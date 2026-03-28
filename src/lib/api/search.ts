@@ -1,0 +1,182 @@
+// Client-side helpers for building housing search requests, URLs, and normalized responses.
+import type { PublicCatalogItem } from "@/lib/public-properties";
+import type { SearchApiResponse, SearchFilters, SearchResponse } from "@/types/catalog";
+
+const DEFAULT_PAGE_SIZE = 30;
+
+function appendIfNotEmpty(params: URLSearchParams, key: string, value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+  params.set(key, normalized);
+}
+
+function parseItems(value: unknown): PublicCatalogItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value as PublicCatalogItem[];
+}
+
+function appendStayParamsToPath(path: string, filters: SearchFilters): string {
+  const [pathWithoutHash, hash = ""] = path.split("#", 2);
+  const [pathname, queryString = ""] = pathWithoutHash.split("?", 2);
+  const query = new URLSearchParams(queryString);
+
+  if (filters.checkIn) {
+    query.set("checkIn", filters.checkIn);
+  } else {
+    query.delete("checkIn");
+  }
+  if (filters.checkOut) {
+    query.set("checkOut", filters.checkOut);
+  } else {
+    query.delete("checkOut");
+  }
+  if (filters.guests) {
+    query.set("guests", filters.guests);
+  } else {
+    query.delete("guests");
+  }
+  if (filters.guestsAdults) {
+    query.set("guestsAdults", filters.guestsAdults);
+  } else {
+    query.delete("guestsAdults");
+  }
+  if (filters.guestsChildren) {
+    query.set("guestsChildren", filters.guestsChildren);
+  } else {
+    query.delete("guestsChildren");
+  }
+
+  const nextQuery = query.toString();
+  const nextPath = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+  return hash ? `${nextPath}#${hash}` : nextPath;
+}
+
+export function buildAccommodationSearchParams(
+  filters: SearchFilters,
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
+): URLSearchParams {
+  const params = new URLSearchParams();
+
+  params.set("page", String(Math.max(1, page)));
+  params.set("page_size", String(Math.max(1, pageSize)));
+
+  appendIfNotEmpty(params, "q", filters.query);
+  appendIfNotEmpty(params, "location", filters.location);
+  appendIfNotEmpty(params, "locationId", filters.locationId);
+  appendIfNotEmpty(params, "propertyType", filters.propertyType);
+  appendIfNotEmpty(params, "checkIn", filters.checkIn);
+  appendIfNotEmpty(params, "checkOut", filters.checkOut);
+  appendIfNotEmpty(params, "guests", filters.guests);
+  appendIfNotEmpty(params, "guestsAdults", filters.guestsAdults);
+  appendIfNotEmpty(params, "guestsChildren", filters.guestsChildren);
+  appendIfNotEmpty(params, "minPrice", filters.minPrice);
+  appendIfNotEmpty(params, "maxPrice", filters.maxPrice);
+  appendIfNotEmpty(params, "sort", filters.sort);
+  appendIfNotEmpty(params, "minRating", filters.minRating);
+
+  if (filters.hasPhotos) params.set("hasPhotos", "1");
+  if (filters.hasReviews) params.set("hasReviews", "1");
+  if (filters.familyFriendly) params.set("familyFriendly", "1");
+  if (filters.petsAllowed) params.set("petsAllowed", "1");
+
+  return params;
+}
+
+function toSearchResponse(payload: SearchApiResponse, filters: SearchFilters): SearchResponse {
+  const page = Number.isFinite(payload.page) ? Math.max(1, payload.page) : 1;
+  const totalPages = Number.isFinite(payload.total_pages) ? Math.max(1, payload.total_pages) : 1;
+  const pageSize = Number.isFinite(payload.page_size)
+    ? Math.max(1, payload.page_size)
+    : DEFAULT_PAGE_SIZE;
+  const total = Number.isFinite(payload.total) ? Math.max(0, payload.total) : 0;
+
+  return {
+    items: parseItems(payload.items).map((item) => ({
+      ...item,
+      path: appendStayParamsToPath(item.path, filters),
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages,
+    hasMore: page < totalPages,
+  };
+}
+
+export async function fetchAccommodationSearch(
+  filters: SearchFilters,
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<SearchResponse> {
+  const query = buildAccommodationSearchParams(filters, page, pageSize).toString();
+  const response = await fetch(`/api/search/accommodations?${query}`, {
+    method: "GET",
+    signal,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("accommodations_fetch_failed");
+  }
+
+  const payload = (await response.json()) as SearchApiResponse;
+  return toSearchResponse(payload, filters);
+}
+
+export function buildHousingCatalogUrl(
+  filters: SearchFilters,
+  page = 1,
+  keepPageParam = false,
+): string {
+  const params = new URLSearchParams();
+  params.set("direction", "housing");
+
+  appendIfNotEmpty(params, "q", filters.query);
+  appendIfNotEmpty(params, "location", filters.location);
+  appendIfNotEmpty(params, "propertyType", filters.propertyType);
+  appendIfNotEmpty(params, "checkIn", filters.checkIn);
+  appendIfNotEmpty(params, "checkOut", filters.checkOut);
+  appendIfNotEmpty(params, "guests", filters.guests);
+  appendIfNotEmpty(params, "guestsAdults", filters.guestsAdults);
+  appendIfNotEmpty(params, "guestsChildren", filters.guestsChildren);
+  appendIfNotEmpty(params, "minPrice", filters.minPrice);
+  appendIfNotEmpty(params, "maxPrice", filters.maxPrice);
+  appendIfNotEmpty(params, "sort", filters.sort);
+  appendIfNotEmpty(params, "minRating", filters.minRating);
+
+  if (filters.hasPhotos) params.set("hasPhotos", "1");
+  if (filters.hasReviews) params.set("hasReviews", "1");
+  if (filters.familyFriendly) params.set("familyFriendly", "1");
+  if (filters.petsAllowed) params.set("petsAllowed", "1");
+  if (keepPageParam && page > 1) params.set("page", String(page));
+
+  return `/search?${params.toString()}`;
+}
+
+export function buildHousingMapQuery(filters: SearchFilters): string {
+  const params = new URLSearchParams();
+  appendIfNotEmpty(params, "q", filters.query);
+  appendIfNotEmpty(params, "location", filters.location);
+  appendIfNotEmpty(params, "locationId", filters.locationId);
+  appendIfNotEmpty(params, "type", filters.propertyType);
+  appendIfNotEmpty(params, "guests", filters.guests);
+  appendIfNotEmpty(params, "guestsAdults", filters.guestsAdults);
+  appendIfNotEmpty(params, "guestsChildren", filters.guestsChildren);
+  appendIfNotEmpty(params, "checkIn", filters.checkIn);
+  appendIfNotEmpty(params, "checkOut", filters.checkOut);
+  appendIfNotEmpty(params, "minPrice", filters.minPrice);
+  appendIfNotEmpty(params, "maxPrice", filters.maxPrice);
+  appendIfNotEmpty(params, "sort", filters.sort);
+  appendIfNotEmpty(params, "minRating", filters.minRating);
+  if (filters.hasPhotos) params.set("hasPhotos", "1");
+  if (filters.hasReviews) params.set("hasReviews", "1");
+  if (filters.familyFriendly) params.set("familyFriendly", "1");
+  if (filters.petsAllowed) params.set("petsAllowed", "1");
+  return params.toString();
+}

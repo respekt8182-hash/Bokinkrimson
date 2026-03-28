@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+// Maintenance script that scans repository text files for mojibake and obvious encoding corruption.
+
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { extname } from "node:path";
+
+const ROOTS = ["src"];
+const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".css"]);
+const MAX_REPORT_LINES = 80;
+
+const PATTERNS = [
+  {
+    name: "cp1251-mojibake",
+    regex: /[РС][\u0400\u0402-\u040F\u0450\u0452-\u045F]|в[\u0400\u0402-\u040F\u0450\u0452-\u045F]/u,
+  },
+  {
+    name: "latin1-mojibake",
+    regex: /[ÐÑ][\u0080-\u00FFA-Za-z]|â[\u0080-\u00BF]/u,
+  },
+];
+
+function listTrackedFiles() {
+  const result = spawnSync("git", ["ls-files", ...ROOTS], { encoding: "utf8" });
+  if (result.status !== 0) {
+    const details = result.stderr?.trim() || result.stdout?.trim() || "unknown git error";
+    throw new Error(`Failed to list files with git ls-files: ${details}`);
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((file) => EXTENSIONS.has(extname(file).toLowerCase()));
+}
+
+function scanFile(filePath) {
+  const text = readFileSync(filePath, "utf8");
+  const lines = text.split(/\r?\n/);
+  const hits = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    for (const pattern of PATTERNS) {
+      if (pattern.regex.test(line)) {
+        hits.push({
+          filePath,
+          line: i + 1,
+          pattern: pattern.name,
+          sample: line.trim().slice(0, 180),
+        });
+        break;
+      }
+    }
+  }
+
+  return hits;
+}
+
+function main() {
+  const files = listTrackedFiles();
+  const allHits = [];
+
+  for (const filePath of files) {
+    allHits.push(...scanFile(filePath));
+  }
+
+  if (allHits.length === 0) {
+    console.log("check-mojibake: no suspicious encoding patterns found.");
+    return;
+  }
+
+  console.error("check-mojibake: found suspicious encoding patterns:");
+  for (const hit of allHits.slice(0, MAX_REPORT_LINES)) {
+    console.error(`- ${hit.filePath}:${hit.line} [${hit.pattern}] ${hit.sample}`);
+  }
+  if (allHits.length > MAX_REPORT_LINES) {
+    console.error(`... and ${allHits.length - MAX_REPORT_LINES} more matches`);
+  }
+  process.exitCode = 1;
+}
+
+main();

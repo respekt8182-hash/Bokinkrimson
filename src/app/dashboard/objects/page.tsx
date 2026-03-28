@@ -1,0 +1,499 @@
+// Next.js page for route /dashboard/objects.
+import { PaymentStatus, ReviewStatus } from "@prisma/client";
+import {
+  BedDouble,
+  CalendarDays,
+  CircleCheckBig,
+  Image as ImageIcon,
+  MessageCircle,
+  SquareChartGantt,
+  Star,
+} from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { CreatePropertyButton } from "@/components/objects/create-property-button";
+import { DeletePropertyButton } from "@/components/objects/delete-property-button";
+import { StatsButton } from "@/components/objects/stats-button";
+import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
+import { getSession } from "@/lib/auth";
+import { cn } from "@/lib/cn";
+import { db } from "@/lib/db";
+import { getPlacementValidUntil } from "@/lib/payments";
+import { getPropertyWorkflowStatus, type PropertyProgress, serializeProperty } from "@/lib/properties";
+import { buildPublicPropertyPath } from "@/lib/public-properties";
+
+type IconName = "rooms" | "photos" | "prices";
+
+function InlineIcon({ name, className }: { name: IconName; className?: string }) {
+  const iconByName: Record<IconName, LucideIcon> = {
+    rooms: BedDouble,
+    photos: ImageIcon,
+    prices: SquareChartGantt,
+  };
+
+  return <AppIcon icon={iconByName[name]} className={cn("h-4 w-4", className)} />;
+}
+
+function getCompletedDashboardStages(progress: PropertyProgress): number {
+  const stages = [
+    progress.step1 && progress.step3,
+    progress.step4 && progress.step5,
+    progress.step6 && progress.step7,
+    progress.step8 && progress.step9,
+    progress.step10,
+  ];
+
+  let completed = 0;
+  for (const stage of stages) {
+    if (!stage) break;
+    completed += 1;
+  }
+
+  return completed;
+}
+
+type DashboardRoomPrice = {
+  dateFrom: Date;
+  dateTo: Date;
+  price: { toString(): string } | number;
+  currency: string;
+};
+
+type DashboardRoomWithPrices = {
+  prices: DashboardRoomPrice[];
+};
+
+function getUtcDayStart(input: Date): number {
+  return Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate());
+}
+
+function getDistanceToPricePeriodMs(dayStartUtcMs: number, period: DashboardRoomPrice): number {
+  const dateFromMs = getUtcDayStart(period.dateFrom);
+  const dateToMs = getUtcDayStart(period.dateTo);
+
+  if (dayStartUtcMs < dateFromMs) {
+    return dateFromMs - dayStartUtcMs;
+  }
+
+  if (dayStartUtcMs > dateToMs) {
+    return dayStartUtcMs - dateToMs;
+  }
+
+  return 0;
+}
+
+function getNearestRoomPrice(prices: DashboardRoomPrice[], dayStartUtcMs: number): DashboardRoomPrice | null {
+  let nearest: DashboardRoomPrice | null = null;
+  let nearestDistanceMs = Number.POSITIVE_INFINITY;
+
+  for (const priceItem of prices) {
+    const currentDistanceMs = getDistanceToPricePeriodMs(dayStartUtcMs, priceItem);
+    if (currentDistanceMs < nearestDistanceMs) {
+      nearest = priceItem;
+      nearestDistanceMs = currentDistanceMs;
+      continue;
+    }
+
+    if (
+      currentDistanceMs === nearestDistanceMs &&
+      nearest &&
+      getUtcDayStart(priceItem.dateFrom) < getUtcDayStart(nearest.dateFrom)
+    ) {
+      nearest = priceItem;
+    }
+  }
+
+  return nearest;
+}
+
+const priceNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+
+function formatChessboardPriceLabel(rooms: DashboardRoomWithPrices[], dayStartUtcMs: number): string | null {
+  const nearestRoomPrices = rooms
+    .map((room) => getNearestRoomPrice(room.prices ?? [], dayStartUtcMs))
+    .filter((item): item is DashboardRoomPrice => Boolean(item));
+
+  if (nearestRoomPrices.length === 0) {
+    return null;
+  }
+
+  const prices = nearestRoomPrices.map((item) => Number(item.price)).filter(Number.isFinite);
+  if (prices.length === 0) {
+    return null;
+  }
+
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const uniqueCurrencies = Array.from(new Set(nearestRoomPrices.map((item) => item.currency).filter(Boolean)));
+  const currencySuffix = uniqueCurrencies.length === 1 ? ` ${uniqueCurrencies[0]}` : "";
+
+  if (minPrice === maxPrice) {
+    return `${priceNumberFormat.format(minPrice)}${currencySuffix}`;
+  }
+
+  return `${priceNumberFormat.format(minPrice)} - ${priceNumberFormat.format(maxPrice)}${currencySuffix}`;
+}
+
+export default async function DashboardObjectsPage() {
+  const session = await getSession();
+
+  if (!session) {
+    redirect("/auth/login?next=/dashboard/objects");
+  }
+
+  const properties = await db.property.findMany({
+    where: { ownerId: session.id, ownerDeletedAt: null },
+    orderBy: [{ updatedAt: "desc" }],
+    include: {
+      media: {
+        where: { roomId: null },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      },
+      rooms: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          prices: {
+            orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+            select: {
+              id: true,
+              dateFrom: true,
+              dateTo: true,
+              price: true,
+              currency: true,
+            },
+          },
+        },
+      },
+      amenities: {
+        include: {
+          amenity: true,
+        },
+      },
+      customAmenities: true,
+      payments: {
+        where: {
+          ownerId: session.id,
+          status: PaymentStatus.SUCCEEDED,
+        },
+        orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: {
+          paidAt: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+
+  const propertyIds = properties.map((p) => p.id);
+  const reviewStats = propertyIds.length > 0
+    ? await db.review.groupBy({
+        by: ["propertyId"],
+        where: { propertyId: { in: propertyIds }, status: ReviewStatus.ACTIVE, deletedAt: null },
+        _avg: { rating: true },
+        _count: { id: true },
+      })
+    : [];
+  const reviewStatsByPropertyId = new Map(
+    reviewStats.map((s) => [s.propertyId!, { avg: s._avg.rating, count: s._count.id }]),
+  );
+
+  const items = properties.map((item) => serializeProperty(item));
+  const todayUtcMs = getUtcDayStart(new Date());
+  const chessboardPriceLabelByPropertyId = new Map(
+    properties.map((property) => [property.id, formatChessboardPriceLabel(property.rooms, todayUtcMs)]),
+  );
+  const publicationUntilByPropertyId = new Map(
+    properties.map((property) => {
+      const latestSucceededPayment = property.payments[0] ?? null;
+      if (!latestSucceededPayment) {
+        return [property.id, null] as const;
+      }
+      const anchorDate = latestSucceededPayment.paidAt ?? latestSucceededPayment.createdAt;
+      return [property.id, getPlacementValidUntil(anchorDate)] as const;
+    }),
+  );
+  const workflowStatusByPropertyId = new Map(
+    items.map((item) => [item.id, getPropertyWorkflowStatus(item.status, item.pendingEditStatus)]),
+  );
+  const draftCount = items.filter(
+    (item) => workflowStatusByPropertyId.get(item.id) === "DRAFT",
+  ).length;
+  const moderationCount = items.filter(
+    (item) => workflowStatusByPropertyId.get(item.id) === "PENDING_MODERATION",
+  ).length;
+  const publishedCount = items.filter(
+    (item) => workflowStatusByPropertyId.get(item.id) === "PUBLISHED",
+  ).length;
+  const rejectedCount = items.filter(
+    (item) => workflowStatusByPropertyId.get(item.id) === "REJECTED",
+  ).length;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl text-olive">Объекты</h1>
+        </div>
+        <CreatePropertyButton />
+      </div>
+
+
+      {items.length === 0 ? (
+        <div id="objects-list" className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75">
+          Нет объектов. Нажмите «Добавить объект».
+        </div>
+      ) : (
+        <div id="objects-list" className="grid gap-3">
+          {items.map((item, index) => {
+            const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
+            const completedStages = getCompletedDashboardStages(item.progress);
+            const isDone = completedStages >= 5;
+            const chessboardPriceLabel = chessboardPriceLabelByPropertyId.get(item.id) ?? null;
+            const publicationUntilDate = publicationUntilByPropertyId.get(item.id) ?? null;
+            const daysLeft = publicationUntilDate
+              ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)
+              : null;
+            const publicationExpired = daysLeft !== null && daysLeft < 0;
+            const publicationSoon = daysLeft !== null && !publicationExpired && daysLeft <= 30;
+            const publicPath = buildPublicPropertyPath({
+              id: item.id,
+              locationId: item.locationId,
+              name: item.name,
+            });
+            const nextItem = items[index + 1] ?? null;
+
+            const stats = reviewStatsByPropertyId.get(item.id) ?? null;
+            const avgRating = stats ? Number(stats.avg ?? 0) : 0;
+            const reviewCount = stats?.count ?? 0;
+
+            return (
+              <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <Link
+                    href={`/dashboard/objects/${item.id}/about`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl transition hover:bg-cream/45"
+                  >
+                    <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10">
+                      {firstImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={firstImage.url}
+                          alt={item.name ?? "Объект"}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[11px] text-olive/50">
+                          Фото
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 py-1">
+                      <h2 className="truncate text-xl text-olive">{item.name ?? "Новый объект"}</h2>
+                      <p className="text-xs text-olive/60">
+                        {item.locationName ?? "Локация не выбрана"} • {item.typeLabel ?? "Тип не указан"}
+                      </p>
+                      <span className="mt-2 inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
+                        {item.statusLabel}
+                      </span>
+                    </div>
+                  </Link>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((i) => {
+                        const fill = Math.min(1, Math.max(0, avgRating - (i - 1)));
+                        const pct = Math.round(fill * 100);
+                        return (
+                          <svg
+                            key={i}
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4 shrink-0"
+                            aria-hidden="true"
+                          >
+                            <defs>
+                              <clipPath id={`star-fill-${item.id}-${i}`}>
+                                <rect x="0" y="0" width={`${pct}%`} height="24" />
+                              </clipPath>
+                            </defs>
+                            <path
+                              d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+                              fill="none"
+                              stroke={reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"}
+                              strokeWidth="1.65"
+                              strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            {pct > 0 && (
+                              <path
+                                d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+                                fill="var(--color-sage)"
+                                stroke="none"
+                                clipPath={`url(#star-fill-${item.id}-${i})`}
+                              />
+                            )}
+                          </svg>
+                        );
+                      })}
+                    </div>
+                    {reviewCount > 0 ? (
+                      <>
+                        <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
+                          <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
+                          <span className="text-sm font-bold leading-none text-olive">
+                            {avgRating.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-olive/50">
+                          <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
+                          <span className="text-xs leading-none">{reviewCount}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
+                        <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
+                        <span className="text-xs text-olive/35">Нет отзывов</span>
+                      </div>
+                    )}
+                  </div>
+                  {publicationUntilDate ? (
+                    <div
+                      className={cn(
+                        "shrink-0 flex items-center gap-2 rounded-xl border px-3 py-1.5",
+                        publicationExpired
+                          ? "border-red-200 bg-red-50"
+                          : publicationSoon
+                            ? "border-amber-200 bg-amber-50"
+                            : "border-emerald-200 bg-emerald-50",
+                      )}
+                    >
+                      <AppIcon
+                        icon={CalendarDays}
+                        className={cn(
+                          "h-4 w-4 shrink-0",
+                          publicationExpired ? "text-red-500" : publicationSoon ? "text-amber-500" : "text-emerald-600",
+                        )}
+                      />
+                      <div>
+                        <p
+                          className={cn(
+                            "text-[10px] leading-none",
+                            publicationExpired ? "text-red-400" : publicationSoon ? "text-amber-500" : "text-emerald-500",
+                          )}
+                        >
+                          Размещается до
+                        </p>
+                        <p
+                          className={cn(
+                            "text-xs font-bold leading-snug",
+                            publicationExpired ? "text-red-600" : publicationSoon ? "text-amber-700" : "text-emerald-700",
+                          )}
+                        >
+                          {publicationUntilDate.toLocaleDateString("ru-RU")}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {!publicationUntilDate && (
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-olive/65">
+                      <span>Готовность</span>
+                      {isDone ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
+                          <AppIcon icon={CircleCheckBig} className="h-4 w-4" />
+                          5/5
+                        </span>
+                      ) : (
+                        <span>{completedStages}/5</span>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "h-2 flex-1 rounded-full transition-all duration-300",
+                            i < completedStages
+                              ? isDone
+                                ? "bg-sky-500"
+                                : "bg-primary"
+                              : "bg-cream ring-1 ring-inset ring-olive/20",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+
+                {item.moderationNotes ? (
+                  <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
+                    {item.moderationNotes}
+                  </p>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-olive/60">
+                    Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/dashboard/objects/${item.id}/about`}
+                      className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Карточка
+                    </Link>
+                    <Link
+                      href={`/dashboard/objects/${item.id}/payment`}
+                      className="rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+                    >
+                      Оплата
+                    </Link>
+                    {item.status === "PUBLISHED" && (
+                      <>
+                        <Link
+                          href={publicPath}
+                          className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
+                        >
+                          Публичная страница
+                        </Link>
+                        <StatsButton
+                          propertyId={item.id}
+                          propertyName={item.name ?? "Объект"}
+                        />
+                      </>
+                    )}
+                    <DeletePropertyButton
+                      propertyId={item.id}
+                      propertyName={item.name ?? "Новый объект"}
+                      propertyStatus={item.status}
+                    />
+                  </div>
+                </div>
+
+                {nextItem ? (
+                  <div className="mt-2 border-t border-olive/10 pt-2 text-right">
+                    <Link
+                      href={`/dashboard/objects/${nextItem.id}/about`}
+                      className="text-xs font-semibold text-terra hover:underline"
+                    >
+                      Следующий объект: {nextItem.name ?? "Без названия"} →
+                    </Link>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {publishedCount > 0 ? (
+        <p className="text-xs text-olive/65">Опубликовано объектов: {publishedCount}</p>
+      ) : null}
+    </div>
+  );
+}

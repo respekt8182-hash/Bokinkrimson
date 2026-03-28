@@ -1,0 +1,328 @@
+"use client";
+
+import { ChevronLeft, ChevronRight, Images, Phone, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AppIcon } from "@/components/ui/app-icon";
+import type { PublicPropertyCard } from "@/lib/public-properties";
+
+type Media = PublicPropertyCard["media"][number];
+
+interface PropertyMediaGalleryProps {
+  media: Media[];
+  title?: string;
+  phoneHref?: string | null;
+}
+
+function MediaItem({
+  media,
+  alt,
+  className,
+  loading = "lazy",
+}: {
+  media: Media;
+  alt: string;
+  className: string;
+  loading?: "lazy" | "eager";
+}) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={media.url} alt={alt} loading={loading} decoding="async" className={className} />;
+}
+
+export function PropertyMediaGallery({
+  media,
+  title = "Фото объекта",
+  phoneHref,
+}: PropertyMediaGalleryProps) {
+  const photos = media.filter((item) => item.type === "IMAGE").slice(0, 10);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+
+  const openLightbox = useCallback((index: number) => {
+    setActiveIndex(index);
+    setLightboxOpen(true);
+  }, []);
+
+  const closeLightbox = useCallback(() => setLightboxOpen(false), []);
+
+  const prev = useCallback(() => {
+    setActiveIndex((i) => (i - 1 + photos.length) % photos.length);
+  }, [photos.length]);
+
+  const next = useCallback(() => {
+    setActiveIndex((i) => (i + 1) % photos.length);
+  }, [photos.length]);
+  const count = photos.length;
+  const safeActiveIndex = count > 0 ? Math.min(activeIndex, count - 1) : 0;
+  const isLightboxVisible = lightboxOpen && count > 0;
+
+  useEffect(() => {
+    if (!isLightboxVisible) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      else if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isLightboxVisible, closeLightbox, prev, next]);
+
+  useEffect(() => {
+    document.body.style.overflow = isLightboxVisible ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isLightboxVisible]);
+
+  useEffect(() => {
+    if (!isLightboxVisible || !thumbsRef.current) return;
+    const thumb = thumbsRef.current.children[safeActiveIndex] as HTMLElement | undefined;
+    if (thumb) thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [isLightboxVisible, safeActiveIndex]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx < 0) next();
+      else prev();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  if (count === 0) return null;
+
+  const activeMedia = photos[safeActiveIndex];
+  const portalRoot = typeof document === "undefined" ? null : document.body;
+
+  return (
+    <>
+      <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
+        {count === 1 ? (
+          <div
+            className="gallery-img-wrap hidden cursor-pointer overflow-hidden rounded-3xl md:block"
+            style={{ height: "500px" }}
+            onClick={() => openLightbox(0)}
+          >
+            <MediaItem
+              media={photos[0]}
+              alt={title}
+              loading="eager"
+              className="gallery-img h-full w-full object-cover"
+            />
+          </div>
+        ) : count === 2 ? (
+          <div
+            className="hidden md:grid md:gap-2.5"
+            style={{ gridTemplateColumns: "1.7fr 1fr", height: "500px" }}
+          >
+            <div
+              className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
+              onClick={() => openLightbox(0)}
+            >
+              <MediaItem
+                media={photos[0]}
+                alt={title}
+                loading="eager"
+                className="gallery-img h-full w-full object-cover"
+              />
+            </div>
+            <div
+              className="gallery-img-wrap cursor-pointer overflow-hidden rounded-r-3xl"
+              onClick={() => openLightbox(1)}
+            >
+              <MediaItem
+                media={photos[1]}
+                alt="Фото 2"
+                className="gallery-img h-full w-full object-cover"
+              />
+            </div>
+          </div>
+        ) : (
+          <div
+            className="hidden md:grid md:gap-2.5"
+            style={{
+              gridTemplateColumns: "1.7fr 1fr",
+              gridTemplateRows: "1fr 1fr",
+              height: "500px",
+            }}
+          >
+            <div
+              className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
+              onClick={() => openLightbox(0)}
+            >
+              <MediaItem
+                media={photos[0]}
+                alt={title}
+                loading="eager"
+                className="gallery-img h-full w-full object-cover"
+              />
+            </div>
+
+            {photos.slice(1, 3).map((photo, i) => (
+              <div
+                key={photo.id}
+                className={`gallery-img-wrap relative cursor-pointer overflow-hidden ${
+                  i === 0 ? "rounded-tr-3xl" : "rounded-br-3xl"
+                }`}
+                onClick={() => openLightbox(i + 1)}
+              >
+                <MediaItem
+                  media={photo}
+                  alt={`Фото ${i + 2}`}
+                  className="gallery-img h-full w-full object-cover"
+                />
+
+                {i === 1 && count > 3 ? (
+                  <div className="gallery-show-all-overlay absolute inset-0 flex items-end justify-end p-4">
+                    <button
+                      className="gallery-show-all-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openLightbox(3);
+                      }}
+                    >
+                      <AppIcon icon={Images} className="h-4 w-4" />
+                      Все {count} фото
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 md:hidden">
+          {photos.slice(0, Math.min(count, 3)).map((photo, i) => (
+            <div
+              key={photo.id}
+              className={`gallery-img-wrap relative cursor-pointer overflow-hidden rounded-2xl ${
+                i === 0 || (count === 2 && i === 1) ? "col-span-2" : ""
+              }`}
+              onClick={() => openLightbox(i)}
+            >
+              <MediaItem
+                media={photo}
+                alt={`Фото ${i + 1}`}
+                loading={i === 0 ? "eager" : "lazy"}
+                className={`gallery-img w-full object-cover ${
+                  i === 0 ? "h-60" : count === 2 && i === 1 ? "h-44" : "h-40"
+                }`}
+              />
+              {i === 2 && count > 3 ? (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-midnight/55">
+                  <span className="gallery-more-badge flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold text-white">
+                    +{count - 3} фото
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ))}
+
+          {phoneHref ? (
+            <a
+              href={phoneHref}
+              className="col-span-2 mt-0.5 flex items-center justify-center gap-2.5 rounded-2xl bg-primary px-4 py-4 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(15,118,110,0.35)] transition active:scale-[0.98]"
+            >
+              <AppIcon icon={Phone} className="h-5 w-5" />
+              Позвонить
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      {isLightboxVisible && portalRoot
+        ? createPortal(
+            <div
+              className="gallery-lightbox"
+              onClick={closeLightbox}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Просмотр фотографий"
+            >
+              <div className="gallery-lightbox-content" onClick={(e) => e.stopPropagation()}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  key={safeActiveIndex}
+                  src={activeMedia.url}
+                  alt={`Фото ${safeActiveIndex + 1} из ${count}`}
+                  className="gallery-lightbox-img"
+                />
+              </div>
+
+              <div className="gallery-lightbox-counter">
+                {safeActiveIndex + 1} / {count}
+              </div>
+
+              <button
+                className="gallery-lightbox-close"
+                onClick={closeLightbox}
+                aria-label="Закрыть"
+              >
+                <AppIcon icon={X} className="h-5 w-5" />
+              </button>
+
+              {count > 1 ? (
+                <>
+                  <button
+                    className="gallery-lightbox-nav gallery-lightbox-prev"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      prev();
+                    }}
+                    aria-label="Предыдущее фото"
+                  >
+                    <AppIcon icon={ChevronLeft} className="h-5 w-5" />
+                  </button>
+                  <button
+                    className="gallery-lightbox-nav gallery-lightbox-next"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      next();
+                    }}
+                    aria-label="Следующее фото"
+                  >
+                    <AppIcon icon={ChevronRight} className="h-5 w-5" />
+                  </button>
+                </>
+              ) : null}
+
+              {count > 1 ? (
+                <div
+                  className="gallery-lightbox-thumbs"
+                  ref={thumbsRef}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {photos.map((photo, i) => (
+                    <button
+                      key={photo.id}
+                      className={`gallery-lightbox-thumb ${i === safeActiveIndex ? "active" : ""}`}
+                      onClick={() => setActiveIndex(i)}
+                      aria-label={`Фото ${i + 1}`}
+                      aria-current={i === safeActiveIndex}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>,
+            portalRoot,
+          )
+        : null}
+    </>
+  );
+}

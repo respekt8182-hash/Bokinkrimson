@@ -1,3 +1,4 @@
+// PostCSS configuration that enables Tailwind CSS processing.
 const config = {
   plugins: {
     "@tailwindcss/postcss": {},
