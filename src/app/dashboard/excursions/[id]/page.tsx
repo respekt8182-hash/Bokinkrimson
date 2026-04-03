@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { ExcursionEditor } from "@/components/excursions/excursion-editor";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serializeExcursion } from "@/lib/excursions";
+import { getExcursionDisplayNumberFromOrderedIds, serializeExcursion } from "@/lib/excursions";
 
 type ExcursionPageProps = {
   params: Promise<{ id: string }>;
@@ -17,25 +17,43 @@ export default async function DashboardExcursionByIdPage({ params }: ExcursionPa
   }
 
   const { id } = await params;
-  const excursion = await db.excursion.findUnique({
-    where: { id },
-    include: {
-      mainLocation: { select: { name: true } },
-      anchorLocation: { select: { name: true } },
-      district: { select: { name: true } },
-      category: { select: { name: true } },
-      meetingLocation: { select: { name: true } },
-      pickupLocations: { select: { locationId: true } },
-      routeLocations: {
-        select: { locationId: true, sortOrder: true },
-        orderBy: { sortOrder: "asc" },
+  const [excursion, ownerExcursionIds] = await Promise.all([
+    db.excursion.findUnique({
+      where: { id },
+      include: {
+        mainLocation: { select: { name: true } },
+        anchorLocation: { select: { name: true } },
+        district: { select: { name: true } },
+        category: { select: { name: true } },
+        meetingLocation: { select: { name: true } },
+        pickupLocations: { select: { locationId: true } },
+        routeLocations: {
+          select: { locationId: true, sortOrder: true },
+          orderBy: { sortOrder: "asc" },
+        },
       },
-    },
-  });
+    }),
+    db.excursion.findMany({
+      where: { ownerId: session.id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    }),
+  ]);
 
   if (!excursion || excursion.ownerId !== session.id) {
     notFound();
   }
 
-  return <ExcursionEditor initialExcursion={serializeExcursion(excursion)} />;
+  const displayExcursionNumber =
+    getExcursionDisplayNumberFromOrderedIds(
+      excursion.id,
+      ownerExcursionIds.map((item) => item.id),
+    ) ?? 1;
+
+  return (
+    <ExcursionEditor
+      initialExcursion={serializeExcursion(excursion)}
+      displayExcursionNumber={displayExcursionNumber}
+    />
+  );
 }

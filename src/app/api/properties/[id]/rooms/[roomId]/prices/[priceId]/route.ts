@@ -1,7 +1,7 @@
 // Room pricing item endpoint: read/update/delete a single room price period with overlap protection.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
 import { updateRoomPriceSchema } from "@/lib/schemas";
@@ -10,7 +10,12 @@ type RouteContext = {
   params: Promise<{ id: string; roomId: string; priceId: string }>;
 };
 
-async function getOwnedPrice(propertyId: string, roomId: string, priceId: string, userId: string) {
+async function getAccessiblePrice(
+  propertyId: string,
+  roomId: string,
+  priceId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   return db.roomPrice.findFirst({
     where: {
       id: priceId,
@@ -18,24 +23,28 @@ async function getOwnedPrice(propertyId: string, roomId: string, priceId: string
       room: {
         propertyId,
         isActive: true,
-        property: {
-          ownerId: userId,
-          ownerDeletedAt: null,
-        },
+        property: editor?.isAdmin
+          ? {
+              ownerDeletedAt: null,
+            }
+          : {
+              ownerId: editor?.id,
+              ownerDeletedAt: null,
+            },
       },
     },
   });
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, priceId } = await context.params;
-  const price = await getOwnedPrice(id, roomId, priceId, session.id);
+  const price = await getAccessiblePrice(id, roomId, priceId, editor);
 
   if (!price) {
     return NextResponse.json({ error: "Период цены не найден" }, { status: 404 });
@@ -45,14 +54,14 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, priceId } = await context.params;
-  const existing = await getOwnedPrice(id, roomId, priceId, session.id);
+  const existing = await getAccessiblePrice(id, roomId, priceId, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Период цены не найден" }, { status: 404 });
@@ -111,14 +120,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, priceId } = await context.params;
-  const existing = await getOwnedPrice(id, roomId, priceId, session.id);
+  const existing = await getAccessiblePrice(id, roomId, priceId, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Период цены не найден" }, { status: 404 });

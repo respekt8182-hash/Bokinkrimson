@@ -9,7 +9,6 @@ import {
   ListChecks,
   MapPin,
   Phone,
-  UserRound,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -50,6 +49,7 @@ type ObjectAboutPageProps = {
   initialProperty: SerializedProperty;
   displayPropertyNumber: number;
   initialBlock?: AboutBlockId;
+  basePath?: string;
 };
 
 type PatchStepResponse = {
@@ -132,6 +132,7 @@ export function ObjectAboutPage({
   initialProperty,
   displayPropertyNumber,
   initialBlock,
+  basePath = "/dashboard/objects",
 }: ObjectAboutPageProps) {
   const router = useRouter();
   const [property, setProperty] = useState(initialProperty);
@@ -182,6 +183,7 @@ export function ObjectAboutPage({
   );
 
   const [phone, setPhone] = useState(initialProperty.phone ?? "");
+  const [phone2, setPhone2] = useState(initialProperty.phone2 ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialProperty.websiteUrl ?? "");
   const [contactEmail, setContactEmail] = useState(initialProperty.contactEmail ?? "");
   const [contactPersonName, setContactPersonName] = useState(
@@ -268,7 +270,7 @@ export function ObjectAboutPage({
 
   function moveToNextBlock() {
     if (activeBlockIndex >= aboutBlockOrder.length - 1) {
-      router.push(`/dashboard/objects/${property.id}/rules`);
+      router.push(`${basePath}/${property.id}/rules`);
       return;
     }
 
@@ -493,6 +495,7 @@ export function ObjectAboutPage({
     setMapDraftLocationName(item.locationName ?? "");
     setMapDraftLocationId(item.locationId ?? "");
     setPhone(item.phone ?? "");
+    setPhone2(item.phone2 ?? "");
     setWebsiteUrl(item.websiteUrl ?? "");
     setContactEmail(item.contactEmail ?? "");
     setContactPersonName(item.contactPersonName ?? "");
@@ -661,11 +664,18 @@ export function ObjectAboutPage({
 
     setIsSavingContacts(true);
     try {
+      const normalizedContactPersonName = contactPersonName.trim();
+
       const updated = await patchStep(4, {
         phone: phone.trim(),
+        phoneName: normalizedContactPersonName || (property.phoneName ?? ""),
+        phone2: phone2.trim(),
+        phone2Name: normalizedContactPersonName || (property.phone2Name ?? ""),
+        phone3: property.phone3 ?? "",
+        phone3Name: property.phone3Name ?? "",
         websiteUrl: websiteUrl.trim(),
         contactEmail: contactEmail.trim(),
-        contactPersonName: contactPersonName.trim(),
+        contactPersonName: normalizedContactPersonName,
         contactPersonRole: contactPersonRole.trim(),
         listingChannels: listingChannels.trim(),
         whatsappUrl: whatsappUrl.trim(),
@@ -823,7 +833,7 @@ export function ObjectAboutPage({
         await goNextFromContacts();
         return;
       case "photo":
-        router.push(`/dashboard/objects/${property.id}/rules`);
+        router.push(`${basePath}/${property.id}/rules`);
         return;
       default:
         return;
@@ -1060,14 +1070,20 @@ export function ObjectAboutPage({
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-olive">Информация об объекте</h2>
+                <p className="mt-0.5 text-sm text-olive/55">Тип, название и описание</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-5 p-4 sm:p-5">
+            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+              Заполните основные данные об объекте: выберите тип, укажите название и добавьте описание.
+              Эти данные увидят гости при поиске жилья.
+            </p>
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-olive">Тип объекта</span>
+                <span className="text-sm font-semibold text-olive">1. Тип объекта</span>
                 {selectedType ? (
                   <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
                     Выбрано
@@ -1078,6 +1094,7 @@ export function ObjectAboutPage({
                   </span>
                 )}
               </div>
+              <p className="text-xs text-olive/50">Выберите один вариант, который лучше всего описывает ваш объект</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {propertyTypes.map((item) => {
                   const isSelected = selectedType === item.id;
@@ -1108,7 +1125,7 @@ export function ObjectAboutPage({
             </div>
 
             <div className="space-y-2">
-              <span className="text-sm font-semibold text-olive">Название объекта</span>
+              <span className="text-sm font-semibold text-olive">2. Название объекта</span>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -1119,7 +1136,7 @@ export function ObjectAboutPage({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-olive">Описание объекта</span>
+                <span className="text-sm font-semibold text-olive">3. Описание объекта</span>
                 <span
                   className={cn(
                     "text-xs tabular-nums",
@@ -1185,11 +1202,16 @@ export function ObjectAboutPage({
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-olive">Локация</h2>
+                <p className="mt-0.5 text-sm text-olive/55">Адрес и расположение на карте</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-4 p-4 sm:p-5">
+            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+              Укажите, где находится ваш объект. Гости смогут найти его по населённому пункту и увидят точку на карте.
+            </p>
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-olive">Населённый пункт</span>
@@ -1286,32 +1308,50 @@ export function ObjectAboutPage({
 
       {activeBlock === "ksr" ? (
         <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
-          <h2 className="text-xl text-olive">КСР</h2>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <AppIcon icon={ListChecks} className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-olive">Реестр КСР</h2>
+              <p className="mt-0.5 text-sm text-olive/55">Классифицированные средства размещения</p>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-olive/15 bg-cream/35 p-4 text-sm text-olive/80">
             <p className="font-semibold text-olive">
-              Укажите номер записи в реестре классифицированных средств размещения
+              Что это такое?
             </p>
             <p className="mt-2">
-              Этот номер нужен для подтверждения правомерного размещения объекта и прохождения
-              модерации.
+              Все гостиницы, отели и гостевые дома в России должны быть внесены в реестр КСР.
+              Укажите номер записи из реестра — он нужен для прохождения модерации.
             </p>
-            <p className="mt-2 text-xs text-olive/70">
+            <p className="mt-2 font-semibold text-olive">Как найти номер?</p>
+            <p className="mt-1">
+              Перейдите на сайт реестра, найдите свой объект и скопируйте номер записи.
+            </p>
+            <p className="mt-2 text-xs text-olive/55">
               Требования ФЗ N 132 от 24.11.1996 и N 127 от 07.06.2025.
             </p>
             <a
               href="https://tourism.fsa.gov.ru/"
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex text-sm font-semibold text-terra hover:underline"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-terra/10 px-3 py-2 text-sm font-semibold text-terra transition hover:bg-terra/15"
             >
-              Перейти в реестр КСР
+              <AppIcon icon={Globe} className="h-4 w-4" />
+              Открыть реестр КСР
             </a>
           </div>
-          <Input
-            value={registryNumber}
-            onChange={(event) => setRegistryNumber(event.target.value)}
-            placeholder="Номер записи в реестре"
-          />
+          <div className="space-y-1.5">
+            <span className="text-sm font-semibold text-olive">Номер записи в реестре</span>
+            <Input
+              value={registryNumber}
+              onChange={(event) => setRegistryNumber(event.target.value)}
+              placeholder="Например: 012345678"
+            />
+            <p className="text-xs text-olive/50">Скопируйте номер с сайта реестра и вставьте сюда</p>
+          </div>
           {!property.classificationApplicable ? (
             <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
               КСР отмечен как неприменимый для этого объекта. Раздел завершен без номера реестра.
@@ -1357,13 +1397,18 @@ export function ObjectAboutPage({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-olive">Контакты</h2>
+              <p className="mt-0.5 text-sm text-olive/55">Как гости смогут с вами связаться</p>
             </div>
           </div>
+
+          <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+            Укажите хотя бы один телефон — он обязателен. Мессенджеры и соцсети добавляйте по желанию, чтобы гостям было удобнее связаться.
+          </p>
 
           {/* Required fields */}
           <div className="space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Основные данные
+              Основные данные (обязательно)
             </p>
             <div className="space-y-2.5">
               <div className="relative">
@@ -1371,6 +1416,7 @@ export function ObjectAboutPage({
                   <AppIcon icon={Phone} className="h-4 w-4" />
                 </span>
                 <Input
+                  type="tel"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
                   placeholder="Телефон *"
@@ -1379,12 +1425,13 @@ export function ObjectAboutPage({
               </div>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                  <AppIcon icon={UserRound} className="h-4 w-4" />
+                  <AppIcon icon={Phone} className="h-4 w-4" />
                 </span>
                 <Input
-                  value={contactPersonName}
-                  onChange={(event) => setContactPersonName(event.target.value)}
-                  placeholder="Контактное лицо"
+                  type="tel"
+                  value={phone2}
+                  onChange={(event) => setPhone2(event.target.value)}
+                  placeholder="Телефон 2"
                   className="pl-10"
                 />
               </div>
@@ -1393,6 +1440,9 @@ export function ObjectAboutPage({
 
           {/* Optional fields */}
           <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+              Дополнительно
+            </p>
             <div className="space-y-2.5">
               {showContactRole && (
                 <div className="relative">
@@ -1696,12 +1746,15 @@ export function ObjectAboutPage({
       {activeBlock === "photo" ? (
         <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
           <div>
-            <h2 className="text-xl text-olive">Фото объекта</h2>
-            <p className="text-sm text-olive/50">
-              Лимиты объекта: до {mediaLimits.property.images} фото, до{" "}
-              {mediaLimits.property.videos} видео. Фото: {accommodationPhotoUploadLimitsLabel}.
+            <h2 className="text-xl font-semibold text-olive">Фото объекта</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              Загрузите фотографии вашего объекта — фасад, территорию, общие зоны. Фото номеров добавляются отдельно на вкладке «Номера».
             </p>
           </div>
+          <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+            Можно загрузить до {mediaLimits.property.images} фото и до{" "}
+            {mediaLimits.property.videos} видео. Требования к фото: {accommodationPhotoUploadLimitsLabel}. Первое фото станет обложкой карточки.
+          </p>
           <PropertyMediaManager
             propertyId={property.id}
             initialMedia={property.media}
@@ -1722,7 +1775,7 @@ export function ObjectAboutPage({
             >
               Назад
             </Button>
-            <Button onClick={() => router.push(`/dashboard/objects/${property.id}/rules`)}>
+            <Button onClick={() => router.push(`${basePath}/${property.id}/rules`)}>
               Далее
             </Button>
           </div>

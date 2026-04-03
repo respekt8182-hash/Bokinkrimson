@@ -1,7 +1,7 @@
 // API route handler for /api/media/[mediaId].
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { normalizePropertyMediaSortOrder, normalizeRoomMediaSortOrder } from "@/lib/media";
 import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { deleteFromStorage } from "@/lib/storage";
@@ -11,9 +11,9 @@ type RouteContext = {
 };
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
@@ -42,8 +42,12 @@ export async function DELETE(_request: Request, context: RouteContext) {
     },
   });
 
-  const isPropertyOwner = Boolean(media?.property && media.property.ownerId === session.id);
-  const isRoomOwner = Boolean(media?.room && media.room.property.ownerId === session.id);
+  const isPropertyOwner = Boolean(
+    media?.property && (editor.isAdmin || media.property.ownerId === editor.id),
+  );
+  const isRoomOwner = Boolean(
+    media?.room && (editor.isAdmin || media.room.property.ownerId === editor.id),
+  );
 
   if (!media || (!isPropertyOwner && !isRoomOwner)) {
     return NextResponse.json({ error: "Медиа не найдено" }, { status: 404 });

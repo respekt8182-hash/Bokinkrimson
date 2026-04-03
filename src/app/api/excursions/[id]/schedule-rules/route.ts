@@ -1,21 +1,24 @@
 // API route handler for /api/excursions/[id]/schedule-rules.
-import { ExcursionScheduleMode, Prisma } from "@prisma/client";
+import { ExcursionAvailabilityMode, ExcursionScheduleMode, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { upsertExcursionScheduleRulesSchema } from "@/lib/schemas";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function ensureOwner(excursionId: string, ownerId: string) {
+async function ensureAccess(
+  excursionId: string,
+  editor: NonNullable<Awaited<ReturnType<typeof getEditorSession>>>,
+) {
   const row = await db.excursion.findUnique({
     where: { id: excursionId },
     select: { id: true, ownerId: true },
   });
 
-  if (!row || row.ownerId !== ownerId) {
+  if (!row || (!editor.isAdmin && row.ownerId !== editor.id)) {
     return null;
   }
 
@@ -30,13 +33,13 @@ function toDateOnly(value: string | null | undefined): Date | null {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
-  if (!session) {
+  const editor = await getEditorSession();
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const existing = await ensureOwner(id, session.id);
+  const existing = await ensureAccess(id, editor);
   if (!existing) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
@@ -80,13 +83,13 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const session = await getSession();
-  if (!session) {
+  const editor = await getEditorSession();
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const existing = await ensureOwner(id, session.id);
+  const existing = await ensureAccess(id, editor);
   if (!existing) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
@@ -173,6 +176,7 @@ export async function POST(request: Request, context: RouteContext) {
         scheduleMode:
           parsed.data.scheduleMode ??
           (rules.length > 0 ? ExcursionScheduleMode.RULES : ExcursionScheduleMode.TEXT),
+        availabilityMode: ExcursionAvailabilityMode.REGULAR,
       },
     });
   });

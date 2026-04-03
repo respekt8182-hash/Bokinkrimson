@@ -234,43 +234,61 @@ function createInitialMapState(): MapState {
 function SkeletonCard({ view }: { view: "list" | "grid" }) {
   const isGrid = view === "grid";
 
-  return (
-    <article
-      className={cn(
-        "overflow-hidden rounded-[20px] border border-olive/12 bg-white/96 p-2.5 md:p-3",
-        isGrid ? "min-h-[498px]" : "min-h-[276px]",
-      )}
-      aria-hidden="true"
-    >
-      <div className={cn(isGrid ? "grid gap-3" : "grid gap-3 md:grid-cols-[260px_minmax(0,1fr)]")}>
-        <div className={cn("catalog-skeleton rounded-2xl", isGrid ? "h-[220px]" : "h-[210px]")} />
-        <div className={cn("space-y-2", isGrid ? "min-h-[220px]" : "")}>
-          <div className="catalog-skeleton h-3 w-20 rounded-md" />
-          <div className="catalog-skeleton h-6 w-3/5 rounded-md" />
-          <div className="catalog-skeleton h-4 w-2/5 rounded-md" />
-          <div className="catalog-skeleton h-5 w-28 rounded-md" />
+  if (isGrid) {
+    return (
+      <article className="overflow-hidden rounded-2xl border border-olive/[0.07] bg-white" aria-hidden="true">
+        <div className="catalog-skeleton aspect-[4/3] w-full rounded-t-2xl" />
+        <div className="space-y-2.5 p-3">
+          <div className="catalog-skeleton h-3 w-16 rounded-md" />
+          <div className="catalog-skeleton h-5 w-4/5 rounded-md" />
+          <div className="catalog-skeleton h-3.5 w-3/5 rounded-md" />
           <div className="flex gap-2">
-            <div className="catalog-skeleton h-7 w-7 rounded-full" />
-            <div className="catalog-skeleton h-7 w-7 rounded-full" />
-            <div className="catalog-skeleton h-7 w-7 rounded-full" />
+            <div className="catalog-skeleton h-6 w-6 rounded-lg" />
+            <div className="catalog-skeleton h-6 w-20 rounded-lg" />
           </div>
-          {!isGrid ? (
-            <div className="grid gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-              <div className="space-y-2">
-                <div className="catalog-skeleton h-6 w-32 rounded-md" />
-                <div className="catalog-skeleton h-4 w-36 rounded-md" />
-              </div>
+          <div className="flex gap-1.5">
+            <div className="catalog-skeleton h-5 w-14 rounded-md" />
+            <div className="catalog-skeleton h-5 w-14 rounded-md" />
+          </div>
+        </div>
+        <div className="flex items-end justify-between border-t border-olive/[0.06] p-3">
+          <div className="catalog-skeleton h-6 w-28 rounded-md" />
+          <div className="catalog-skeleton h-9 w-20 rounded-xl" />
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-olive/[0.07] bg-white" aria-hidden="true">
+      <div className="flex flex-col md:flex-row">
+        <div className="catalog-skeleton aspect-[4/3] w-full shrink-0 md:aspect-[4/3] md:w-[240px] lg:w-[280px]" />
+        <div className="flex flex-1 flex-col p-4 md:flex-row md:gap-4">
+          <div className="flex-1 space-y-2.5">
+            <div className="catalog-skeleton h-3 w-16 rounded-md" />
+            <div className="catalog-skeleton h-6 w-3/5 rounded-md" />
+            <div className="catalog-skeleton h-4 w-2/5 rounded-md" />
+            <div className="flex gap-2">
+              <div className="catalog-skeleton h-6 w-6 rounded-lg" />
+              <div className="catalog-skeleton h-6 w-24 rounded-lg" />
+            </div>
+            <div className="flex gap-1.5">
+              <div className="catalog-skeleton h-5 w-16 rounded-md" />
+              <div className="catalog-skeleton h-5 w-16 rounded-md" />
+              <div className="catalog-skeleton h-5 w-16 rounded-md" />
+            </div>
+          </div>
+          <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[190px]">
+            <div className="flex items-center gap-2">
+              <div className="catalog-skeleton h-4 w-16 rounded-md" />
+              <div className="catalog-skeleton h-9 w-9 rounded-lg" />
+            </div>
+            <div className="mt-auto space-y-2 text-right">
+              <div className="catalog-skeleton ml-auto h-6 w-28 rounded-md" />
               <div className="catalog-skeleton h-10 w-full rounded-xl" />
             </div>
-          ) : null}
-        </div>
-        {isGrid ? (
-          <div className="space-y-2">
-            <div className="catalog-skeleton h-6 w-32 rounded-md" />
-            <div className="catalog-skeleton h-4 w-36 rounded-md" />
-            <div className="catalog-skeleton h-10 w-full rounded-full" />
           </div>
-        ) : null}
+        </div>
       </div>
     </article>
   );
@@ -627,9 +645,9 @@ export function PublicHousingResultsWithMap({
             aria-busy={loadingInitial || loadingMore}
             className="space-y-4"
           >
-            <div className={cn("grid gap-4", view === "grid" ? "sm:grid-cols-2" : "grid-cols-1")}>
+            <div className={cn("grid gap-4 transition-all duration-300", view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1")}>
               {loadingInitial && items.length === 0
-                ? Array.from({ length: 3 }, (_, index) => (
+                ? Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
                     <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
                   ))
                 : items.map((item, index) => {
@@ -671,8 +689,8 @@ export function PublicHousingResultsWithMap({
             </div>
 
             {loadingMore ? (
-              <div className={cn("grid gap-4", view === "grid" ? "sm:grid-cols-2" : "grid-cols-1")}>
-                {Array.from({ length: 3 }, (_, index) => (
+              <div className={cn("grid gap-4", view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1")}>
+                {Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
                   <SkeletonCard key={`load-more-skeleton-${index}`} view={view} />
                 ))}
               </div>

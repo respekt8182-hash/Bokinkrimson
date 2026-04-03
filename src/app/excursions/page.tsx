@@ -19,6 +19,7 @@ export default async function ExcursionsPage({ searchParams }: ExcursionsPagePro
   query.set("direction", "excursions");
   const allowed = [
     "q",
+    "offerType",
     "location",
     "district",
     "category",

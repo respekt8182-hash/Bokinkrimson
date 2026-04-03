@@ -1,7 +1,7 @@
 // API route handler for /api/properties/[id]/rooms/[roomId].
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import {
   markPropertyNeedsRemoderationAfterOwnerEdit,
   preparePropertyForPublishedOwnerEdit,
@@ -14,29 +14,37 @@ type RouteContext = {
   params: Promise<{ id: string; roomId: string }>;
 };
 
-async function getOwnedRoom(propertyId: string, roomId: string, userId: string) {
+async function getAccessibleRoom(
+  propertyId: string,
+  roomId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   return db.room.findFirst({
     where: {
       id: roomId,
       propertyId,
-      property: {
-        ownerId: userId,
-        ownerDeletedAt: null,
-      },
+      property: editor?.isAdmin
+        ? {
+            ownerDeletedAt: null,
+          }
+        : {
+            ownerId: editor?.id,
+            ownerDeletedAt: null,
+          },
     },
     include: roomInclude,
   });
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
-  const room = await getOwnedRoom(id, roomId, session.id);
+  const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room || !room.isActive) {
     return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
@@ -46,14 +54,14 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
-  const existing = await getOwnedRoom(id, roomId, session.id);
+  const existing = await getAccessibleRoom(id, roomId, editor);
 
   if (!existing || !existing.isActive) {
     return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
@@ -158,9 +166,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
@@ -170,10 +178,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
       id: roomId,
       propertyId: id,
       isActive: true,
-      property: {
-        ownerId: session.id,
-        ownerDeletedAt: null,
-      },
+      property: editor.isAdmin
+        ? {
+            ownerDeletedAt: null,
+          }
+        : {
+            ownerId: editor.id,
+            ownerDeletedAt: null,
+          },
     },
     select: { id: true, propertyId: true },
   });

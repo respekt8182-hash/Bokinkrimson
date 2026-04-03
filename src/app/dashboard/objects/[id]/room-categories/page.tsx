@@ -105,7 +105,10 @@ export default async function DashboardObjectRoomCategoriesPage({
                     ID объекта: {displayPropertyNumber}
                   </p>
                   <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">Номера</h1>
-                  <p className="mt-1 truncate text-sm text-olive/60">
+                  <p className="mt-0.5 text-sm text-olive/55">
+                    Категории номеров и цены
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-olive/45">
                     {property.name ?? "Объект без названия"}
                   </p>
                 </div>
@@ -135,6 +138,11 @@ export default async function DashboardObjectRoomCategoriesPage({
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl bg-terra/5 px-4 py-3 text-[13px] leading-relaxed text-olive/70">
+          Создайте категории номеров вашего объекта. Для каждой категории укажите название, описание, вместимость и цены.
+          Нажмите «Создать номер», чтобы добавить первую категорию.
         </div>
 
         <RoomFundManager

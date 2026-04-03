@@ -1,8 +1,8 @@
 // Room media reorder endpoint: validates complete room media order and updates sort positions atomically.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { serializeMedia } from "@/lib/media";
 import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 
@@ -14,30 +14,38 @@ const reorderSchema = z.object({
   orderedIds: z.array(z.string().trim().min(1)).min(1).max(200),
 });
 
-async function getOwnedRoom(propertyId: string, roomId: string, userId: string) {
+async function getAccessibleRoom(
+  propertyId: string,
+  roomId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   return db.room.findFirst({
     where: {
       id: roomId,
       propertyId,
       isActive: true,
-      property: {
-        ownerId: userId,
-        ownerDeletedAt: null,
-      },
+      property: editor?.isAdmin
+        ? {
+            ownerDeletedAt: null,
+          }
+        : {
+            ownerId: editor?.id,
+            ownerDeletedAt: null,
+          },
     },
     select: { id: true, propertyId: true },
   });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
-  const room = await getOwnedRoom(id, roomId, session.id);
+  const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room) {
     return NextResponse.json({ error: "Номер не найден" }, { status: 404 });

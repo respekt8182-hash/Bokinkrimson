@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { crimeaLocationById, isClassificationApplicableByType } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { resolveOrCreatePropertyLocation } from "@/lib/location-directory";
 import {
   PROPERTY_OWNER_DELETE_RETENTION_DAYS,
@@ -63,12 +64,12 @@ function runtimeSupportsAllowedPolicies(): boolean {
 
 // Fetch one property draft by id. Access is owner-only.
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
-  if (session) {
-    await purgeExpiredPropertyDraftsForOwner(db, session.id);
+  const editor = await getEditorSession();
+  if (editor?.kind === "owner") {
+    await purgeExpiredPropertyDraftsForOwner(db, editor.id);
   }
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
@@ -79,7 +80,11 @@ export async function GET(_request: Request, context: RouteContext) {
     include: propertyInclude,
   });
 
-  if (!property || property.ownerId !== session.id || property.ownerDeletedAt) {
+  if (
+    !property ||
+    property.ownerDeletedAt ||
+    (!editor.isAdmin && property.ownerId !== editor.id)
+  ) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
@@ -93,12 +98,12 @@ export async function GET(_request: Request, context: RouteContext) {
 
 // Partial update endpoint for wizard steps 1-7 (step 8 media has dedicated routes).
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
-  if (session) {
-    await purgeExpiredPropertyDraftsForOwner(db, session.id);
+  const editor = await getEditorSession();
+  if (editor?.kind === "owner") {
+    await purgeExpiredPropertyDraftsForOwner(db, editor.id);
   }
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
@@ -106,7 +111,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const existing = await db.property.findUnique({ where: { id } });
 
-  if (!existing || existing.ownerId !== session.id || existing.ownerDeletedAt) {
+  if (
+    !existing ||
+    existing.ownerDeletedAt ||
+    (!editor.isAdmin && existing.ownerId !== editor.id)
+  ) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
@@ -235,6 +244,11 @@ export async function PATCH(request: Request, context: RouteContext) {
           where: { id },
           data: {
             phone: data.phone.trim(),
+            phoneName: data.phoneName?.trim() ? data.phoneName.trim() : null,
+            phone2: data.phone2?.trim() ? data.phone2.trim() : null,
+            phone2Name: data.phone2Name?.trim() ? data.phone2Name.trim() : null,
+            phone3: data.phone3?.trim() ? data.phone3.trim() : null,
+            phone3Name: data.phone3Name?.trim() ? data.phone3Name.trim() : null,
             websiteUrl: data.websiteUrl?.trim() ? data.websiteUrl.trim() : null,
             contactEmail: data.contactEmail?.trim() ? data.contactEmail.trim().toLowerCase() : null,
             contactPersonName: data.contactPersonName?.trim()

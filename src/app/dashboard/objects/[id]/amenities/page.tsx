@@ -65,11 +65,18 @@ export default async function DashboardObjectAmenitiesPage({
                 ID объекта: {displayPropertyNumber}
               </p>
               <h1 className="text-3xl text-olive">Удобства в номерах</h1>
+              <p className="mt-1 text-sm text-olive/55">
+                Что есть в номерах вашего объекта
+              </p>
             </div>
             <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold uppercase text-olive">
               {getPropertyWorkflowStatusLabel(property.status, property.moderationNotes, property.pendingEditStatus)}
             </span>
           </div>
+        </div>
+
+        <div className="rounded-xl bg-emerald-50 px-4 py-3 text-[13px] leading-relaxed text-olive/70">
+          Выберите удобства, которые есть в номерах вашего объекта. Гости фильтруют жильё по удобствам — чем больше отметите, тем легче вас найти.
         </div>
 
         <RoomAmenitiesManager propertyId={property.id} />

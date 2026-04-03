@@ -1,8 +1,8 @@
 // Property media reorder endpoint: validates complete media order and persists sort positions atomically.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { serializeMedia } from "@/lib/media";
 import {
   markPropertyNeedsRemoderationAfterOwnerEdit,
@@ -17,13 +17,20 @@ const reorderSchema = z.object({
   orderedIds: z.array(z.string().trim().min(1)).min(1).max(200),
 });
 
-async function ensureOwner(propertyId: string, userId: string) {
+async function ensurePropertyAccess(
+  propertyId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   const property = await db.property.findUnique({
     where: { id: propertyId },
     select: { id: true, ownerId: true, ownerDeletedAt: true },
   });
 
-  if (!property || property.ownerId !== userId || property.ownerDeletedAt) {
+  if (!property || property.ownerDeletedAt) {
+    return null;
+  }
+
+  if (!editor?.isAdmin && property.ownerId !== editor?.id) {
     return null;
   }
 
@@ -31,14 +38,14 @@ async function ensureOwner(propertyId: string, userId: string) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const property = await ensureOwner(id, session.id);
+  const property = await ensurePropertyAccess(id, editor);
 
   if (!property) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });

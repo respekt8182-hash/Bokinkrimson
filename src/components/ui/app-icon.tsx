@@ -18,7 +18,7 @@ export function AppIcon({
   filled = false,
   fillStyle = "soft",
   strokeWidth = APP_ICON_STROKE_WIDTH,
-  absoluteStrokeWidth = true,
+  absoluteStrokeWidth: _absoluteStrokeWidth = true,
   fill: fillProp,
   ...rest
 }: AppIconProps) {
@@ -33,8 +33,7 @@ export function AppIcon({
   return (
     <Icon
       className={cn("app-icon shrink-0", className)}
-      strokeWidth={strokeWidth}
-      absoluteStrokeWidth={absoluteStrokeWidth}
+      stroke={rest.stroke ?? strokeWidth}
       fill={resolvedFill}
       shapeRendering="geometricPrecision"
       vectorEffect="non-scaling-stroke"

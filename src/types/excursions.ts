@@ -40,6 +40,68 @@ export type FaqItem = {
   a: string;
 };
 
+export type ItineraryDay = {
+  day: number;
+  title: string;
+  teaser?: string;
+  description: string;
+  locations: string[];
+  startTime?: string;
+  endTime?: string;
+  included?: string[];
+  meals?: string;
+  accommodation?: string;
+  activities?: string[];
+};
+
+export type ExcursionExtraOption = {
+  title: string;
+  description?: string;
+  included: boolean;
+  price?: number | null;
+};
+
+export const OFFER_TYPE_OPTIONS = [
+  { value: "EXCURSION", label: "Экскурсия" },
+  { value: "TOUR", label: "Тур" },
+] as const;
+
+export const OFFER_SUBTYPE_PRESETS = {
+  EXCURSION: [
+    "Пешеходная",
+    "Автомобильная",
+    "Морская",
+    "Индивидуальная",
+    "Групповая",
+  ],
+  TOUR: [
+    "Авторский",
+    "Однодневный",
+    "Многодневный",
+    "Джип-тур",
+    "Автобусный",
+    "Гастро-тур",
+    "Паломнический",
+  ],
+} as const;
+
+export const TOUR_MEAL_PLAN_OPTIONS = [
+  "Не включено",
+  "Завтрак",
+  "Завтрак + ужин",
+  "Полный пансион",
+  "По программе / частично",
+] as const;
+
+export const PRICE_UNIT_PRESETS = [
+  "чел",
+  "группу",
+  "место",
+  "семью",
+  "тур",
+  "пакет",
+] as const;
+
 export const TIMELINE_ICON_LABELS: Record<TimelineStepIcon, string> = {
   meeting_point: "Встреча",
   bus: "Автобус",
@@ -150,4 +212,13 @@ export const TIMELINE_DURATION_OPTIONS = [
   { value: "1.5 ч", label: "1.5 ч" },
   { value: "2 ч", label: "2 ч" },
   { value: "3 ч", label: "3 ч" },
+];
+
+export const HIGHLIGHT_PRESETS = [
+  "Красивые виды и фотостопы",
+  "Продуманный маршрут без спешки",
+  "Локальные истории и факты",
+  "Комфортная логистика",
+  "Подходит для всей семьи",
+  "Авторская программа",
 ];

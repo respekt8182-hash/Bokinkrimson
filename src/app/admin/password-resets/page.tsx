@@ -26,9 +26,6 @@ export default async function AdminPasswordResetsPage() {
         user: {
           select: { id: true, firstName: true, lastName: true, email: true },
         },
-        processedBy: {
-          select: { firstName: true, lastName: true },
-        },
       },
     }),
   ]);
@@ -110,9 +107,7 @@ export default async function AdminPasswordResetsPage() {
                         : "-"}
                     </td>
                     <td className="px-3 py-2 text-olive/70">
-                      {req.processedBy
-                        ? `${req.processedBy.firstName} ${req.processedBy.lastName}`
-                        : "-"}
+                      {req.processedById ?? "-"}
                     </td>
                     <td className="px-3 py-2">
                       <Link

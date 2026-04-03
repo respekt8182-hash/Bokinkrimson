@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ExcursionOfferType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serializeExcursion } from "@/lib/excursions";
@@ -35,16 +36,27 @@ export async function GET() {
   return NextResponse.json({ items: items.map(serializeExcursion) });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
+  let offerType: ExcursionOfferType = ExcursionOfferType.EXCURSION;
+  try {
+    const payload = (await request.json()) as { offerType?: string };
+    if (payload.offerType === ExcursionOfferType.TOUR) {
+      offerType = ExcursionOfferType.TOUR;
+    }
+  } catch {
+    // Empty body is allowed for backwards compatibility.
+  }
+
   const created = await db.excursion.create({
     data: {
       ownerId: session.id,
+      offerType,
       contactFirstName: session.firstName,
       contactLastName: session.lastName,
       contactEmail: "",

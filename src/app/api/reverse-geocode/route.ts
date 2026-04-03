@@ -1,11 +1,11 @@
 // API route handler for /api/reverse-geocode.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getEditorSession } from "@/lib/editor-access";
 import { isCoordinateInCrimea } from "@/lib/properties";
 import { reverseGeocode } from "@/lib/yandex-geocoder";
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await getEditorSession();
 
   if (!session) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });

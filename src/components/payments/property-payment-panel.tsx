@@ -7,6 +7,8 @@ import {
   CircleAlert,
   CircleCheckBig,
   CircleX,
+  CreditCard,
+  Phone,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,6 +22,7 @@ import {
 } from "@/lib/payments";
 
 type PaymentStatusValue = "CREATED" | "PENDING" | "SUCCEEDED" | "CANCELED";
+type PaymentProviderValue = "MOCK" | "YOOKASSA" | "MANAGER";
 type PropertyStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
 
 type PaymentReadinessIssue = {
@@ -139,6 +142,8 @@ export function PropertyPaymentPanel({
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isTempPaying, setIsTempPaying] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("YOOKASSA");
+  const [managerRequested, setManagerRequested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -243,13 +248,16 @@ export function PropertyPaymentPanel({
     setIsCreating(true);
     setError("");
     setMessage("");
+    setManagerRequested(false);
 
     try {
       const response = await fetch(`/api/properties/${propertyId}/payments`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: paymentMethod }),
       });
 
-      const body = (await response.json()) as PaymentRouteResponse;
+      const body = (await response.json()) as PaymentRouteResponse & { managerRequested?: boolean };
 
       if (!response.ok) {
         if (body.item) {
@@ -271,6 +279,13 @@ export function PropertyPaymentPanel({
       if (body.item) {
         const paymentItem = body.item;
         setPayments((prev) => [paymentItem, ...prev.filter((item) => item.id !== paymentItem.id)]);
+      }
+
+      if (body.managerRequested) {
+        setManagerRequested(true);
+        setMessage("");
+        await refreshPayments();
+        return;
       }
 
       if (body.redirectUrl) {
@@ -531,8 +546,9 @@ export function PropertyPaymentPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold text-olive">Оплата размещения</h1>
-              <p className="mt-0.5 text-sm text-olive/60">
-                <span className="font-medium text-olive">{propertyName}</span>
+              <p className="mt-0.5 text-sm text-olive/55">Последний шаг перед публикацией</p>
+              <p className="mt-0.5 text-xs text-olive/45">
+                <span className="font-medium text-olive/60">{propertyName}</span>
               </p>
             </div>
             <span
@@ -571,25 +587,24 @@ export function PropertyPaymentPanel({
             </div>
           ) : null}
 
-          {/* Info notice */}
-          <div className="flex gap-3 rounded-xl border border-olive/10 bg-cream/70 p-3 text-sm text-olive/75">
-            <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="space-y-1">
-              <p>
-                После успешной оплаты система автоматически отправит карточку на модерацию, если она
-                заполнена полностью и тариф покрыт.
-              </p>
-              <p>
-                Если доплата не нужна и размещение уже активно, изменения можно отправить на
-                модерацию кнопкой ниже.
-              </p>
-            </div>
+          {/* Info notice — step-by-step guide */}
+          <div className="rounded-xl border border-olive/10 bg-cream/70 p-4 text-sm text-olive/75">
+            <p className="mb-2 font-semibold text-olive">Как это работает?</p>
+            <ol className="list-inside list-decimal space-y-1.5 text-[13px]">
+              <li>Убедитесь, что все предыдущие разделы заполнены (объект, правила, номера, удобства)</li>
+              <li>Оплатите размещение — тариф рассчитывается автоматически по количеству номеров</li>
+              <li>После оплаты карточка отправится на модерацию автоматически</li>
+              <li>После прохождения модерации объект появится в каталоге</li>
+            </ol>
+            <p className="mt-2 text-xs text-olive/55">
+              Если размещение уже оплачено, изменения можно повторно отправить на модерацию кнопкой ниже.
+            </p>
           </div>
 
           {/* Stats grid */}
-          <div className="grid gap-2 sm:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-3">
             {/* Active rooms */}
-            <div className="rounded-xl bg-cream p-3">
+            <div className="rounded-xl bg-cream p-3.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
                 Активных номеров
               </p>
@@ -598,13 +613,13 @@ export function PropertyPaymentPanel({
               >
                 {readiness.roomCount}
               </p>
-              <p className="mt-2 text-[11px] text-olive/60">
-                {readiness.roomCount > 0 ? "номеров активно" : "нет активных"}
+              <p className="mt-2 text-[11px] text-olive/50">
+                {readiness.roomCount > 0 ? "Влияет на стоимость тарифа" : "Создайте номера на вкладке «Номера»"}
               </p>
             </div>
 
             {/* Tariff */}
-            <div className="rounded-xl bg-cream p-3">
+            <div className="rounded-xl bg-cream p-3.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
                 Тариф
               </p>
@@ -617,13 +632,15 @@ export function PropertyPaymentPanel({
                 <p className="mt-1 text-lg font-bold text-olive">
                   {formatMoney(readiness.quote.amount)}
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-[11px] text-olive/50">Заполните все разделы</p>
+              )}
             </div>
 
             {/* Pricing group */}
-            <div className="rounded-xl bg-cream p-3">
+            <div className="rounded-xl bg-cream p-3.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                Категория
+                Категория тарифа
               </p>
               <p
                 className={`mt-1.5 text-base font-semibold leading-tight ${readiness.quote ? "text-olive" : "text-olive/35"}`}
@@ -631,6 +648,9 @@ export function PropertyPaymentPanel({
                 {readiness.quote
                   ? getPricingGroupLabel(readiness.quote.pricingGroup)
                   : "Не определена"}
+              </p>
+              <p className="mt-1 text-[11px] text-olive/50">
+                {readiness.quote ? "Определяется типом объекта" : "Зависит от типа объекта и номеров"}
               </p>
             </div>
           </div>
@@ -718,11 +738,12 @@ export function PropertyPaymentPanel({
 
           {/* Readiness errors */}
           {!readiness.ready ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              <p className="mb-2 flex items-center gap-1.5 font-semibold text-red-800">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <p className="mb-1 flex items-center gap-1.5 font-semibold text-red-800">
                 <AppIcon icon={CircleAlert} className="h-4 w-4" />
-                Необходимо устранить:
+                Что нужно сделать перед оплатой
               </p>
+              <p className="mb-3 text-xs text-red-600/70">Перейдите по ссылкам ниже, заполните данные и вернитесь обратно</p>
               <ul className="space-y-1 pl-1">
                 {readinessIssues.map((issue) => (
                   <li key={issue.id} className="flex items-start gap-2">
@@ -750,36 +771,100 @@ export function PropertyPaymentPanel({
             </div>
           ) : null}
 
+          {/* Manager payment confirmation banner */}
+          {managerRequested && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex items-start gap-3">
+                <AppIcon icon={CircleCheckBig} className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <p className="font-semibold text-olive">Заявка на оплату отправлена</p>
+                  <p className="mt-1 text-sm text-olive/70">
+                    Ваши контактные данные переданы менеджеру. Менеджер свяжется с вами в ближайшее
+                    время для подтверждения оплаты.
+                  </p>
+                  <p className="mt-1 text-sm text-olive/55">
+                    После подтверждения оплаты карточка автоматически будет отправлена на модерацию.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Payment method selector */}
+          {!canSubmitModerationWithPaidPlacement && canCreatePayment && readiness.ready && amountDue > 0 && !managerRequested && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-olive">Выберите способ оплаты</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("YOOKASSA")}
+                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
+                    paymentMethod === "YOOKASSA"
+                      ? "border-primary bg-primary/5"
+                      : "border-olive/15 bg-white hover:border-olive/30"
+                  }`}
+                >
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
+                  }`}>
+                    <AppIcon icon={CreditCard} className={`h-5 w-5 ${
+                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
+                    }`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${
+                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
+                    }`}>Онлайн-оплата</p>
+                    <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("MANAGER")}
+                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
+                    paymentMethod === "MANAGER"
+                      ? "border-primary bg-primary/5"
+                      : "border-olive/15 bg-white hover:border-olive/30"
+                  }`}
+                >
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    paymentMethod === "MANAGER" ? "bg-primary/15" : "bg-olive/8"
+                  }`}>
+                    <AppIcon icon={Phone} className={`h-5 w-5 ${
+                      paymentMethod === "MANAGER" ? "text-primary" : "text-olive/50"
+                    }`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${
+                      paymentMethod === "MANAGER" ? "text-primary" : "text-olive"
+                    }`}>Через менеджера</p>
+                    <p className="text-xs text-olive/55">Перевод на карту / по реквизитам</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Button
-              onClick={() =>
-                void (canSubmitModerationWithPaidPlacement
-                  ? submitForModeration()
-                  : createPayment())
-              }
-              disabled={primaryActionDisabled || isTempPaying}
-            >
-              {isCreating || isSubmittingModeration
-                ? primaryActionPendingLabel
-                : primaryActionLabel}
-            </Button>
-            {/* TODO(temp): remove this button after payment QA is finished. */}
-            <Button
-              variant="secondary"
-              onClick={() => void runTempPayment()}
-              disabled={
-                isTempPaying ||
-                isCreating ||
-                isSubmittingModeration ||
-                isUpdating ||
-                !canUseTempPayButton
-              }
-            >
-              {isTempPaying
-                ? "Проводим..."
-                : "Временно: зачесть оплату"}
-            </Button>
+            {!managerRequested && (
+              <Button
+                onClick={() =>
+                  void (canSubmitModerationWithPaidPlacement
+                    ? submitForModeration()
+                    : createPayment())
+                }
+                disabled={primaryActionDisabled || isTempPaying}
+              >
+                {isCreating || isSubmittingModeration
+                  ? primaryActionPendingLabel
+                  : canSubmitModerationWithPaidPlacement
+                    ? primaryActionLabel
+                    : paymentMethod === "MANAGER"
+                      ? "Отправить заявку менеджеру"
+                      : "Перейти к оплате"}
+              </Button>
+            )}
             <div className="mx-1 h-5 w-px bg-olive/15 hidden sm:block" />
             <Button variant="ghost" onClick={() => void refreshPayments()} disabled={isUpdating}>
               {isUpdating ? "Обновление..." : "Обновить"}
@@ -796,21 +881,34 @@ export function PropertyPaymentPanel({
 
       {latestPayment ? (
         <section className="rounded-2xl border border-olive/10 bg-white p-4">
-          <h2 className="text-lg text-olive">Последний платеж</h2>
-          <p className="mt-1 text-sm text-olive/75">
-            Статус:{" "}
-            <span className="font-semibold text-olive">{latestPayment.statusLabel}</span>
-          </p>
-          <p className="text-sm text-olive/75">
-            Сумма:{" "}
-            <span className="font-semibold text-olive">{formatMoney(latestPayment.amount)}</span>
-          </p>
-          <p className="text-sm text-olive/75">
-            Создан: {formatDateTime(latestPayment.createdAt)}
-          </p>
+          <h2 className="text-lg font-semibold text-olive">Последний платеж</h2>
+          <div className="mt-2 grid gap-1.5 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-olive/55">Статус</span>
+              <span className="font-semibold text-olive">{latestPayment.statusLabel}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-olive/55">Сумма</span>
+              <span className="font-semibold text-olive">{formatMoney(latestPayment.amount)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-olive/55">Дата</span>
+              <span className="text-olive">{formatDateTime(latestPayment.createdAt)}</span>
+            </div>
+          </div>
 
           {isOpenPayment(latestPayment.status) ? (
             <div className="mt-3 flex flex-wrap gap-2">
+              {latestPayment.provider === "MANAGER" ? (
+                <div className="w-full rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                  <p className="font-medium">Ожидает подтверждения менеджером</p>
+                  <p className="mt-0.5 text-xs text-amber-700/70">
+                    Менеджер свяжется с вами для подтверждения оплаты. После подтверждения карточка
+                    будет отправлена на модерацию автоматически.
+                  </p>
+                </div>
+              ) : null}
+
               {latestPayment.provider === "YOOKASSA" && latestPayment.confirmationUrl ? (
                 <a
                   href={latestPayment.confirmationUrl}
@@ -880,28 +978,45 @@ export function PropertyPaymentPanel({
 
       {payments.length > 0 ? (
         <section className="rounded-2xl border border-olive/10 bg-white p-4">
-          <h2 className="text-lg text-olive">История платежей</h2>
-          <div className="mt-3 overflow-x-auto">
+          <h2 className="text-lg font-semibold text-olive">История платежей</h2>
+          <p className="mt-0.5 text-xs text-olive/50">Все операции по оплате размещения</p>
+
+          {/* Mobile card layout */}
+          <div className="mt-3 space-y-2 sm:hidden">
+            {payments.map((payment) => (
+              <div key={payment.id} className="rounded-xl border border-olive/10 bg-cream/50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-olive">{formatMoney(payment.amount)}</span>
+                  <span className="rounded-full bg-olive/8 px-2 py-0.5 text-[11px] font-semibold text-olive/70">{payment.statusLabel}</span>
+                </div>
+                <p className="mt-1 text-xs text-olive/55">Тариф: {payment.tariffCode}</p>
+                <p className="text-xs text-olive/45">{formatDateTime(payment.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="mt-3 hidden overflow-x-auto sm:block">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-olive/65">
-                  <th className="py-1 pr-4">ID</th>
-                  <th className="py-1 pr-4">Тариф</th>
-                  <th className="py-1 pr-4">Сумма</th>
-                  <th className="py-1 pr-4">Статус</th>
-                  <th className="py-1">Дата</th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">ID</th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Тариф</th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Сумма</th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Статус</th>
+                  <th className="py-1.5 text-xs font-semibold uppercase tracking-wide">Дата</th>
                 </tr>
               </thead>
               <tbody>
                 {payments.map((payment) => (
                   <tr key={payment.id} className="border-t border-olive/10">
-                    <td className="py-1 pr-4 font-mono text-xs text-olive">
+                    <td className="py-2 pr-4 font-mono text-xs text-olive">
                       {payment.id.slice(0, 12)}...
                     </td>
-                    <td className="py-1 pr-4 text-olive">{payment.tariffCode}</td>
-                    <td className="py-1 pr-4 text-olive">{formatMoney(payment.amount)}</td>
-                    <td className="py-1 pr-4 text-olive">{payment.statusLabel}</td>
-                    <td className="py-1 text-olive">{formatDateTime(payment.createdAt)}</td>
+                    <td className="py-2 pr-4 text-olive">{payment.tariffCode}</td>
+                    <td className="py-2 pr-4 font-medium text-olive">{formatMoney(payment.amount)}</td>
+                    <td className="py-2 pr-4 text-olive">{payment.statusLabel}</td>
+                    <td className="py-2 text-olive">{formatDateTime(payment.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

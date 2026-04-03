@@ -96,6 +96,12 @@ export default async function AdminModerationExcursionPage({
             Назад к очереди
           </Link>
           <Link
+            href={`/admin/excursions/${excursion.id}`}
+            className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+          >
+            Полный редактор
+          </Link>
+          <Link
             href={publicPath}
             className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
           >

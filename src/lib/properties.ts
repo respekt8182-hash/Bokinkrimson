@@ -86,6 +86,11 @@ export type SerializedProperty = {
   latitude: number | null;
   longitude: number | null;
   phone: string | null;
+  phoneName: string | null;
+  phone2: string | null;
+  phone2Name: string | null;
+  phone3: string | null;
+  phone3Name: string | null;
   websiteUrl: string | null;
   contactEmail: string | null;
   contactPersonName: string | null;
@@ -634,6 +639,8 @@ const PROPERTY_AUTO_MODERATION_SELECT = {
   quietHoursFrom: true,
   quietHoursTo: true,
   classificationApplicable: true,
+  starRating: true,
+  selfAssessmentPassed: true,
   registryNumber: true,
   registryNumberPending: true,
   status: true,
@@ -827,6 +834,11 @@ export function serializeProperty(property: {
   latitude: Prisma.Decimal | null;
   longitude: Prisma.Decimal | null;
   phone: string | null;
+  phoneName: string | null;
+  phone2: string | null;
+  phone2Name: string | null;
+  phone3: string | null;
+  phone3Name: string | null;
   websiteUrl: string | null;
   contactEmail: string | null;
   contactPersonName: string | null;
@@ -918,6 +930,11 @@ export function serializeProperty(property: {
     latitude: property.latitude === null ? null : Number(property.latitude),
     longitude: property.longitude === null ? null : Number(property.longitude),
     phone: property.phone,
+    phoneName: property.phoneName,
+    phone2: property.phone2,
+    phone2Name: property.phone2Name,
+    phone3: property.phone3,
+    phone3Name: property.phone3Name,
     websiteUrl: property.websiteUrl,
     contactEmail: property.contactEmail,
     contactPersonName: property.contactPersonName,

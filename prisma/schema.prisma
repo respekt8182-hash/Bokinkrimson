@@ -50,6 +50,11 @@ enum ExcursionFormat {
   VIP        @map("vip")
 }
 
+enum ExcursionOfferType {
+  EXCURSION @map("excursion")
+  TOUR      @map("tour")
+}
+
 enum ExcursionPriceType {
   PER_PERSON @map("per_person")
   PER_GROUP  @map("per_group")
@@ -65,6 +70,12 @@ enum ExcursionScheduleMode {
   TEXT     @map("text")
   RULES    @map("rules")
   SESSIONS @map("sessions")
+}
+
+enum ExcursionAvailabilityMode {
+  REGULAR   @map("regular")
+  DATED     @map("dated")
+  ON_REQUEST @map("on_request")
 }
 
 enum ExcursionSessionStatus {
@@ -112,6 +123,7 @@ enum PaymentStatus {
 enum PaymentProvider {
   MOCK     @map("mock")
   YOOKASSA @map("yookassa")
+  MANAGER  @map("manager")
 }
 
 enum OccupancyStatus {
@@ -173,15 +185,15 @@ model User {
   excursions   Excursion[]
   applications Application[] @relation("GuestApplications")
   payments     Payment[] @relation("OwnerPayments")
+  confirmedPayments Payment[] @relation("ConfirmedPayments")
   favoriteProperties FavoriteProperty[]
-  adminActions AdminActionLog[] @relation("AdminActionActor")
   adminMessages AdminMessage[] @relation("AdminMessageSender")
   reviews      Review[]
   reviewReactions ReviewReaction[]
   reviewReports ReviewReport[] @relation("ReviewReporter")
   passwordResetRequests         PasswordResetRequest[] @relation("PasswordResetRequestedByUser")
-  processedPasswordResetRequests PasswordResetRequest[] @relation("PasswordResetProcessedByAdmin")
-  approvedCustomLocations CustomLocation[] @relation("CustomLocationApprovedBy")
+  chatConsentGiven Boolean @default(false) @map("chat_consent_given")
+  supportChat      SupportChat?
 }
 
 model PasswordResetRequest {
@@ -194,7 +206,6 @@ model PasswordResetRequest {
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
   user          User                       @relation("PasswordResetRequestedByUser", fields: [userId], references: [id], onDelete: Cascade)
-  processedBy   User?                      @relation("PasswordResetProcessedByAdmin", fields: [processedById], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([userId, status, createdAt])
@@ -214,6 +225,11 @@ model Property {
   latitude                 Decimal?               @db.Decimal(9, 6)
   longitude                Decimal?               @db.Decimal(9, 6)
   phone                    String?
+  phoneName                String?
+  phone2                   String?
+  phone2Name               String?
+  phone3                   String?
+  phone3Name               String?
   websiteUrl               String?
   contactEmail             String?
   contactPersonName        String?
@@ -308,7 +324,6 @@ model CustomLocation {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   sourceProperty   Property?            @relation("CustomLocationSourceProperty", fields: [sourcePropertyId], references: [id], onDelete: SetNull)
-  approvedBy       User?                @relation("CustomLocationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([status, name])
 }
@@ -442,6 +457,8 @@ model ExcursionScheduleException {
 model Excursion {
   id                    String                 @id @default(cuid())
   ownerId               String
+  offerType             ExcursionOfferType     @default(EXCURSION)
+  subtypeLabel          String?
   title                 String?
   locationId            String?
   locationName          String?
@@ -459,9 +476,16 @@ model Excursion {
   shortDescription      String?
   fullDescription       String?
   routeDescription      String?
+  highlights            Json                   @default("[]")
   durationMinutes       Int?
+  durationDays          Int?
+  durationNights        Int?
+  itineraryDays         Json                   @default("[]")
+  finishPoint           String?
   scheduleText          String?
   scheduleMode          ExcursionScheduleMode  @default(TEXT)
+  availabilityMode      ExcursionAvailabilityMode @default(REGULAR)
+  availabilityNote      String?
   format                ExcursionFormat?
   groupSizeMin          Int?
   groupSizeMax          Int?
@@ -501,10 +525,18 @@ model Excursion {
   timeline              Json                   @default("[]")
   pricingTiers          Json                   @default("[]")
   faqItems              Json                   @default("[]")
+  extraOptions          Json                   @default("[]")
   includedItems         String[]               @default([])
   excludedItems         String[]               @default([])
   transferDetails       String?
   cancellationPolicyType String?
+  priceUnitLabel        String?
+  accommodationProvided Boolean?
+  accommodationType     String?
+  accommodationNights   Int?
+  accommodationFormat   String?
+  mealPlan              String?
+  accommodationComment  String?
   avgRating             Decimal                @default(0) @db.Decimal(3, 2)
   reviewsCount          Int                    @default(0)
   profileViews          Int                    @default(0)
@@ -528,6 +560,7 @@ model Excursion {
   applications          Application[]
   adminMessages         AdminMessage[]
   reviews               Review[]
+  payments              Payment[]
 
   @@index([ownerId, updatedAt])
   @@index([status, updatedAt])
@@ -600,14 +633,13 @@ model ReviewReport {
 }
 
 model AdminActionLog {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   adminUserId String
-  action     String
-  targetType String
-  targetId   String
-  details    Json?
-  createdAt  DateTime @default(now())
-  adminUser  User     @relation("AdminActionActor", fields: [adminUserId], references: [id], onDelete: Cascade)
+  action      String
+  targetType  String
+  targetId    String
+  details     Json?
+  createdAt   DateTime @default(now())
 
   @@index([adminUserId, createdAt])
   @@index([targetType, targetId, createdAt])
@@ -722,7 +754,8 @@ model Application {
 
 model Payment {
   id              String          @id @default(cuid())
-  propertyId      String
+  propertyId      String?
+  excursionId     String?
   ownerId         String
   amount          Decimal         @db.Decimal(10, 2)
   tariffCode      String
@@ -738,13 +771,19 @@ model Payment {
   updatedAt       DateTime        @updatedAt
   paidAt          DateTime?
   canceledAt      DateTime?
-  property        Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  managerNotes    String?
+  confirmedById   String?
+  confirmedBy     User?           @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
+  property        Property?       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion       Excursion?      @relation(fields: [excursionId], references: [id], onDelete: Cascade)
   owner           User            @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
+  @@index([excursionId, status, createdAt])
   @@index([ownerId, createdAt])
   @@index([providerPaymentId])
+  @@index([provider, status])
 }
 
 model RoomPrice {
@@ -892,4 +931,52 @@ model Media {
   @@index([propertyId, sortOrder])
   @@index([roomId, sortOrder])
   @@index([type, createdAt])
+}
+
+// ─── Support Chat ───────────────────────────────────────────────
+
+model SupportChat {
+  id        String           @id @default(cuid())
+  userId    String           @unique @map("user_id")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  SupportMessage[]
+
+  @@index([updatedAt])
+  @@map("support_chats")
+}
+
+model SupportMessage {
+  id         String      @id @default(cuid())
+  chatId     String      @map("chat_id")
+  senderType String      @map("sender_type") @db.VarChar(20)
+  senderName String?     @map("sender_name") @db.VarChar(100)
+  text       String
+  imageUrl   String?     @map("image_url") @db.VarChar(500)
+  createdAt  DateTime    @default(now()) @map("created_at")
+  chat       SupportChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+  @@map("support_messages")
+}
+
+model ChatManager {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(100)
+  photoUrl  String?  @map("photo_url") @db.VarChar(500)
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("chat_managers")
+}
+
+model SiteSetting {
+  key       String   @id @db.VarChar(100)
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
 }

@@ -348,6 +348,38 @@ export function HousingSearchDateRangeField({
     });
   }, []);
 
+  const syncActiveMonthFromScroll = useCallback(() => {
+    const monthList = monthListRef.current;
+    if (!monthList) {
+      return;
+    }
+
+    const listTop = monthList.getBoundingClientRect().top;
+    let nextActiveMonthKey = "";
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (const month of calendarMonths) {
+      const section = monthSectionRefs.current[month.key];
+      if (!section) {
+        continue;
+      }
+
+      const distance = Math.abs(section.getBoundingClientRect().top - listTop - 12);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        nextActiveMonthKey = month.key;
+      }
+    }
+
+    if (!nextActiveMonthKey) {
+      return;
+    }
+
+    setActiveMonthKey((current) =>
+      current === nextActiveMonthKey ? current : nextActiveMonthKey,
+    );
+  }, [calendarMonths]);
+
   const openPanel = useCallback(() => {
     const preferredMonthKey =
       getMonthKeyFromIso(range.checkIn) ?? getMonthKeyFromIso(todayIso) ?? calendarMonths[0]?.key ?? "";
@@ -441,16 +473,51 @@ export function HousingSearchDateRangeField({
       return;
     }
 
+    const preferredMonthKey =
+      getMonthKeyFromIso(range.checkIn) ?? getMonthKeyFromIso(todayIso) ?? calendarMonths[0]?.key ?? "";
     const raf = window.requestAnimationFrame(() => {
-      if (activeMonthKey) {
-        scrollToMonth(activeMonthKey, "auto");
+      if (preferredMonthKey) {
+        scrollToMonth(preferredMonthKey, "auto");
       }
     });
 
     return () => {
       window.cancelAnimationFrame(raf);
     };
-  }, [activeMonthKey, isOpen, scrollToMonth]);
+  }, [calendarMonths, isOpen, range.checkIn, scrollToMonth, todayIso]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const monthList = monthListRef.current;
+    if (!monthList) {
+      return;
+    }
+
+    let frame = 0;
+    const syncVisibleMonth = () => {
+      if (frame) {
+        return;
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        syncActiveMonthFromScroll();
+      });
+    };
+
+    syncVisibleMonth();
+    monthList.addEventListener("scroll", syncVisibleMonth, { passive: true });
+
+    return () => {
+      monthList.removeEventListener("scroll", syncVisibleMonth);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [isOpen, syncActiveMonthFromScroll]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -489,7 +556,7 @@ export function HousingSearchDateRangeField({
   }, [closePanel, isOpen]);
 
   return (
-    <div ref={rootRef} className={cn("relative", isOpen ? "z-[11000] xl:z-[4000]" : "")}>
+    <div ref={rootRef} className={cn("relative", isOpen ? "z-[11000]" : "")}>
       {showHiddenInputs && range.checkIn ? <input type="hidden" name="checkIn" value={range.checkIn} /> : null}
       {showHiddenInputs && range.checkOut ? <input type="hidden" name="checkOut" value={range.checkOut} /> : null}
 
@@ -519,7 +586,7 @@ export function HousingSearchDateRangeField({
           <button
             type="button"
             className={cn(
-              "fixed inset-0 z-[10990] bg-primary/30 xl:hidden",
+              "fixed inset-0 z-[10990] bg-primary/30 xl:bg-primary/16 xl:backdrop-blur-[2px]",
               isOpen ? "popover-overlay-enter" : "popover-overlay-exit pointer-events-none",
             )}
             onClick={closePanel}
@@ -527,7 +594,7 @@ export function HousingSearchDateRangeField({
           />
           <div
             className={cn(
-              "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-[11000] max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border ring-olive/12 bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:left-0 xl:right-auto xl:top-[calc(100%+8px)] xl:bottom-auto xl:z-[4000] xl:w-[min(92vw,840px)] xl:max-h-none xl:overflow-visible xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
+              "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-[11000] max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border ring-olive/12 bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:date-picker-dialog xl:inset-x-auto xl:left-1/2 xl:top-1/2 xl:bottom-auto xl:w-[min(92vw,840px)] xl:max-w-[92vw] xl:-translate-x-1/2 xl:-translate-y-1/2 xl:p-4 xl:shadow-[0_22px_54px_-24px_rgba(15,118,110,0.45)]",
               isOpen ? "popover-enter" : "popover-exit pointer-events-none",
             )}
           >

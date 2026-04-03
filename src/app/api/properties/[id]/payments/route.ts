@@ -1,6 +1,7 @@
 // Owner property payment endpoint: returns readiness/history and creates new placement payment attempts.
 import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -13,6 +14,7 @@ import {
   getPropertyProgress,
   purgeExpiredPropertyDraftsForOwner,
 } from "@/lib/properties";
+import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -115,11 +117,26 @@ export async function GET(_request: Request, context: RouteContext) {
   });
 }
 
-export async function POST(_request: Request, context: RouteContext) {
+const createPaymentSchema = z.object({
+  provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("YOOKASSA"),
+});
+
+export async function POST(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  let body: z.infer<typeof createPaymentSchema> = { provider: "YOOKASSA" };
+  try {
+    const raw = await request.json();
+    const parsed = createPaymentSchema.safeParse(raw);
+    if (parsed.success) {
+      body = parsed.data;
+    }
+  } catch {
+    // empty body is fine, defaults to YOOKASSA
   }
 
   await purgeExpiredPropertyDraftsForOwner(db, session.id);
@@ -178,6 +195,94 @@ export async function POST(_request: Request, context: RouteContext) {
     ? placement.requiredPaymentAmount
     : readiness.quote.amount;
 
+  const idempotenceKey = crypto.randomUUID();
+
+  // --- MANAGER flow ---
+  if (body.provider === "MANAGER") {
+    const created = await db.payment.create({
+      data: {
+        propertyId: property.id,
+        ownerId: session.id,
+        amount,
+        tariffCode: readiness.quote.tariff.code,
+        roomCount: readiness.quote.roomCount,
+        status: PaymentStatus.PENDING,
+        provider: PaymentProvider.MANAGER,
+        idempotenceKey,
+        confirmationUrl: null,
+        placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
+      },
+      include: {
+        property: { select: { name: true } },
+      },
+    });
+
+    return NextResponse.json({
+      item: serializePayment(created),
+      redirectUrl: null,
+      managerRequested: true,
+    });
+  }
+
+  // --- YOOKASSA flow ---
+  if (isYookassaConfigured()) {
+    const created = await db.payment.create({
+      data: {
+        propertyId: property.id,
+        ownerId: session.id,
+        amount,
+        tariffCode: readiness.quote.tariff.code,
+        roomCount: readiness.quote.roomCount,
+        status: PaymentStatus.CREATED,
+        provider: PaymentProvider.YOOKASSA,
+        idempotenceKey,
+        placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
+      },
+      include: {
+        property: { select: { name: true } },
+      },
+    });
+
+    try {
+      const yooPayment = await createYookassaPayment({
+        idempotenceKey,
+        amountRub: Number(amount),
+        description: `Размещение объекта «${property.name ?? "Без названия"}» на 365 дней`,
+        metadata: { paymentId: created.id, propertyId: property.id },
+      });
+
+      const updated = await db.payment.update({
+        where: { id: created.id },
+        data: {
+          providerPaymentId: yooPayment.id,
+          confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+          providerPayload: yooPayment,
+          status: PaymentStatus.PENDING,
+        },
+        include: {
+          property: { select: { name: true } },
+        },
+      });
+
+      return NextResponse.json({
+        item: serializePayment(updated),
+        redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
+      });
+    } catch (error) {
+      // If YooKassa creation fails, clean up
+      await db.payment.update({
+        where: { id: created.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+      });
+      console.error("YooKassa payment creation failed", error);
+      return NextResponse.json(
+        { error: "Не удалось создать платёж. Попробуйте позже или выберите оплату через менеджера." },
+        { status: 502 },
+      );
+    }
+  }
+
+  // --- Fallback: MOCK (dev mode) ---
   const created = await db.payment.create({
     data: {
       propertyId: property.id,
@@ -187,14 +292,12 @@ export async function POST(_request: Request, context: RouteContext) {
       roomCount: readiness.quote.roomCount,
       status: PaymentStatus.CREATED,
       provider: PaymentProvider.MOCK,
-      idempotenceKey: crypto.randomUUID(),
+      idempotenceKey,
       confirmationUrl: null,
       placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
     },
     include: {
-      property: {
-        select: { name: true },
-      },
+      property: { select: { name: true } },
     },
   });
 

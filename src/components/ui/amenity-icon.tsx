@@ -168,3 +168,52 @@ type KeyAmenityIconProps = {
 export function KeyAmenityIcon({ className }: KeyAmenityIconProps) {
   return <AppIcon icon={Sparkles} className={cn("h-4 w-4", className)} />;
 }
+
+const amenityNamePatterns: Array<[RegExp, LucideIcon]> = [
+  [/wi-?fi|интернет|вай-?фай/i, Wifi],
+  [/кондиционер/i, AirVent],
+  [/вентилятор/i, Fan],
+  [/отопление|обогрев|теплый пол|камин/i, Flame],
+  [/душ/i, ShowerHead],
+  [/ванн/i, Bath],
+  [/туалет|сануз|уборн/i, Toilet],
+  [/кухн|плит|духов|микроволн/i, CookingPot],
+  [/холодильник/i, Refrigerator],
+  [/чайник|кофе/i, Coffee],
+  [/стир/i, WashingMachine],
+  [/утюг|глажк/i, Shirt],
+  [/телевизор|тв|tv/i, Tv],
+  [/кровать|диван|спальн/i, BedDouble],
+  [/парковк|стоянк|гараж/i, House],
+  [/бассейн/i, Waves],
+  [/сейф/i, LockKeyhole],
+  [/балкон|терас|веранд/i, PanelsTopLeft],
+  [/вид.*мор|мор.*вид|первая линия/i, Waves],
+  [/вид.*гор|гор.*вид/i, Mountain],
+  [/сад|двор|территори|беседк/i, Trees],
+  [/лифт/i, ArrowUpDown],
+  [/детск|ребен|игр/i, Baby],
+  [/животн|питом/i, PawPrint],
+  [/фен/i, Wind],
+  [/мини-?бар/i, GlassWater],
+  [/мангал|барбекю|гриль/i, Flame],
+  [/розетк|зарядк/i, PlugZap],
+];
+
+export function guessAmenityIcon(name: string): LucideIcon {
+  const lower = name.toLowerCase().replaceAll("ё", "е");
+  for (const [pattern, icon] of amenityNamePatterns) {
+    if (pattern.test(lower)) return icon;
+  }
+  return Sparkles;
+}
+
+type NameBasedAmenityIconProps = {
+  name: string;
+  className?: string;
+};
+
+export function NameBasedAmenityIcon({ name, className }: NameBasedAmenityIconProps) {
+  const Icon = guessAmenityIcon(name);
+  return <AppIcon icon={Icon} className={cn("h-4 w-4", className)} />;
+}

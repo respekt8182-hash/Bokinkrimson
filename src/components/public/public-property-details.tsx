@@ -1,21 +1,25 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   BadgeCheck,
   Bath,
   BedDouble,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Copy,
   Mail,
   MapPin,
   Phone,
   RulerDimensionLine,
   Star,
   TriangleAlert,
+  User,
   Users,
   X,
 } from "lucide-react";
@@ -31,7 +35,7 @@ import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-but
 import { HousingSearchDateRangeField } from "@/components/public/housing-search-date-range-field";
 import { ExcursionMapPreview } from "@/components/maps/excursion-map-preview";
 import { PropertyMediaGallery } from "@/components/public/property-media-gallery";
-import { AmenityIcon } from "@/components/ui/amenity-icon";
+import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { FieldAdornmentIcon } from "@/components/ui/field-adornment-icon";
@@ -75,6 +79,13 @@ type HouseRuleChipConfig = {
   valueClassName?: string;
 };
 
+type ContactChannelLink = {
+  key: string;
+  href: string;
+  label: string;
+  brand: "whatsapp" | "telegram" | "vk" | "max" | "ok";
+};
+
 type RoomMedia = PublicPropertyCard["rooms"][number]["media"][number];
 
 
@@ -109,6 +120,15 @@ function formatNightsLabel(nights: number): string {
   if (last === 1) return `${nights} ночь`;
   if (last >= 2 && last <= 4) return `${nights} ночи`;
   return `${nights} ночей`;
+}
+
+function formatReviewsCountLabel(count: number): string {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} отзывов`;
+  if (last === 1) return `${count} отзыв`;
+  if (last >= 2 && last <= 4) return `${count} отзыва`;
+  return `${count} отзывов`;
 }
 
 function LocationPinIcon({ className }: { className?: string }) {
@@ -211,12 +231,6 @@ function getRoomAmenityCategory(name: string): RoomAmenityItem["category"] {
   return "equipment";
 }
 
-function getInitials(firstName: string, lastName: string): string {
-  const first = firstName.trim().slice(0, 1);
-  const fallback = lastName.trim().slice(0, 1);
-  return (first || fallback || "?").toUpperCase();
-}
-
 function formatTime(value: string | null): string {
   if (!value) return "Не указано";
   const [hours = "", minutes = ""] = value.split(":");
@@ -296,6 +310,30 @@ function normalizePhoneHref(phone: string | null | undefined): string | null {
   }
 
   return hasLeadingPlus ? `tel:+${digits}` : `tel:${digits}`;
+}
+
+function formatPhoneLabel(phone: string | null | undefined): string | null {
+  const value = phone?.trim() ?? "";
+  if (!value) {
+    return null;
+  }
+
+  if (/[()\s-]/.test(value)) {
+    return value;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 11 && (digits.startsWith("7") || digits.startsWith("8"))) {
+    const prefix = digits.startsWith("8") ? "8" : "+7";
+    const rest = digits.slice(1);
+    return `${prefix} ${rest.slice(0, 3)} ${rest.slice(3, 6)}-${rest.slice(6, 8)}-${rest.slice(8, 10)}`;
+  }
+
+  return value.startsWith("+") ? `+${digits}` : digits;
 }
 
 function getRoomBasePrice(room: PublicPropertyCard["rooms"][number]): {
@@ -653,12 +691,12 @@ function GuestsPlacementField({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[1190] bg-primary/30 md:hidden"
+            className="fixed inset-0 z-[1190] bg-primary/30"
             onClick={closePanel}
             aria-label="Закрыть выбор гостей"
           />
 
-          <div className="absolute left-0 top-[calc(100%+8px)] z-[1200] w-full rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)] md:right-0 md:left-auto md:w-[412px]">
+          <div className="fixed left-1/2 top-1/2 z-[1200] max-h-[calc(100vh-32px)] w-[min(92vw,412px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)]">
             <h3 className="text-lg font-semibold text-olive">Гости</h3>
 
             <div className="mt-3 space-y-3">
@@ -871,8 +909,12 @@ export function PublicPropertyDetails({
   const [roomMediaIndexByRoom, setRoomMediaIndexByRoom] = useState<Record<string, number>>({});
   const [activeRoomDetailsId, setActiveRoomDetailsId] = useState<string | null>(null);
   const [isMobileBookingOpen, setIsMobileBookingOpen] = useState(false);
+  const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
   const [showAllAmenities, setShowAllAmenities] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const [leadModalRoom, setLeadModalRoom] = useState<PublicPropertyCard["rooms"][number] | null>(null);
+  const [leadExtra, setLeadExtra] = useState("");
+  const [leadCopied, setLeadCopied] = useState(false);
   const propertyMedia = useMemo(
     () => item.media.filter((media) => media.type === "IMAGE").slice(0, 10),
     [item.media],
@@ -900,20 +942,38 @@ export function PublicPropertyDetails({
   const hasMapSection = item.latitude !== null && item.longitude !== null;
   const mapOverlayAddress = item.address ?? item.locationName ?? "Координаты объекта";
   const mobilePhoneHref = normalizePhoneHref(item.contacts.phone);
+  const mobilePhoneLabel = formatPhoneLabel(item.contacts.phone);
+  const phone2Href = normalizePhoneHref(item.contacts.phone2);
+  const phone2Label = formatPhoneLabel(item.contacts.phone2);
+  const phone3Href = normalizePhoneHref(item.contacts.phone3);
+  const phone3Label = formatPhoneLabel(item.contacts.phone3);
+  const phoneEntries = [
+    mobilePhoneHref && mobilePhoneLabel
+      ? { href: mobilePhoneHref, label: mobilePhoneLabel, name: item.contacts.phoneName?.trim() || null }
+      : null,
+    phone2Href && phone2Label
+      ? { href: phone2Href, label: phone2Label, name: item.contacts.phone2Name?.trim() || null }
+      : null,
+    phone3Href && phone3Label
+      ? { href: phone3Href, label: phone3Label, name: item.contacts.phone3Name?.trim() || null }
+      : null,
+  ].filter((entry): entry is { href: string; label: string; name: string | null } => entry !== null);
   const contactWhatsappUrl = item.contacts.whatsappUrl?.trim()
     ? item.contacts.whatsappUrl.trim()
     : null;
   const contactTelegramUrl = normalizeTelegramProfileUrl(item.contacts.telegramUrl);
+  const contactVkUrl = item.contacts.vkUrl?.trim() ? item.contacts.vkUrl.trim() : null;
+  const contactMaxUrl = item.contacts.maxUrl?.trim() ? item.contacts.maxUrl.trim() : null;
+  const contactOkUrl = item.contacts.okUrl?.trim() ? item.contacts.okUrl.trim() : null;
   const seaDistanceLabel = extractSeaDistanceLabel(allAmenities);
   const mainPriceLabel =
     item.minNightPrice !== null && item.currency
       ? `от ${formatMoney(item.minNightPrice, item.currency)}`
       : "Цена по запросу";
   const locationLabel = item.locationName ?? "Крым";
-  const headerRatingLine =
-    item.reviewsCount > 0
-      ? `${item.avgRating.toFixed(1)} · ${item.reviewsCount} отзывов`
-      : "Нет отзывов";
+  const hasReviews = item.reviewsCount > 0;
+  const reviewsCountLabel = formatReviewsCountLabel(item.reviewsCount);
+  const headerRatingLine = hasReviews ? `${item.avgRating.toFixed(1)} · ${reviewsCountLabel}` : null;
   const heroBadges = [
     item.avgRating >= 4.8 && item.reviewsCount >= 10 ? "Топ выбор гостей" : null,
     item.reviewsCount >= 25 ? "Проверено отзывами" : null,
@@ -925,9 +985,51 @@ export function PublicPropertyDetails({
   const ownerEmail = item.contacts.email?.trim() ?? "";
   const hasOwnerEmail = ownerEmail.length > 0;
   const hasAnyOwnerContacts = Boolean(
-    mobilePhoneHref || contactWhatsappUrl || contactTelegramUrl || hasOwnerEmail,
+    mobilePhoneHref || phone2Href || phone3Href || contactWhatsappUrl || contactTelegramUrl || contactVkUrl || contactMaxUrl || contactOkUrl || hasOwnerEmail,
   );
-  const ownerVerificationLabel = "Продавец проверен";
+  const ownerVerificationLabel = "Владелец проверен";
+  const contactChannelLinks = [
+    contactWhatsappUrl
+      ? {
+          key: "whatsapp",
+          href: contactWhatsappUrl,
+          label: "WhatsApp",
+          brand: "whatsapp",
+        }
+      : null,
+    contactTelegramUrl
+      ? {
+          key: "telegram",
+          href: contactTelegramUrl,
+          label: "Telegram",
+          brand: "telegram",
+        }
+      : null,
+    contactVkUrl
+      ? {
+          key: "vk",
+          href: contactVkUrl,
+          label: "ВКонтакте",
+          brand: "vk",
+        }
+      : null,
+    contactOkUrl
+      ? {
+          key: "ok",
+          href: contactOkUrl,
+          label: "Одноклассники",
+          brand: "ok",
+        }
+      : null,
+    contactMaxUrl
+      ? {
+          key: "max",
+          href: contactMaxUrl,
+          label: "Max",
+          brand: "max",
+        }
+      : null,
+  ].filter((channel): channel is ContactChannelLink => channel !== null);
   const rankedRooms = useMemo(() => {
     return item.rooms
       .map((room, index) => {
@@ -1185,79 +1287,138 @@ export function PublicPropertyDetails({
 
   return (
     <div ref={detailsRootRef} className="property-details-page space-y-6">
-      {/* ── 2-column layout: gallery+content left, sticky info right ── */}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.48fr)_minmax(300px,368px)]">
-        {/* ── Left column ── */}
-        <div className="space-y-5">
-          {/* Gallery */}
-          <section>
-            {propertyMedia.length > 0 ? (
-              <PropertyMediaGallery
-                media={propertyMedia}
-                title={item.name ?? "Объект"}
-                phoneHref={mobilePhoneHref}
-              />
-            ) : (
-              <div className="rounded-3xl bg-cream py-12 text-center text-sm text-olive/60 ring-1 ring-olive/10">
-                Фото и видео объекта пока не загружены.
-              </div>
-            )}
-          </section>
+      {/* Hero: gallery + overlaid info */}
+      <section className="relative overflow-hidden rounded-3xl">
+        {propertyMedia.length > 0 ? (
+          <PropertyMediaGallery
+            media={propertyMedia}
+            title={item.name ?? "Объект"}
+            phoneHref={mobilePhoneHref}
+          />
+        ) : (
+          <div className="bg-cream py-12 text-center text-sm text-olive/60 ring-1 ring-olive/10">
+            Фото и видео объекта пока не загружены.
+          </div>
+        )}
 
-          {/* Mobile-only property info (visible below gallery on mobile, hidden on desktop) */}
-          <div className="lg:hidden rounded-3xl bg-white p-5 ring-1 ring-olive/10 shadow-[0_4px_24px_rgba(15,118,110,0.07)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-cream px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-olive/70 ring-1 ring-olive/12">
-                {item.typeLabel ?? "Объект размещения"}
-              </span>
-              {heroBadges.map((badge) => (
-                <span
-                  key={badge}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold",
-                    /первая\s+линия|до моря/i.test(badge) ? "bg-terra/14 text-terra" : "bg-sage/25 text-olive",
-                  )}
-                >
-                  {badge}
+        {/* Overlay info — desktop: over gallery, mobile: below gallery images */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden bg-gradient-to-t from-midnight/75 via-midnight/40 to-transparent px-6 pb-6 pt-28 md:block">
+          <div className="pointer-events-auto flex items-end justify-between gap-6">
+            <div className="min-w-0 space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/90 backdrop-blur-sm">
+                  {item.typeLabel ?? "Объект размещения"}
                 </span>
-              ))}
-            </div>
-            <h1 className="mt-3 text-2xl leading-tight text-olive">{item.name ?? "Объект"}</h1>
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-olive/72">
-              <SparkStarIcon className="h-4 w-4 text-terra" />
-              <span>{headerRatingLine}</span>
-              <span className="text-olive/45">•</span>
-              <LocationPinIcon className="h-4 w-4 text-terra" />
-              <span>{locationLabel}</span>
-            </p>
-            {item.address ? (
-              <a
-                href={yandexMapsHref ?? "#"}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="mt-1.5 inline-flex items-start gap-1.5 text-sm underline decoration-dotted underline-offset-4 text-olive/75 hover:text-terra"
-              >
-                <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{item.address}</span>
-              </a>
-            ) : null}
-            <div className="mt-4 flex items-end justify-between gap-3">
-              <div>
-                <p className="text-3xl font-black leading-none text-olive">{mainPriceLabel}</p>
-                <p className="mt-1 text-sm text-olive/60">за ночь</p>
+                {heroBadges
+                  .filter((b) => !/проверено в реестре/i.test(b))
+                  .map((badge) => (
+                    <span
+                      key={badge}
+                      className="rounded-full border border-white/20 bg-white/12 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur-sm"
+                    >
+                      {badge}
+                    </span>
+                  ))}
               </div>
+              <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] md:text-[2.4rem]">
+                {item.name ?? "Объект"}
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/80">
+                <span className="inline-flex items-center gap-1.5">
+                  <LocationPinIcon className="h-4 w-4 text-white/70" />
+                  <span>{locationLabel}</span>
+                </span>
+                {headerRatingLine ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 font-medium text-white/90 backdrop-blur-sm">
+                    <SparkStarIcon className="h-4 w-4 text-sage" />
+                    <span>{headerRatingLine}</span>
+                  </span>
+                ) : null}
+              </div>
+              {item.address ? (
+                <a
+                  href={yandexMapsHref ?? "#"}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex max-w-full items-start gap-1.5 text-sm text-white/70 underline decoration-dotted underline-offset-4 transition hover:text-white"
+                >
+                  <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{item.address}</span>
+                </a>
+              ) : null}
+            </div>
+            <div className="shrink-0">
               <FavoriteToggleButton propertyId={item.id} initialIsFavorite={initialIsFavorite} />
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Mobile-only info strip below gallery */}
+      <div className="space-y-2.5 px-1 md:hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-olive/10 bg-cream/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-olive/70">
+            {item.typeLabel ?? "Объект размещения"}
+          </span>
+          {heroBadges
+            .filter((b) => !/проверено в реестре/i.test(b))
+            .map((badge) => (
+              <span
+                key={badge}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  /первая\s+линия|до моря/i.test(badge)
+                    ? "bg-terra/12 text-terra-ink"
+                    : "bg-sage/18 text-olive/80",
+                )}
+              >
+                {badge}
+              </span>
+            ))}
+        </div>
+        <h1 className="text-2xl font-bold leading-tight text-olive sm:text-3xl">
+          {item.name ?? "Объект"}
+        </h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-olive/68">
+          <span className="inline-flex items-center gap-1.5">
+            <LocationPinIcon className="h-4 w-4 text-terra" />
+            <span>{locationLabel}</span>
+          </span>
+          {headerRatingLine ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sage/16 px-3 py-1 font-medium text-olive">
+              <SparkStarIcon className="h-4 w-4 text-terra" />
+              <span>{headerRatingLine}</span>
+            </span>
+          ) : null}
+        </div>
+        {item.address ? (
+          <a
+            href={yandexMapsHref ?? "#"}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex max-w-full items-start gap-1.5 text-sm text-olive/72 underline decoration-dotted underline-offset-4 transition hover:text-terra"
+          >
+            <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{item.address}</span>
+          </a>
+        ) : null}
+        <div className="flex items-center justify-between">
+          <FavoriteToggleButton propertyId={item.id} initialIsFavorite={initialIsFavorite} />
+        </div>
+      </div>
+
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,368px)]">
+        {/* ── Left column ── */}
+        <div className="space-y-5">
 
           {/* Sticky section navigation */}
           <nav
-            className="sticky top-0 z-20 -mx-4 overflow-x-auto border-b border-olive/8 bg-white/97 shadow-sm backdrop-blur-sm"
+            className="sticky top-4 z-20 overflow-x-auto rounded-2xl border border-olive/10 bg-white/94 px-2 shadow-[0_10px_26px_rgba(58,43,35,0.06)] backdrop-blur-sm"
             aria-label="Навигация по разделам"
           >
-            <div className="flex min-w-max items-center gap-0 px-4">
+            <div className="flex min-w-max items-center gap-1">
               {[
-                { href: "#room-fund", label: "Номера и цены" },
+                { href: "#room-fund", label: "Варианты размещения" },
                 { href: "#description-panel", label: "Описание" },
                 { href: "#amenities", label: "Удобства" },
                 { href: "#house-rules", label: "Правила" },
@@ -1267,7 +1428,7 @@ export function PublicPropertyDetails({
                 <a
                   key={link.href}
                   href={link.href}
-                  className="whitespace-nowrap rounded-lg px-3 py-3 text-sm font-medium text-olive/60 transition hover:bg-cream hover:text-olive"
+                  className="whitespace-nowrap rounded-xl px-3 py-3 text-sm font-medium text-olive/62 transition hover:bg-cream hover:text-olive"
                 >
                   {link.label}
                 </a>
@@ -1276,19 +1437,63 @@ export function PublicPropertyDetails({
           </nav>
 
           <section
-            id="room-fund"
-            className="relative overflow-hidden rounded-[32px] border border-white/75 bg-white/90 p-4 shadow-[0_20px_55px_rgba(17,29,16,0.045)] ring-1 ring-olive/8 backdrop-blur-sm md:p-6"
+            aria-label="Даты и гости"
+            className="rounded-[28px] border border-olive/10 bg-white p-4 shadow-[0_14px_36px_rgba(58,43,35,0.06)] md:p-5"
           >
-            <div
-              className="pointer-events-none absolute inset-x-6 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(15,118,110,0.2),transparent)]"
-              aria-hidden="true"
-            />
-            <div className="relative">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:gap-5">
+              <div className="flex items-start gap-3 xl:w-[280px] xl:shrink-0">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cream text-terra ring-1 ring-olive/10">
+                  <CalendarSmIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
+                    Даты и гости
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <p className="text-lg font-semibold text-olive">{sidebarNightlyLabel}</p>
+                    <p className="text-sm text-olive/60">{sidebarPriceMeta}</p>
+                  </div>
+                  {sidebarPriceRoomHint ? (
+                    <p className="mt-1 text-sm text-olive/66">{sidebarPriceRoomHint}</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(220px,0.9fr)] xl:flex-1">
+                <HousingSearchDateRangeField
+                  initialCheckIn={checkIn ?? ""}
+                  initialCheckOut={checkOut ?? ""}
+                  onRangeChange={handleStayRangeChange}
+                  autoSubmitOnComplete={false}
+                  showHiddenInputs={false}
+                  buttonClassName="h-[62px] w-full rounded-2xl border border-olive/14 bg-white px-4 text-left text-olive transition hover:border-olive/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/30"
+                />
+                <GuestsPlacementField
+                  adults={adults}
+                  childrenAges={childrenAges}
+                  onAdultsChange={setAdults}
+                  onChildrenAgesChange={setChildrenAges}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="room-fund"
+            className="relative overflow-hidden rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+          >
+            <div className="relative flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="flex items-center gap-2.5 text-2xl text-olive">
-                  <span className="h-6 w-1 shrink-0 rounded-full bg-terra" aria-hidden="true" />
-                  Номерной фонд
-                </h2>
+                <h2 className="text-2xl text-olive md:text-[1.85rem]">Доступные варианты</h2>
+                <p className="mt-1 text-sm text-olive/68">
+                  {item.rooms.length}{" "}
+                  {item.rooms.length === 1
+                    ? "вариант"
+                    : item.rooms.length >= 2 && item.rooms.length <= 4
+                      ? "варианта"
+                      : "вариантов"}{" "}
+                  размещения
+                </p>
               </div>
             </div>
             {item.rooms.length === 0 ? (
@@ -1352,7 +1557,7 @@ export function PublicPropertyDetails({
                         !amenity.key.startsWith(`${room.id}-bed-type-`) &&
                         amenity.key !== `${room.id}-beds-base`,
                     )
-                    .slice(0, 3);
+                    .slice(0, 6);
                   const roomDetailsDialogId = `room-details-${room.id}`;
                   const roomDetailsTitleId = `room-details-title-${room.id}`;
                   const roomSummaryLine = [
@@ -1364,208 +1569,162 @@ export function PublicPropertyDetails({
                     .join(" · ");
                   return (
                     <Fragment key={room.id}>
-                      <article className="room-card group relative overflow-hidden rounded-[28px] border border-olive/10 bg-white p-3 shadow-[0_14px_34px_rgba(17,29,16,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/18 hover:shadow-[0_22px_44px_rgba(17,29,16,0.08)] md:p-3.5">
-                        <div
-                          className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,rgba(15,118,110,0.14),rgba(201,88,72,0.12),transparent_75%)]"
-                          aria-hidden="true"
-                        />
-                        <div className="relative grid gap-3.5 md:grid-cols-[278.25px_minmax(0,1fr)] md:items-start md:gap-4">
-                          <div className="space-y-2">
+                      <article className="room-card group relative overflow-hidden rounded-[20px] border border-olive/10 bg-white p-3 shadow-[0_2px_12px_rgba(58,43,35,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(58,43,35,0.1)] md:p-4">
+                        <div className="relative flex flex-col gap-3 md:flex-row md:items-stretch md:gap-4">
+                          {/* ── IMAGE ── */}
+                          <div className="shrink-0 md:w-[200px]">
                             {roomMedia.length > 0 ? (
-                              <>
-                                <div className="room-card-media-shell relative overflow-hidden rounded-[20px] border border-black/5 bg-[linear-gradient(180deg,rgba(247,243,234,0.94),rgba(255,255,255,0.98))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_10px_24px_rgba(17,29,16,0.04)] ring-1 ring-olive/8">
-                                  <div className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5">
-                                    <span className="inline-flex items-center rounded-full bg-white/92 px-2.5 py-1 text-[10px] font-semibold text-olive shadow-sm ring-1 ring-olive/8 backdrop-blur">
-                                      {activeRoomMedia?.type === "VIDEO" ? "Видео" : "Фото"}
-                                    </span>
-                                    {roomMedia.length > 1 ? (
-                                      <span className="inline-flex items-center rounded-full bg-olive/88 px-2 py-1 text-[10px] font-semibold text-white/95 shadow-sm backdrop-blur">
-                                        {roomIndex + 1} / {roomMedia.length}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <div className="room-media-stage relative overflow-hidden rounded-[16px] bg-[#ebe5d8]">
-                                    {activeRoomMedia ? (
-                                      <MediaPreview
-                                        media={activeRoomMedia}
-                                        alt={
-                                          activeRoomMedia.type === "VIDEO"
-                                            ? `${room.title} — видео`
-                                            : room.title
-                                        }
-                                        className={cn(
-                                          "h-full w-full",
-                                          activeRoomMedia.type === "VIDEO"
-                                            ? "bg-black object-cover"
-                                            : "object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]",
-                                          activeRoomMedia.type === "IMAGE" ? "" : "",
-                                        )}
-                                      />
-                                    ) : null}
-                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/15 via-black/0 to-transparent" />
-                                  </div>
-                                  {roomMedia.length > 1 ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          cycleRoomMedia(room.id, -1, roomMedia.length)
-                                        }
-                                        aria-label="Предыдущий файл номера"
-                                        className="absolute left-2.5 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[14px] border border-white/70 bg-white/92 text-olive opacity-100 shadow-[0_10px_24px_rgba(17,29,16,0.12)] backdrop-blur transition-all duration-300 hover:scale-105 hover:bg-white md:opacity-0 md:group-hover:opacity-100"
-                                      >
-                                        <ChevronLeftIcon className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => cycleRoomMedia(room.id, 1, roomMedia.length)}
-                                        aria-label="Следующий файл номера"
-                                        className="absolute right-2.5 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[14px] border border-white/70 bg-white/92 text-olive opacity-100 shadow-[0_10px_24px_rgba(17,29,16,0.12)] backdrop-blur transition-all duration-300 hover:scale-105 hover:bg-white md:opacity-0 md:group-hover:opacity-100"
-                                      >
-                                        <ChevronRightIcon className="h-4 w-4" />
-                                      </button>
-                                    </>
+                              <div className="room-card-media-shell relative h-full overflow-hidden rounded-[14px] bg-[#ebe5d8]">
+                                {roomMedia.length > 1 ? (
+                                  <span className="absolute left-2 bottom-2 z-10 inline-flex items-center rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                                    {roomIndex + 1} / {roomMedia.length}
+                                  </span>
+                                ) : null}
+                                <div className="room-media-stage relative overflow-hidden bg-[#ebe5d8]">
+                                  {activeRoomMedia ? (
+                                    <MediaPreview
+                                      media={activeRoomMedia}
+                                      alt={
+                                        activeRoomMedia.type === "VIDEO"
+                                          ? `${room.title} — видео`
+                                          : room.title
+                                      }
+                                      className={cn(
+                                        "h-full w-full",
+                                        activeRoomMedia.type === "VIDEO"
+                                          ? "bg-black object-cover"
+                                          : "object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]",
+                                      )}
+                                    />
                                   ) : null}
                                 </div>
-                              </>
+                                {roomMedia.length > 1 ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        cycleRoomMedia(room.id, -1, roomMedia.length)
+                                      }
+                                      aria-label="Предыдущий файл номера"
+                                      className="absolute left-1.5 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:opacity-0 md:group-hover:opacity-100"
+                                    >
+                                      <ChevronLeftIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => cycleRoomMedia(room.id, 1, roomMedia.length)}
+                                      aria-label="Следующий файл номера"
+                                      className="absolute right-1.5 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:opacity-0 md:group-hover:opacity-100"
+                                    >
+                                      <ChevronRightIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
+                                ) : null}
+                              </div>
                             ) : (
-                              <div className="rounded-[20px] border border-dashed border-olive/18 bg-[linear-gradient(180deg,rgba(249,247,241,0.9),rgba(255,255,255,0.92))] p-4 text-sm text-olive/60">
-                                Фото и видео номера отсутствуют.
+                              <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-olive/18 bg-cream/50 p-4 text-sm text-olive/50">
+                                Нет фото
                               </div>
                             )}
                           </div>
-                          <div className="flex min-w-0 flex-col rounded-[22px] bg-[linear-gradient(180deg,rgba(247,244,237,0.78),rgba(255,255,255,0.98))] p-3 ring-1 ring-olive/8 md:p-3.5">
-                            <div>
-                              <h3 className="text-[1.1rem] font-semibold leading-[1.2] text-olive md:text-[1.22rem]">
-                                {room.title}
-                              </h3>
-                              {roomSummaryLine ? (
-                                <p className="mt-1.5 text-[12.5px] leading-relaxed text-olive/63 md:text-[13px]">
-                                  {roomSummaryLine}
-                                </p>
-                              ) : null}
-                            </div>
 
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[10.5px] font-medium text-olive/78 ring-1 ring-olive/8 shadow-[0_1px_0_rgba(255,255,255,0.65)]">
-                                <BedIcon className="h-4 w-4 shrink-0" />
-                                {room.beds}
-                                {room.extraBeds > 0 ? ` + ${room.extraBeds} доп.` : ""}&nbsp;мест
-                              </span>
-                              {room.areaSqm !== null ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[10.5px] font-medium text-olive/78 ring-1 ring-olive/8 shadow-[0_1px_0_rgba(255,255,255,0.65)]">
-                                  <AppIcon
-                                    icon={RulerDimensionLine}
-                                    className="h-4 w-4 shrink-0"
-                                  />
-                                  {room.areaSqm}&nbsp;м²
+                          {/* ── DETAILS ── */}
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <h3 className="text-base font-bold leading-snug text-olive md:text-[1.1rem]">
+                              {room.title}
+                            </h3>
+
+                            {/* Key specs as icon+text rows */}
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center gap-2 text-[13px] text-olive/75">
+                                <BedIcon className="h-4 w-4 shrink-0 text-olive/45" />
+                                <span>
+                                  {room.beds}
+                                  {room.extraBeds > 0 ? ` места + ${room.extraBeds} доп.` : " мест"}
                                 </span>
-                              ) : null}
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[10.5px] font-medium text-olive/78 ring-1 ring-olive/8 shadow-[0_1px_0_rgba(255,255,255,0.65)]">
-                                <AppIcon icon={Bath} className="h-4 w-4 shrink-0" />
-                                {room.bathroomTypeLabel}
-                              </span>
-                            </div>
-
-                            <div className="mt-3 rounded-[20px] border border-olive/8 bg-white/88 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
-                              <p className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-olive/38">
-                                Оснащение номера
-                              </p>
-                              {roomAmenityItems.length > 0 ? (
-                                <div className="amenities-grid mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
-                                  {visibleRoomAmenities.map((amenity) => (
-                                    <div
-                                      key={amenity.key}
-                                      className="flex items-center gap-2 rounded-[14px] bg-[linear-gradient(180deg,rgba(247,243,234,0.82),rgba(255,255,255,0.92))] px-2.5 py-1.5 ring-1 ring-olive/6"
-                                    >
-                                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[12px] bg-white text-terra shadow-[0_6px_14px_rgba(17,29,16,0.06)] ring-1 ring-olive/10">
-                                        <RoomFeatureIcon
-                                          name={amenity.name}
-                                          featureId={amenity.featureId}
-                                          className="h-4 w-4 text-terra/90"
-                                        />
-                                      </span>
-                                      <span className="min-w-0 text-[11.5px] leading-snug text-olive/74">
-                                        {amenity.name}
-                                      </span>
-                                    </div>
-                                  ))}
+                              </div>
+                              {room.roomsCount > 0 ? (
+                                <div className="flex items-center gap-2 text-[13px] text-olive/75">
+                                  <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
+                                  <span>
+                                    {String(room.roomsCount).padStart(2, "0")} комнат{room.roomsCount === 1 ? "а" : room.roomsCount >= 2 && room.roomsCount <= 4 ? "ы" : ""}
+                                  </span>
                                 </div>
                               ) : null}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setActiveRoomDetailsId((prev) =>
-                                    prev === room.id ? null : room.id,
-                                  )
-                                }
-                                aria-expanded={isDetailsOpen}
-                                aria-controls={roomDetailsDialogId}
-                                aria-haspopup="dialog"
-                                data-state={isDetailsOpen ? "open" : "closed"}
-                                className={cn(
-                                  "room-amenities-trigger group mt-2.5 inline-flex w-full items-center justify-between gap-2.5 rounded-[16px] border px-3 py-2.5 text-left transition-all duration-300",
-                                  isDetailsOpen
-                                    ? "border-primary/16 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(15,118,110,0.06),rgba(255,255,255,0.98))] shadow-[0_12px_24px_rgba(15,118,110,0.08)]"
-                                    : "border-olive/10 bg-white/92 hover:-translate-y-0.5 hover:border-primary/16 hover:shadow-[0_12px_24px_rgba(17,29,16,0.08)]",
-                                )}
-                              >
-                                <span className="flex min-w-0 items-center gap-2.5">
-                                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[12px] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,243,234,0.92))] text-terra shadow-sm ring-1 ring-olive/8">
-                                    <CheckBadgeIcon className="h-4 w-4" />
-                                  </span>
-                                  <span className="min-w-0 text-[12.5px] font-semibold text-olive">
-                                    {isDetailsOpen
-                                      ? "Скрыть удобства"
-                                      : roomAmenityItems.length > 4
-                                        ? `Все удобства · ${roomAmenityItems.length}`
-                                        : "Подробнее о номере"}
-                                  </span>
-                                </span>
-                                <ChevronDownIcon
-                                  className={cn(
-                                    "h-4 w-4 shrink-0 transition-transform duration-300",
-                                    isDetailsOpen ? "rotate-180" : "group-hover:-translate-y-0.5",
-                                  )}
-                                />
-                              </button>
+                              {room.bathroomTypeLabel ? (
+                                <div className="flex items-center gap-2 text-[13px] text-olive/75">
+                                  <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
+                                  <span>{room.bathroomTypeLabel}</span>
+                                </div>
+                              ) : null}
                             </div>
 
-                            <div className="mt-3 lg:mt-auto">
-                              {summary.tone === "warn" ? (
-                                <div className="flex items-start gap-2.5 rounded-[20px] border border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98),rgba(255,244,214,0.92))] px-3.5 py-3 text-sm text-amber-700 shadow-[0_10px_24px_rgba(217,119,6,0.1)]">
-                                  <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                                  <span>{summary.text}</span>
+                            {/* Amenities as icon+text pairs in a compact grid */}
+                            {visibleRoomAmenities.length > 0 ? (
+                              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                                {visibleRoomAmenities.map((amenity) => (
+                                  <span
+                                    key={amenity.key}
+                                    className="inline-flex items-center gap-1.5 text-[12.5px] text-olive/65"
+                                  >
+                                    <RoomFeatureIcon
+                                      name={amenity.name}
+                                      featureId={amenity.featureId}
+                                      className="h-3.5 w-3.5 shrink-0 text-olive/40"
+                                    />
+                                    {amenity.name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {/* "Подробное описание" link */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveRoomDetailsId((prev) =>
+                                  prev === room.id ? null : room.id,
+                                )
+                              }
+                              aria-expanded={isDetailsOpen}
+                              aria-controls={roomDetailsDialogId}
+                              aria-haspopup="dialog"
+                              className="mt-auto pt-2.5 text-left text-[13px] font-semibold text-primary hover:text-primary-hover transition-colors"
+                            >
+                              Подробное описание
+                            </button>
+                          </div>
+
+                          {/* ── PRICE + CTA ── */}
+                          <div className="flex shrink-0 flex-row items-center justify-between gap-3 border-t border-olive/8 pt-3 md:w-[180px] md:flex-col md:items-end md:justify-start md:border-l md:border-t-0 md:pl-4 md:pt-0">
+                            {summary.tone === "warn" ? (
+                              <div className="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-[13px] text-amber-700">
+                                <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                <span>{summary.text}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="md:text-right">
+                                  <p className="text-xl font-bold leading-none text-olive md:text-[1.35rem]">
+                                    {summary.bigPrice}
+                                  </p>
+                                  <p className="mt-1 text-[12px] text-olive/55">
+                                    {summary.smallLabel || "за номер в сутки"}
+                                  </p>
                                 </div>
-                              ) : (
-                                <div className="relative overflow-hidden rounded-[20px] border border-primary/12 bg-[linear-gradient(135deg,rgba(241,248,246,0.98),rgba(255,255,255,0.98)_56%,rgba(249,243,238,0.94))] p-3.5 shadow-[0_14px_28px_rgba(15,118,110,0.08)]">
-                                  <div
-                                    className="pointer-events-none absolute right-0 top-0 h-20 w-24 bg-[radial-gradient(circle_at_top_right,rgba(15,118,110,0.16),transparent_68%)]"
-                                    aria-hidden="true"
-                                  />
-                                  <div className="relative min-w-0 flex-1">
-                                    <p className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-olive/42">
-                                      Стоимость проживания
-                                    </p>
-                                    <div className="mt-1.5 flex items-end justify-between gap-2">
-                                      <p className="truncate text-[1.55rem] font-bold leading-none text-olive md:text-[1.68rem]">
-                                        {summary.bigPrice}
-                                      </p>
-                                      {summary.sideLabel ? (
-                                        <p className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-olive/60 ring-1 ring-olive/8">
-                                          {summary.sideLabel}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                    {summary.smallLabel ? (
-                                      <p className="mt-1.5 text-[11.5px] text-olive/60">
-                                        {summary.smallLabel}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLeadModalRoom(room);
+                                    setLeadExtra("");
+                                    setLeadCopied(false);
+                                  }}
+                                  className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-xl bg-[#e8621a] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#d45615] active:scale-[0.97]"
+                                >
+                                  Отправить заявку
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </article>
@@ -1714,20 +1873,20 @@ export function PublicPropertyDetails({
 
           <section
             id="description-panel"
-            className="rounded-3xl bg-white p-5 ring-1 ring-olive/10 md:p-6"
+            className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
           >
-            <h2 className="flex items-center gap-2.5 text-2xl text-olive">
-              <span className="h-6 w-1 shrink-0 rounded-full bg-terra" aria-hidden="true" />
-              Описание объекта
-            </h2>
-            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-olive/80">
+            <h2 className="text-2xl text-olive md:text-[1.85rem]">Описание</h2>
+            <p className="mt-2 text-sm text-olive/66">
+              Коротко о проживании, атмосфере и том, что важно знать перед бронированием.
+            </p>
+            <p className="mt-4 whitespace-pre-line text-[15px] leading-7 text-olive/82">
               {description.length > 0 ? shortDescription : "Описание пока не добавлено владельцем."}
             </p>
             {description.length > 420 ? (
               <button
                 type="button"
                 onClick={() => setShowFullDescription((prev) => !prev)}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-olive/18 px-4 py-1.5 text-sm font-semibold text-olive/75 transition hover:bg-cream hover:text-olive"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-olive/16 px-4 py-2 text-sm font-semibold text-olive/74 transition hover:bg-cream hover:text-olive"
               >
                 {showFullDescription ? (
                   <>
@@ -1746,10 +1905,10 @@ export function PublicPropertyDetails({
 
           {hasMapSection ? (
             <section id="map-panel">
-              <article className="overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10 shadow-sm">
-                <div className="px-6 pb-3 pt-5">
-                  <h3 className="text-lg text-olive">Местоположение на карте</h3>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-olive/55">
+              <article className="overflow-hidden rounded-[28px] border border-olive/10 bg-white shadow-[0_14px_36px_rgba(58,43,35,0.05)]">
+                <div className="px-5 pb-4 pt-5 md:px-6">
+                  <h3 className="text-2xl text-olive md:text-[1.7rem]">На карте</h3>
+                  <p className="mt-2 flex items-center gap-1.5 text-sm text-olive/62">
                     <LocationPinIcon className="h-4 w-4 shrink-0 text-terra" />
                     {item.address ?? "Координаты объекта доступны"}
                   </p>
@@ -1765,19 +1924,17 @@ export function PublicPropertyDetails({
           ) : null}
 
           {similarCards.length > 0 ? (
-            <section
-              className="rounded-3xl bg-white p-5 ring-1 ring-olive/10 md:p-6"
-            >
-              <h2 className="flex items-center gap-2.5 text-2xl text-olive">
-                <span className="h-6 w-1 shrink-0 rounded-full bg-terra" aria-hidden="true" />
-                Похожие предложения
-              </h2>
+            <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6">
+              <h2 className="text-2xl text-olive md:text-[1.75rem]">Похожие предложения рядом</h2>
+              <p className="mt-2 text-sm text-olive/66">
+                Несколько спокойных альтернатив в той же локации.
+              </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {similarCards.map((card) => (
                   <Link
                     key={card.id}
                     href={card.path}
-                    className="overflow-hidden rounded-xl border border-olive/12 bg-cream/45 transition hover:-translate-y-0.5 hover:shadow-md"
+                    className="overflow-hidden rounded-[22px] border border-olive/12 bg-[#fcfbf7] transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     {card.coverImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -1808,10 +1965,10 @@ export function PublicPropertyDetails({
             </section>
           ) : null}
 
-          {/* Amenities (moved from sidebar) */}
-          {allAmenities.length > 0 ? (
+          {/* Amenities removed */}
+          {false ? (
             <section
-              id="amenities"
+              id="amenities-remove"
               className="rounded-3xl bg-white p-5 ring-1 ring-olive/10 md:p-6"
             >
               <div className="flex items-center justify-between gap-2">
@@ -1833,8 +1990,9 @@ export function PublicPropertyDetails({
                 {visibleAmenities.map((name) => (
                   <span
                     key={name}
-                    className="rounded-full bg-cream px-3 py-1.5 text-sm text-olive/75"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 text-sm text-olive/75"
                   >
+                    <NameBasedAmenityIcon name={name} className="h-3.5 w-3.5 text-terra/70" />
                     {name}
                   </span>
                 ))}
@@ -1845,42 +2003,34 @@ export function PublicPropertyDetails({
           {/* House rules (moved from sidebar) */}
           <section
             id="house-rules"
-            className="overflow-hidden rounded-[28px] border border-white/70 bg-white/85 shadow-[0_20px_48px_rgba(58,43,35,0.08)] ring-1 ring-olive/8 backdrop-blur-sm"
+            className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
           >
-            <div className="relative overflow-hidden bg-gradient-to-br from-cream via-white to-primary/5 px-5 py-5">
-              <span
-                className="pointer-events-none absolute -right-8 top-0 h-28 w-28 rounded-full bg-terra/10 blur-3xl"
-                aria-hidden="true"
-              />
-              <span
-                className="pointer-events-none absolute -left-10 bottom-0 h-24 w-24 rounded-full bg-primary/10 blur-3xl"
-                aria-hidden="true"
-              />
-              <div className="relative flex items-start justify-between gap-4">
-                <h2 className="flex items-center gap-2.5 text-2xl text-olive">
-                  <span className="h-6 w-1 shrink-0 rounded-full bg-terra" aria-hidden="true" />
-                  Правила проживания
-                </h2>
-                <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/85 text-primary shadow-[0_10px_24px_rgba(15,118,110,0.14)] ring-1 ring-white/90 backdrop-blur sm:flex">
-                  <CheckBadgeIcon className="h-6 w-6" />
-                </span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl text-olive md:text-[1.75rem]">Правила проживания</h2>
+                <p className="mt-2 text-sm text-olive/66">
+                  Базовые условия заселения, проживания и дополнительных услуг.
+                </p>
               </div>
-              <div className="relative mt-4 flex flex-wrap gap-2">
-                {ruleChips.map((chip) => (
-                  <span
-                    key={chip.key}
-                    className={cn(
-                      "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium text-olive/70 shadow-sm backdrop-blur",
-                      chip.className,
-                    )}
-                  >
-                    <span className="shrink-0 text-olive/55">{chip.label}</span>
-                    <span className={cn("min-w-0 break-words font-semibold", chip.valueClassName)}>
-                      {chip.value}
-                    </span>
+              <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cream text-primary ring-1 ring-olive/10 sm:inline-flex">
+                <CheckBadgeIcon className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              {ruleChips.map((chip) => (
+                <span
+                  key={chip.key}
+                  className={cn(
+                    "inline-flex max-w-full items-center gap-2 rounded-2xl border px-3.5 py-2 text-sm text-olive/72",
+                    chip.className,
+                  )}
+                >
+                  <span className="shrink-0 text-olive/55">{chip.label}</span>
+                  <span className={cn("min-w-0 break-words font-semibold", chip.valueClassName)}>
+                    {chip.value}
                   </span>
-                ))}
-              </div>
+                </span>
+              ))}
             </div>
           </section>
         </div>
@@ -1888,168 +2038,127 @@ export function PublicPropertyDetails({
         {/* ── Right sticky info panel (desktop only) ── */}
         <aside
           id="owner-contacts"
-          className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start"
+          className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start lg:mt-14"
         >
-          {/* Property info card */}
-          <div className="overflow-hidden rounded-3xl bg-white ring-1 ring-olive/10 shadow-[0_16px_40px_rgba(15,118,110,0.13)]">
-            <div className="relative space-y-3 px-5 pb-5 pt-5">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_top_right,rgba(15,118,110,0.22),transparent_48%),radial-gradient(circle_at_top_left,rgba(242,196,77,0.18),transparent_36%)]"
-              />
-              {/* Type + badges */}
-              <div className="relative flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-cream px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-olive/70 ring-1 ring-olive/12">
-                  {item.typeLabel ?? "Объект размещения"}
+          <div className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.06)]">
+            <div className="flex items-center gap-3">
+              {item.owner.avatarUrl ? (
+                <Image
+                  src={item.owner.avatarUrl}
+                  alt={ownerDisplayName}
+                  width={52}
+                  height={52}
+                  className="h-[52px] w-[52px] shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+                />
+              ) : (
+                <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
+                  <AppIcon icon={User} className="h-5 w-5" />
                 </span>
-                {heroBadges.map((badge) => (
-                  <span
-                    key={badge}
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-semibold",
-                      /первая\s+линия|до моря/i.test(badge) ? "bg-terra/14 text-terra" : "bg-sage/25 text-olive",
-                    )}
-                  >
-                    {badge}
-                  </span>
-                ))}
-              </div>
-              {/* Name + rating + location + address */}
-              <div className="relative">
-                <h1 className="text-2xl leading-tight text-olive">{item.name ?? "Объект"}</h1>
-                <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm text-olive/72">
-                  <SparkStarIcon className="h-4 w-4 text-terra" />
-                  <span>{headerRatingLine}</span>
-                  <span className="text-olive/45">•</span>
-                  <LocationPinIcon className="h-4 w-4 text-terra" />
-                  <span>{locationLabel}</span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold text-olive">{ownerDisplayName}</p>
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-primary/85">
+                  <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5" />
+                  <span>{ownerVerificationLabel}</span>
                 </p>
-                {item.address ? (
-                  <a
-                    href={yandexMapsHref ?? "#"}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="mt-1.5 inline-flex items-start gap-1.5 text-sm underline decoration-dotted underline-offset-4 text-olive/75 hover:text-terra"
-                  >
-                    <LocationPinIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{item.address}</span>
-                  </a>
-                ) : null}
               </div>
-              {/* Price + favorite */}
-              <div className="relative flex items-end justify-between gap-3 border-b border-olive/8 pb-4">
-                <div>
-                  <p className="text-3xl font-black leading-none text-olive">{mainPriceLabel}</p>
-                  <p className="mt-1 text-sm text-olive/60">за ночь</p>
-                </div>
-                <FavoriteToggleButton propertyId={item.id} initialIsFavorite={initialIsFavorite} />
-              </div>
-              {/* Contacts */}
-              <div className="relative space-y-2.5">
-                <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-olive/38">
-                  Способы связи
-                </p>
-                {mobilePhoneHref ? (
-                  <a
-                    href={mobilePhoneHref}
-                    className="group flex min-h-[60px] w-full items-center justify-between gap-3 overflow-hidden rounded-[24px] bg-primary px-4 py-3 text-white shadow-[0_18px_36px_rgba(15,118,110,0.28)] ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:bg-primary/95 hover:shadow-[0_22px_44px_rgba(15,118,110,0.34)] active:scale-[0.98]"
-                  >
-                    <span className="flex min-w-0 items-center gap-3 text-left">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/14 ring-1 ring-white/15">
-                        <PhoneIcon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[15px] font-semibold">Позвонить</span>
-                        <span className="mt-0.5 block text-xs text-white/72">Быстрый ответ напрямую</span>
-                      </span>
-                    </span>
-                    <ChevronRightIcon className="h-5 w-5 shrink-0 text-white/75 transition group-hover:translate-x-0.5" />
-                  </a>
-                ) : null}
+            </div>
+            <div className="mt-4 space-y-3">
+              {phoneEntries.length > 0 ? (
                 <div className="space-y-2.5">
-                  {contactWhatsappUrl ? (
-                    <a
-                      href={contactWhatsappUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="group flex h-14 items-center justify-between gap-3 rounded-[22px] border border-[#25D366]/16 bg-[linear-gradient(145deg,rgba(255,255,255,0.94),rgba(37,211,102,0.08))] px-4 shadow-[0_12px_28px_rgba(37,211,102,0.1),inset_0_1px_0_rgba(255,255,255,0.94)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[#25D366]/32 hover:shadow-[0_18px_36px_rgba(37,211,102,0.16),inset_0_1px_0_rgba(255,255,255,0.98)] active:scale-[0.98]"
-                    >
-                      <span className="flex min-w-0 items-center gap-3 text-left">
-                        <ContactBrandMark brand="whatsapp" className="h-10 w-10 rounded-2xl" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-olive">WhatsApp</span>
-                          <span className="mt-0.5 block text-xs text-olive/52">Открыть чат</span>
-                        </span>
-                      </span>
-                      <ChevronRightIcon className="h-4 w-4 shrink-0 text-primary/50 transition group-hover:translate-x-0.5 group-hover:text-[#25D366]" />
-                    </a>
-                  ) : null}
-                  {contactTelegramUrl ? (
-                    <a
-                      href={contactTelegramUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="group flex h-14 items-center justify-between gap-3 rounded-[22px] border border-[#27A7E7]/16 bg-[linear-gradient(145deg,rgba(255,255,255,0.94),rgba(39,167,231,0.08))] px-4 shadow-[0_12px_28px_rgba(39,167,231,0.1),inset_0_1px_0_rgba(255,255,255,0.94)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[#27A7E7]/32 hover:shadow-[0_18px_36px_rgba(39,167,231,0.16),inset_0_1px_0_rgba(255,255,255,0.98)] active:scale-[0.98]"
-                    >
-                      <span className="flex min-w-0 items-center gap-3 text-left">
-                        <ContactBrandMark brand="telegram" className="h-10 w-10 rounded-2xl" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-olive">Telegram</span>
-                          <span className="mt-0.5 block text-xs text-olive/52">Открыть чат</span>
-                        </span>
-                      </span>
-                      <ChevronRightIcon className="h-4 w-4 shrink-0 text-primary/50 transition group-hover:translate-x-0.5 group-hover:text-[#26A5E4]" />
-                    </a>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
+                      Телефон
+                    </p>
+                    {phoneEntries.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsPhoneExpanded((value) => !value)}
+                        className="text-xs font-semibold text-olive/62 transition hover:text-olive"
+                      >
+                        {isPhoneExpanded ? "Скрыть" : `Еще ${phoneEntries.length - 1}`}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <a
+                    href={phoneEntries[0]!.href}
+                    className="block rounded-[22px] border border-olive/10 bg-white px-4 py-3 transition hover:border-olive/18 hover:shadow-sm"
+                  >
+                    {phoneEntries[0]!.name ? (
+                      <span className="block text-xs text-olive/52">{phoneEntries[0]!.name}</span>
+                    ) : null}
+                    <span className="mt-1 block text-[1.55rem] font-semibold leading-tight text-olive">
+                      {phoneEntries[0]!.label}
+                    </span>
+                  </a>
+
+                  {isPhoneExpanded && phoneEntries.length > 1 ? (
+                    <div className="space-y-2">
+                      {phoneEntries.slice(1).map((entry, idx) => (
+                        <a
+                          key={`${entry.label}-${idx}`}
+                          href={entry.href}
+                          className="flex items-center justify-between gap-3 rounded-[18px] border border-olive/10 bg-white px-4 py-3 transition hover:border-olive/18 hover:shadow-sm"
+                        >
+                          <span className="min-w-0">
+                            {entry.name ? (
+                              <span className="block truncate text-xs text-olive/52">{entry.name}</span>
+                            ) : null}
+                            <span className="block truncate text-sm font-semibold text-olive">
+                              {entry.label}
+                            </span>
+                          </span>
+                          <PhoneIcon className="h-4 w-4 shrink-0 text-terra" />
+                        </a>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
-                {hasOwnerEmail ? (
-                  <a
-                    href={`mailto:${ownerEmail}`}
-                    className="group flex h-14 items-center justify-between gap-3 rounded-[20px] border border-olive/10 bg-white/85 px-4 shadow-[0_10px_24px_rgba(58,43,35,0.06)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-olive/18 hover:bg-white hover:shadow-[0_16px_28px_rgba(58,43,35,0.10)] active:scale-[0.98]"
-                  >
-                    <span className="flex min-w-0 items-center gap-3 text-left">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cream ring-1 ring-olive/10 text-olive/70">
-                        <MailIcon className="h-[18px] w-[18px]" />
+              ) : null}
+
+              {contactChannelLinks.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {contactChannelLinks.map((channel) => (
+                    <a
+                      key={channel.key}
+                      href={channel.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center gap-2.5 rounded-[18px] border border-olive/10 bg-white px-3 py-2.5 transition hover:border-olive/18 hover:shadow-sm"
+                    >
+                      <ContactBrandMark brand={channel.brand} className="h-9 w-9 rounded-xl" />
+                      <span className="min-w-0 truncate text-sm font-medium text-olive">
+                        {channel.label}
                       </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-olive">Электронная почта</span>
-                        <span className="mt-0.5 block truncate text-xs text-olive/52">{ownerEmail}</span>
-                      </span>
-                    </span>
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-primary/50 transition group-hover:translate-x-0.5 group-hover:text-primary" />
-                  </a>
-                ) : null}
-                {!hasAnyOwnerContacts ? (
-                  <p className="rounded-[22px] border border-dashed border-olive/18 bg-white/75 px-4 py-4 text-center text-sm text-olive/70">
-                    Контакты владельца пока не добавлены
-                  </p>
-                ) : null}
-              </div>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+
+              {hasOwnerEmail ? (
+                <a
+                  href={`mailto:${ownerEmail}`}
+                  className="flex items-center gap-3 rounded-[18px] border border-olive/10 bg-white px-3.5 py-3 transition hover:border-olive/18 hover:shadow-sm"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cream ring-1 ring-olive/10 text-olive/60">
+                    <MailIcon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-olive">Электронная почта</span>
+                    <span className="block truncate text-xs text-olive/52">{ownerEmail}</span>
+                  </span>
+                </a>
+              ) : null}
+
+              {!hasAnyOwnerContacts ? (
+                <p className="rounded-[22px] border border-dashed border-olive/18 bg-cream/40 px-4 py-4 text-center text-sm text-olive/70">
+                  Контакты владельца пока не добавлены
+                </p>
+              ) : null}
             </div>
           </div>
 
-          {/* Date/guests compact widget */}
-          <div className="rounded-3xl bg-white p-5 ring-1 ring-olive/10">
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-olive/38">
-              Период и гости
-            </p>
-            <HousingSearchDateRangeField
-              initialCheckIn={checkIn ?? ""}
-              initialCheckOut={checkOut ?? ""}
-              onRangeChange={handleStayRangeChange}
-              autoSubmitOnComplete={false}
-              showHiddenInputs={false}
-              buttonClassName="h-[62px] w-full rounded-2xl border border-olive/16 bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-            />
-            <div className="mt-2">
-              <GuestsPlacementField
-                adults={adults}
-                childrenAges={childrenAges}
-                onAdultsChange={setAdults}
-                onChildrenAgesChange={setChildrenAges}
-              />
-            </div>
-          </div>
         </aside>
       </div>
 
@@ -2101,6 +2210,153 @@ export function PublicPropertyDetails({
           </div>
         </div>
       </div>
+
+      {/* ── LEAD MESSAGE MODAL ── */}
+      {leadModalRoom ? (() => {
+        const fmtDate = (iso: string) => {
+          const d = parseIsoDate(iso);
+          if (!d) return iso;
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          return `${dd}.${mm}.${yyyy}`;
+        };
+        const leadSummary = getRoomPriceSummary(leadModalRoom, checkIn, checkOut, totalGuests);
+        const lines: string[] = [
+          "Добрый день! Нашел ваше объявление на сайте \"Крым Вокруг\".",
+          "",
+          "Хотел бы уточнить наличие свободных мест:",
+        ];
+        if (checkIn && checkOut) {
+          lines.push(`- Даты: ${fmtDate(checkIn)} - ${fmtDate(checkOut)} (${selectedNights} ${selectedNights === 1 ? "ночь" : selectedNights >= 2 && selectedNights <= 4 ? "ночи" : "ночей"})`);
+        }
+        lines.push(`- Гостей: ${totalGuests} (взрослых: ${adults}${childrenAges.length > 0 ? `, детей: ${childrenAges.length}` : ""})`);
+        lines.push(`- Номер: "${leadModalRoom.title}"`);
+        lines.push(`- Объект: "${item.name}"`);
+        if (leadSummary.tone === "ok" && leadSummary.bigPrice) {
+          lines.push(`- Стоимость: ${leadSummary.bigPrice}${leadSummary.smallLabel ? ` (${leadSummary.smallLabel})` : ""}`);
+        }
+        lines.push("");
+        lines.push("Прошу подтвердить актуальность цены и наличие свободных мест.");
+        const extraTrimmed = leadExtra.trim();
+        if (extraTrimmed) {
+          lines.push("");
+          lines.push(`(Дополнительно: ${extraTrimmed})`);
+        }
+        lines.push("");
+        lines.push("Буду благодарен за ответ!");
+        const fullMessage = lines.join("\n");
+
+        const handleCopy = async () => {
+          try {
+            await navigator.clipboard.writeText(fullMessage);
+            setLeadCopied(true);
+            setTimeout(() => setLeadCopied(false), 2500);
+          } catch {
+            // fallback
+            const ta = document.createElement("textarea");
+            ta.value = fullMessage;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            setLeadCopied(true);
+            setTimeout(() => setLeadCopied(false), 2500);
+          }
+        };
+
+        return (
+          <>
+            <button
+              type="button"
+              aria-label="Закрыть"
+              onClick={() => setLeadModalRoom(null)}
+              className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px]"
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-x-3 bottom-3 z-[51] flex max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-[480px] sm:rounded-2xl"
+            >
+              {/* Header */}
+              <div className="flex shrink-0 items-center justify-between border-b border-olive/10 px-5 py-3.5">
+                <h3 className="text-[15px] font-semibold text-olive">Заявка на бронирование</h3>
+                <button
+                  type="button"
+                  onClick={() => setLeadModalRoom(null)}
+                  aria-label="Закрыть"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/16 text-olive/70 transition hover:bg-cream"
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                <p className="text-[13px] leading-relaxed text-olive/70">
+                  Скопируйте готовое сообщение нажатием кнопки ниже и отправьте его владельцу объекта в любой удобный мессенджер.
+                </p>
+
+                {/* Message preview */}
+                <div className="mt-3 rounded-xl border border-olive/12 bg-cream/50 p-3.5">
+                  <pre className="whitespace-pre-wrap break-words font-[family-name:var(--font-body)] text-[13px] leading-relaxed text-olive/85">
+                    {fullMessage}
+                  </pre>
+                </div>
+
+                {/* Extra info textarea */}
+                <div className="mt-3">
+                  <label
+                    htmlFor="lead-extra-info"
+                    className="block text-[12px] font-medium text-olive/60"
+                  >
+                    Дополнительная информация (необязательно)
+                  </label>
+                  <textarea
+                    id="lead-extra-info"
+                    value={leadExtra}
+                    onChange={(e) => {
+                      setLeadExtra(e.target.value);
+                      setLeadCopied(false);
+                    }}
+                    placeholder="Например: нужна детская кроватка, приедем поздно вечером..."
+                    rows={2}
+                    className="mt-1.5 w-full resize-none rounded-xl border border-olive/16 bg-white px-3.5 py-2.5 text-[13px] text-olive placeholder:text-olive/35 outline-none transition focus:border-olive/30 focus:ring-2 focus:ring-sage/25"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className={cn(
+                    "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
+                    leadCopied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+                  )}
+                >
+                  {leadCopied ? (
+                    <>
+                      <Check className="h-4.5 w-4.5" />
+                      Скопировано!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4.5 w-4.5" />
+                      Скопировать сообщение
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })() : null}
 
       {isMobileBookingOpen ? (
         <div className="fixed inset-0 z-50 bg-midnight/55 p-4 lg:hidden">

@@ -5,6 +5,7 @@ import { CircleHelp, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ExcursionFaq } from "@/components/excursions/excursion-faq";
 import { AppIcon } from "@/components/ui/app-icon";
+import { NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
 import type { PublicPropertyCard } from "@/lib/public-properties";
 
 type PublicPropertyBottomSectionsProps = {
@@ -52,13 +53,16 @@ export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSecti
             </button>
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {item.amenityHighlights.map((amenity) => (
               <div
                 key={amenity}
-                className="rounded-2xl border border-olive/10 bg-cream/45 px-4 py-3 text-sm font-semibold text-olive"
+                className="flex items-center gap-2.5 rounded-2xl border border-olive/10 bg-cream/45 px-3.5 py-2.5"
               >
-                {amenity}
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-terra ring-1 ring-olive/8">
+                  <NameBasedAmenityIcon name={amenity} className="h-4 w-4 text-terra/85" />
+                </span>
+                <span className="text-sm font-medium text-olive">{amenity}</span>
               </div>
             ))}
           </div>
@@ -149,14 +153,15 @@ export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSecti
               {item.amenityGroups.property.length > 0 ? (
                 <div className="rounded-2xl border border-olive/10 bg-cream/45 p-4">
                   <p className="text-sm font-semibold text-olive">На территории объекта</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
                     {item.amenityGroups.property.map((amenity) => (
-                      <span
+                      <div
                         key={`property-${amenity}`}
-                        className="rounded-full bg-white px-3 py-1.5 text-xs text-olive/80 ring-1 ring-olive/10"
+                        className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-olive/8"
                       >
-                        {amenity}
-                      </span>
+                        <NameBasedAmenityIcon name={amenity} className="h-4 w-4 shrink-0 text-terra/75" />
+                        <span className="text-xs text-olive/80">{amenity}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -165,14 +170,15 @@ export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSecti
               {item.amenityGroups.rooms.length > 0 ? (
                 <div className="rounded-2xl border border-olive/10 bg-cream/45 p-4">
                   <p className="text-sm font-semibold text-olive">В номерах</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
                     {item.amenityGroups.rooms.map((amenity) => (
-                      <span
+                      <div
                         key={`room-${amenity}`}
-                        className="rounded-full bg-white px-3 py-1.5 text-xs text-olive/80 ring-1 ring-olive/10"
+                        className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-olive/8"
                       >
-                        {amenity}
-                      </span>
+                        <NameBasedAmenityIcon name={amenity} className="h-4 w-4 shrink-0 text-terra/75" />
+                        <span className="text-xs text-olive/80">{amenity}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

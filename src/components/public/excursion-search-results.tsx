@@ -2,12 +2,16 @@
 
 import {
   ArrowDown,
+  ArrowRight,
+  CalendarDays,
   ChevronDown,
   Clock3,
   LoaderCircle,
   MapPin,
+  Route,
   SlidersHorizontal,
   Star,
+  Users,
   X,
 } from "lucide-react";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +19,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
+import {
+  formatProgramDuration,
+  formatProgramPrice,
+  getOfferTypeLabel,
+} from "@/lib/excursion-offers";
 import {
   YandexMapMultiViewer,
   type YandexMapPoint,
@@ -97,15 +106,6 @@ const rubFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }
 
 function formatMoney(value: number): string {
   return `${rubFormatter.format(Math.round(value))} ₽`;
-}
-
-function formatDuration(minutes: number | null): string {
-  if (!minutes || minutes <= 0) return "";
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins} мин`;
-  if (mins === 0) return `${hours} ч`;
-  return `${hours} ч ${mins} мин`;
 }
 
 function pluralizeReviews(count: number): string {
@@ -1049,6 +1049,7 @@ export function ExcursionSearchResults({
       const p = new URLSearchParams({ page_size: "30", page: String(loadedPage + 1) });
       if (filters.query) p.set("q", filters.query);
       if (filters.locationName) p.set("location", filters.locationName);
+      if (filters.offerType) p.set("offerType", filters.offerType);
       if (filters.districtSlug) p.set("district", filters.districtSlug);
       if (filters.categorySlug) p.set("category", filters.categorySlug);
       if (filters.dateFrom) p.set("dateFrom", filters.dateFrom);
@@ -1108,6 +1109,7 @@ export function ExcursionSearchResults({
       // URL is the source of truth: push a new search URL and let server return canonical filters.
       const params: Record<string, string> = {
         q: query,
+        offerType: filters.offerType ?? "",
         location,
         district,
         category,
@@ -1126,7 +1128,7 @@ export function ExcursionSearchResults({
       };
       router.push(buildSearchUrl(params));
     },
-    [query, location, district, category, dateFrom, guests, format, durationBucket, minPrice, maxPrice, radiusKm, pickup, kids, sort, router],
+    [query, filters.offerType, location, district, category, dateFrom, guests, format, durationBucket, minPrice, maxPrice, radiusKm, pickup, kids, sort, router],
   );
 
   const handleRadiusChange = useCallback(
@@ -1167,6 +1169,19 @@ export function ExcursionSearchResults({
         key: "category",
         label: filters.categoryName,
         clear: () => applyFilters({ category: "" }),
+      });
+    }
+    if (filters.offerType === "excursion") {
+      chips.push({
+        key: "offerType",
+        label: "Экскурсии",
+        clear: () => applyFilters({ offerType: "" }),
+      });
+    } else if (filters.offerType === "tour") {
+      chips.push({
+        key: "offerType",
+        label: "Туры",
+        clear: () => applyFilters({ offerType: "" }),
       });
     }
     if (filters.query) {
@@ -1220,7 +1235,7 @@ export function ExcursionSearchResults({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-olive">
-            {filters.locationName ? `Экскурсии · ${filters.locationName}` : "Экскурсии в Крыму"}
+            {filters.locationName ? `Экскурсии и туры · ${filters.locationName}` : "Экскурсии и туры в Крыму"}
           </h1>
           <p className="mt-0.5 text-sm text-olive/60">
             Найдено: {pagination.total}{" "}
@@ -1239,6 +1254,30 @@ export function ExcursionSearchResults({
           <AppIcon icon={SlidersHorizontal} className="h-4 w-4" />
           Фильтры
         </button>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[
+          { key: "", label: "Все программы" },
+          { key: "excursion", label: "Экскурсии" },
+          { key: "tour", label: "Туры" },
+        ].map((option) => {
+          const isActive = (filters.offerType ?? "") === option.key;
+          return (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => applyFilters({ offerType: option.key })}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                isActive
+                  ? "bg-primary text-white"
+                  : "border border-olive/15 bg-white text-olive/70 hover:border-primary/35 hover:text-olive"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Active filter chips ─────────────────────────────────────────────── */}
@@ -2033,6 +2072,23 @@ export function ExcursionSearchResults({
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getRatingText(rating: number): string {
+  if (rating >= 4.8) return "Превосходно";
+  if (rating >= 4.5) return "Отлично";
+  if (rating >= 4.0) return "Очень хорошо";
+  if (rating >= 3.5) return "Хорошо";
+  return "Нормально";
+}
+
+function truncateAvailability(summary: string): string {
+  if (summary.length <= 40) return summary;
+  const seasonMatch = summary.match(/^(Круглый год|Сезонно|[А-Яа-яЁё]+ — [А-Яа-яЁё]+)/);
+  if (seasonMatch) return seasonMatch[1];
+  return summary.slice(0, 37) + "…";
+}
+
 // ─── Excursion Card ───────────────────────────────────────────────────────────
 
 function ExcursionCard({
@@ -2048,7 +2104,26 @@ function ExcursionCard({
   onMouseLeave: () => void;
   cardRef: (el: HTMLElement | null) => void;
 }) {
-  const duration = formatDuration(item.durationMinutes);
+  const duration = formatProgramDuration(item);
+  const priceLabel = formatProgramPrice(item);
+
+  const ratingBlock = item.avgRating > 0 ? (
+    <div className="flex items-center gap-2">
+      <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
+        {item.avgRating.toFixed(1)}
+      </span>
+      <div className="min-w-0">
+        <span className="text-[12px] font-semibold text-olive">
+          {getRatingText(item.avgRating)}
+        </span>
+        {item.reviewsCount > 0 && (
+          <span className="ml-1 text-[12px] text-olive/45">
+            · {pluralizeReviews(item.reviewsCount)}
+          </span>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <article
@@ -2056,15 +2131,27 @@ function ExcursionCard({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "rounded-2xl bg-white/94 p-4 ring-1 transition-all duration-200",
+        "group relative overflow-hidden rounded-2xl border bg-white transition-all duration-300",
         isHighlighted
-          ? "ring-primary/50 shadow-md shadow-primary/10"
-          : "ring-olive/10 hover:ring-olive/20 hover:shadow-sm",
+          ? "border-primary/30 shadow-[0_0_0_2px_rgba(15,118,110,0.2),0_16px_40px_rgba(15,118,110,0.15)]"
+          : "border-olive/[0.07] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]",
       )}
     >
-      <div className="flex gap-4">
+      {/* Full-card overlay link */}
+      <Link
+        href={item.path}
+        aria-label={`Открыть ${item.title}`}
+        className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+      />
+
+      <div className="pointer-events-none relative z-20 flex flex-col md:flex-row">
         {/* Cover image */}
-        <div className="hidden shrink-0 overflow-hidden rounded-xl bg-cream sm:block sm:h-36 sm:w-48">
+        <div
+          className={cn(
+            "relative shrink-0 overflow-hidden bg-sand",
+            "aspect-[16/9] w-full rounded-t-2xl md:aspect-[4/3] md:h-auto md:w-[240px] md:rounded-l-2xl md:rounded-tr-none lg:w-[280px]",
+          )}
+        >
           {item.coverImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -2072,99 +2159,167 @@ function ExcursionCard({
               alt={item.title}
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover"
+              sizes="(min-width: 1024px) 280px, (min-width: 768px) 240px, 100vw"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-olive/40">
+            <div className="flex h-full min-h-[160px] items-center justify-center text-sm text-olive/40">
               Без фото
+            </div>
+          )}
+
+          {/* Type badge on image */}
+          <div className="pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1.5">
+            <span className="rounded-lg bg-gradient-to-r from-primary to-emerald-500 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+              {getOfferTypeLabel(item.offerType)}
+            </span>
+            {item.subtypeLabel ? (
+              <span className="rounded-lg bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-olive/70 shadow-sm backdrop-blur-sm">
+                {item.subtypeLabel}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Availability badge on image */}
+          {item.hasAvailableSession && (
+            <div className="pointer-events-none absolute bottom-2.5 left-2.5">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-green-600/90 px-2 py-1 text-[11px] font-bold text-white shadow-sm backdrop-blur-sm">
+                Есть места
+              </span>
             </div>
           )}
         </div>
 
         {/* Content */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-olive/50">Экскурсия</p>
-              <h2 className="mt-0.5 truncate text-lg font-semibold text-olive leading-snug">
-                {item.title}
-              </h2>
-              <p className="mt-0.5 truncate text-sm text-olive/60">
-                {item.mainLocationName ?? item.locationName ?? "Крым"}
-                {item.anchorCityName && item.anchorCityName !== item.mainLocationName
-                  ? ` · ${item.anchorCityName}`
-                  : ""}
+        <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:flex-row md:gap-4">
+          {/* Center content */}
+          <div className="flex flex-1 flex-col gap-1.5">
+            {/* Title */}
+            <h2 className="text-[16px] font-bold leading-snug tracking-tight text-olive sm:text-[18px]">
+              {item.title}
+            </h2>
+
+            {/* Route / Location */}
+            {item.routeSummary && (
+              <p className="flex items-start gap-1.5 text-[13px] leading-snug text-olive/50">
+                <AppIcon icon={MapPin} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-olive/30" />
+                <span>{item.routeSummary}</span>
               </p>
-            </div>
-
-            {/* Price */}
-            {item.priceFrom !== null ? (
-              <div className="shrink-0 text-right">
-                <p className="text-xs text-olive/50">от</p>
-                <p className="text-lg font-bold text-olive leading-tight">
-                  {formatMoney(item.priceFrom)}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Rating + chips row */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {item.avgRating > 0 ? (
-              <div className="flex items-center gap-1.5">
-                <StarRating rating={item.avgRating} />
-                <span className="text-xs text-olive/60">
-                  {item.avgRating.toFixed(1)} · {pluralizeReviews(item.reviewsCount)}
-                </span>
-              </div>
-            ) : (
-              <span className="text-xs text-olive/40">Нет отзывов</span>
             )}
 
-            {duration ? (
-              <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs text-olive/70">
-                {duration}
-              </span>
-            ) : null}
+            {/* Info chips row */}
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {duration ? (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
+                  <AppIcon icon={Clock3} className="h-3 w-3 shrink-0" />
+                  {duration}
+                </span>
+              ) : null}
 
-            {item.distanceKm !== null ? (
-              <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs text-olive/70">
-                ~{item.distanceKm} км
-              </span>
-            ) : null}
+              {item.availabilitySummary && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-lg bg-sand/60 px-2 py-1 text-[11px] font-medium text-olive/60"
+                  title={item.availabilitySummary}
+                >
+                  <AppIcon icon={CalendarDays} className="h-3 w-3 shrink-0" />
+                  {truncateAvailability(item.availabilitySummary)}
+                </span>
+              )}
 
-            {item.districtName ? (
-              <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs text-olive/70">
-                {item.districtName}
-              </span>
-            ) : null}
+              {item.distanceKm !== null ? (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-sand/60 px-2 py-1 text-[11px] font-medium text-olive/60">
+                  <AppIcon icon={Route} className="h-3 w-3 shrink-0" />
+                  ~{item.distanceKm} км
+                </span>
+              ) : null}
 
-            {item.categoryName ? (
-              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                {item.categoryName}
-              </span>
-            ) : null}
+              {item.districtName ? (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-sand/60 px-2 py-1 text-[11px] font-medium text-olive/60">
+                  <AppIcon icon={MapPin} className="h-3 w-3 shrink-0" />
+                  {item.districtName}
+                </span>
+              ) : null}
+            </div>
 
-            {item.pickupAvailable ? (
-              <span className="rounded-full bg-terra/10 px-2.5 py-0.5 text-xs font-medium text-terra">
-                Трансфер
-              </span>
-            ) : null}
+            {/* Feature tags */}
+            <div className="flex flex-wrap gap-1.5">
+              {item.categoryName ? (
+                <span className="inline-flex items-center rounded-md bg-primary/8 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  {item.categoryName}
+                </span>
+              ) : null}
 
-            {item.hasAvailableSession ? (
-              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                Есть места
-              </span>
-            ) : null}
+              {item.pickupAvailable ? (
+                <span className="inline-flex items-center rounded-md bg-terra/8 px-2 py-0.5 text-[11px] font-medium text-terra">
+                  Трансфер
+                </span>
+              ) : null}
+
+              {item.hasAccommodation ? (
+                <span className="inline-flex items-center rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60">
+                  Проживание
+                </span>
+              ) : null}
+            </div>
+
+            {/* Rating */}
+            {ratingBlock}
+
+            {/* Mobile: price + CTA (below md) */}
+            <div className="mt-auto flex items-end justify-between gap-3 border-t border-olive/[0.06] pt-3 md:hidden">
+              <div className="min-w-0">
+                <p className="text-[17px] font-extrabold leading-tight tracking-tight text-olive">
+                  {priceLabel}
+                </p>
+              </div>
+              <Link
+                href={item.path}
+                className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-terra px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
+              >
+                Подробнее
+                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
 
-          <div className="mt-3">
-            <Link
-              href={item.path}
-              className="inline-flex rounded-xl bg-terra px-4 py-1.5 text-sm font-semibold text-white hover:bg-terra/88 transition-colors"
-            >
-              Подробнее
-            </Link>
+          {/* Right column: rating + price + CTA (desktop only) */}
+          <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[160px] lg:w-[180px]">
+            {/* Rating top-right */}
+            <div className="text-right">
+              {item.avgRating > 0 ? (
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <span className="text-[12px] font-semibold text-olive">
+                      {getRatingText(item.avgRating)}
+                    </span>
+                    {item.reviewsCount > 0 && (
+                      <p className="text-[11px] text-olive/40">
+                        {pluralizeReviews(item.reviewsCount)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-[14px] font-bold text-white">
+                    {item.avgRating.toFixed(1)}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[11px] text-olive/35">Нет отзывов</span>
+              )}
+            </div>
+
+            {/* Price + CTA bottom-right */}
+            <div className="mt-auto text-right">
+              <p className="text-[18px] font-extrabold leading-tight tracking-tight text-olive">
+                {priceLabel}
+              </p>
+              <Link
+                href={item.path}
+                className="pointer-events-auto mt-2 inline-flex h-9 items-center gap-1 rounded-xl bg-terra px-4 text-[12px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
+              >
+                Подробнее
+                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>

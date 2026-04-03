@@ -2,8 +2,10 @@ import {
   AdminMessageSourceType,
   ApplicationStatus,
   BathroomType,
+  ExcursionAvailabilityMode,
   ExcursionDifficulty,
   ExcursionFormat,
+  ExcursionOfferType,
   ExcursionPriceType,
   ExcursionScheduleMode,
   ExcursionSessionStatus,
@@ -184,6 +186,11 @@ export const propertyStep4Schema = z.object({
     .max(24, "Телефон слишком длинный")
     .regex(/^[+0-9()\s-]+$/, "Телефон содержит недопустимые символы")
     .refine((value) => isLikelyPhoneNumber(value), "Введите корректный номер телефона"),
+  phoneName: z.string().trim().max(80, "Имя слишком длинное").optional().or(z.literal("")),
+  phone2: optionalPhoneSchema,
+  phone2Name: z.string().trim().max(80, "Имя слишком длинное").optional().or(z.literal("")),
+  phone3: optionalPhoneSchema,
+  phone3Name: z.string().trim().max(80, "Имя слишком длинное").optional().or(z.literal("")),
   websiteUrl: optionalHttpUrlSchema("Сайт"),
   contactEmail: z
     .string()
@@ -854,9 +861,32 @@ const excursionRouteLocationSchema = z.object({
   sortOrder: z.number().int().min(0).max(999),
 });
 
+const excursionHighlightSchema = z.string().trim().min(2).max(120);
+const itineraryDaySchema = z.object({
+  day: z.number().int().min(1).max(100),
+  title: z.string().trim().min(2).max(120),
+  teaser: z.string().trim().max(240).optional(),
+  description: z.string().trim().min(10).max(4000),
+  locations: z.array(z.string().trim().min(1).max(120)).max(20),
+  startTime: z.string().trim().max(10).optional(),
+  endTime: z.string().trim().max(10).optional(),
+  included: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+  meals: z.string().trim().max(120).optional(),
+  accommodation: z.string().trim().max(160).optional(),
+  activities: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+});
+const excursionExtraOptionSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(400).optional(),
+  included: z.boolean(),
+  price: z.number().min(0).max(1_000_000).nullable().optional(),
+});
+
 export const updateExcursionSchema = z
   .object({
-    title: z.string().trim().min(2).max(140).optional(),
+    offerType: z.nativeEnum(ExcursionOfferType).optional(),
+    subtypeLabel: z.string().trim().min(2).max(120).nullable().optional(),
+    title: z.string().trim().min(2).max(140).nullable().optional(),
     locationId: excursionLocationIdSchema.optional(),
     locationName: z.string().trim().min(2).max(120).optional(),
     mainLocationId: excursionLocationIdSchema.nullable().optional(),
@@ -877,9 +907,16 @@ export const updateExcursionSchema = z
     shortDescription: z.string().trim().min(10).max(1000).nullable().optional(),
     fullDescription: z.string().trim().min(20).max(5000).nullable().optional(),
     routeDescription: z.string().trim().min(10).max(5000).nullable().optional(),
+    highlights: z.array(excursionHighlightSchema).max(6).optional(),
     durationMinutes: z.number().int().min(15).max(10080).nullable().optional(),
+    durationDays: z.number().int().min(1).max(365).nullable().optional(),
+    durationNights: z.number().int().min(0).max(364).nullable().optional(),
+    itineraryDays: z.array(itineraryDaySchema).max(60).optional(),
+    finishPoint: z.string().trim().min(2).max(240).nullable().optional(),
     scheduleText: z.string().trim().min(2).max(2000).nullable().optional(),
     scheduleMode: z.nativeEnum(ExcursionScheduleMode).optional(),
+    availabilityMode: z.nativeEnum(ExcursionAvailabilityMode).optional(),
+    availabilityNote: z.string().trim().min(2).max(1000).nullable().optional(),
     format: z.nativeEnum(ExcursionFormat).nullable().optional(),
     groupSizeMin: z.number().int().min(1).max(1000).nullable().optional(),
     groupSizeMax: z.number().int().min(1).max(1000).nullable().optional(),
@@ -921,6 +958,7 @@ export const updateExcursionSchema = z
       )
       .max(20)
       .optional(),
+    extraOptions: z.array(excursionExtraOptionSchema).max(30).optional(),
     pricingTiers: z
       .array(
         z.object({
@@ -944,6 +982,13 @@ export const updateExcursionSchema = z
     meetingPointLat: z.number().min(-90).max(90).nullable().optional(),
     meetingPointLng: z.number().min(-180).max(180).nullable().optional(),
     minBookingNoticeHours: z.number().int().min(0).max(720).nullable().optional(),
+    priceUnitLabel: z.string().trim().min(2).max(80).nullable().optional(),
+    accommodationProvided: z.boolean().nullable().optional(),
+    accommodationType: z.string().trim().min(2).max(120).nullable().optional(),
+    accommodationNights: z.number().int().min(0).max(364).nullable().optional(),
+    accommodationFormat: z.string().trim().min(2).max(120).nullable().optional(),
+    mealPlan: z.string().trim().min(2).max(120).nullable().optional(),
+    accommodationComment: z.string().trim().min(2).max(1000).nullable().optional(),
     hasGuideLicense: z.boolean().optional(),
     instantConfirmation: z.boolean().optional(),
     contactFirstName: z.string().trim().min(2).max(80).nullable().optional(),
@@ -970,7 +1015,7 @@ export const updateExcursionSchema = z
     vkUrl: optionalHttpUrlSchema("VK").nullable().optional(),
     maxUrl: optionalHttpUrlSchema("Max").nullable().optional(),
     okUrl: optionalHttpUrlSchema("Одноклассники").nullable().optional(),
-    photoUrls: z.array(photoUrlSchema).max(6).optional(),
+    photoUrls: z.array(photoUrlSchema).max(12).optional(),
     videoUrls: z.array(z.string().trim().url()).max(2).optional(),
     status: z.nativeEnum(ExcursionStatus).optional(),
   })
@@ -1014,6 +1059,22 @@ export const updateExcursionSchema = z
       });
     }
 
+    if (data.offerType === ExcursionOfferType.TOUR) {
+      if (
+        data.durationDays !== undefined &&
+        data.durationNights !== undefined &&
+        data.durationDays !== null &&
+        data.durationNights !== null &&
+        data.durationNights > data.durationDays
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Ночей не может быть больше, чем дней",
+          path: ["durationNights"],
+        });
+      }
+    }
+
     if (data.routeLocations && data.routeLocations.length > 0) {
       const seenSortOrders = new Set<number>();
       for (const routeLocation of data.routeLocations) {
@@ -1026,6 +1087,21 @@ export const updateExcursionSchema = z
           break;
         }
         seenSortOrders.add(routeLocation.sortOrder);
+      }
+    }
+
+    if (data.itineraryDays) {
+      const seenDayNumbers = new Set<number>();
+      for (const day of data.itineraryDays) {
+        if (seenDayNumbers.has(day.day)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Номера дней программы должны быть уникальными",
+            path: ["itineraryDays"],
+          });
+          break;
+        }
+        seenDayNumbers.add(day.day);
       }
     }
   });
@@ -1115,7 +1191,7 @@ export const upsertExcursionScheduleRulesSchema = z.object({
 
 export const createReviewReportSchema = z.object({
   reason: z.enum(["spam", "abuse", "misleading", "other"], {
-    required_error: "Выберите причину жалобы",
+    message: "Выберите причину жалобы",
   }),
   comment: z
     .string()

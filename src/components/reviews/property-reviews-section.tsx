@@ -55,6 +55,22 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
+function formatReviewMonth(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatReviewsCountLabel(count: number): string {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} отзывов`;
+  if (last === 1) return `${count} отзыв`;
+  if (last >= 2 && last <= 4) return `${count} отзыва`;
+  return `${count} отзывов`;
+}
+
 function getInitials(name: string): string {
   const parts = name
     .split(/\s+/)
@@ -101,6 +117,7 @@ export function PropertyReviewsSection({
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>(
@@ -117,6 +134,8 @@ export function PropertyReviewsSection({
 
   const isOwnerViewer = Boolean(currentUserId && ownerUserId && currentUserId === ownerUserId);
   const effectiveRating = rating;
+  const hasPublishedReviews = summary.reviewsCount > 0;
+  const canWriteReview = isAuthenticated && !isOwnerViewer;
 
   useEffect(() => {
     setReplyDraftById((previous) => {
@@ -192,6 +211,7 @@ export function PropertyReviewsSection({
       if (body.item.status === "PENDING" || body.moderationStatus === "PENDING") {
         setText("");
         setRating(5);
+        setIsComposerOpen(false);
         setSuccess("Отзыв отправлен на модерацию. Он появится после проверки администратором.");
         return;
       }
@@ -199,6 +219,7 @@ export function PropertyReviewsSection({
       setItems((previous) => [body.item!, ...previous]);
       setText("");
       setRating(5);
+      setIsComposerOpen(false);
       setSuccess("Спасибо, отзыв опубликован.");
     } finally {
       setIsSubmitting(false);
@@ -326,127 +347,163 @@ export function PropertyReviewsSection({
   }
 
   return (
-    <section className="rounded-3xl bg-white p-5 ring-1 ring-olive/10 shadow-[0_12px_30px_rgba(15,118,110,0.08)] md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section
+      id="reviews"
+      className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+    >
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-2xl text-olive">Отзывы</h2>
-          <p className="mt-1 text-sm text-olive/75">
-            Средний рейтинг: <span className="font-semibold text-olive">{summary.avgRating.toFixed(1)}</span>{" "}
-            ({summary.reviewsCount} отзывов)
-          </p>
+          <h2 className="text-2xl text-olive md:text-[1.85rem]">Отзывы гостей</h2>
+          {hasPublishedReviews ? (
+            <div className="mt-3 flex items-center gap-3 text-sm text-olive/68">
+              <span className="inline-flex min-w-10 items-center justify-center rounded-full bg-emerald-600 px-3 py-1.5 font-semibold text-white">
+                {summary.avgRating.toFixed(1)}
+              </span>
+              <span className="font-medium text-olive">
+                {formatReviewsCountLabel(summary.reviewsCount)}
+              </span>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-olive/66">
+              Рейтинг появится здесь после первых опубликованных отзывов.
+            </p>
+          )}
         </div>
-        {summary.reviewsCount > 0 ? (
-          <span className="rounded-full bg-sage/22 px-3 py-1 text-xs font-semibold text-olive">
-            Проверено отзывами
-          </span>
-        ) : null}
       </div>
 
-      {isAuthenticated ? (
-        isOwnerViewer ? (
-          <div className="mt-4 rounded-xl bg-cream/70 p-4 text-sm text-olive/80 ring-1 ring-olive/10">
-            Вы владелец {entityLabel}. Оставлять отзыв о собственном {entityLabel} нельзя, но вы можете отвечать
-            на отзывы гостей ниже.
-          </div>
+      <div className="mt-5 flex flex-col gap-3 rounded-[24px] bg-[#f4f6f7] px-4 py-4 ring-1 ring-olive/8 md:flex-row md:items-center md:justify-between md:px-5">
+        <div>
+          <p className="text-base font-semibold text-olive">Отдыхали здесь? Поделитесь впечатлениями!</p>
+          <p className="mt-1 text-sm text-olive/60">
+            {isOwnerViewer
+              ? `Вы владелец ${entityLabel}. Оставлять отзыв нельзя, но можно отвечать на отзывы гостей ниже.`
+              : "Короткий честный отзыв помогает другим гостям быстрее понять, подходит ли им это жилье."}
+          </p>
+        </div>
+
+        {canWriteReview ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsComposerOpen((previous) => !previous);
+              setError("");
+              setSuccess("");
+            }}
+            className="inline-flex items-center justify-center rounded-full border border-olive/16 bg-white px-4 py-2 text-sm font-semibold text-olive transition hover:border-olive/24 hover:bg-white/90"
+          >
+            {isComposerOpen ? "Скрыть форму" : "Написать отзыв"}
+          </button>
+        ) : isAuthenticated ? (
+          <span className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-medium text-olive/72 ring-1 ring-olive/10">
+            Ответы владельца доступны ниже
+          </span>
         ) : (
-          <div className="mt-4 rounded-xl bg-cream/70 p-4 ring-1 ring-olive/10">
-            <p className="text-sm font-semibold text-olive">Оставить отзыв</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => changeRatingByStep(-0.5)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-olive ring-1 ring-olive/20 transition hover:bg-cream"
-                aria-label="Уменьшить оценку на 0.5"
-              >
-                {"<"}
-              </button>
-              <div
-                className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 ring-1 ring-olive/20"
-                tabIndex={0}
-                role="slider"
-                aria-label="Оценка"
-                aria-valuemin={0.5}
-                aria-valuemax={5}
-                aria-valuenow={effectiveRating}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-                    event.preventDefault();
-                    changeRatingByStep(-0.5);
-                  } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-                    event.preventDefault();
-                    changeRatingByStep(0.5);
-                  }
-                }}
-              >
-                {[1, 2, 3, 4, 5].map((starIndex) => (
-                  <span
-                    key={starIndex}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md"
-                    aria-hidden="true"
-                  >
-                    <StarGlyph fillPercent={getStarFillPercent(effectiveRating, starIndex)} />
-                  </span>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => changeRatingByStep(0.5)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-olive ring-1 ring-olive/20 transition hover:bg-cream"
-                aria-label="Увеличить оценку на 0.5"
-              >
-                {">"}
-              </button>
-              <span className="text-sm font-semibold text-olive">{effectiveRating.toFixed(1)} / 5</span>
-            </div>
-            <textarea
-              className="mt-3 w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/50 focus:border-terra focus:ring-2 focus:ring-terra/20"
-              rows={4}
-              maxLength={2000}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="Напишите ваши впечатления"
-            />
-            <div className="mt-3">
-              <Button onClick={() => void submitReview()} disabled={isSubmitting}>
-                {isSubmitting ? "Отправка..." : "Отправить отзыв"}
-              </Button>
-            </div>
-            {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
-            {success ? <p className="mt-2 text-sm text-green-700">{success}</p> : null}
-          </div>
-        )
-      ) : (
-        <div className="mt-4 rounded-xl bg-cream/70 p-4 text-sm text-olive/80 ring-1 ring-olive/10">
-          Оставлять отзывы о {entityLabel} могут только авторизованные пользователи.
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href={loginHref}
-              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white"
             >
               Войти
             </Link>
             <Link
               href={registerHref}
-              className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-white"
+              className="rounded-full border border-olive/16 bg-white px-4 py-2 text-sm font-semibold text-olive"
             >
               Регистрация
             </Link>
           </div>
+        )}
+      </div>
+
+      {canWriteReview && isComposerOpen ? (
+        <div className="mt-4 rounded-[24px] bg-[#fcfbf7] p-5 ring-1 ring-olive/10">
+          <p className="text-base font-semibold text-olive">Оставить отзыв</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => changeRatingByStep(-0.5)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-olive ring-1 ring-olive/16 transition hover:bg-cream"
+              aria-label="Уменьшить оценку на 0.5"
+            >
+              {"<"}
+            </button>
+            <div
+              className="inline-flex items-center gap-1 rounded-xl bg-white px-2 py-1.5 ring-1 ring-olive/16"
+              tabIndex={0}
+              role="slider"
+              aria-label="Оценка"
+              aria-valuemin={0.5}
+              aria-valuemax={5}
+              aria-valuenow={effectiveRating}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  changeRatingByStep(-0.5);
+                } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  changeRatingByStep(0.5);
+                }
+              }}
+            >
+              {[1, 2, 3, 4, 5].map((starIndex) => (
+                <span
+                  key={starIndex}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md"
+                  aria-hidden="true"
+                >
+                  <StarGlyph fillPercent={getStarFillPercent(effectiveRating, starIndex)} />
+                </span>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => changeRatingByStep(0.5)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-olive ring-1 ring-olive/16 transition hover:bg-cream"
+              aria-label="Увеличить оценку на 0.5"
+            >
+              {">"}
+            </button>
+            <span className="text-sm font-semibold text-olive">{effectiveRating.toFixed(1)} / 5</span>
+          </div>
+
+          <textarea
+            className="mt-4 w-full rounded-2xl border border-olive/16 bg-white px-4 py-3 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-terra focus:ring-2 focus:ring-terra/18"
+            rows={5}
+            maxLength={2000}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Напишите, что понравилось, что было удобно и что стоит знать другим гостям."
+          />
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button onClick={() => void submitReview()} disabled={isSubmitting}>
+              {isSubmitting ? "Отправка..." : "Отправить отзыв"}
+            </Button>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            {success ? <p className="text-sm text-green-700">{success}</p> : null}
+          </div>
         </div>
-      )}
+      ) : null}
+
+      {!isComposerOpen && error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {!isComposerOpen && success ? <p className="mt-4 text-sm text-green-700">{success}</p> : null}
 
       {items.length === 0 ? (
-        <div className="mt-4 rounded-2xl bg-cream/70 p-6 text-center ring-1 ring-olive/10">
-          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-terra ring-1 ring-olive/12">
-            <AppIcon icon={MessageSquareText} className="h-7 w-7" />
+        <div className="mt-5 rounded-[24px] border border-dashed border-olive/18 bg-[#fcfbf7] p-6">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-terra ring-1 ring-olive/10">
+              <AppIcon icon={MessageSquareText} className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-base font-semibold text-olive">Пока нет отзывов</p>
+              <p className="mt-1 text-sm leading-6 text-olive/70">
+                Когда гости начнут делиться впечатлениями, здесь появятся рейтинг и подробные комментарии.
+              </p>
+            </div>
           </div>
-          <p className="mt-3 text-base font-semibold text-olive">Пока нет отзывов</p>
-          <p className="mt-1 text-sm text-olive/75">
-            Будьте первым гостем, который поделится впечатлениями об этом объекте.
-          </p>
         </div>
       ) : (
-        <div className="mt-4 space-y-3">
+        <div className="mt-6 space-y-4">
           {items.map((review) => {
             const likeActive = review.currentUserReaction === "LIKE";
             const dislikeActive = review.currentUserReaction === "DISLIKE";
@@ -455,11 +512,11 @@ export function PropertyReviewsSection({
             return (
               <article
                 key={review.id}
-                className="rounded-2xl bg-cream/60 p-4 ring-1 ring-olive/10"
+                className="rounded-[24px] border border-olive/10 bg-white p-5 shadow-[0_10px_28px_rgba(58,43,35,0.04)]"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-semibold text-olive ring-1 ring-olive/12">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="flex min-w-0 items-start gap-3.5">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#eef3f6] text-base font-semibold text-olive ring-1 ring-olive/10">
                       {review.userAvatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -474,53 +531,60 @@ export function PropertyReviewsSection({
                       )}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-olive">{review.userName}</p>
-                      <p className="text-xs text-olive/60">{formatDateTime(review.createdAt)}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="truncate text-lg font-semibold text-olive">{review.userName}</p>
+                        <span className="text-sm text-olive/55">{formatReviewMonth(review.createdAt)}</span>
+                      </div>
+                      <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-terra">
+                        <div className="inline-flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((starIndex) => (
+                            <StarGlyph
+                              key={`${review.id}-star-${starIndex}`}
+                              fillPercent={getStarFillPercent(review.rating, starIndex)}
+                            />
+                          ))}
+                        </div>
+                        <span>{review.rating.toFixed(1)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-terra">
-                    <div className="inline-flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((starIndex) => (
-                        <StarGlyph
-                          key={`${review.id}-star-${starIndex}`}
-                          fillPercent={getStarFillPercent(review.rating, starIndex)}
-                        />
-                      ))}
-                    </div>
-                    <span>{review.rating.toFixed(1)}</span>
                   </div>
                 </div>
 
-                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-olive/85">
+                <p className="mt-4 whitespace-pre-line text-[15px] leading-7 text-olive/84">
                   {review.text}
                 </p>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2.5 text-sm text-olive/65">
+                  <span className="font-medium text-olive/70">Полезный отзыв?</span>
                   <button
                     type="button"
                     onClick={() => void setReaction(review, likeActive ? null : "LIKE")}
                     disabled={isReactionSaving}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition ${
                       likeActive
                         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-olive/15 bg-white text-olive/70 hover:border-emerald-200 hover:text-emerald-700"
+                        : "border-olive/14 bg-white text-olive/72 hover:border-emerald-200 hover:text-emerald-700"
                     }`}
                   >
                     <AppIcon icon={ThumbsUp} className="h-3.5 w-3.5" />
-                    <span>{review.likesCount}</span>
+                    <span>Да</span>
+                    {review.likesCount > 0 ? <span className="text-xs opacity-70">{review.likesCount}</span> : null}
                   </button>
                   <button
                     type="button"
                     onClick={() => void setReaction(review, dislikeActive ? null : "DISLIKE")}
                     disabled={isReactionSaving}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition ${
                       dislikeActive
                         ? "border-rose-300 bg-rose-50 text-rose-700"
-                        : "border-olive/15 bg-white text-olive/70 hover:border-rose-200 hover:text-rose-700"
+                        : "border-olive/14 bg-white text-olive/72 hover:border-rose-200 hover:text-rose-700"
                     }`}
                   >
                     <AppIcon icon={ThumbsDown} className="h-3.5 w-3.5" />
-                    <span>{review.dislikesCount}</span>
+                    <span>Нет</span>
+                    {review.dislikesCount > 0 ? (
+                      <span className="text-xs opacity-70">{review.dislikesCount}</span>
+                    ) : null}
                   </button>
                   {reactionErrorById[review.id] ? (
                     <span className="text-xs text-red-600">{reactionErrorById[review.id]}</span>
@@ -528,22 +592,22 @@ export function PropertyReviewsSection({
                 </div>
 
                 {review.ownerReply ? (
-                  <div className="mt-3 rounded-lg border border-olive/12 bg-white px-3 py-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/65">
+                  <div className="mt-4 rounded-[20px] border-l-4 border-sage bg-[#f7faf8] px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/58">
                       Ответ владельца
                     </p>
-                    <p className="mt-1 whitespace-pre-line text-sm text-olive/85">{review.ownerReply}</p>
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-olive/84">
+                      {review.ownerReply}
+                    </p>
                     {review.ownerRepliedAt ? (
-                      <p className="mt-1 text-xs text-olive/60">{formatDateTime(review.ownerRepliedAt)}</p>
+                      <p className="mt-2 text-xs text-olive/55">{formatDateTime(review.ownerRepliedAt)}</p>
                     ) : null}
                   </div>
                 ) : null}
 
                 {isOwnerViewer ? (
-                  <div className="mt-3 rounded-lg border border-olive/12 bg-white px-3 py-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/65">
-                      Ответить на отзыв
-                    </p>
+                  <div className="mt-4 rounded-[20px] bg-[#f7f8f8] p-4 ring-1 ring-olive/8">
+                    <p className="text-sm font-semibold text-olive">Ответить на отзыв</p>
                     <textarea
                       rows={3}
                       maxLength={2000}
@@ -555,9 +619,9 @@ export function PropertyReviewsSection({
                         }))
                       }
                       placeholder="Ваш ответ гостю"
-                      className="mt-2 w-full rounded-xl border border-olive/20 bg-white px-3 py-2 text-sm text-olive outline-none placeholder:text-olive/50 focus:border-terra focus:ring-2 focus:ring-terra/20"
+                      className="mt-3 w-full rounded-2xl border border-olive/16 bg-white px-3.5 py-3 text-sm text-olive outline-none placeholder:text-olive/50 focus:border-terra focus:ring-2 focus:ring-terra/18"
                     />
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       <Button
                         onClick={() => void submitOwnerReply(review.id)}
                         disabled={replySavingById[review.id] ?? false}

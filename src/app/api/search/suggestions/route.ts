@@ -1,8 +1,13 @@
 import { ExcursionStatus, PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { crimeaLocationById } from "@/lib/constants";
+import { crimeaLocationById, crimeaLocations } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
+import {
+  isConfiguredDatabaseReachable,
+  isDatabaseFallbackEligibleError,
+  logDatabaseFallbackOnce,
+} from "@/lib/prisma-errors";
 import { createInMemoryRateLimiter } from "@/lib/rate-limit";
 
 type SuggestionDirection = "housing" | "excursions";
@@ -511,6 +516,49 @@ function buildExcursionLocationAggregates(rows: ExcursionSuggestionRow[]): Locat
   return items;
 }
 
+function buildFallbackLocationAggregates(direction: SuggestionDirection): LocationAggregate[] {
+  const subtitle =
+    direction === "housing" ? "Крым, Россия · жильё" : "Крым, Россия · экскурсии";
+
+  return crimeaLocations.map((item) => ({
+    id: item.id,
+    name: item.name,
+    normalizedName: normalizeText(item.name),
+    latinName: normalizeText(transliterateToLatin(item.name)),
+    activeListingsCount: 0,
+    subtitle,
+  }));
+}
+
+function buildFallbackSuggestionsResponse(input: {
+  direction: SuggestionDirection;
+  query: string;
+  include: Set<SuggestionType>;
+  limit: number;
+}): SearchSuggestionsResponse {
+  const locationAggregates = buildFallbackLocationAggregates(input.direction);
+
+  const popular =
+    !input.query && input.include.has("location")
+      ? locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion)
+      : [];
+
+  const matches =
+    input.query && input.include.has("location")
+      ? rankLocationMatches({
+          query: input.query,
+          items: locationAggregates,
+          limit: input.limit,
+        }).map((entry) => entry.item)
+      : [];
+
+  return {
+    recent: [],
+    popular,
+    matches,
+  };
+}
+
 async function getPopularHousingLocationIds(): Promise<PopularLocationEntry[]> {
   const now = Date.now();
   if (housingPopularCache && housingPopularCache.expiresAt > now) {
@@ -847,102 +895,146 @@ export async function GET(request: Request) {
   const limit = parseLimit(searchParams.get("limit"));
   const include = parseInclude(searchParams.get("include"), direction);
   const query = (searchParams.get("query") ?? "").trim().slice(0, queryMaxLength);
-
-  let popular: SearchSuggestionItem[] = [];
-  let matches: SearchSuggestionItem[] = [];
-
-  if (direction === "housing") {
-    // Housing can return both locations and specific properties ("hotels").
-    const rows = await getHousingSuggestionRows();
-    const locationAggregates = buildHousingLocationAggregates(rows);
-    const locationCountById = new Map(
-      locationAggregates.map((item) => [item.id, item.activeListingsCount]),
-    );
-
-    if (!query && include.has("location")) {
-      const popularEntries = await getPopularHousingLocationIds();
-      if (popularEntries.length > 0) {
-        const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
-        const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
-        popular = popularEntries
-          .slice(0, popularLocationsLimit)
-          .map((e) => locationById.get(e.locationId))
-          .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
-          .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
-          .map(toLocationSuggestion);
-      }
-      // Fall back to listing-count ordering if there are no view stats yet.
-      if (popular.length === 0) {
-        popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
-      }
-    }
-
-    if (query) {
-      // For housing we blend location + hotel matches into one ranked list.
-      const locationMatches = include.has("location")
-        ? rankLocationMatches({
-            query,
-            items: locationAggregates,
-            limit: Math.max(limit, 12),
-          })
-        : [];
-      const hotelMatches = include.has("hotel")
-        ? rankHotelMatches({
-            query,
-            rows,
-            locationCountById,
-            limit: Math.max(limit, 14),
-          })
-        : [];
-
-      matches = mergeRankedSuggestions({
-        locations: locationMatches,
-        hotels: hotelMatches,
-        limit,
-      });
-    }
-  } else {
-    // Excursions currently expose location suggestions only.
-    const rows = await getExcursionSuggestionRows();
-    const locationAggregates = buildExcursionLocationAggregates(rows);
-
-    if (!query && include.has("location")) {
-      const popularEntries = await getPopularExcursionLocationIds();
-      if (popularEntries.length > 0) {
-        const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
-        const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
-        popular = popularEntries
-          .slice(0, popularLocationsLimit)
-          .map((e) => locationById.get(e.locationId))
-          .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
-          .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
-          .map(toLocationSuggestion);
-      }
-      if (popular.length === 0) {
-        popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
-      }
-    }
-
-    if (query && include.has("location")) {
-      matches = rankLocationMatches({
-        query,
-        items: locationAggregates,
-        limit,
-      }).map((entry) => entry.item);
-    }
-  }
-
-  const payload: SearchSuggestionsResponse = {
-    // "recent" is reserved for client-side/local history and intentionally empty on server.
-    recent: [],
-    popular,
-    matches,
+  const canUseFallback = process.env.NODE_ENV !== "production";
+  const responseHeaders = {
+    "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+    "X-RateLimit-Remaining": String(rate.remaining),
   };
 
-  return NextResponse.json(payload, {
-    headers: {
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-      "X-RateLimit-Remaining": String(rate.remaining),
-    },
-  });
+  if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
+    logDatabaseFallbackOnce(
+      "search-suggestions",
+      "Database is unavailable. Returning built-in location suggestions.",
+    );
+
+    return NextResponse.json(
+      buildFallbackSuggestionsResponse({
+        direction,
+        query,
+        include,
+        limit,
+      }),
+      {
+        headers: responseHeaders,
+      },
+    );
+  }
+
+  try {
+    let popular: SearchSuggestionItem[] = [];
+    let matches: SearchSuggestionItem[] = [];
+
+    if (direction === "housing") {
+      // Housing can return both locations and specific properties ("hotels").
+      const rows = await getHousingSuggestionRows();
+      const locationAggregates = buildHousingLocationAggregates(rows);
+      const locationCountById = new Map(
+        locationAggregates.map((item) => [item.id, item.activeListingsCount]),
+      );
+
+      if (!query && include.has("location")) {
+        const popularEntries = await getPopularHousingLocationIds();
+        if (popularEntries.length > 0) {
+          const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
+          const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
+          popular = popularEntries
+            .slice(0, popularLocationsLimit)
+            .map((e) => locationById.get(e.locationId))
+            .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
+            .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
+            .map(toLocationSuggestion);
+        }
+        // Fall back to listing-count ordering if there are no view stats yet.
+        if (popular.length === 0) {
+          popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
+        }
+      }
+
+      if (query) {
+        // For housing we blend location + hotel matches into one ranked list.
+        const locationMatches = include.has("location")
+          ? rankLocationMatches({
+              query,
+              items: locationAggregates,
+              limit: Math.max(limit, 12),
+            })
+          : [];
+        const hotelMatches = include.has("hotel")
+          ? rankHotelMatches({
+              query,
+              rows,
+              locationCountById,
+              limit: Math.max(limit, 14),
+            })
+          : [];
+
+        matches = mergeRankedSuggestions({
+          locations: locationMatches,
+          hotels: hotelMatches,
+          limit,
+        });
+      }
+    } else {
+      // Excursions currently expose location suggestions only.
+      const rows = await getExcursionSuggestionRows();
+      const locationAggregates = buildExcursionLocationAggregates(rows);
+
+      if (!query && include.has("location")) {
+        const popularEntries = await getPopularExcursionLocationIds();
+        if (popularEntries.length > 0) {
+          const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
+          const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
+          popular = popularEntries
+            .slice(0, popularLocationsLimit)
+            .map((e) => locationById.get(e.locationId))
+            .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
+            .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
+            .map(toLocationSuggestion);
+        }
+        if (popular.length === 0) {
+          popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
+        }
+      }
+
+      if (query && include.has("location")) {
+        matches = rankLocationMatches({
+          query,
+          items: locationAggregates,
+          limit,
+        }).map((entry) => entry.item);
+      }
+    }
+
+    const payload: SearchSuggestionsResponse = {
+      // "recent" is reserved for client-side/local history and intentionally empty on server.
+      recent: [],
+      popular,
+      matches,
+    };
+
+    return NextResponse.json(payload, {
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
+      throw error;
+    }
+
+    logDatabaseFallbackOnce(
+      "search-suggestions",
+      "Database is unavailable or credentials are invalid. Returning built-in location suggestions.",
+    );
+
+    return NextResponse.json(
+      buildFallbackSuggestionsResponse({
+        direction,
+        query,
+        include,
+        limit,
+      }),
+      {
+        headers: responseHeaders,
+      },
+    );
+  }
 }

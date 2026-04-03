@@ -206,6 +206,11 @@ export function ObjectWizard({
   const [mapDraftAddress, setMapDraftAddress] = useState(initialProperty.address ?? "");
 
   const [phone, setPhone] = useState(initialProperty.phone ?? "");
+  const [phoneName, setPhoneName] = useState(initialProperty.phoneName ?? "");
+  const [phone2, setPhone2] = useState(initialProperty.phone2 ?? "");
+  const [phone2Name, setPhone2Name] = useState(initialProperty.phone2Name ?? "");
+  const [phone3, setPhone3] = useState(initialProperty.phone3 ?? "");
+  const [phone3Name, setPhone3Name] = useState(initialProperty.phone3Name ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialProperty.websiteUrl ?? "");
   const [contactEmail, setContactEmail] = useState(initialProperty.contactEmail ?? "");
   const [contactPersonName, setContactPersonName] = useState(
@@ -368,6 +373,11 @@ export function ObjectWizard({
     setMapDraftLongitude(item.longitude);
     setMapDraftAddress(item.address ?? "");
     setPhone(item.phone ?? "");
+    setPhoneName(item.phoneName ?? "");
+    setPhone2(item.phone2 ?? "");
+    setPhone2Name(item.phone2Name ?? "");
+    setPhone3(item.phone3 ?? "");
+    setPhone3Name(item.phone3Name ?? "");
     setWebsiteUrl(item.websiteUrl ?? "");
     setContactEmail(item.contactEmail ?? "");
     setContactPersonName(item.contactPersonName ?? "");
@@ -493,6 +503,11 @@ export function ObjectWizard({
       step: 4,
       data: {
         phone: phone.trim(),
+        phoneName: phoneName.trim(),
+        phone2: phone2.trim(),
+        phone2Name: phone2Name.trim(),
+        phone3: phone3.trim(),
+        phone3Name: phone3Name.trim(),
         websiteUrl: websiteUrl.trim(),
         contactEmail: contactEmail.trim(),
         contactPersonName: contactPersonName.trim(),
@@ -1083,14 +1098,71 @@ export function ObjectWizard({
             Эти данные в первую очередь видит администратор, чтобы связаться с владельцем
             объявления.
           </p>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-olive">Телефон</p>
-            <Input
-              type="tel"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="+7 (___) ___-__-__"
-            />
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-olive">Телефон (основной)</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Номер телефона</p>
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="+7 (___) ___-__-__"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Имя (необязательно)</p>
+                <Input
+                  value={phoneName}
+                  onChange={(event) => setPhoneName(event.target.value)}
+                  placeholder="Иван"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-olive">Дополнительный телефон 2 (необязательно)</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Номер телефона</p>
+                <Input
+                  type="tel"
+                  value={phone2}
+                  onChange={(event) => setPhone2(event.target.value)}
+                  placeholder="+7 (___) ___-__-__"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Имя (необязательно)</p>
+                <Input
+                  value={phone2Name}
+                  onChange={(event) => setPhone2Name(event.target.value)}
+                  placeholder="Мария"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-olive">Дополнительный телефон 3 (необязательно)</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Номер телефона</p>
+                <Input
+                  type="tel"
+                  value={phone3}
+                  onChange={(event) => setPhone3(event.target.value)}
+                  placeholder="+7 (___) ___-__-__"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-olive">Имя (необязательно)</p>
+                <Input
+                  value={phone3Name}
+                  onChange={(event) => setPhone3Name(event.target.value)}
+                  placeholder="Пётр"
+                />
+              </div>
+            </div>
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-olive">Сайт (необязательно)</p>

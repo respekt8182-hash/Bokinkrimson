@@ -1,12 +1,9 @@
 // Next.js page for route /dashboard/objects.
 import { PaymentStatus, ReviewStatus } from "@prisma/client";
 import {
-  BedDouble,
   CalendarDays,
   CircleCheckBig,
-  Image as ImageIcon,
   MessageCircle,
-  SquareChartGantt,
   Star,
 } from "lucide-react";
 import Link from "next/link";
@@ -14,25 +11,14 @@ import { redirect } from "next/navigation";
 import { CreatePropertyButton } from "@/components/objects/create-property-button";
 import { DeletePropertyButton } from "@/components/objects/delete-property-button";
 import { StatsButton } from "@/components/objects/stats-button";
-import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
+import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/db";
+import { loadDashboardPageData } from "@/lib/dashboard-page-db";
 import { getPlacementValidUntil } from "@/lib/payments";
 import { getPropertyWorkflowStatus, type PropertyProgress, serializeProperty } from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
-
-type IconName = "rooms" | "photos" | "prices";
-
-function InlineIcon({ name, className }: { name: IconName; className?: string }) {
-  const iconByName: Record<IconName, LucideIcon> = {
-    rooms: BedDouble,
-    photos: ImageIcon,
-    prices: SquareChartGantt,
-  };
-
-  return <AppIcon icon={iconByName[name]} className={cn("h-4 w-4", className)} />;
-}
 
 function getCompletedDashboardStages(progress: PropertyProgress): number {
   const stages = [
@@ -52,86 +38,8 @@ function getCompletedDashboardStages(progress: PropertyProgress): number {
   return completed;
 }
 
-type DashboardRoomPrice = {
-  dateFrom: Date;
-  dateTo: Date;
-  price: { toString(): string } | number;
-  currency: string;
-};
-
-type DashboardRoomWithPrices = {
-  prices: DashboardRoomPrice[];
-};
-
 function getUtcDayStart(input: Date): number {
   return Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate());
-}
-
-function getDistanceToPricePeriodMs(dayStartUtcMs: number, period: DashboardRoomPrice): number {
-  const dateFromMs = getUtcDayStart(period.dateFrom);
-  const dateToMs = getUtcDayStart(period.dateTo);
-
-  if (dayStartUtcMs < dateFromMs) {
-    return dateFromMs - dayStartUtcMs;
-  }
-
-  if (dayStartUtcMs > dateToMs) {
-    return dayStartUtcMs - dateToMs;
-  }
-
-  return 0;
-}
-
-function getNearestRoomPrice(prices: DashboardRoomPrice[], dayStartUtcMs: number): DashboardRoomPrice | null {
-  let nearest: DashboardRoomPrice | null = null;
-  let nearestDistanceMs = Number.POSITIVE_INFINITY;
-
-  for (const priceItem of prices) {
-    const currentDistanceMs = getDistanceToPricePeriodMs(dayStartUtcMs, priceItem);
-    if (currentDistanceMs < nearestDistanceMs) {
-      nearest = priceItem;
-      nearestDistanceMs = currentDistanceMs;
-      continue;
-    }
-
-    if (
-      currentDistanceMs === nearestDistanceMs &&
-      nearest &&
-      getUtcDayStart(priceItem.dateFrom) < getUtcDayStart(nearest.dateFrom)
-    ) {
-      nearest = priceItem;
-    }
-  }
-
-  return nearest;
-}
-
-const priceNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
-
-function formatChessboardPriceLabel(rooms: DashboardRoomWithPrices[], dayStartUtcMs: number): string | null {
-  const nearestRoomPrices = rooms
-    .map((room) => getNearestRoomPrice(room.prices ?? [], dayStartUtcMs))
-    .filter((item): item is DashboardRoomPrice => Boolean(item));
-
-  if (nearestRoomPrices.length === 0) {
-    return null;
-  }
-
-  const prices = nearestRoomPrices.map((item) => Number(item.price)).filter(Number.isFinite);
-  if (prices.length === 0) {
-    return null;
-  }
-
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const uniqueCurrencies = Array.from(new Set(nearestRoomPrices.map((item) => item.currency).filter(Boolean)));
-  const currencySuffix = uniqueCurrencies.length === 1 ? ` ${uniqueCurrencies[0]}` : "";
-
-  if (minPrice === maxPrice) {
-    return `${priceNumberFormat.format(minPrice)}${currencySuffix}`;
-  }
-
-  return `${priceNumberFormat.format(minPrice)} - ${priceNumberFormat.format(maxPrice)}${currencySuffix}`;
 }
 
 export default async function DashboardObjectsPage() {
@@ -141,69 +49,78 @@ export default async function DashboardObjectsPage() {
     redirect("/auth/login?next=/dashboard/objects");
   }
 
-  const properties = await db.property.findMany({
-    where: { ownerId: session.id, ownerDeletedAt: null },
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      media: {
-        where: { roomId: null },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      },
-      rooms: {
-        where: { isActive: true },
-        select: {
-          id: true,
-          prices: {
-            orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+  const { properties, reviewStats } = await loadDashboardPageData(
+    {
+      contextId: "dashboard-objects",
+      pageLabel: "Objects dashboard",
+      fallbackDescription: "Showing empty state.",
+    },
+    async () => {
+      const properties = await db.property.findMany({
+        where: { ownerId: session.id, ownerDeletedAt: null },
+        orderBy: [{ updatedAt: "desc" }],
+        include: {
+          media: {
+            where: { roomId: null },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          rooms: {
+            where: { isActive: true },
             select: {
               id: true,
-              dateFrom: true,
-              dateTo: true,
-              price: true,
-              currency: true,
+              prices: {
+                orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+                select: {
+                  id: true,
+                  dateFrom: true,
+                  dateTo: true,
+                  price: true,
+                  currency: true,
+                },
+              },
+            },
+          },
+          amenities: {
+            include: {
+              amenity: true,
+            },
+          },
+          customAmenities: true,
+          payments: {
+            where: {
+              ownerId: session.id,
+              status: PaymentStatus.SUCCEEDED,
+            },
+            orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            select: {
+              paidAt: true,
+              createdAt: true,
             },
           },
         },
-      },
-      amenities: {
-        include: {
-          amenity: true,
-        },
-      },
-      customAmenities: true,
-      payments: {
-        where: {
-          ownerId: session.id,
-          status: PaymentStatus.SUCCEEDED,
-        },
-        orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-        take: 1,
-        select: {
-          paidAt: true,
-          createdAt: true,
-        },
-      },
-    },
-  });
+      });
 
-  const propertyIds = properties.map((p) => p.id);
-  const reviewStats = propertyIds.length > 0
-    ? await db.review.groupBy({
-        by: ["propertyId"],
-        where: { propertyId: { in: propertyIds }, status: ReviewStatus.ACTIVE, deletedAt: null },
-        _avg: { rating: true },
-        _count: { id: true },
-      })
-    : [];
+      const propertyIds = properties.map((property) => property.id);
+      const reviewStats = propertyIds.length > 0
+        ? await db.review.groupBy({
+            by: ["propertyId"],
+            where: { propertyId: { in: propertyIds }, status: ReviewStatus.ACTIVE, deletedAt: null },
+            _avg: { rating: true },
+            _count: { id: true },
+          })
+        : [];
+
+      return { properties, reviewStats };
+    },
+    { properties: [], reviewStats: [] },
+  );
   const reviewStatsByPropertyId = new Map(
     reviewStats.map((s) => [s.propertyId!, { avg: s._avg.rating, count: s._count.id }]),
   );
 
   const items = properties.map((item) => serializeProperty(item));
   const todayUtcMs = getUtcDayStart(new Date());
-  const chessboardPriceLabelByPropertyId = new Map(
-    properties.map((property) => [property.id, formatChessboardPriceLabel(property.rooms, todayUtcMs)]),
-  );
   const publicationUntilByPropertyId = new Map(
     properties.map((property) => {
       const latestSucceededPayment = property.payments[0] ?? null;
@@ -217,17 +134,8 @@ export default async function DashboardObjectsPage() {
   const workflowStatusByPropertyId = new Map(
     items.map((item) => [item.id, getPropertyWorkflowStatus(item.status, item.pendingEditStatus)]),
   );
-  const draftCount = items.filter(
-    (item) => workflowStatusByPropertyId.get(item.id) === "DRAFT",
-  ).length;
-  const moderationCount = items.filter(
-    (item) => workflowStatusByPropertyId.get(item.id) === "PENDING_MODERATION",
-  ).length;
   const publishedCount = items.filter(
     (item) => workflowStatusByPropertyId.get(item.id) === "PUBLISHED",
-  ).length;
-  const rejectedCount = items.filter(
-    (item) => workflowStatusByPropertyId.get(item.id) === "REJECTED",
   ).length;
 
   return (
@@ -250,7 +158,6 @@ export default async function DashboardObjectsPage() {
             const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
             const completedStages = getCompletedDashboardStages(item.progress);
             const isDone = completedStages >= 5;
-            const chessboardPriceLabel = chessboardPriceLabelByPropertyId.get(item.id) ?? null;
             const publicationUntilDate = publicationUntilByPropertyId.get(item.id) ?? null;
             const daysLeft = publicationUntilDate
               ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)

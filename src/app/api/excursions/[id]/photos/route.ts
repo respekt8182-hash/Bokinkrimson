@@ -1,8 +1,8 @@
 // API route handler for /api/excursions/[id]/photos.
 import { NextResponse } from "next/server";
 import { imageSizeLimitBytes } from "@/lib/constants";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { serializeExcursion } from "@/lib/excursions";
 import {
   convertImageUploadToWebp,
@@ -18,30 +18,26 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function ensureOwner(excursionId: string, userId: string) {
+async function ensureOwner(excursionId: string) {
   const excursion = await db.excursion.findUnique({
     where: { id: excursionId },
     select: { id: true, ownerId: true, photoUrls: true },
   });
 
-  if (!excursion || excursion.ownerId !== userId) {
-    return null;
-  }
-
   return excursion;
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const excursion = await ensureOwner(id, session.id);
+  const excursion = await ensureOwner(id);
 
-  if (!excursion) {
+  if (!excursion || (!editor.isAdmin && excursion.ownerId !== editor.id)) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
 

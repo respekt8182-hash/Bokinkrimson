@@ -1,7 +1,7 @@
 // Room occupancy item endpoint: read/update/delete a single booking block for the selected room.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { serializeRoomOccupancy } from "@/lib/occupancy";
 import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate } from "@/lib/pricing";
@@ -11,7 +11,12 @@ type RouteContext = {
   params: Promise<{ id: string; roomId: string; occupancyId: string }>;
 };
 
-async function getOwnedOccupancy(propertyId: string, roomId: string, occupancyId: string, userId: string) {
+async function getAccessibleOccupancy(
+  propertyId: string,
+  roomId: string,
+  occupancyId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   return db.roomOccupancy.findFirst({
     where: {
       id: occupancyId,
@@ -19,24 +24,28 @@ async function getOwnedOccupancy(propertyId: string, roomId: string, occupancyId
       room: {
         propertyId,
         isActive: true,
-        property: {
-          ownerId: userId,
-          ownerDeletedAt: null,
-        },
+        property: editor?.isAdmin
+          ? {
+              ownerDeletedAt: null,
+            }
+          : {
+              ownerId: editor?.id,
+              ownerDeletedAt: null,
+            },
       },
     },
   });
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, occupancyId } = await context.params;
-  const occupancy = await getOwnedOccupancy(id, roomId, occupancyId, session.id);
+  const occupancy = await getAccessibleOccupancy(id, roomId, occupancyId, editor);
 
   if (!occupancy) {
     return NextResponse.json({ error: "Бронирование не найдено" }, { status: 404 });
@@ -46,14 +55,14 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, occupancyId } = await context.params;
-  const existing = await getOwnedOccupancy(id, roomId, occupancyId, session.id);
+  const existing = await getAccessibleOccupancy(id, roomId, occupancyId, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Бронирование не найдено" }, { status: 404 });
@@ -121,14 +130,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId, occupancyId } = await context.params;
-  const existing = await getOwnedOccupancy(id, roomId, occupancyId, session.id);
+  const existing = await getAccessibleOccupancy(id, roomId, occupancyId, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Бронирование не найдено" }, { status: 404 });

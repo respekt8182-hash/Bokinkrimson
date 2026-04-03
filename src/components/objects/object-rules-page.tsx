@@ -39,6 +39,7 @@ type RulesSnapshot = {
 type ObjectRulesPageProps = {
   initialProperty: SerializedProperty;
   displayPropertyNumber: number;
+  basePath?: string;
 };
 
 const rulesDraftStorageKeyPrefix = "object-rules-draft:";
@@ -164,7 +165,11 @@ async function readErrorMessage(response: Response, fallback: string): Promise<s
   return fallback;
 }
 
-export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: ObjectRulesPageProps) {
+export function ObjectRulesPage({
+  initialProperty,
+  displayPropertyNumber,
+  basePath = "/dashboard/objects",
+}: ObjectRulesPageProps) {
   const router = useRouter();
   const [checkInFrom, setCheckInFrom] = useState(initialProperty.checkInFrom ?? "");
   const [checkOutUntil, setCheckOutUntil] = useState(initialProperty.checkOutUntil ?? "");
@@ -424,10 +429,10 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
 
       const nextUrl = new URL(anchor.href, window.location.href);
       const currentUrl = new URL(window.location.href);
-      const objectBasePath = `/dashboard/objects/${initialProperty.id}`;
+      const objectBasePath = `${basePath}/${initialProperty.id}`;
       const isObjectNavigation =
         nextUrl.origin === currentUrl.origin &&
-        (nextUrl.pathname === "/dashboard/objects" ||
+        (nextUrl.pathname === basePath ||
           nextUrl.pathname === objectBasePath ||
           nextUrl.pathname.startsWith(`${objectBasePath}/`));
 
@@ -471,6 +476,7 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
   }, [
     canAutoSave,
     hasRestoredDraft,
+    basePath,
     initialProperty.id,
     persistDraftSnapshot,
     router,
@@ -501,15 +507,24 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
           </div>
           <div>
             <h2 className="font-semibold text-olive">Правила проживания</h2>
+            <p className="mt-0.5 text-sm text-olive/55">Условия заселения и пребывания гостей</p>
           </div>
         </div>
 
         <div className="divide-y divide-olive/8">
+          {/* Intro hint */}
+          <div className="px-5 py-3">
+            <p className="rounded-xl bg-sky-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+              Заполните правила проживания — время заезда/выезда и основные политики. Эта информация отображается в карточке объекта и помогает гостям заранее узнать условия. Данные сохраняются автоматически.
+            </p>
+          </div>
+
           {/* Check-in / Check-out */}
           <div className="px-5 py-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
               Время заезда и выезда
             </p>
+            <p className="mb-3 text-xs text-olive/50">Во сколько гости могут заселиться и до скольки должны выехать</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1.5">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
@@ -541,10 +556,13 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
           {/* Children */}
           <div className="px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-sm font-medium text-olive">
-                <AppIcon icon={Baby} className="h-4 w-4" />
-                Дети
-              </span>
+              <div>
+                <span className="flex items-center gap-2 text-sm font-medium text-olive">
+                  <AppIcon icon={Baby} className="h-4 w-4" />
+                  Размещение с детьми
+                </span>
+                <p className="mt-0.5 pl-6 text-xs text-olive/50">Принимаете ли вы гостей с детьми?</p>
+              </div>
               <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
                 <button
                   type="button"
@@ -594,9 +612,10 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
 
           {/* Policies: Animals & Smoking */}
           <div className="px-5 py-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
               Политики
             </p>
+            <p className="mb-3 text-xs text-olive/50">Правила для животных и курения на территории</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
@@ -648,10 +667,13 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
           {/* Quiet Hours */}
           <div className="px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-sm font-medium text-olive">
-                <AppIcon icon={Moon} className="h-4 w-4" />
-                Тихие часы
-              </span>
+              <div>
+                <span className="flex items-center gap-2 text-sm font-medium text-olive">
+                  <AppIcon icon={Moon} className="h-4 w-4" />
+                  Тихие часы
+                </span>
+                <p className="mt-0.5 pl-6 text-xs text-olive/50">Время, когда нужно соблюдать тишину</p>
+              </div>
               <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
                 <button
                   type="button"
@@ -707,9 +729,10 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
 
           {/* Extra conditions: Parking / Meals / Prepayment */}
           <div className="px-5 py-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
               Дополнительные условия
             </p>
+            <p className="mb-3 text-xs text-olive/50">Необязательно — укажите парковку, питание и предоплату, если они есть</p>
             <PropertyRulesExtraFields
               parkingInfo={parkingInfo}
               onParkingInfoChange={setParkingInfo}
@@ -728,14 +751,14 @@ export function ObjectRulesPage({ initialProperty, displayPropertyNumber }: Obje
           ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
-              href={`/dashboard/objects/${initialProperty.id}/about`}
+              href={`${basePath}/${initialProperty.id}/about`}
               className="text-sm font-semibold text-terra hover:underline"
             >
               Назад
             </Link>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={`/dashboard/objects/${initialProperty.id}/room-categories`}
+                href={`${basePath}/${initialProperty.id}/room-categories`}
                 className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
               >
                 Далее

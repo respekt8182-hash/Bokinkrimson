@@ -1,7 +1,7 @@
 // Property media endpoint: list and upload object-level photos/videos with limits and image conversion.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import {
   detectMediaTypeFromUpload,
   getMediaLimit,
@@ -27,13 +27,20 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function ensureOwner(propertyId: string, userId: string) {
+async function ensurePropertyAccess(
+  propertyId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   const property = await db.property.findUnique({
     where: { id: propertyId },
     select: { id: true, ownerId: true, ownerDeletedAt: true },
   });
 
-  if (!property || property.ownerId !== userId || property.ownerDeletedAt) {
+  if (!property || property.ownerDeletedAt) {
+    return null;
+  }
+
+  if (!editor?.isAdmin && property.ownerId !== editor?.id) {
     return null;
   }
 
@@ -53,14 +60,14 @@ async function listPropertyMedia(propertyId: string) {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const property = await ensureOwner(id, session.id);
+  const property = await ensurePropertyAccess(id, editor);
 
   if (!property) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
@@ -70,14 +77,14 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const property = await ensureOwner(id, session.id);
+  const property = await ensurePropertyAccess(id, editor);
 
   if (!property) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });

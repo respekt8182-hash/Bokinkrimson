@@ -1,11 +1,17 @@
-import { ExcursionStatus, Prisma } from "@prisma/client";
+import {
+  ExcursionAvailabilityMode,
+  ExcursionOfferType,
+  ExcursionStatus,
+  Prisma,
+} from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import {
   findNearestMajorExcursionLocation,
   getExcursionLocationByIdOrSlug,
 } from "@/lib/excursion-directory";
+import { getResolvedAvailabilityMode } from "@/lib/excursion-offers";
 import { serializeExcursion } from "@/lib/excursions";
 import { updateExcursionSchema } from "@/lib/schemas";
 
@@ -69,15 +75,30 @@ function dedupeStrings(items: string[]): string[] {
 }
 
 type PublishReadinessPayload = {
+  offerType: ExcursionOfferType;
   title: string | null;
   locationId: string | null;
+  categoryId: string | null;
   description: string | null;
   durationMinutes: number | null;
+  durationDays: number | null;
+  durationNights: number | null;
+  timelineLength: number;
+  itineraryDaysLength: number;
+  routeLocationsLength: number;
+  startPoint: string | null;
   scheduleText: string | null;
+  availabilityMode: ExcursionAvailabilityMode;
+  availabilityNote: string | null;
+  hasRegularSchedule: boolean;
+  hasSessions: boolean;
   priceFrom: Prisma.Decimal | number | null;
+  priceUnitLabel: string | null;
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  accommodationProvided: boolean | null;
+  accommodationType: string | null;
   photoUrls: string[];
 };
 
@@ -92,23 +113,45 @@ function hasPositivePrice(value: Prisma.Decimal | number | null): boolean {
 function getMissingPublishFields(payload: PublishReadinessPayload): string[] {
   const missing: string[] = [];
 
+  const isTour = payload.offerType === ExcursionOfferType.TOUR;
+
   if (!payload.title?.trim()) {
     missing.push("название");
   }
   if (!payload.locationId?.trim()) {
-    missing.push("локация");
+    missing.push("основная локация");
+  }
+  if (!payload.categoryId?.trim()) {
+    missing.push("основная категория");
   }
   if (!payload.description?.trim()) {
     missing.push("описание");
   }
-  if (!payload.durationMinutes || payload.durationMinutes < 15) {
+  if (isTour) {
+    if (!payload.durationDays || payload.durationDays < 1) {
+      missing.push("длительность в днях");
+    }
+  } else if (!payload.durationMinutes || payload.durationMinutes < 15) {
     missing.push("длительность");
   }
-  if (!payload.scheduleText?.trim()) {
-    missing.push("расписание");
+
+  if (payload.availabilityMode === ExcursionAvailabilityMode.REGULAR && !payload.hasRegularSchedule) {
+    missing.push("валидное расписание");
+  }
+  if (payload.availabilityMode === ExcursionAvailabilityMode.DATED && !payload.hasSessions) {
+    missing.push("заезды / даты");
+  }
+  if (
+    payload.availabilityMode === ExcursionAvailabilityMode.ON_REQUEST &&
+    !payload.availabilityNote?.trim()
+  ) {
+    missing.push("условия режима по запросу");
   }
   if (!hasPositivePrice(payload.priceFrom)) {
     missing.push("цена");
+  }
+  if (isTour && !payload.priceUnitLabel?.trim()) {
+    missing.push("единица цены");
   }
   if (
     !payload.contactFirstName?.trim() ||
@@ -121,6 +164,30 @@ function getMissingPublishFields(payload: PublishReadinessPayload): string[] {
     missing.push("минимум 3 фото");
   }
 
+  if (isTour) {
+    if (!payload.startPoint?.trim()) {
+      missing.push("стартовая точка");
+    }
+    if (payload.itineraryDaysLength === 0 && payload.routeLocationsLength === 0) {
+      missing.push("программа по дням или маршрут");
+    }
+    if (payload.durationNights && payload.durationNights > 0) {
+      const hasAccommodationState =
+        payload.accommodationProvided !== null &&
+        (payload.accommodationProvided === false || Boolean(payload.accommodationType?.trim()));
+      if (!hasAccommodationState) {
+        missing.push("проживание / отметка, что проживание не включено");
+      }
+    }
+  } else {
+    if (!payload.startPoint?.trim()) {
+      missing.push("точка старта / место встречи");
+    }
+    if (payload.timelineLength === 0 && payload.routeLocationsLength === 0) {
+      missing.push("программа или маршрут");
+    }
+  }
+
   return missing;
 }
 
@@ -128,16 +195,16 @@ function isOwnerAllowedStatusTransition(nextStatus: ExcursionStatus): boolean {
   return nextStatus === ExcursionStatus.DRAFT || nextStatus === ExcursionStatus.PENDING_MODERATION;
 }
 
-async function getOwnerExcursion(
+async function getAccessibleExcursion(
   excursionId: string,
-  ownerId: string,
+  editor: NonNullable<Awaited<ReturnType<typeof getEditorSession>>>,
 ): Promise<ExcursionWithRelations | null> {
   const item = await db.excursion.findUnique({
     where: { id: excursionId },
     include: excursionSerializationInclude,
   });
 
-  if (!item || item.ownerId !== ownerId) {
+  if (!item || (!editor.isAdmin && item.ownerId !== editor.id)) {
     return null;
   }
 
@@ -145,14 +212,14 @@ async function getOwnerExcursion(
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const existing = await getOwnerExcursion(id, session.id);
+  const existing = await getAccessibleExcursion(id, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
@@ -162,14 +229,14 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const existing = await getOwnerExcursion(id, session.id);
+  const existing = await getAccessibleExcursion(id, editor);
 
   if (!existing) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
@@ -202,7 +269,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const nextVideoUrls = data.videoUrls ? dedupeUrls(data.videoUrls) : existing.videoUrls;
   const nextStatus = data.status ?? existing.status;
 
-  if (data.status !== undefined && !isOwnerAllowedStatusTransition(nextStatus)) {
+  if (data.status !== undefined && !editor.isAdmin && !isOwnerAllowedStatusTransition(nextStatus)) {
     return NextResponse.json(
       {
         error:
@@ -332,21 +399,64 @@ export async function PATCH(request: Request, context: RouteContext) {
     resolvedLegacyLocation?.name ??
     (nextAnchorLocation ? nextAnchorLocation.name : existing.locationName ?? null);
 
+  const nextOfferType = data.offerType ?? existing.offerType;
+  const nextAvailabilityMode = getResolvedAvailabilityMode(
+    data.availabilityMode ?? existing.availabilityMode,
+    data.scheduleMode ?? existing.scheduleMode,
+  );
+  const nextTimeline = data.timeline ?? ((existing.timeline as Prisma.JsonValue) as Prisma.JsonArray);
+  const nextItineraryDays =
+    data.itineraryDays ?? ((existing.itineraryDays as Prisma.JsonValue) as Prisma.JsonArray);
+  const nextRouteLocationsLength = data.routeLocations
+    ? data.routeLocations.length
+    : existing.routeLocations.length;
+
+  const [existingSessionsCount, existingScheduleRulesCount] = await Promise.all([
+    db.excursionSession.count({ where: { excursionId: existing.id } }),
+    db.excursionScheduleRule.count({ where: { excursionId: existing.id } }),
+  ]);
+
+  const hasSessions = existingSessionsCount > 0;
+  const hasRegularSchedule =
+    Boolean((data.scheduleText === undefined ? existing.scheduleText : data.scheduleText)?.trim()) ||
+    existingScheduleRulesCount > 0;
+
   const nextState = {
+    offerType: nextOfferType,
     title: data.title ?? existing.title,
     locationId: nextLocationId,
+    categoryId: nextCategoryId ?? null,
     description: data.description === undefined ? existing.description : data.description,
-    routeDescription:
-      data.routeDescription === undefined ? existing.routeDescription : data.routeDescription,
+    routeDescription: data.routeDescription === undefined ? existing.routeDescription : data.routeDescription,
     durationMinutes:
       data.durationMinutes === undefined ? existing.durationMinutes : data.durationMinutes,
+    durationDays: data.durationDays === undefined ? existing.durationDays : data.durationDays,
+    durationNights:
+      data.durationNights === undefined ? existing.durationNights : data.durationNights,
+    timelineLength: Array.isArray(nextTimeline) ? nextTimeline.length : 0,
+    itineraryDaysLength: Array.isArray(nextItineraryDays) ? nextItineraryDays.length : 0,
+    routeLocationsLength: nextRouteLocationsLength,
+    startPoint: data.startPoint === undefined ? existing.startPoint : data.startPoint,
     scheduleText: data.scheduleText === undefined ? existing.scheduleText : data.scheduleText,
+    availabilityMode: nextAvailabilityMode,
+    availabilityNote:
+      data.availabilityNote === undefined ? existing.availabilityNote : data.availabilityNote,
+    hasRegularSchedule,
+    hasSessions,
     priceFrom: data.priceFrom === undefined ? existing.priceFrom : data.priceFrom,
+    priceUnitLabel:
+      data.priceUnitLabel === undefined ? existing.priceUnitLabel : data.priceUnitLabel,
     contactFirstName:
       data.contactFirstName === undefined ? existing.contactFirstName : data.contactFirstName,
     contactLastName:
       data.contactLastName === undefined ? existing.contactLastName : data.contactLastName,
     contactPhone: data.contactPhone === undefined ? existing.contactPhone : data.contactPhone,
+    accommodationProvided:
+      data.accommodationProvided === undefined
+        ? existing.accommodationProvided
+        : data.accommodationProvided,
+    accommodationType:
+      data.accommodationType === undefined ? existing.accommodationType : data.accommodationType,
     photoUrls: nextPhotoUrls,
   };
 
@@ -399,6 +509,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const updateData: Prisma.ExcursionUpdateInput = {
+    ...(data.offerType !== undefined ? { offerType: data.offerType } : {}),
+    ...(data.subtypeLabel !== undefined ? { subtypeLabel: data.subtypeLabel } : {}),
     ...(data.title !== undefined ? { title: data.title } : {}),
     ...(nextLocationId !== undefined ? { locationId: nextLocationId } : {}),
     ...(nextLocationName !== undefined ? { locationName: nextLocationName } : {}),
@@ -417,9 +529,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.shortDescription !== undefined ? { shortDescription: data.shortDescription } : {}),
     ...(data.fullDescription !== undefined ? { fullDescription: data.fullDescription } : {}),
     ...(data.routeDescription !== undefined ? { routeDescription: data.routeDescription } : {}),
+    ...(data.highlights !== undefined ? { highlights: data.highlights } : {}),
     ...(data.durationMinutes !== undefined ? { durationMinutes: data.durationMinutes } : {}),
+    ...(data.durationDays !== undefined ? { durationDays: data.durationDays } : {}),
+    ...(data.durationNights !== undefined ? { durationNights: data.durationNights } : {}),
+    ...(data.itineraryDays !== undefined ? { itineraryDays: data.itineraryDays } : {}),
+    ...(data.finishPoint !== undefined ? { finishPoint: data.finishPoint } : {}),
     ...(data.scheduleText !== undefined ? { scheduleText: data.scheduleText } : {}),
     ...(data.scheduleMode !== undefined ? { scheduleMode: data.scheduleMode } : {}),
+    ...(data.availabilityMode !== undefined ? { availabilityMode: data.availabilityMode } : {}),
+    ...(data.availabilityNote !== undefined ? { availabilityNote: data.availabilityNote } : {}),
     ...(data.format !== undefined ? { format: data.format } : {}),
     ...(data.groupSizeMin !== undefined ? { groupSizeMin: data.groupSizeMin } : {}),
     ...(data.groupSizeMax !== undefined ? { groupSizeMax: data.groupSizeMax } : {}),
@@ -451,8 +570,24 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.minBookingNoticeHours !== undefined
       ? { minBookingNoticeHours: data.minBookingNoticeHours }
       : {}),
+    ...(data.priceUnitLabel !== undefined ? { priceUnitLabel: data.priceUnitLabel } : {}),
+    ...(data.accommodationProvided !== undefined
+      ? { accommodationProvided: data.accommodationProvided }
+      : {}),
+    ...(data.accommodationType !== undefined ? { accommodationType: data.accommodationType } : {}),
+    ...(data.accommodationNights !== undefined
+      ? { accommodationNights: data.accommodationNights }
+      : {}),
+    ...(data.accommodationFormat !== undefined
+      ? { accommodationFormat: data.accommodationFormat }
+      : {}),
+    ...(data.mealPlan !== undefined ? { mealPlan: data.mealPlan } : {}),
+    ...(data.accommodationComment !== undefined
+      ? { accommodationComment: data.accommodationComment }
+      : {}),
     ...(data.hasGuideLicense !== undefined ? { hasGuideLicense: data.hasGuideLicense } : {}),
     ...(data.timeline !== undefined ? { timeline: data.timeline } : {}),
+    ...(data.extraOptions !== undefined ? { extraOptions: data.extraOptions } : {}),
     ...(data.pricingTiers !== undefined ? { pricingTiers: data.pricingTiers } : {}),
     ...(data.faqItems !== undefined ? { faqItems: data.faqItems } : {}),
     ...(data.pickupAvailable !== undefined ? { pickupAvailable: data.pickupAvailable } : {}),
@@ -549,16 +684,16 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id } = await context.params;
   const existing = await db.excursion.findUnique({ where: { id } });
 
-  if (!existing || existing.ownerId !== session.id) {
+  if (!existing || (!editor.isAdmin && existing.ownerId !== editor.id)) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
 

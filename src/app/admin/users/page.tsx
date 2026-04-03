@@ -14,7 +14,6 @@ export default async function AdminUsersPage() {
           applications: true,
           payments: true,
           reviews: true,
-          adminActions: true,
           passwordResetRequests: true,
         },
       },

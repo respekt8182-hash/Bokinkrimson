@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const pageSize = Number.parseInt(searchParams.get("pageSize") ?? "12", 10);
   const location = searchParams.get("location") ?? undefined;
   const locationId = searchParams.get("locationId") ?? undefined;
+  const offerType = searchParams.get("offerType") ?? undefined;
   const district = searchParams.get("district") ?? undefined;
   const districtId = searchParams.get("districtId") ?? undefined;
   const category = searchParams.get("category") ?? undefined;
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
   const result = await getPublicExcursionCatalog({
     page: Number.isFinite(page) ? page : 1,
     pageSize: Number.isFinite(pageSize) ? pageSize : 12,
+    offerType: offerType === "tour" || offerType === "excursion" ? offerType : undefined,
     location,
     locationId,
     district,

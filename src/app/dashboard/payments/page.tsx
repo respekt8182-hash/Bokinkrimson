@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { loadDashboardPageData } from "@/lib/dashboard-page-db";
 import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
 
 export default async function DashboardPaymentsPage() {
@@ -12,21 +13,30 @@ export default async function DashboardPaymentsPage() {
     redirect("/auth/login?next=/dashboard/payments");
   }
 
-  const properties = await db.property.findMany({
-    where: {
-      ownerId: session.id,
-      ownerDeletedAt: null,
+  const properties = await loadDashboardPageData(
+    {
+      contextId: "dashboard-payments",
+      pageLabel: "Payments dashboard",
+      fallbackDescription: "Showing empty state.",
     },
-    orderBy: [{ updatedAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      pendingEditStatus: true,
-      moderationNotes: true,
-      updatedAt: true,
-    },
-  });
+    async () =>
+      db.property.findMany({
+        where: {
+          ownerId: session.id,
+          ownerDeletedAt: null,
+        },
+        orderBy: [{ updatedAt: "desc" }],
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          pendingEditStatus: true,
+          moderationNotes: true,
+          updatedAt: true,
+        },
+      }),
+    [],
+  );
 
   return (
     <div className="space-y-4">

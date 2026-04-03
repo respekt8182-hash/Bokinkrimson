@@ -126,6 +126,7 @@ export function PropertyRulesExtraFields({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-olive">Парковка</p>
+            <p className="mt-0.5 text-xs text-olive/50">Выберите доступные варианты парковки</p>
           </div>
           <span className="rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/52">
             Необязательно
@@ -155,6 +156,7 @@ export function PropertyRulesExtraFields({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-olive">Питание</p>
+            <p className="mt-0.5 text-xs text-olive/50">Какие варианты питания вы предоставляете</p>
           </div>
           <span className="rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/52">
             Необязательно
@@ -184,6 +186,7 @@ export function PropertyRulesExtraFields({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-olive">Предоплата при бронировании</p>
+            <p className="mt-0.5 text-xs text-olive/50">Сколько процентов гость платит при бронировании</p>
           </div>
           <span
             className={cn(

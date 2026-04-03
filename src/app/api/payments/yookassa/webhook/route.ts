@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     existing.providerPayload === null;
 
   if (!shouldUpdate) {
-    if (nextStatus === PaymentStatus.SUCCEEDED) {
+    if (nextStatus === PaymentStatus.SUCCEEDED && existing.propertyId) {
       await autoSubmitPropertyAfterSuccessfulPayment(db, existing.propertyId);
     }
 
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
       },
     });
 
-    if (updated.status === PaymentStatus.SUCCEEDED) {
+    if (updated.status === PaymentStatus.SUCCEEDED && existing.propertyId) {
       await autoSubmitPropertyAfterSuccessfulPayment(tx, existing.propertyId);
     }
   });

@@ -246,6 +246,38 @@ export function SingleDatePopoverField({
     });
   }, []);
 
+  const syncActiveMonthFromScroll = useCallback(() => {
+    const monthList = monthListRef.current;
+    if (!monthList) {
+      return;
+    }
+
+    const listTop = monthList.getBoundingClientRect().top;
+    let nextActiveMonthKey = "";
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (const month of calendarMonths) {
+      const section = monthSectionRefs.current[month.key];
+      if (!section) {
+        continue;
+      }
+
+      const distance = Math.abs(section.getBoundingClientRect().top - listTop - 12);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        nextActiveMonthKey = month.key;
+      }
+    }
+
+    if (!nextActiveMonthKey) {
+      return;
+    }
+
+    setActiveMonthKey((current) =>
+      current === nextActiveMonthKey ? current : nextActiveMonthKey,
+    );
+  }, [calendarMonths]);
+
   const openPanel = useCallback(() => {
     const preferredMonthKey =
       getMonthKeyFromIso(value) ??
@@ -288,16 +320,55 @@ export function SingleDatePopoverField({
       return;
     }
 
+    const preferredMonthKey =
+      getMonthKeyFromIso(value) ??
+      getMonthKeyFromIso(normalizedMinDate) ??
+      getMonthKeyFromIso(todayIso) ??
+      calendarMonths[0]?.key ??
+      "";
     const raf = window.requestAnimationFrame(() => {
-      if (activeMonthKey) {
-        scrollToMonth(activeMonthKey, "auto");
+      if (preferredMonthKey) {
+        scrollToMonth(preferredMonthKey, "auto");
       }
     });
 
     return () => {
       window.cancelAnimationFrame(raf);
     };
-  }, [activeMonthKey, isOpen, scrollToMonth]);
+  }, [calendarMonths, isOpen, normalizedMinDate, scrollToMonth, todayIso, value]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const monthList = monthListRef.current;
+    if (!monthList) {
+      return;
+    }
+
+    let frame = 0;
+    const syncVisibleMonth = () => {
+      if (frame) {
+        return;
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        syncActiveMonthFromScroll();
+      });
+    };
+
+    syncVisibleMonth();
+    monthList.addEventListener("scroll", syncVisibleMonth, { passive: true });
+
+    return () => {
+      monthList.removeEventListener("scroll", syncVisibleMonth);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [isOpen, syncActiveMonthFromScroll]);
 
   useEffect(() => {
     if (!isOpen) {

@@ -53,6 +53,10 @@ export async function GET(request: Request) {
   const result = await getPublicExcursionCatalog({
     page,
     pageSize,
+    offerType:
+      searchParams.get("offerType") === "tour" || searchParams.get("offerType") === "excursion"
+        ? (searchParams.get("offerType") as "tour" | "excursion")
+        : undefined,
     locationId:
       searchParams.get("location_id") ??
       searchParams.get("locationId") ??

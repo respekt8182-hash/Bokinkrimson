@@ -167,6 +167,11 @@ export type PublicPropertyCard = {
   };
   contacts: {
     phone: string | null;
+    phoneName: string | null;
+    phone2: string | null;
+    phone2Name: string | null;
+    phone3: string | null;
+    phone3Name: string | null;
     websiteUrl: string | null;
     email: string | null;
     whatsappUrl: string | null;
@@ -1387,7 +1392,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       }
       if (
         petsAllowed &&
-        ![PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED].includes(
+        !([PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED] as PetsPolicy[]).includes(
           displayState.petsPolicy ?? PetsPolicy.FORBIDDEN,
         )
       ) {
@@ -1918,6 +1923,11 @@ export async function getPublicPropertyByIdentifier(
     amenityGroups,
     contacts: {
       phone: sp?.phone ?? property.phone,
+      phoneName: sp?.phoneName ?? property.phoneName,
+      phone2: sp?.phone2 ?? property.phone2,
+      phone2Name: sp?.phone2Name ?? property.phone2Name,
+      phone3: sp?.phone3 ?? property.phone3,
+      phone3Name: sp?.phone3Name ?? property.phone3Name,
       websiteUrl: sp?.websiteUrl ?? property.websiteUrl,
       email: displayContactEmail ?? (displayShowEmail ? property.owner.email : null),
       whatsappUrl: sp?.whatsappUrl ?? property.whatsappUrl,

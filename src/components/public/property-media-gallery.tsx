@@ -55,17 +55,20 @@ export function PropertyMediaGallery({
   const next = useCallback(() => {
     setActiveIndex((i) => (i + 1) % photos.length);
   }, [photos.length]);
+
   const count = photos.length;
   const safeActiveIndex = count > 0 ? Math.min(activeIndex, count - 1) : 0;
   const isLightboxVisible = lightboxOpen && count > 0;
 
   useEffect(() => {
     if (!isLightboxVisible) return;
+
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeLightbox();
       else if (e.key === "ArrowLeft") prev();
       else if (e.key === "ArrowRight") next();
     };
+
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [isLightboxVisible, closeLightbox, prev, next]);
@@ -79,8 +82,11 @@ export function PropertyMediaGallery({
 
   useEffect(() => {
     if (!isLightboxVisible || !thumbsRef.current) return;
+
     const thumb = thumbsRef.current.children[safeActiveIndex] as HTMLElement | undefined;
-    if (thumb) thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (thumb) {
+      thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
   }, [isLightboxVisible, safeActiveIndex]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -90,12 +96,15 @@ export function PropertyMediaGallery({
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
+
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
+
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
       if (dx < 0) next();
       else prev();
     }
+
     touchStartX.current = null;
     touchStartY.current = null;
   };
@@ -104,14 +113,34 @@ export function PropertyMediaGallery({
 
   const activeMedia = photos[safeActiveIndex];
   const portalRoot = typeof document === "undefined" ? null : document.body;
+  const desktopPreviewPhotos = photos.slice(1, 5);
 
-  return (
-    <>
-      <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
-        {count === 1 ? (
+  const renderDesktopGallery = () => {
+    if (count === 1) {
+      return (
+        <div
+          className="gallery-img-wrap hidden cursor-pointer overflow-hidden rounded-3xl md:block"
+          style={{ height: "560px" }}
+          onClick={() => openLightbox(0)}
+        >
+          <MediaItem
+            media={photos[0]}
+            alt={title}
+            loading="eager"
+            className="gallery-img h-full w-full object-cover"
+          />
+        </div>
+      );
+    }
+
+    if (count === 2) {
+      return (
+        <div
+          className="hidden md:grid md:gap-2.5"
+          style={{ gridTemplateColumns: "1.7fr 1fr", height: "560px" }}
+        >
           <div
-            className="gallery-img-wrap hidden cursor-pointer overflow-hidden rounded-3xl md:block"
-            style={{ height: "500px" }}
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
             onClick={() => openLightbox(0)}
           >
             <MediaItem
@@ -121,86 +150,161 @@ export function PropertyMediaGallery({
               className="gallery-img h-full w-full object-cover"
             />
           </div>
-        ) : count === 2 ? (
           <div
-            className="hidden md:grid md:gap-2.5"
-            style={{ gridTemplateColumns: "1.7fr 1fr", height: "500px" }}
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-r-3xl"
+            onClick={() => openLightbox(1)}
           >
-            <div
-              className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
-              onClick={() => openLightbox(0)}
-            >
-              <MediaItem
-                media={photos[0]}
-                alt={title}
-                loading="eager"
-                className="gallery-img h-full w-full object-cover"
-              />
-            </div>
-            <div
-              className="gallery-img-wrap cursor-pointer overflow-hidden rounded-r-3xl"
-              onClick={() => openLightbox(1)}
-            >
-              <MediaItem
-                media={photos[1]}
-                alt="Фото 2"
-                className="gallery-img h-full w-full object-cover"
-              />
-            </div>
+            <MediaItem
+              media={photos[1]}
+              alt="Фото 2"
+              className="gallery-img h-full w-full object-cover"
+            />
           </div>
-        ) : (
+        </div>
+      );
+    }
+
+    if (count === 3) {
+      return (
+        <div
+          className="hidden md:grid md:gap-2.5"
+          style={{
+            gridTemplateColumns: "1.7fr 1fr",
+            gridTemplateRows: "1fr 1fr",
+            height: "560px",
+          }}
+        >
           <div
-            className="hidden md:grid md:gap-2.5"
-            style={{
-              gridTemplateColumns: "1.7fr 1fr",
-              gridTemplateRows: "1fr 1fr",
-              height: "500px",
-            }}
+            className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
+            onClick={() => openLightbox(0)}
           >
+            <MediaItem
+              media={photos[0]}
+              alt={title}
+              loading="eager"
+              className="gallery-img h-full w-full object-cover"
+            />
+          </div>
+
+          {photos.slice(1, 3).map((photo, i) => (
             <div
-              className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
-              onClick={() => openLightbox(0)}
+              key={photo.id}
+              className={`gallery-img-wrap cursor-pointer overflow-hidden ${
+                i === 0 ? "rounded-tr-3xl" : "rounded-br-3xl"
+              }`}
+              onClick={() => openLightbox(i + 1)}
             >
               <MediaItem
-                media={photos[0]}
-                alt={title}
-                loading="eager"
+                media={photo}
+                alt={`Фото ${i + 2}`}
                 className="gallery-img h-full w-full object-cover"
               />
             </div>
+          ))}
+        </div>
+      );
+    }
 
-            {photos.slice(1, 3).map((photo, i) => (
-              <div
-                key={photo.id}
-                className={`gallery-img-wrap relative cursor-pointer overflow-hidden ${
-                  i === 0 ? "rounded-tr-3xl" : "rounded-br-3xl"
-                }`}
-                onClick={() => openLightbox(i + 1)}
-              >
-                <MediaItem
-                  media={photo}
-                  alt={`Фото ${i + 2}`}
-                  className="gallery-img h-full w-full object-cover"
-                />
+    if (count === 4) {
+      return (
+        <div
+          className="hidden md:grid md:gap-2.5"
+          style={{
+            gridTemplateColumns: "2fr 1fr 1fr",
+            gridTemplateRows: "1fr 1fr",
+            height: "560px",
+          }}
+        >
+          <div
+            className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
+            onClick={() => openLightbox(0)}
+          >
+            <MediaItem
+              media={photos[0]}
+              alt={title}
+              loading="eager"
+              className="gallery-img h-full w-full object-cover"
+            />
+          </div>
 
-                {i === 1 && count > 3 ? (
-                  <div className="gallery-show-all-overlay absolute inset-0 flex items-end justify-end p-4">
-                    <button
-                      className="gallery-show-all-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openLightbox(3);
-                      }}
-                    >
-                      <AppIcon icon={Images} className="h-4 w-4" />
-                      Все {count} фото
-                    </button>
-                  </div>
-                ) : null}
+          {photos.slice(1, 4).map((photo, i) => (
+            <div
+              key={photo.id}
+              className={`gallery-img-wrap cursor-pointer overflow-hidden ${
+                i === 1 ? "rounded-tr-3xl" : i === 2 ? "col-span-2 rounded-br-3xl" : ""
+              }`}
+              onClick={() => openLightbox(i + 1)}
+            >
+              <MediaItem
+                media={photo}
+                alt={`Фото ${i + 2}`}
+                className="gallery-img h-full w-full object-cover"
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="hidden md:grid md:gap-2.5"
+        style={{
+          gridTemplateColumns: "2fr 1fr 1fr",
+          gridTemplateRows: "1fr 1fr",
+          height: "560px",
+        }}
+      >
+        <div
+          className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
+          onClick={() => openLightbox(0)}
+        >
+          <MediaItem
+            media={photos[0]}
+            alt={title}
+            loading="eager"
+            className="gallery-img h-full w-full object-cover"
+          />
+        </div>
+
+        {desktopPreviewPhotos.map((photo, i) => (
+          <div
+            key={photo.id}
+            className={`gallery-img-wrap relative cursor-pointer overflow-hidden ${
+              i === 1 ? "rounded-tr-3xl" : i === 3 ? "rounded-br-3xl" : ""
+            }`}
+            onClick={() => openLightbox(i + 1)}
+          >
+            <MediaItem
+              media={photo}
+              alt={`Фото ${i + 2}`}
+              className="gallery-img h-full w-full object-cover"
+            />
+
+            {i === 3 && count > 5 ? (
+              <div className="gallery-show-all-overlay absolute inset-0 flex items-end justify-end p-4">
+                <button
+                  className="gallery-show-all-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openLightbox(4);
+                  }}
+                >
+                  <AppIcon icon={Images} className="h-4 w-4" />
+                  Все {count} фото
+                </button>
               </div>
-            ))}
+            ) : null}
           </div>
-        )}
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
+        {renderDesktopGallery()}
 
         <div className="grid grid-cols-2 gap-2 md:hidden">
           {photos.slice(0, Math.min(count, 3)).map((photo, i) => (

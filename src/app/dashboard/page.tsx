@@ -4,7 +4,84 @@ import { ExcursionStatus, PropertyStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  isConfiguredDatabaseReachable,
+  isDatabaseFallbackEligibleError,
+  logDatabaseFallbackOnce,
+} from "@/lib/prisma-errors";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
+
+type DashboardStats = {
+  objectsTotal: number;
+  objectsPendingModeration: number;
+  excursionsTotal: number;
+  excursionsPendingModeration: number;
+};
+
+const fallbackDashboardStats: DashboardStats = {
+  objectsTotal: 0,
+  objectsPendingModeration: 0,
+  excursionsTotal: 0,
+  excursionsPendingModeration: 0,
+};
+
+async function getDashboardStats(ownerId: string): Promise<DashboardStats> {
+  const canUseFallback = process.env.NODE_ENV !== "production";
+  if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
+    logDatabaseFallbackOnce(
+      "dashboard-stats",
+      "Database is unavailable. Dashboard counters will use zero fallback values.",
+    );
+    return fallbackDashboardStats;
+  }
+
+  try {
+    const [objectsTotal, objectsPendingModeration, excursionsTotal, excursionsPendingModeration] =
+      await Promise.all([
+        db.property.count({
+          where: {
+            ownerId,
+            ownerDeletedAt: null,
+          },
+        }),
+        db.property.count({
+          where: {
+            ownerId,
+            ownerDeletedAt: null,
+            ...buildPropertyWorkflowStatusWhere(PropertyStatus.PENDING_MODERATION),
+          },
+        }),
+        db.excursion.count({
+          where: {
+            ownerId,
+          },
+        }),
+        db.excursion.count({
+          where: {
+            ownerId,
+            status: ExcursionStatus.PENDING_MODERATION,
+          },
+        }),
+      ]);
+
+    return {
+      objectsTotal,
+      objectsPendingModeration,
+      excursionsTotal,
+      excursionsPendingModeration,
+    };
+  } catch (error) {
+    if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
+      throw error;
+    }
+
+    logDatabaseFallbackOnce(
+      "dashboard-stats",
+      "Database is unavailable or credentials are invalid. Dashboard counters will use zero fallback values.",
+    );
+    return fallbackDashboardStats;
+  }
+}
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -13,33 +90,12 @@ export default async function DashboardPage() {
     redirect("/auth/login?next=/dashboard");
   }
 
-  const [objectsTotal, objectsPendingModeration, excursionsTotal, excursionsPendingModeration] =
-    await Promise.all([
-      db.property.count({
-        where: {
-          ownerId: session.id,
-          ownerDeletedAt: null,
-        },
-      }),
-      db.property.count({
-        where: {
-          ownerId: session.id,
-          ownerDeletedAt: null,
-          ...buildPropertyWorkflowStatusWhere(PropertyStatus.PENDING_MODERATION),
-        },
-      }),
-      db.excursion.count({
-        where: {
-          ownerId: session.id,
-        },
-      }),
-      db.excursion.count({
-        where: {
-          ownerId: session.id,
-          status: ExcursionStatus.PENDING_MODERATION,
-        },
-      }),
-    ]);
+  const {
+    objectsTotal,
+    objectsPendingModeration,
+    excursionsTotal,
+    excursionsPendingModeration,
+  } = await getDashboardStats(session.id);
 
   return (
     <div className="space-y-6">

@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { loadDashboardPageData } from "@/lib/dashboard-page-db";
 import { DashboardReviewsEntityPanel } from "@/components/reviews/dashboard-reviews-entity-panel";
 
 export default async function DashboardReviewsPage() {
@@ -11,33 +12,45 @@ export default async function DashboardReviewsPage() {
     redirect("/auth/login?next=/dashboard/reviews");
   }
 
-  const [properties, excursions] = await Promise.all([
-    db.property.findMany({
-      where: {
-        ownerId: session.id,
-        ownerDeletedAt: null,
-      },
-      orderBy: [{ reviewsCount: "desc" }, { updatedAt: "desc" }],
-      select: {
-        id: true,
-        name: true,
-        reviewsCount: true,
-        avgRating: true,
-      },
-    }),
-    db.excursion.findMany({
-      where: {
-        ownerId: session.id,
-      },
-      orderBy: [{ reviewsCount: "desc" }, { updatedAt: "desc" }],
-      select: {
-        id: true,
-        title: true,
-        reviewsCount: true,
-        avgRating: true,
-      },
-    }),
-  ]);
+  const { properties, excursions } = await loadDashboardPageData(
+    {
+      contextId: "dashboard-reviews",
+      pageLabel: "Reviews dashboard",
+      fallbackDescription: "Showing empty state.",
+    },
+    async () => {
+      const [properties, excursions] = await Promise.all([
+        db.property.findMany({
+          where: {
+            ownerId: session.id,
+            ownerDeletedAt: null,
+          },
+          orderBy: [{ reviewsCount: "desc" }, { updatedAt: "desc" }],
+          select: {
+            id: true,
+            name: true,
+            reviewsCount: true,
+            avgRating: true,
+          },
+        }),
+        db.excursion.findMany({
+          where: {
+            ownerId: session.id,
+          },
+          orderBy: [{ reviewsCount: "desc" }, { updatedAt: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            reviewsCount: true,
+            avgRating: true,
+          },
+        }),
+      ]);
+
+      return { properties, excursions };
+    },
+    { properties: [], excursions: [] },
+  );
 
   const propertyReviewsCount = properties.reduce((sum, item) => sum + item.reviewsCount, 0);
   const excursionReviewsCount = excursions.reduce((sum, item) => sum + item.reviewsCount, 0);

@@ -22,18 +22,18 @@ function getStatusDeleteHint(status: ExcursionStatus): string {
   }
 
   if (status === ExcursionStatus.PUBLISHED) {
-    return "Опубликованная экскурсия будет снята с публикации и удалена без возможности восстановления.";
+    return "Опубликованная программа будет снята с публикации и удалена без возможности восстановления.";
   }
 
   if (status === ExcursionStatus.PENDING_MODERATION) {
-    return "Экскурсия на модерации будет удалена из кабинета. Восстановление не предусмотрено.";
+    return "Программа на модерации будет удалена из кабинета. Восстановление не предусмотрено.";
   }
 
   if (status === ExcursionStatus.NEEDS_FIX || status === ExcursionStatus.REJECTED) {
-    return "Экскурсия со статусом модерации будет удалена без возможности восстановления.";
+    return "Программа со статусом модерации будет удалена без возможности восстановления.";
   }
 
-  return "Экскурсия будет удалена без возможности восстановления.";
+  return "Программа будет удалена без возможности восстановления.";
 }
 
 export function DeleteExcursionButton({
@@ -65,11 +65,11 @@ export function DeleteExcursionButton({
 
       if (!response.ok) {
         const body = (await response.json()) as DeleteExcursionResponse;
-        setError(body.error ?? "Не удалось удалить экскурсию");
+        setError(body.error ?? "Не удалось удалить программу");
         return;
       }
 
-      setSuccess("Экскурсия удалена");
+      setSuccess("Программа удалена");
       setIsModalOpen(false);
       setIsAcknowledged(false);
       router.refresh();
@@ -92,7 +92,7 @@ export function DeleteExcursionButton({
         onClick={openModal}
         className="border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra"
       >
-        Удалить экскурсию
+        Удалить программу
       </Button>
 
       {success ? <p className="max-w-xl text-xs text-green-700">{success}</p> : null}
@@ -103,7 +103,7 @@ export function DeleteExcursionButton({
           <div className="w-full max-w-xl rounded-2xl border border-olive/15 bg-white p-4 shadow-xl">
             <h3 className="text-xl text-olive">Подтверждение удаления</h3>
             <p className="mt-2 text-sm text-olive/80">
-              Вы удаляете экскурсию <span className="font-semibold text-olive">{excursionTitle}</span>.
+              Вы удаляете программу <span className="font-semibold text-olive">{excursionTitle}</span>.
             </p>
             <p className="mt-2 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">{warningText}</p>
 
@@ -114,7 +114,7 @@ export function DeleteExcursionButton({
                 onChange={(event) => setIsAcknowledged(event.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-olive/30"
               />
-              <span>Я понимаю, что экскурсия будет удалена.</span>
+              <span>Я понимаю, что программа будет удалена.</span>
             </label>
 
             {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PropertyChessboardWorkspace } from "@/components/rooms/property-chessboard-workspace";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { loadDashboardPageData } from "@/lib/dashboard-page-db";
 import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
 
 type DashboardChessboardPageProps = {
@@ -23,16 +24,25 @@ export default async function DashboardChessboardPage({
 
   const filters = await searchParams;
   const returnMode = filters.from === "prices" || filters.from === "rooms" ? filters.from : null;
-  const properties = await db.property.findMany({
-    where: { ownerId: session.id, ownerDeletedAt: null },
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      rooms: {
-        where: { isActive: true },
-        select: { id: true },
-      },
+  const properties = await loadDashboardPageData(
+    {
+      contextId: "dashboard-chessboard",
+      pageLabel: "Chessboard dashboard",
+      fallbackDescription: "Showing empty state.",
     },
-  });
+    async () =>
+      db.property.findMany({
+        where: { ownerId: session.id, ownerDeletedAt: null },
+        orderBy: [{ updatedAt: "desc" }],
+        include: {
+          rooms: {
+            where: { isActive: true },
+            select: { id: true },
+          },
+        },
+      }),
+    [],
+  );
 
   const items = properties.map((property) => ({
     id: property.id,

@@ -152,6 +152,12 @@ export default async function AdminModerationObjectPage({
             Назад к очереди
           </Link>
           <Link
+            href={`/admin/objects/${property.id}/about`}
+            className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+          >
+            Полный редактор
+          </Link>
+          <Link
             href={publicPath}
             className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
           >

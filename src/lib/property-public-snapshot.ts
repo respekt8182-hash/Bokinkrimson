@@ -24,6 +24,11 @@ export type PublishedPropertySnapshot = {
     description: string | null;
     faqItems: FaqItem[];
     phone: string | null;
+    phoneName: string | null;
+    phone2: string | null;
+    phone2Name: string | null;
+    phone3: string | null;
+    phone3Name: string | null;
     websiteUrl: string | null;
     contactEmail: string | null;
     showEmail: boolean;
@@ -113,6 +118,11 @@ export function buildPublishedPropertySnapshot(
       description: property.description,
       faqItems: Array.isArray(property.faqItems) ? (property.faqItems as FaqItem[]) : [],
       phone: property.phone,
+      phoneName: property.phoneName,
+      phone2: property.phone2,
+      phone2Name: property.phone2Name,
+      phone3: property.phone3,
+      phone3Name: property.phone3Name,
       websiteUrl: property.websiteUrl,
       contactEmail: property.contactEmail,
       showEmail: property.showEmail,

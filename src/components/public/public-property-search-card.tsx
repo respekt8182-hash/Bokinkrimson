@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
   AirVent,
   ArrowRight,
+  Camera,
   ChevronLeft,
   ChevronRight,
   CircleCheckBig,
@@ -67,9 +68,7 @@ function formatReviewsLabel(value: number): string {
 
 function formatSeaDistance(label: string): string {
   const trimmed = label.trim();
-  // If already descriptive (contains letters), return as-is
   if (/\p{L}/u.test(trimmed)) return trimmed;
-  // Pure number вЂ” treat as meters
   const meters = parseInt(trimmed, 10);
   if (!Number.isFinite(meters)) return trimmed;
   if (meters < 1000) return `${meters} м до моря`;
@@ -116,9 +115,7 @@ function buildLocationLine(locationName: string | null, address: string | null):
 }
 
 type PriceSummary = {
-  /** Primary (large) price line */
   primary: string;
-  /** Secondary (small) price line */
   secondary: string | null;
   roomLabel: string | null;
 };
@@ -129,14 +126,12 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
 
   if (item.stayPrice) {
     if (hasDates && item.stayPrice.nights > 1) {
-      // Dates selected, multi-night: total on top, per-night below
       return {
         primary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
         secondary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за ночь`,
         roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
       };
     }
-    // No dates or 1 night: per-night price
     return {
       primary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} / ночь`,
       secondary: null,
@@ -167,98 +162,36 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
   };
 }
 
-function ChevronIcon({ direction }: { direction: "left" | "right" }) {
-  return (
-    <AppIcon icon={direction === "left" ? ChevronLeft : ChevronRight} className="h-4 w-4" />
-  );
-}
-
-function ArrowIcon() {
-  return <AppIcon icon={ArrowRight} className="h-4 w-4" />;
-}
-
-function PinIcon({ className }: { className?: string }) {
-  return <AppIcon icon={MapPin} className={className} />;
-}
-
-function StarIcon({ className }: { className?: string }) {
-  return <AppIcon icon={Star} className={className} filled />;
-}
-
-function UsersIcon({ className }: { className?: string }) {
-  return <AppIcon icon={Users} className={className} />;
-}
-
 function resolveAmenityIcon(name: string): LucideIcon {
   const normalized = name.toLowerCase();
-
-  if (/wi-?fi|интернет/.test(normalized)) {
-    return Wifi;
-  }
-
-  if (/парков|parking/.test(normalized)) {
-    return CircleParking;
-  }
-
-  if (/кухн|мини[\s-]?кух|плит|печь|stove/.test(normalized)) {
-    return CookingPot;
-  }
-
-  if (/басс|pool/.test(normalized)) {
-    return Waves;
-  }
-
-  if (/кондиц|ac|air/.test(normalized)) {
-    return AirVent;
-  }
-
-  if (/вид на море|sea view/.test(normalized)) {
-    return Waves;
-  }
-
-  if (/вид на гор|mountain view/.test(normalized)) {
-    return Mountain;
-  }
-
-  if (/панорам/.test(normalized)) {
-    return PanelsTopLeft;
-  }
-
-  if (/балкон|террас|balcony|terrace/.test(normalized)) {
-    return PanelsTopLeft;
-  }
-
-  if (/живот|pets|pet/.test(normalized)) {
-    return PawPrint;
-  }
-
-  if (/завтрак|breakfast/.test(normalized)) {
-    return Coffee;
-  }
-
-  if (/трансфер|shuttle|transfer/.test(normalized)) {
-    return Van;
-  }
-
-  if (/стирал|washer|laundry/.test(normalized)) {
-    return WashingMachine;
-  }
-
+  if (/wi-?fi|интернет/.test(normalized)) return Wifi;
+  if (/парков|parking/.test(normalized)) return CircleParking;
+  if (/кухн|мини[\s-]?кух|плит|печь|stove/.test(normalized)) return CookingPot;
+  if (/басс|pool/.test(normalized)) return Waves;
+  if (/кондиц|ac|air/.test(normalized)) return AirVent;
+  if (/вид на море|sea view/.test(normalized)) return Waves;
+  if (/вид на гор|mountain view/.test(normalized)) return Mountain;
+  if (/панорам/.test(normalized)) return PanelsTopLeft;
+  if (/балкон|террас|balcony|terrace/.test(normalized)) return PanelsTopLeft;
+  if (/живот|pets|pet/.test(normalized)) return PawPrint;
+  if (/завтрак|breakfast/.test(normalized)) return Coffee;
+  if (/трансфер|shuttle|transfer/.test(normalized)) return Van;
+  if (/стирал|washer|laundry/.test(normalized)) return WashingMachine;
   return CircleCheckBig;
 }
 
-function AmenityGlyph({ name }: { name: string }) {
-  return <AppIcon icon={resolveAmenityIcon(name)} className="h-4 w-4" />;
+function getRatingText(rating: number): string {
+  if (rating >= 4.8) return "Превосходно";
+  if (rating >= 4.5) return "Отлично";
+  if (rating >= 4.0) return "Очень хорошо";
+  if (rating >= 3.5) return "Хорошо";
+  return "Нормально";
 }
 
 const NEW_BADGE_DAYS = 5;
 
 type StatusBadgeTone = "top" | "new" | "sale";
-
-type StatusBadge = {
-  label: string;
-  tone: StatusBadgeTone;
-};
+type StatusBadge = { label: string; tone: StatusBadgeTone };
 
 function resolveStatusBadges(input: PublicCatalogItem): StatusBadge[] {
   const badges: StatusBadge[] = [];
@@ -266,11 +199,7 @@ function resolveStatusBadges(input: PublicCatalogItem): StatusBadge[] {
   const isPublishedRecently =
     Number.isFinite(createdAtMs) &&
     Date.now() - createdAtMs <= NEW_BADGE_DAYS * 24 * 60 * 60 * 1000;
-
-  if (isPublishedRecently) {
-    badges.push({ label: "НОВОЕ", tone: "new" });
-  }
-
+  if (isPublishedRecently) badges.push({ label: "НОВОЕ", tone: "new" });
   if (
     input.stayPrice &&
     input.minNightPrice !== null &&
@@ -283,11 +212,8 @@ function resolveStatusBadges(input: PublicCatalogItem): StatusBadge[] {
       tone: "sale",
     });
   }
-
-  if (input.reviewsCount >= 12 && input.avgRating >= 4.8) {
+  if (input.reviewsCount >= 12 && input.avgRating >= 4.8)
     badges.push({ label: "ТОП", tone: "top" });
-  }
-
   return badges.slice(0, 3);
 }
 
@@ -338,20 +264,19 @@ export function PublicPropertySearchCard({
   }, [item.roomPreviews, item.roomSnapshot]);
   const starCount = Math.max(0, Math.min(5, Math.floor(item.starRating)));
   const isGrid = view === "grid";
-  const amenityLimit = isGrid ? 4 : 3;
+
+  const amenityLimitGrid = 4;
+  const amenityLimitList = 6;
+  const amenityLimit = isGrid ? amenityLimitGrid : amenityLimitList;
   const amenityHighlights = useMemo(
     () => item.amenityHighlights.slice(0, amenityLimit),
     [amenityLimit, item.amenityHighlights],
   );
-  const remainingAmenitiesCount = Math.max(
-    0,
-    item.amenityHighlights.length - amenityHighlights.length,
-  );
+  const remainingAmenitiesCount = Math.max(0, item.amenityHighlights.length - amenityHighlights.length);
 
   const guestsForLinks = useMemo(() => {
-    if (typeof searchGuests === "number" && Number.isFinite(searchGuests) && searchGuests > 0) {
+    if (typeof searchGuests === "number" && Number.isFinite(searchGuests) && searchGuests > 0)
       return Math.floor(searchGuests);
-    }
     if (roomCapacity !== null && roomCapacity > 0) return roomCapacity;
     return 2;
   }, [roomCapacity, searchGuests]);
@@ -364,7 +289,6 @@ export function PublicPropertySearchCard({
     const guestsFromPath = params.get("guests")?.trim() ?? "";
     const adultsFromPath = params.get("guestsAdults")?.trim() ?? "";
     const childrenFromPath = params.get("guestsChildren")?.trim() ?? "";
-
     params.set("checkIn", checkInFromPath || item.stayContext.checkIn);
     params.set("checkOut", checkOutFromPath || item.stayContext.checkOut);
     params.set("guests", guestsFromPath || String(guestsForLinks));
@@ -380,6 +304,11 @@ export function PublicPropertySearchCard({
     el.addEventListener("animationend", handler);
     return () => el.removeEventListener("animationend", handler);
   }, [isNew]);
+
+  const locationLine = useMemo(
+    () => buildLocationLine(item.locationName, item.address),
+    [item.address, item.locationName],
+  );
 
   function cycleImage(direction: -1 | 1) {
     if (images.length <= 1) return;
@@ -402,9 +331,8 @@ export function PublicPropertySearchCard({
   function handleImageRef(node: HTMLImageElement | null) {
     imageRef.current = node;
     if (!node || !currentImage) return;
-    if (node.complete && node.naturalWidth > 0) {
+    if (node.complete && node.naturalWidth > 0)
       setLoadedImageUrl((prev) => (prev === currentImage ? prev : currentImage));
-    }
   }
 
   function handleOverlayTouchStart(event: React.TouchEvent<HTMLAnchorElement>) {
@@ -436,25 +364,299 @@ export function PublicPropertySearchCard({
     swipeHandledRef.current = false;
   }
 
-  const locationLine = useMemo(
-    () => buildLocationLine(item.locationName, item.address),
-    [item.address, item.locationName],
+  // ── Shared image block ──────────────────────────────────────────────
+  const imageBlock = (
+    <div
+      className={cn(
+        "card-img-wrap relative shrink-0 overflow-hidden bg-sand",
+        isGrid
+          ? "aspect-[4/3] w-full rounded-xl"
+          : "aspect-[4/3] w-full rounded-xl sm:aspect-[3/2] md:aspect-[4/3] md:h-auto md:w-[240px] lg:w-[280px] md:rounded-l-xl md:rounded-r-none",
+      )}
+    >
+      {currentImage ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={currentImage}
+            ref={handleImageRef}
+            src={currentImage}
+            alt={item.name}
+            loading="lazy"
+            decoding="async"
+            sizes={
+              isGrid
+                ? "(min-width: 1024px) 40vw, 100vw"
+                : "(min-width: 1280px) 280px, (min-width: 768px) 240px, 100vw"
+            }
+            onLoad={() => setLoadedImageUrl(currentImage)}
+            onError={handleImageError}
+            className={cn(
+              "card-img h-full w-full object-cover transition-all duration-500",
+              isImageLoaded ? "opacity-100" : "opacity-0",
+            )}
+          />
+          {!isImageLoaded && (
+            <div className="catalog-skeleton absolute inset-0" aria-hidden="true" />
+          )}
+        </>
+      ) : (
+        <div className="flex h-full min-h-[160px] items-center justify-center text-sm text-olive/40">
+          Без фото
+        </div>
+      )}
+
+      {/* Badges */}
+      {badges.length > 0 && (
+        <div className="pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1.5">
+          {badges.map((badge) => (
+            <span
+              key={`${item.id}-badge-${badge.label}`}
+              className={cn(
+                "rounded-lg px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm",
+                badge.tone === "top"
+                  ? "bg-gradient-to-r from-primary to-emerald-500"
+                  : badge.tone === "sale"
+                    ? "bg-gradient-to-r from-terra to-rose-500"
+                    : "bg-gradient-to-r from-amber-400 to-orange-400",
+              )}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Favorite button */}
+      <div className="pointer-events-auto absolute right-2.5 top-2.5">
+        <FavoriteToggleButton
+          propertyId={item.id}
+          initialIsFavorite={initialIsFavorite}
+          variant="icon"
+          className="border-white/70 bg-white/90 text-olive/90 shadow-sm backdrop-blur-md hover:bg-white"
+          onToggle={onWishlistToggle}
+        />
+      </div>
+
+      {/* Photo count */}
+      {images.length > 1 && (
+        <div className="pointer-events-none absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-lg bg-black/50 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
+          <AppIcon icon={Camera} className="h-3 w-3" />
+          {images.length}
+        </div>
+      )}
+
+      {/* Carousel dots + arrows */}
+      {images.length > 1 && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 bottom-2.5 flex justify-center gap-1 md:opacity-0 md:transition md:duration-200 md:group-hover:opacity-100">
+            {images.map((_, index) => (
+              <span
+                key={`dot-${item.id}-${index}`}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: safeImageIndex === index ? 14 : 5,
+                  height: 5,
+                  backgroundColor: safeImageIndex === index ? "white" : "rgba(255,255,255,0.5)",
+                  borderRadius: "9999px",
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="pointer-events-auto absolute inset-y-0 left-0 right-0 hidden items-center justify-between px-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
+            <button
+              type="button"
+              onClick={() => cycleImage(-1)}
+              aria-label="Предыдущее фото"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-olive/80 shadow-sm backdrop-blur-sm transition hover:bg-white"
+            >
+              <AppIcon icon={ChevronLeft} className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => cycleImage(1)}
+              aria-label="Следующее фото"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-olive/80 shadow-sm backdrop-blur-sm transition hover:bg-white"
+            >
+              <AppIcon icon={ChevronRight} className="h-4 w-4" />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 
+  // ── Rating block ──────────────────────────────────────────────────────
+  const ratingBlock = item.avgRating > 0 ? (
+    <div className="flex items-center gap-2">
+      <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
+        {item.avgRating.toFixed(1)}
+      </span>
+      <div className="min-w-0">
+        <span className="text-[12px] font-semibold text-olive">
+          {getRatingText(item.avgRating)}
+        </span>
+        {item.reviewsCount > 0 && (
+          <span className="ml-1 text-[12px] text-olive/45">
+            · {formatReviewsLabel(item.reviewsCount)}
+          </span>
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  // ── Sea distance tag ──────────────────────────────────────────────────
+  const seaTag = seaDistanceLabel ? (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-foam px-2 py-1 text-[11px] font-semibold text-accent">
+      <AppIcon icon={Waves} className="h-3 w-3 shrink-0" />
+      {formatSeaDistance(seaDistanceLabel)}
+    </span>
+  ) : null;
+
+  // ── Capacity tag ──────────────────────────────────────────────────────
+  const capacityTag = roomCapacity ? (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
+      <AppIcon icon={Users} className="h-3 w-3" />
+      До {roomCapacity} гостей
+    </span>
+  ) : null;
+
+  // ── Amenities ─────────────────────────────────────────────────────────
+  const amenitiesBlock = amenityHighlights.length > 0 ? (
+    <div className="flex flex-wrap gap-1.5" role="list" aria-label="Ключевые удобства">
+      {amenityHighlights.map((amenity) => (
+        <span
+          key={`${item.id}-amenity-${amenity}`}
+          title={amenity}
+          role="listitem"
+          className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
+        >
+          <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{amenity}</span>
+        </span>
+      ))}
+      {remainingAmenitiesCount > 0 && (
+        <span className="inline-flex items-center rounded-md border border-dashed border-olive/12 bg-white px-2 py-0.5 text-[11px] font-semibold text-olive/45">
+          +{remainingAmenitiesCount}
+        </span>
+      )}
+    </div>
+  ) : null;
+
+  // ── GRID VIEW ─────────────────────────────────────────────────────────
+  if (isGrid) {
+    return (
+      <article
+        ref={cardRef}
+        className={cn(
+          "result-card group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-300",
+          isNew ? "is-new" : "",
+          isHighlighted
+            ? "border-primary/30 shadow-[0_0_0_2px_rgba(15,118,110,0.2),0_16px_40px_rgba(15,118,110,0.15)]"
+            : "border-olive/[0.07] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]",
+        )}
+        aria-label={`Открыть карточку ${item.name}`}
+      >
+        <Link
+          href={detailsHref}
+          aria-labelledby={titleId}
+          aria-label={`Открыть карточку ${item.name}`}
+          onTouchStart={handleOverlayTouchStart}
+          onTouchMove={handleOverlayTouchMove}
+          onTouchEnd={handleOverlayTouchEnd}
+          onClick={handleOverlayClick}
+          className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+        />
+
+        <div className="pointer-events-none relative z-20 flex h-full flex-col">
+          {/* Image */}
+          {imageBlock}
+
+          {/* Content */}
+          <div className="flex flex-1 flex-col gap-2 p-3 pb-0">
+            {/* Type + stars */}
+            <div className="flex items-center gap-2">
+              {item.typeLabel && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
+                  {item.typeLabel}
+                </span>
+              )}
+              {starCount > 0 && (
+                <span className="text-[11px] text-amber-400" aria-label={`${starCount} звезды`}>
+                  {"★".repeat(starCount)}
+                </span>
+              )}
+            </div>
+
+            {/* Title */}
+            <h2
+              id={titleId}
+              title={item.name}
+              className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-olive"
+            >
+              {item.name}
+            </h2>
+
+            {/* Location */}
+            <p className="flex items-start gap-1 text-[12px] leading-snug text-olive/50">
+              <AppIcon icon={MapPin} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-olive/30" />
+              <span className="line-clamp-1">{locationLine}</span>
+            </p>
+
+            {/* Rating */}
+            {ratingBlock}
+
+            {/* Distance tags */}
+            {(seaTag || capacityTag) && (
+              <div className="flex flex-wrap gap-1.5">
+                {seaTag}
+                {capacityTag}
+              </div>
+            )}
+
+            {/* Amenities - compact in grid */}
+            {amenitiesBlock}
+          </div>
+
+          {/* Price + CTA pinned to bottom */}
+          <div className="mt-auto border-t border-olive/[0.06] p-3">
+            <div className="flex items-end justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[17px] font-extrabold leading-tight tracking-tight text-olive">
+                  {priceSummary.primary}
+                </p>
+                {priceSummary.secondary && (
+                  <p className="mt-0.5 text-[11px] text-olive/40">{priceSummary.secondary}</p>
+                )}
+              </div>
+              <Link
+                href={detailsHref}
+                className="pointer-events-auto inline-flex h-9 shrink-0 items-center gap-1 rounded-xl bg-primary px-4 text-[12px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
+              >
+                Выбрать
+                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  // ── LIST VIEW ─────────────────────────────────────────────────────────
   return (
     <article
       ref={cardRef}
       className={cn(
-        "result-card group relative overflow-hidden rounded-2xl border bg-white",
-        isGrid ? "flex h-full min-h-[460px] flex-col p-2 md:p-2.5" : "w-full p-2.5 md:p-2.5",
+        "result-card group relative overflow-hidden rounded-2xl border bg-white transition-all duration-300",
         isNew ? "is-new" : "",
         isHighlighted
-          ? "border-primary/30 shadow-[0_0_0_2px_rgba(15,118,110,0.25),0_20px_48px_rgba(15,118,110,0.18)]"
-          : "border-olive/6 shadow-[0_2px_16px_rgba(0,0,0,0.06)] hover:border-primary/15 hover:shadow-[0_20px_40px_-12px_rgba(15,118,110,0.18),0_8px_20px_rgba(0,0,0,0.06)]",
+          ? "border-primary/30 shadow-[0_0_0_2px_rgba(15,118,110,0.2),0_16px_40px_rgba(15,118,110,0.15)]"
+          : "border-olive/[0.07] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]",
       )}
       aria-label={`Открыть карточку ${item.name}`}
     >
-      {/* Full-card link overlay */}
       <Link
         href={detailsHref}
         aria-labelledby={titleId}
@@ -463,300 +665,121 @@ export function PublicPropertySearchCard({
         onTouchMove={handleOverlayTouchMove}
         onTouchEnd={handleOverlayTouchEnd}
         onClick={handleOverlayClick}
-        className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/60 focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
+        className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
       />
 
-      <div
-        className={cn(
-          "pointer-events-none relative z-20 min-w-0",
-          isGrid ? "flex h-full flex-col gap-3" : "flex flex-col gap-3 md:flex-row md:gap-4",
-        )}
-      >
-        {/* в”Ђв”Ђ IMAGE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
-        <div
-          className={cn(
-            "card-img-wrap relative shrink-0 overflow-hidden rounded-xl bg-sand",
-            isGrid
-              ? "aspect-square w-full"
-              : "aspect-[4/3] w-full sm:aspect-[16/11] md:aspect-square md:h-auto md:w-[220px] lg:w-[240px]",
-          )}
-        >
-          {currentImage ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                key={currentImage}
-                ref={handleImageRef}
-                src={currentImage}
-                alt={item.name}
-                loading="lazy"
-                decoding="async"
-                sizes={
-                  isGrid
-                    ? "(min-width: 1024px) 40vw, 100vw"
-                    : "(min-width: 1280px) 240px, (min-width: 768px) 220px, 100vw"
-                }
-                onLoad={() => setLoadedImageUrl(currentImage)}
-                onError={handleImageError}
-                className={cn(
-                  "card-img h-full w-full object-cover transition-all duration-500 group-hover:scale-[1.03]",
-                  isImageLoaded ? "opacity-100" : "opacity-0",
-                )}
-              />
-              {!isImageLoaded && (
-                <div className="catalog-skeleton absolute inset-0" aria-hidden="true" />
-              )}
-            </>
-          ) : (
-            <div className="flex h-full min-h-[160px] items-center justify-center text-sm text-olive/40">
-              Без фото
-            </div>
-          )}
+      <div className="pointer-events-none relative z-20 flex flex-col md:flex-row">
+        {/* Image */}
+        {imageBlock}
 
-          {/* Gradient overlay */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-midnight/50 to-transparent" />
-
-          {/* Badges вЂ” horizontal row, top-left */}
-          {badges.length > 0 && (
-            <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5">
-              {badges.map((badge) => (
-                <span
-                  key={`${item.id}-badge-${badge.label}`}
-                  className={cn(
-                    "rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm",
-                    badge.tone === "top"
-                      ? "bg-gradient-to-r from-primary to-emerald-500"
-                      : badge.tone === "sale"
-                        ? "bg-gradient-to-r from-terra to-rose-500"
-                        : "bg-gradient-to-r from-amber-400 to-orange-400",
-                  )}
-                >
-                  {badge.label}
+        {/* Content: center + right */}
+        <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:flex-row md:gap-4">
+          {/* Center content */}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {/* Type + stars row */}
+            <div className="flex items-center gap-2">
+              {item.typeLabel && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
+                  {item.typeLabel}
                 </span>
-              ))}
+              )}
+              {starCount > 0 && (
+                <span className="text-[11px] text-amber-400" aria-label={`${starCount} звезды`}>
+                  {"★".repeat(starCount)}
+                </span>
+              )}
             </div>
-          )}
-
-          {/* Favorite button */}
-          <div className="pointer-events-auto absolute right-2 top-2">
-            <FavoriteToggleButton
-              propertyId={item.id}
-              initialIsFavorite={initialIsFavorite}
-              variant="icon"
-              className="border-white/70 bg-white/88 text-olive/90 backdrop-blur-md"
-              onToggle={onWishlistToggle}
-            />
-          </div>
-
-          {/* Carousel controls */}
-          {images.length > 1 && (
-            <>
-              {/* Dot indicators */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1 md:opacity-0 md:transition md:duration-200 md:group-hover:opacity-100">
-                {images.map((_, index) => (
-                  <span
-                    key={`dot-${item.id}-${index}`}
-                    className="rounded-full transition-all duration-300"
-                    style={{
-                      width: safeImageIndex === index ? 16 : 5,
-                      height: 5,
-                      backgroundColor: safeImageIndex === index ? "white" : "rgba(255,255,255,0.5)",
-                      borderRadius: "9999px",
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Prev / Next buttons вЂ” desktop */}
-              <div className="pointer-events-auto absolute inset-y-0 left-0 right-0 hidden items-center justify-between px-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
-                <button
-                  type="button"
-                  onClick={() => cycleImage(-1)}
-                  aria-label="Предыдущее фото"
-                  className="icon-button-soft inline-flex h-8 w-8 items-center justify-center rounded-full"
-                >
-                  <ChevronIcon direction="left" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => cycleImage(1)}
-                  aria-label="Следующее фото"
-                  className="icon-button-soft inline-flex h-8 w-8 items-center justify-center rounded-full"
-                >
-                  <ChevronIcon direction="right" />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* в”Ђв”Ђ CONTENT + PRICE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
-        <div className="min-w-0 flex flex-1 flex-col">
-          {/* в”Ђв”Ђ Info block в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
-          <div className={cn("min-w-0 flex-1", isGrid ? "space-y-2" : "space-y-2.5")}>
-            {/* Type pill */}
-            {item.typeLabel && (
-              <span className="inline-flex items-center rounded-md bg-primary/8 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                {item.typeLabel}
-              </span>
-            )}
 
             {/* Title */}
             <h2
               id={titleId}
               title={item.name}
-              className={cn(
-                "font-bold tracking-tight text-olive",
-                isGrid
-                  ? "line-clamp-2 text-[15px] leading-snug md:text-[17px]"
-                  : "text-[16px] leading-snug [overflow-wrap:anywhere] md:text-[18px]",
-              )}
+              className="text-[16px] font-bold leading-snug tracking-tight text-olive [overflow-wrap:anywhere] sm:text-[18px]"
             >
               {item.name}
-              {starCount > 0 && (
-                <span
-                  className="ml-1.5 whitespace-nowrap text-[12px] font-normal text-amber-400"
-                  aria-label={`${starCount} звезды`}
-                >
-                  {"в…".repeat(starCount)}
-                </span>
-              )}
             </h2>
 
-            {/* Location: city, address */}
-            <p className="flex items-start gap-1.5 text-[13px] text-olive/50">
-              <PinIcon className="mt-0.5 h-4 w-4 shrink-0 text-terra/50" />
-              <span
-                className={cn(
-                  "min-w-0",
-                  isGrid ? "line-clamp-1" : "leading-relaxed [overflow-wrap:anywhere]",
-                )}
-              >
-                {locationLine}
-              </span>
+            {/* Location */}
+            <p className="flex items-start gap-1.5 text-[13px] leading-snug text-olive/50">
+              <AppIcon icon={MapPin} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-olive/30" />
+              <span className="[overflow-wrap:anywhere]">{locationLine}</span>
             </p>
 
-            {/* Rating + reviews + sea distance */}
-            {(item.avgRating > 0 || seaDistanceLabel || roomCapacity) && (
-              <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                {item.avgRating > 0 && (
-                  <>
-                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[13px] font-bold text-olive">
-                      <StarIcon className="h-4 w-4 text-amber-400" />
-                      {item.avgRating.toFixed(1)}
-                    </span>
-                    {item.reviewsCount > 0 && (
-                      <span className="text-[12px] text-olive/45">
-                        {formatReviewsLabel(item.reviewsCount)}
-                      </span>
-                    )}
-                  </>
-                )}
-                {seaDistanceLabel && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-foam px-2 py-0.5 text-[11px] font-semibold text-accent">
-                    <AppIcon icon={Waves} className="h-3 w-3 shrink-0" />
-                    {formatSeaDistance(seaDistanceLabel)}
-                  </span>
-                )}
-                {roomCapacity ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/8 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                    <UsersIcon className="h-4 w-4" />
-                    До {roomCapacity} гостей
-                  </span>
-                ) : null}
+            {/* Distance + capacity tags */}
+            {(seaTag || capacityTag) && (
+              <div className="flex flex-wrap gap-1.5">
+                {seaTag}
+                {capacityTag}
               </div>
             )}
 
-            {/* Amenity chips */}
-            {amenityHighlights.length > 0 && (
-              <div
-                className={cn(
-                  "gap-1.5",
-                  isGrid ? "grid grid-cols-2 pt-1" : "grid grid-cols-1 pt-1.5 sm:grid-cols-2",
-                )}
-                role="list"
-                aria-label="Ключевые удобства"
-              >
-                {amenityHighlights.map((amenity) => (
-                  <span
-                    key={`${item.id}-amenity-${amenity}`}
-                    title={amenity}
-                    role="listitem"
-                    aria-label={`Удобство: ${amenity}`}
-                    className="inline-flex min-w-0 items-start gap-1 rounded-md border border-olive/6 bg-sand/40 px-2 py-1 text-[11px] font-medium text-olive/55"
-                  >
-                    <AmenityGlyph name={amenity} />
-                    <span
-                      className={cn(
-                        "min-w-0",
-                        isGrid ? "truncate" : "whitespace-normal break-words leading-snug",
-                      )}
-                    >
-                      {amenity}
-                    </span>
-                  </span>
-                ))}
-                {remainingAmenitiesCount > 0 ? (
-                  <span className="inline-flex min-w-0 items-center gap-1 rounded-md border border-dashed border-olive/10 bg-white/90 px-2 py-1 text-[11px] font-semibold text-olive/55">
-                    +{remainingAmenitiesCount} ещё
-                  </span>
-                ) : null}
-              </div>
-            )}
-          </div>
+            {/* Amenities */}
+            {amenitiesBlock}
 
-          {/* в”Ђв”Ђ Price block в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
-          {isGrid ? (
-            /* Grid: price at bottom */
-            <div className="mt-auto space-y-2 pt-2">
-              <div className="rounded-xl bg-gradient-to-br from-primary/8 via-primary/4 to-transparent px-3 py-2.5">
-                <p className="break-words text-[17px] font-extrabold leading-snug tracking-tight text-olive [overflow-wrap:anywhere] sm:text-[18px]">
+            {/* Mobile rating + price (visible below md) */}
+            <div className="mt-auto flex items-end justify-between gap-3 border-t border-olive/[0.06] pt-3 md:hidden">
+              <div className="min-w-0 space-y-1">
+                {ratingBlock}
+                <p className="text-[17px] font-extrabold leading-tight tracking-tight text-olive">
                   {priceSummary.primary}
                 </p>
                 {priceSummary.secondary && (
-                  <p className="mt-0.5 text-[11px] font-medium text-olive/45">
-                    {priceSummary.secondary}
-                  </p>
+                  <p className="text-[11px] text-olive/40">{priceSummary.secondary}</p>
                 )}
               </div>
               <Link
                 href={detailsHref}
-                className="pointer-events-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-teal-600 text-[13px] font-bold text-white shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/25 hover:brightness-110 active:scale-[0.97]"
+                className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
-                <ArrowIcon />
+                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5" />
               </Link>
             </div>
-          ) : (
-            <div className="relative mt-3 overflow-hidden rounded-[22px] border border-primary/10 bg-gradient-to-r from-primary/[0.09] via-white to-cream/80 p-3 shadow-[0_14px_30px_-26px_rgba(15,118,110,0.34)]">
-              <div className="pointer-events-none absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-primary/75 via-primary/35 to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-primary/[0.08] to-transparent" />
-              <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 pl-2 sm:pl-0">
-                  <p className="break-words text-[16px] font-extrabold leading-snug tracking-tight text-olive [overflow-wrap:anywhere] sm:text-[17px] lg:text-[18px]">
-                    {priceSummary.primary}
-                  </p>
-                  {priceSummary.secondary && (
-                    <p className="mt-0.5 text-[11px] font-medium text-olive/40">
-                      {priceSummary.secondary}
-                    </p>
-                  )}
-                  {priceSummary.roomLabel && (
-                    <p className="mt-1 text-[11px] font-medium text-olive/45">
-                      {priceSummary.roomLabel}
-                    </p>
-                  )}
+          </div>
+
+          {/* Right column: rating + price + CTA (desktop only) */}
+          <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[190px] lg:w-[210px]">
+            {/* Rating top-right */}
+            <div className="text-right">
+              {item.avgRating > 0 ? (
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <span className="text-[12px] font-semibold text-olive">
+                      {getRatingText(item.avgRating)}
+                    </span>
+                    {item.reviewsCount > 0 && (
+                      <p className="text-[11px] text-olive/40">
+                        {formatReviewsLabel(item.reviewsCount)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-[14px] font-bold text-white">
+                    {item.avgRating.toFixed(1)}
+                  </span>
                 </div>
-                <Link
-                  href={detailsHref}
-                  className="pointer-events-auto inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-teal-600 px-5 text-[13px] font-bold text-white shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/25 hover:brightness-110 active:scale-[0.97] sm:h-10 sm:w-auto sm:min-w-[170px]"
-                >
-                  Подробнее
-                  <ArrowIcon />
-                </Link>
-              </div>
+              ) : null}
             </div>
-          )}
+
+            {/* Price + CTA bottom-right */}
+            <div className="mt-auto text-right">
+              <p className="text-[18px] font-extrabold leading-tight tracking-tight text-olive">
+                {priceSummary.primary}
+              </p>
+              {priceSummary.secondary && (
+                <p className="mt-0.5 text-[11px] text-olive/40">{priceSummary.secondary}</p>
+              )}
+              {priceSummary.roomLabel && (
+                <p className="mt-1 text-[11px] text-olive/40">{priceSummary.roomLabel}</p>
+              )}
+              <Link
+                href={detailsHref}
+                className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
+              >
+                Подробнее
+                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </article>

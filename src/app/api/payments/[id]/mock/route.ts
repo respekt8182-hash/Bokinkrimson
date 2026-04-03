@@ -74,7 +74,9 @@ export async function POST(request: Request, context: RouteContext) {
 
   if (nextStatus === existing.status) {
     if (requestedStatus === PaymentStatus.SUCCEEDED) {
-      await autoSubmitPropertyAfterSuccessfulPayment(db, existing.propertyId);
+      if (existing.propertyId) {
+        await autoSubmitPropertyAfterSuccessfulPayment(db, existing.propertyId);
+      }
     }
 
     return NextResponse.json({ item: serializePayment(existing) });
@@ -110,7 +112,9 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (next.status === PaymentStatus.SUCCEEDED) {
-      await autoSubmitPropertyAfterSuccessfulPayment(tx, existing.propertyId);
+      if (existing.propertyId) {
+        await autoSubmitPropertyAfterSuccessfulPayment(tx, existing.propertyId);
+      }
     }
 
     return next;

@@ -97,13 +97,13 @@ export async function GET(_request: Request, context: RouteContext) {
             },
           });
 
-          if (updated.status === PaymentStatus.SUCCEEDED) {
+          if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.propertyId) {
             await autoSubmitPropertyAfterSuccessfulPayment(tx, currentPayment.propertyId);
           }
 
           return updated;
         });
-      } else if (nextStatus === PaymentStatus.SUCCEEDED) {
+      } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.propertyId) {
         await autoSubmitPropertyAfterSuccessfulPayment(db, payment.propertyId);
       }
     } catch (error) {

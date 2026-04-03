@@ -1,5 +1,10 @@
 // UI component for public excursion list in the excursions module.
 ﻿import Link from "next/link";
+import {
+  formatProgramDuration,
+  formatProgramPrice,
+  getOfferTypeLabel,
+} from "@/lib/excursion-offers";
 import type { PublicExcursionCatalogResult } from "@/lib/public-excursions";
 
 type PublicExcursionListProps = {
@@ -7,25 +12,6 @@ type PublicExcursionListProps = {
   description?: string | null;
   result: PublicExcursionCatalogResult;
 };
-
-function formatMoney(value: number, currency: string): string {
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
-}
-
-function formatDuration(minutes: number | null): string {
-  if (!minutes || minutes <= 0) {
-    return "Не указана";
-  }
-  const hours = Math.floor(minutes / 60);
-  const restMinutes = minutes % 60;
-  if (hours === 0) {
-    return `${restMinutes} мин`;
-  }
-  if (restMinutes === 0) {
-    return `${hours} ч`;
-  }
-  return `${hours} ч ${restMinutes} мин`;
-}
 
 export function PublicExcursionList({ title, description, result }: PublicExcursionListProps) {
   return (
@@ -65,33 +51,41 @@ export function PublicExcursionList({ title, description, result }: PublicExcurs
                 </div>
 
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-olive/60">Экскурсия</p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                      {getOfferTypeLabel(item.offerType)}
+                    </span>
+                    {item.subtypeLabel ? (
+                      <span className="rounded-full border border-olive/10 px-3 py-1 text-xs font-medium text-olive/70">
+                        {item.subtypeLabel}
+                      </span>
+                    ) : null}
+                  </div>
                   <h2 className="mt-1 text-2xl text-olive">{item.title}</h2>
-                  <p className="mt-1 text-sm text-olive/70">
-                    {item.mainLocationName
-                      ? `${item.mainLocationName}${
-                          item.anchorCityName ? ` (рядом с ${item.anchorCityName})` : ""
-                        }`
-                      : item.locationName ?? "Крым"}
-                  </p>
+                  <p className="mt-1 text-sm text-olive/70">{item.routeSummary}</p>
 
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/70">
+                    <span className="rounded-full bg-cream px-3 py-1">{item.availabilitySummary}</span>
                     <span className="rounded-full bg-cream px-3 py-1">
-                      Длительность: {formatDuration(item.durationMinutes)}
+                      Длительность: {formatProgramDuration(item)}
                     </span>
                     <span className="rounded-full bg-cream px-3 py-1">
                       Рейтинг: {item.avgRating.toFixed(1)} ({item.reviewsCount})
                     </span>
                     <span className="rounded-full bg-cream px-3 py-1">
-                      {item.priceFrom !== null
-                        ? `от ${formatMoney(item.priceFrom, item.currency)}`
-                        : "Цена по запросу"}
+                      {formatProgramPrice(item)}
                     </span>
                     {item.districtName ? (
                       <span className="rounded-full bg-cream px-3 py-1">{item.districtName}</span>
                     ) : null}
                     {item.categoryName ? (
                       <span className="rounded-full bg-cream px-3 py-1">{item.categoryName}</span>
+                    ) : null}
+                    {item.hasAccommodation ? (
+                      <span className="rounded-full bg-cream px-3 py-1">С проживанием</span>
+                    ) : null}
+                    {item.pickupAvailable ? (
+                      <span className="rounded-full bg-cream px-3 py-1">С трансфером</span>
                     ) : null}
                     {item.distanceKm !== null ? (
                       <span className="rounded-full bg-cream px-3 py-1">

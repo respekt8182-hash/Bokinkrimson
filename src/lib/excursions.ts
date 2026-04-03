@@ -1,17 +1,27 @@
 // Domain/service module for excursions.
 import {
+  ExcursionAvailabilityMode,
   ExcursionDifficulty,
   ExcursionFormat,
+  ExcursionOfferType,
   ExcursionPriceType,
   ExcursionScheduleMode,
   ExcursionStatus,
   type Prisma,
 } from "@prisma/client";
-import type { TimelineStep, PricingTier, FaqItem } from "@/types/excursions";
+import type {
+  ExcursionExtraOption,
+  FaqItem,
+  ItineraryDay,
+  PricingTier,
+  TimelineStep,
+} from "@/types/excursions";
 
 export type SerializedExcursion = {
   id: string;
   ownerId: string;
+  offerType: ExcursionOfferType;
+  subtypeLabel: string | null;
   title: string | null;
   locationId: string | null;
   locationName: string | null;
@@ -34,9 +44,16 @@ export type SerializedExcursion = {
   shortDescription: string | null;
   fullDescription: string | null;
   routeDescription: string | null;
+  highlights: string[];
   durationMinutes: number | null;
+  durationDays: number | null;
+  durationNights: number | null;
+  itineraryDays: ItineraryDay[];
+  finishPoint: string | null;
   scheduleText: string | null;
   scheduleMode: ExcursionScheduleMode;
+  availabilityMode: ExcursionAvailabilityMode;
+  availabilityNote: string | null;
   format: ExcursionFormat | null;
   groupSizeMin: number | null;
   groupSizeMax: number | null;
@@ -56,6 +73,7 @@ export type SerializedExcursion = {
   cancellationPolicyType: string | null;
   transferDetails: string | null;
   timeline: TimelineStep[];
+  extraOptions: ExcursionExtraOption[];
   pricingTiers: PricingTier[];
   faqItems: FaqItem[];
   physicalRequirements: string[];
@@ -81,6 +99,13 @@ export type SerializedExcursion = {
   okUrl: string | null;
   photoUrls: string[];
   videoUrls: string[];
+  priceUnitLabel: string | null;
+  accommodationProvided: boolean | null;
+  accommodationType: string | null;
+  accommodationNights: number | null;
+  accommodationFormat: string | null;
+  mealPlan: string | null;
+  accommodationComment: string | null;
   avgRating: number;
   reviewsCount: number;
   moderationNotes: string | null;
@@ -109,9 +134,19 @@ export function getExcursionStatusLabel(status: ExcursionStatus): string {
   }
 }
 
+export function getExcursionDisplayNumberFromOrderedIds(
+  excursionId: string,
+  orderedExcursionIds: readonly string[],
+): number | null {
+  const index = orderedExcursionIds.indexOf(excursionId);
+  return index === -1 ? null : index + 1;
+}
+
 export function serializeExcursion(excursion: {
   id: string;
   ownerId: string;
+  offerType: ExcursionOfferType;
+  subtypeLabel: string | null;
   title: string | null;
   locationId: string | null;
   locationName: string | null;
@@ -129,9 +164,16 @@ export function serializeExcursion(excursion: {
   shortDescription: string | null;
   fullDescription: string | null;
   routeDescription: string | null;
+  highlights: Prisma.JsonValue;
   durationMinutes: number | null;
+  durationDays: number | null;
+  durationNights: number | null;
+  itineraryDays: Prisma.JsonValue;
+  finishPoint: string | null;
   scheduleText: string | null;
   scheduleMode: ExcursionScheduleMode;
+  availabilityMode: ExcursionAvailabilityMode;
+  availabilityNote: string | null;
   format: ExcursionFormat | null;
   groupSizeMin: number | null;
   groupSizeMax: number | null;
@@ -157,6 +199,7 @@ export function serializeExcursion(excursion: {
   minBookingNoticeHours: number | null;
   hasGuideLicense: boolean;
   timeline: Prisma.JsonValue;
+  extraOptions: Prisma.JsonValue;
   pricingTiers: Prisma.JsonValue;
   faqItems: Prisma.JsonValue;
   pickupAvailable: boolean;
@@ -174,6 +217,13 @@ export function serializeExcursion(excursion: {
   okUrl: string | null;
   photoUrls: string[];
   videoUrls: string[];
+  priceUnitLabel: string | null;
+  accommodationProvided: boolean | null;
+  accommodationType: string | null;
+  accommodationNights: number | null;
+  accommodationFormat: string | null;
+  mealPlan: string | null;
+  accommodationComment: string | null;
   avgRating: Prisma.Decimal;
   reviewsCount: number;
   moderationNotes: string | null;
@@ -197,6 +247,8 @@ export function serializeExcursion(excursion: {
   return {
     id: excursion.id,
     ownerId: excursion.ownerId,
+    offerType: excursion.offerType,
+    subtypeLabel: excursion.subtypeLabel,
     title: excursion.title,
     locationId: excursion.locationId,
     locationName: excursion.locationName,
@@ -219,9 +271,20 @@ export function serializeExcursion(excursion: {
     shortDescription: excursion.shortDescription,
     fullDescription: excursion.fullDescription,
     routeDescription: excursion.routeDescription,
+    highlights: Array.isArray(excursion.highlights)
+      ? excursion.highlights.filter((item): item is string => typeof item === "string")
+      : [],
     durationMinutes: excursion.durationMinutes,
+    durationDays: excursion.durationDays,
+    durationNights: excursion.durationNights,
+    itineraryDays: Array.isArray(excursion.itineraryDays)
+      ? (excursion.itineraryDays as ItineraryDay[])
+      : [],
+    finishPoint: excursion.finishPoint,
     scheduleText: excursion.scheduleText,
     scheduleMode: excursion.scheduleMode,
+    availabilityMode: excursion.availabilityMode,
+    availabilityNote: excursion.availabilityNote,
     format: excursion.format,
     groupSizeMin: excursion.groupSizeMin,
     groupSizeMax: excursion.groupSizeMax,
@@ -247,7 +310,12 @@ export function serializeExcursion(excursion: {
     minBookingNoticeHours: excursion.minBookingNoticeHours,
     hasGuideLicense: excursion.hasGuideLicense,
     timeline: Array.isArray(excursion.timeline) ? (excursion.timeline as TimelineStep[]) : [],
-    pricingTiers: Array.isArray(excursion.pricingTiers) ? (excursion.pricingTiers as PricingTier[]) : [],
+    extraOptions: Array.isArray(excursion.extraOptions)
+      ? (excursion.extraOptions as ExcursionExtraOption[])
+      : [],
+    pricingTiers: Array.isArray(excursion.pricingTiers)
+      ? (excursion.pricingTiers as PricingTier[])
+      : [],
     faqItems: Array.isArray(excursion.faqItems) ? (excursion.faqItems as FaqItem[]) : [],
     pickupAvailable: excursion.pickupAvailable,
     pickupLocationIds: (excursion.pickupLocations ?? []).map((item) => item.locationId),
@@ -269,6 +337,13 @@ export function serializeExcursion(excursion: {
     okUrl: excursion.okUrl,
     photoUrls: excursion.photoUrls,
     videoUrls: excursion.videoUrls,
+    priceUnitLabel: excursion.priceUnitLabel,
+    accommodationProvided: excursion.accommodationProvided,
+    accommodationType: excursion.accommodationType,
+    accommodationNights: excursion.accommodationNights,
+    accommodationFormat: excursion.accommodationFormat,
+    mealPlan: excursion.mealPlan,
+    accommodationComment: excursion.accommodationComment,
     avgRating: Number(excursion.avgRating),
     reviewsCount: excursion.reviewsCount,
     moderationNotes: excursion.moderationNotes,

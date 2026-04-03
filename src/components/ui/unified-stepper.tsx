@@ -233,6 +233,7 @@ function StepContent({
   const toneStyles = getStepToneStyles(tone);
   const resolvedIcon = StepIcon ?? (iconName ? STEP_ICON_BY_NAME[iconName] : undefined);
   const usesIcon = resolvedIcon !== undefined;
+  const useToneDrivenVisuals = Boolean(toneStyles);
 
   return (
     <>
@@ -245,17 +246,21 @@ function StepContent({
           isDone
             ? (toneStyles?.doneCircle ??
                 "bg-gradient-to-br from-sage to-amber-400 text-midnight shadow-lg shadow-sage/30 ring-2 ring-sage/20")
-            : isPartial
+            : useToneDrivenVisuals
               ? isActive
-                ? "border-2 border-amber-500 bg-amber-50 text-amber-700 shadow-sm shadow-amber-500/20 ring-[3px] ring-amber-500/20"
-                : "border border-amber-300 bg-amber-50/70 text-amber-700"
-              : isActive
-                ? (toneStyles?.activeCircle ??
-                  "border-2 border-primary bg-white text-primary shadow-md shadow-primary/25 ring-[3px] ring-primary/15 stepper-active-pulse")
-                : usesIcon
-                  ? (toneStyles?.inactiveCircle ??
-                    "border border-olive/[0.12] bg-white text-olive/45 shadow-sm shadow-olive/5")
-                  : "border border-olive/[0.18] bg-white text-olive/35",
+                ? toneStyles!.activeCircle
+                : toneStyles!.doneCircle
+              : isPartial
+                ? isActive
+                  ? "border-2 border-amber-500 bg-amber-50 text-amber-700 shadow-sm shadow-amber-500/20 ring-[3px] ring-amber-500/20"
+                  : "border border-amber-300 bg-amber-50/70 text-amber-700"
+                : isActive
+                  ? (toneStyles?.activeCircle ??
+                    "border-2 border-primary bg-white text-primary shadow-md shadow-primary/25 ring-[3px] ring-primary/15 stepper-active-pulse")
+                  : usesIcon
+                    ? (toneStyles?.inactiveCircle ??
+                      "border border-olive/[0.12] bg-white text-olive/45 shadow-sm shadow-olive/5")
+                    : "border border-olive/[0.18] bg-white text-olive/35",
         )}
       >
         {resolvedIcon ? (
@@ -294,11 +299,15 @@ function StepContent({
             : "whitespace-nowrap text-xs transition-colors duration-200",
           isDone
             ? (toneStyles?.doneLabel ?? "font-bold text-midnight/80")
-            : isPartial
-              ? "font-semibold text-amber-700"
-              : isActive
-                ? (toneStyles?.activeLabel ?? "font-semibold text-primary")
-                : (toneStyles?.inactiveLabel ?? "font-medium text-olive/38"),
+            : useToneDrivenVisuals
+              ? isActive
+                ? toneStyles!.activeLabel
+                : toneStyles!.doneLabel
+              : isPartial
+                ? "font-semibold text-amber-700"
+                : isActive
+                  ? (toneStyles?.activeLabel ?? "font-semibold text-primary")
+                  : (toneStyles?.inactiveLabel ?? "font-medium text-olive/38"),
         )}
       >
         {label}
@@ -311,9 +320,11 @@ function StepContent({
             "absolute -bottom-px left-2.5 right-2.5 hidden h-[2.5px] rounded-full sm:block",
             isDone
               ? (toneStyles?.underline ?? "bg-gradient-to-r from-sage to-amber-400")
-              : isPartial
-                ? "bg-amber-500"
-                : (toneStyles?.underline ?? "bg-gradient-to-r from-primary to-teal-500"),
+              : useToneDrivenVisuals
+                ? toneStyles?.underline
+                : isPartial
+                  ? "bg-amber-500"
+                  : (toneStyles?.underline ?? "bg-gradient-to-r from-primary to-teal-500"),
           )}
         />
       )}
@@ -524,7 +535,8 @@ export function UnifiedStepper({
           {steps.map((step, i) => {
             const state = getStepState(step);
             const isActive = i === safeCurrentStep;
-            const isDone = state === "complete";
+            const isComplete = state === "complete";
+            const isDone = isComplete && !isActive;
             const isPartial = state === "partial";
             const isLast = i === steps.length - 1;
             const toneStyles = getStepToneStyles(step.tone);
@@ -547,10 +559,11 @@ export function UnifiedStepper({
                 ? isDone
                   ? (toneStyles?.doneTab ??
                     "bg-sage/10 shadow-[0_2px_12px_-3px] shadow-sage/25 ring-1 ring-sage/15")
-                  : isPartial
-                    ? "bg-amber-50 shadow-[0_2px_12px_-3px] shadow-amber-500/18 ring-1 ring-amber-400/15"
-                    : (toneStyles?.activeTab ??
-                      "bg-primary/[0.07] shadow-[0_2px_12px_-3px] shadow-primary/20 ring-1 ring-primary/10")
+                  : toneStyles
+                    ? toneStyles.activeTab
+                    : isPartial
+                      ? "bg-amber-50 shadow-[0_2px_12px_-3px] shadow-amber-500/18 ring-1 ring-amber-400/15"
+                      : "bg-primary/[0.07] shadow-[0_2px_12px_-3px] shadow-primary/20 ring-1 ring-primary/10"
                 : isDone
                   ? cn(toneStyles?.doneTab ?? "hover:bg-sage/[0.06]", "cursor-pointer")
                   : isPartial

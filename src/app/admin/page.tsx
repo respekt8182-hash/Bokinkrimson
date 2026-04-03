@@ -276,8 +276,14 @@ export default async function AdminHomePage() {
           <ActionLink
             href="/admin/objects"
             icon={Icons.home}
-            label="Список объектов"
-            description="Все объявления о жилье"
+            label="Все объекты"
+            description="Управление объектами жилья"
+          />
+          <ActionLink
+            href="/admin/excursions"
+            icon={Icons.compass}
+            label="Все экскурсии"
+            description="Управление экскурсиями"
           />
           <ActionLink
             href="/admin/users"

@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isSameOrigin } from "@/lib/csrf";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
+const ADMIN_COOKIE_NAME = "boking_admin_session";
+
 const mutatingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 const securityHeaders = {
@@ -103,6 +105,28 @@ export async function proxy(request: NextRequest) {
     return applySecurityHeaders(NextResponse.next());
   }
 
+  // Admin routes use standalone admin auth (separate cookie).
+  if (isAdminRoute) {
+    const isAdminLogin = pathname === "/admin/login";
+    const adminToken = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+
+    if (isAdminLogin) {
+      // If already authenticated, redirect to admin home.
+      if (adminToken) {
+        return applySecurityHeaders(NextResponse.redirect(new URL("/admin", request.url)));
+      }
+      return applySecurityHeaders(NextResponse.next());
+    }
+
+    // All other admin pages require the admin cookie.
+    if (!adminToken) {
+      return applySecurityHeaders(NextResponse.redirect(new URL("/admin/login", request.url)));
+    }
+
+    return applySecurityHeaders(NextResponse.next());
+  }
+
+  // Dashboard routes use regular user session.
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) {
@@ -120,14 +144,6 @@ export async function proxy(request: NextRequest) {
     const response = NextResponse.redirect(loginUrl);
     response.cookies.set(SESSION_COOKIE_NAME, "", { path: "/", maxAge: 0 });
     return applySecurityHeaders(response);
-  }
-
-  if (isAdminRoute && session.role !== "ADMIN") {
-    return applySecurityHeaders(NextResponse.redirect(new URL("/dashboard", request.url)));
-  }
-
-  if (isDashboardRoute(pathname) && session.role === "ADMIN") {
-    return applySecurityHeaders(NextResponse.redirect(new URL("/admin", request.url)));
   }
 
   return applySecurityHeaders(NextResponse.next());

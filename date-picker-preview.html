@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Date Picker Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        olive: '#3a2b23',
+        sage: '#f2c44d',
+        terra: '#a76549',
+        cream: '#faf8f5',
+        sand: '#efe8de',
+        midnight: '#2b1f19',
+        foam: '#f0fdfa',
+        primary: '#0f766e',
+        'primary-hover': '#115e59',
+      }
+    }
+  }
+}
+</script>
+<style>
+body { background: #faf8f5; padding: 20px; font-family: system-ui, sans-serif; }
+.preview-container { position: relative; max-width: 900px; margin: 40px auto; }
+@keyframes popover-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.popover-enter { animation: popover-enter 0.3s ease-out; }
+</style>
+</head>
+<body>
+<h1 style="text-align:center;color:#3a2b23;margin-bottom:24px;font-size:1.25rem;">Date Picker Preview (desktop xl+ view)</h1>
+
+<div class="preview-container">
+<div class="animated-popover date-picker-sheet relative z-[11000] overflow-hidden rounded-2xl border ring-olive/12 bg-white p-4 shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)] w-[min(92vw,840px)] popover-enter">
+
+<div class="grid gap-3" style="grid-template-columns: 180px minmax(0,1fr);">
+
+<!-- Sidebar -->
+<aside class="max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2">
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition bg-primary text-white">Март 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Апрель 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Май 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Июнь 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Июль 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Август 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Сентябрь 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Октябрь 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Ноябрь 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Декабрь 2026</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Январь 2027</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Февраль 2027</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Март 2027</button>
+  <button type="button" class="mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition text-olive/75 hover:bg-foam">Апрель 2027</button>
+</aside>
+
+<!-- Calendar content -->
+<div class="min-w-0">
+  <div class="mb-3 flex items-center justify-between rounded-xl bg-cream/75 px-3 py-2 text-xs text-olive/80">
+    <span>Выберите даты проживания</span>
+  </div>
+  <div class="max-h-[410px] overflow-y-auto pr-1">
+
+    <!-- Март 2026 -->
+    <div class="mb-5 last:mb-0">
+      <h3 class="text-sm font-semibold text-olive">Март 2026</h3>
+      <div class="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
+        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+      </div>
+      <div class="mt-1 grid grid-cols-7 gap-1">
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">1</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">2</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">3</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">4</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">5</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">6</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">7</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">8</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">9</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">10</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">11</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">12</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">13</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">14</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">15</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">16</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">17</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">18</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">19</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">20</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">21</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">22</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">23</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">24</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">25</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">26</button>
+        <button type="button" disabled class="h-9 text-sm rounded-lg cursor-not-allowed text-olive/28">27</button>
+        <button type="button" class="h-9 text-sm rounded-l-lg rounded-r-[4px] bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]">28</button>
+        <button type="button" class="h-9 text-sm rounded-r-lg rounded-l-[4px] font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)] bg-primary">29</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">30</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">31</button>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+      </div>
+    </div>
+
+    <!-- Апрель 2026 -->
+    <div class="mb-5 last:mb-0">
+      <h3 class="text-sm font-semibold text-olive">Апрель 2026</h3>
+      <div class="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
+        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+      </div>
+      <div class="mt-1 grid grid-cols-7 gap-1">
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">1</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">2</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">3</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">4</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">5</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">6</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">7</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">8</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">9</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">10</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">11</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">12</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">13</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">14</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">15</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">16</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">17</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">18</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">19</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">20</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">21</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">22</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">23</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">24</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">25</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">26</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">27</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">28</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">29</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">30</button>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+      </div>
+    </div>
+
+    <!-- Май 2026 -->
+    <div class="mb-5 last:mb-0">
+      <h3 class="text-sm font-semibold text-olive">Май 2026</h3>
+      <div class="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
+        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+      </div>
+      <div class="mt-1 grid grid-cols-7 gap-1">
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <span class="h-9 rounded-lg" aria-hidden="true"></span>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">1</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">2</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">3</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">4</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">5</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">6</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">7</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">8</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">9</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">10</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">11</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">12</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">13</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">14</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">15</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">16</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">17</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">18</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">19</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">20</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">21</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">22</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">23</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">24</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">25</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">26</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">27</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">28</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-olive hover:bg-cream">29</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">30</button>
+        <button type="button" class="h-9 text-sm rounded-lg text-terra hover:bg-cream">31</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+
+</body>
+</html>

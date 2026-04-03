@@ -11,6 +11,11 @@ type SectionSlug = "about" | "rules" | "room-categories" | "amenities" | "chessb
 type ObjectSectionNavProps = {
   propertyId: string;
   activeSection: SectionSlug;
+  basePath?: string;
+  backHref?: string;
+  backLabel?: string;
+  includePayment?: boolean;
+  showChessboardTab?: boolean;
 };
 
 type SectionItem = {
@@ -150,25 +155,42 @@ async function getSectionCompletion(
   };
 }
 
-export async function ObjectSectionNav({ propertyId, activeSection }: ObjectSectionNavProps) {
-  const activeIndex = sections.findIndex((section) => section.slug === activeSection);
+export async function ObjectSectionNav({
+  propertyId,
+  activeSection,
+  basePath = "/dashboard/objects",
+  backHref = basePath,
+  backLabel = "Все объекты",
+  includePayment = true,
+  showChessboardTab = false,
+}: ObjectSectionNavProps) {
+  const availableSections = sections.filter(
+    (section) => includePayment || section.slug !== "payment",
+  );
+  const activeIndex = availableSections.findIndex((section) => section.slug === activeSection);
   const currentStep = activeIndex >= 0 ? activeIndex : 0;
 
-  const visibleSections = sections.filter((section) => !section.hiddenInTabs);
+  const visibleSections = availableSections.filter(
+    (section) => showChessboardTab || !section.hiddenInTabs,
+  );
   const visibleActiveIndex = visibleSections.findIndex((section) => section.slug === activeSection);
   const completionBySection = await getSectionCompletion(propertyId);
 
   const completionFallback = Object.fromEntries(
     visibleSections.map((section, index) => [section.slug, index < visibleActiveIndex]),
-  ) as Record<SectionSlug, boolean>;
+  ) as Record<string, boolean>;
 
   const prevSection =
     activeIndex > 0
-      ? sections.slice(0, activeIndex).findLast((section) => !section.hiddenInTabs)
+      ? availableSections
+          .slice(0, activeIndex)
+          .findLast((section) => showChessboardTab || !section.hiddenInTabs)
       : null;
   const nextSection =
-    activeIndex >= 0 && activeIndex < sections.length - 1
-      ? sections.slice(activeIndex + 1).find((section) => !section.hiddenInTabs)
+    activeIndex >= 0 && activeIndex < availableSections.length - 1
+      ? availableSections
+          .slice(activeIndex + 1)
+          .find((section) => showChessboardTab || !section.hiddenInTabs)
       : null;
 
   const steps = visibleSections.map((section) => {
@@ -176,9 +198,10 @@ export async function ObjectSectionNav({ propertyId, activeSection }: ObjectSect
 
     return {
       label: section.label,
+      status: isComplete ? ("complete" as const) : ("incomplete" as const),
       done: section.slug !== activeSection && isComplete,
       showCompletionBadge: isComplete,
-      href: `/dashboard/objects/${propertyId}/${section.slug}`,
+      href: `${basePath}/${propertyId}/${section.slug}`,
       iconName: section.iconName,
       tone: section.tone,
     };
@@ -191,14 +214,14 @@ export async function ObjectSectionNav({ propertyId, activeSection }: ObjectSect
         currentStep={visibleActiveIndex >= 0 ? visibleActiveIndex : 0}
         showProgress={false}
         nav={{
-          backHref: "/dashboard/objects",
-          backLabel: "\u0412\u0441\u0435 \u043e\u0431\u044a\u0435\u043a\u0442\u044b",
+          backHref,
+          backLabel,
           prevHref: prevSection
-            ? `/dashboard/objects/${propertyId}/${prevSection.slug}`
+            ? `${basePath}/${propertyId}/${prevSection.slug}`
             : undefined,
           prevLabel: prevSection?.label,
           nextHref: nextSection
-            ? `/dashboard/objects/${propertyId}/${nextSection.slug}`
+            ? `${basePath}/${propertyId}/${nextSection.slug}`
             : undefined,
           nextLabel: nextSection?.label,
           counter: `${currentStep + 1}/${visibleSections.length}`,

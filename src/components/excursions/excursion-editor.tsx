@@ -1,41 +1,84 @@
 "use client";
 
-import { ExcursionDifficulty, ExcursionFormat, ExcursionStatus } from "@prisma/client";
-import { CakeSlice, Check, ChevronLeft, ChevronRight, CircleCheckBig, CircleX, Clock3, Info, ListChecks, Map, MapPin, PenLine, Plus, TriangleAlert, UserRound, Users, X } from "lucide-react";
+import {
+  ExcursionAvailabilityMode,
+  ExcursionDifficulty,
+  ExcursionFormat,
+  ExcursionOfferType,
+  ExcursionStatus,
+} from "@prisma/client";
+import {
+  CakeSlice,
+  Check,
+  CircleCheckBig,
+  CircleX,
+  Clock3,
+  Globe,
+  Info,
+  ListChecks,
+  Mail,
+  MapPin,
+  Phone,
+  Plus,
+  TriangleAlert,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DepartureDatesEditor,
+  type DepartureDateItem,
+} from "@/components/excursions/editor/departure-dates-editor";
+import { ExtraOptionsEditor } from "@/components/excursions/editor/extra-options-editor";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 import { Button } from "@/components/ui/button";
 import { AppIcon } from "@/components/ui/app-icon";
+import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { Input } from "@/components/ui/input";
 import { SingleDatePopoverField } from "@/components/ui/single-date-popover-field";
 import { SeaToggle } from "@/components/ui/sea-toggle";
-import { TimePicker } from "@/components/ui/time-picker";
 import { WizardStepper } from "@/components/excursions/editor/wizard-stepper";
 import { TimelineEditor } from "@/components/excursions/editor/timeline-editor";
 import { PricingTiersEditor } from "@/components/excursions/editor/pricing-tiers-editor";
 import { IncludedEditor } from "@/components/excursions/editor/included-editor";
 import { FaqEditor } from "@/components/excursions/editor/faq-editor";
+import { TourDaysEditor } from "@/components/excursions/editor/tour-days-editor";
 import { ExcursionPaymentPanel } from "@/components/payments/excursion-payment-panel";
 import { crimeaLocations, imageSizeLimitBytes } from "@/lib/constants";
+import { isTourOffer } from "@/lib/excursion-offers";
 import type { SerializedExcursion } from "@/lib/excursions";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import { buildWebsiteFaviconUrl } from "@/lib/website-favicon";
 import {
+  type ExcursionExtraOption,
   type TimelineStep,
+  type ItineraryDay,
   type PricingTier,
   type FaqItem,
   EXCURSION_CATEGORY_TAGS,
   INCLUDED_PRESETS,
   EXCLUDED_PRESETS,
   CANCELLATION_POLICY_OPTIONS,
+  HIGHLIGHT_PRESETS,
+  OFFER_SUBTYPE_PRESETS,
+  OFFER_TYPE_OPTIONS,
+  PRICE_UNIT_PRESETS,
   PHYSICAL_REQUIREMENTS_PRESETS,
+  TOUR_MEAL_PLAN_OPTIONS,
   WHAT_TO_BRING_PRESETS,
 } from "@/types/excursions";
 
 type ExcursionEditorProps = {
   initialExcursion: SerializedExcursion;
+  displayExcursionNumber: number;
+  adminMode?: boolean;
+  backHref?: string;
+  backLabel?: string;
+  listHref?: string;
+  moderationHref?: string | null;
 };
 
 type UpdateExcursionResponse = {
@@ -49,7 +92,7 @@ type ReverseGeocodeItem = {
   localityDisplayName?: string | null;
 };
 
-const excursionPhotoLimit = 6;
+const excursionPhotoLimit = 12;
 const excursionPhotoMinForModeration = 3;
 const excursionPhotoAccept = "image/jpeg,image/png,image/heic,image/heif";
 type SupportedExcursionPhotoUploadType = "jpeg" | "png" | "heic" | "heif";
@@ -85,6 +128,17 @@ type ScheduleRulesResponse = {
   exceptions: ScheduleExceptionResponseItem[];
 };
 
+type SessionResponseItem = {
+  startAt: string;
+  endAt: string | null;
+  capacity: number | null;
+  priceOverride: number | null;
+};
+
+type SessionsResponse = {
+  items: SessionResponseItem[];
+};
+
 type AddActionButtonProps = {
   label: string;
   onClick: () => void;
@@ -101,6 +155,8 @@ type FormatOption = {
   value: ExcursionFormat;
   label: string;
 };
+
+
 
 const weekdayOrder: WeekdayId[] = [1, 2, 3, 4, 5, 6, 0];
 
@@ -150,6 +206,7 @@ const defaultFormatOptions: FormatOption[] = [
   { id: "vip", value: ExcursionFormat.VIP, label: "VIP" },
 ];
 
+
 const defaultCategoryTagSet = new Set(EXCURSION_CATEGORY_TAGS.map((item) => item.toLowerCase()));
 const defaultLanguageCodeSet = new Set(
   defaultLanguageOptions.map((item) => normalizeLanguageCode(item.code)),
@@ -193,6 +250,21 @@ function normalizeNullableText(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
+const shortDescriptionMaxLength = 1000;
+
+function buildShortDescription(value: string): string | null {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length <= shortDescriptionMaxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, shortDescriptionMaxLength - 3).trimEnd()}...`;
+}
+
 function normalizeMimeType(value: string): string {
   return value.toLowerCase().split(";")[0]?.trim() ?? "";
 }
@@ -227,10 +299,6 @@ function detectSupportedExcursionPhotoUploadType(
   return null;
 }
 
-function formatMegabytes(sizeBytes: number): string {
-  return `${(sizeBytes / (1024 * 1024)).toFixed(2)} МБ`;
-}
-
 function normalizeLocation(value: string): string {
   return value
     .trim()
@@ -262,6 +330,18 @@ function resolveCrimeaLocationFromAddress(
     }
   }
   return null;
+}
+
+function findExactCrimeaLocationByName(value: string): (typeof crimeaLocations)[number] | null {
+  const normalizedValue = normalizeLocation(value);
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return (
+    crimeaLocations.find((location) => normalizeLocation(location.name) === normalizedValue) ?? null
+  );
 }
 
 function isValidUrl(value: string): boolean {
@@ -354,6 +434,34 @@ function normalizeIsoDateList(values: string[]): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function toDepartureDateItem(item: SessionResponseItem): DepartureDateItem {
+  const startAt = new Date(item.startAt);
+  const endAt = item.endAt ? new Date(item.endAt) : null;
+
+  return {
+    startDate: Number.isNaN(startAt.getTime()) ? "" : startAt.toISOString().slice(0, 10),
+    startTime: Number.isNaN(startAt.getTime()) ? "09:00" : startAt.toISOString().slice(11, 16),
+    endDate: !endAt || Number.isNaN(endAt.getTime()) ? "" : endAt.toISOString().slice(0, 10),
+    endTime: !endAt || Number.isNaN(endAt.getTime()) ? "" : endAt.toISOString().slice(11, 16),
+    capacity: item.capacity === null ? "" : String(item.capacity),
+    priceOverride: item.priceOverride === null ? "" : String(item.priceOverride),
+  };
+}
+
+function buildSessionStartIso(item: DepartureDateItem): string | null {
+  if (!item.startDate || !item.startTime) {
+    return null;
+  }
+  return `${item.startDate}T${item.startTime}:00.000Z`;
+}
+
+function buildSessionEndIso(item: DepartureDateItem): string | null {
+  if (!item.endDate || !item.endTime) {
+    return null;
+  }
+  return `${item.endDate}T${item.endTime}:00.000Z`;
+}
+
 function buildScheduleSummary(params: {
   isYearRound: boolean;
   seasonDateFrom: string;
@@ -396,21 +504,23 @@ function buildScheduleSummary(params: {
   return segments.join(". ");
 }
 
-function getSubmitButtonLabel(status: ExcursionStatus): string {
-  if (status === ExcursionStatus.PUBLISHED) {
-    return "Снять с публикации";
-  }
-
-  if (status === ExcursionStatus.PENDING_MODERATION) {
-    return "Вернуть в черновик";
-  }
-
-  return "Отправить на модерацию";
-}
-
-export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
+export function ExcursionEditor({
+  initialExcursion,
+  adminMode = false,
+  backHref = "/dashboard/excursions",
+  backLabel = "Все программы",
+  listHref = "/dashboard/excursions",
+  moderationHref = null,
+}: ExcursionEditorProps) {
   const router = useRouter();
   const [excursion, setExcursion] = useState(initialExcursion);
+  const initialDescriptionValue =
+    initialExcursion.description ??
+    initialExcursion.fullDescription ??
+    initialExcursion.shortDescription ??
+    "";
+  const [offerType, setOfferType] = useState<ExcursionOfferType>(initialExcursion.offerType);
+  const [subtypeLabel, setSubtypeLabel] = useState(initialExcursion.subtypeLabel ?? "");
   const [title, setTitle] = useState(initialExcursion.title ?? "");
   const [locationId, setLocationId] = useState(initialExcursion.locationId ?? "");
   const [locationInput, setLocationInput] = useState(initialExcursion.locationName ?? "");
@@ -429,19 +539,33 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   );
   const [mapDraftLocationId, setMapDraftLocationId] = useState(initialExcursion.locationId ?? "");
   const [startPoint, setStartPoint] = useState(initialExcursion.startPoint ?? "");
-  const [description, setDescription] = useState(initialExcursion.description ?? "");
+  const [finishPoint, setFinishPoint] = useState(initialExcursion.finishPoint ?? "");
+  const [description, setDescription] = useState(initialDescriptionValue);
   const [routeDescription, setRouteDescription] = useState(initialExcursion.routeDescription ?? "");
+  const [highlights, setHighlights] = useState<string[]>(initialExcursion.highlights ?? []);
   const [durationMinutes, setDurationMinutes] = useState(
     initialExcursion.durationMinutes === null ? "" : String(initialExcursion.durationMinutes),
   );
+  const [durationDays, setDurationDays] = useState(
+    initialExcursion.durationDays === null ? "" : String(initialExcursion.durationDays),
+  );
+  const [durationNights, setDurationNights] = useState(
+    initialExcursion.durationNights === null ? "" : String(initialExcursion.durationNights),
+  );
+  const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>(
+    initialExcursion.itineraryDays ?? [],
+  );
   const [scheduleText, setScheduleText] = useState(initialExcursion.scheduleText ?? "");
+  const [availabilityMode, setAvailabilityMode] = useState<ExcursionAvailabilityMode>(
+    initialExcursion.availabilityMode,
+  );
+  const [availabilityNote, setAvailabilityNote] = useState(initialExcursion.availabilityNote ?? "");
   const [isYearRound, setIsYearRound] = useState(true);
   const [seasonDateFrom, setSeasonDateFrom] = useState("");
   const [seasonDateTo, setSeasonDateTo] = useState("");
   const [daySchedule, setDaySchedule] = useState<DayScheduleState>(createDefaultDaySchedule);
   const [bulkTimeFrom, setBulkTimeFrom] = useState("10:00");
   const [bulkTimeTo, setBulkTimeTo] = useState("14:00");
-  const [additionalClosedDateDraft, setAdditionalClosedDateDraft] = useState("");
   const [additionalClosedDates, setAdditionalClosedDates] = useState<string[]>([]);
   const [scheduleComment, setScheduleComment] = useState("");
   const [isLoadingScheduleRules, setIsLoadingScheduleRules] = useState(false);
@@ -458,6 +582,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   const [vkUrl, setVkUrl] = useState(initialExcursion.vkUrl ?? "");
   const [maxUrl, setMaxUrl] = useState(initialExcursion.maxUrl ?? "");
   const [okUrl, setOkUrl] = useState(initialExcursion.okUrl ?? "");
+  const [failedWebsiteFaviconUrl, setFailedWebsiteFaviconUrl] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState(initialExcursion.photoUrls);
   const [videoUrls, setVideoUrls] = useState(initialExcursion.videoUrls);
   const [videoUrlInput, setVideoUrlInput] = useState("");
@@ -465,7 +590,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   // --- New fields ---
-  const [shortDescription, setShortDescription] = useState(initialExcursion.shortDescription ?? "");
   const [tags, setTags] = useState<string[]>(initialExcursion.tags ?? []);
   const [tagOptions, setTagOptions] = useState<string[]>(() => {
     const next = [...EXCURSION_CATEGORY_TAGS];
@@ -531,9 +655,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     initialExcursion.physicalRequirements ?? [],
   );
   const [whatToBring, setWhatToBring] = useState<string[]>(initialExcursion.whatToBring ?? []);
-  const [hasGuideLicense, setHasGuideLicense] = useState(
-    initialExcursion.hasGuideLicense ?? false,
-  );
+  const [hasGuideLicense, setHasGuideLicense] = useState(initialExcursion.hasGuideLicense ?? false);
   const [timeline, setTimeline] = useState<TimelineStep[]>(initialExcursion.timeline ?? []);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>(
     initialExcursion.pricingTiers ?? [],
@@ -545,7 +667,9 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     initialExcursion.excludedItems ?? [],
   );
   const [transferDetails, setTransferDetails] = useState(initialExcursion.transferDetails ?? "");
-  const [transferEnabled, setTransferEnabled] = useState(Boolean(initialExcursion.transferDetails));
+  const [transferEnabled, setTransferEnabled] = useState(
+    Boolean(initialExcursion.transferDetails || initialExcursion.pickupAvailable),
+  );
   const [cancellationPolicyType, setCancellationPolicyType] = useState(
     initialExcursion.cancellationPolicyType ?? "",
   );
@@ -553,7 +677,32 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     initialExcursion.cancellationPolicy ?? "",
   );
   const [faqItems, setFaqItems] = useState<FaqItem[]>(initialExcursion.faqItems ?? []);
+  const [extraOptions, setExtraOptions] = useState<ExcursionExtraOption[]>(
+    initialExcursion.extraOptions ?? [],
+  );
+  const [priceUnitLabel, setPriceUnitLabel] = useState(initialExcursion.priceUnitLabel ?? "");
+  const [accommodationProvided, setAccommodationProvided] = useState<boolean | null>(
+    initialExcursion.accommodationProvided,
+  );
+  const [accommodationType, setAccommodationType] = useState(
+    initialExcursion.accommodationType ?? "",
+  );
+  const [accommodationNights, setAccommodationNights] = useState(
+    initialExcursion.accommodationNights === null
+      ? ""
+      : String(initialExcursion.accommodationNights),
+  );
+  const [accommodationFormat, setAccommodationFormat] = useState(
+    initialExcursion.accommodationFormat ?? "",
+  );
+  const [mealPlan, setMealPlan] = useState(initialExcursion.mealPlan ?? "");
+  const [accommodationComment, setAccommodationComment] = useState(
+    initialExcursion.accommodationComment ?? "",
+  );
+  const [departureDates, setDepartureDates] = useState<DepartureDateItem[]>([]);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleAutoSaveInitRef = useRef(false);
   const newTagInputRef = useRef<HTMLInputElement | null>(null);
   const newFormatInputRef = useRef<HTMLInputElement | null>(null);
   const newLanguageInputRef = useRef<HTMLInputElement | null>(null);
@@ -562,11 +711,11 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isClientReady, setIsClientReady] = useState(false);
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [isResolvingLocationFromMap, setIsResolvingLocationFromMap] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const isTour = isTourOffer(offerType);
 
   const activeScheduleDays = useMemo(
     () => weekdayOrder.filter((day) => daySchedule[day].enabled),
@@ -591,6 +740,11 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       return fromMinutes !== null && toMinutes !== null && toMinutes > fromMinutes;
     });
   }, [activeScheduleDays, daySchedule, isYearRound, seasonDateFrom, seasonDateTo]);
+
+  const websiteFaviconUrl = useMemo(() => buildWebsiteFaviconUrl(websiteUrl), [websiteUrl]);
+  const shouldShowWebsiteFavicon = Boolean(
+    websiteFaviconUrl && websiteFaviconUrl !== failedWebsiteFaviconUrl,
+  );
 
   useEffect(() => {
     setTagOptions((prev) => {
@@ -617,10 +771,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     }
     newFormatInputRef.current?.focus();
   }, [isAddingFormat]);
-
-  useEffect(() => {
-    setIsClientReady(true);
-  }, []);
 
   useEffect(() => {
     if (!isAddingLanguage) {
@@ -687,7 +837,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         }
 
         setAdditionalClosedDates(normalizeIsoDateList([...nextClosedDates]));
-        setAdditionalClosedDateDraft("");
         setScheduleComment(nextScheduleComment);
 
         if (!body.rules || body.rules.length === 0) {
@@ -759,11 +908,50 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     };
   }, [initialExcursion.id]);
 
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    const loadSessions = async () => {
+      try {
+        const response = await fetch(`/api/excursions/${initialExcursion.id}/sessions`, {
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          return;
+        }
+
+        const body = (await response.json()) as SessionsResponse;
+        setDepartureDates((body.items ?? []).map(toDepartureDateItem));
+      } catch {
+        // Keep the editor responsive if session loading fails temporarily.
+      }
+    };
+
+    void loadSessions();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [initialExcursion.id]);
+
   // --- Autosave (debounced, 2s) ---
   const buildAutoSavePayload = useCallback((): Record<string, unknown> => {
     const selectedLocation = crimeaLocations.find((loc) => loc.id === locationId);
     const resolvedLocationName = selectedLocation?.name ?? locationInput.trim();
+    const regularScheduleSummary = buildScheduleSummary({
+      isYearRound,
+      seasonDateFrom,
+      seasonDateTo,
+      daySchedule,
+      additionalClosedDates,
+      scheduleComment,
+    });
+    const normalizedDescription = normalizeNullableText(description);
+    const normalizedShortDescription = buildShortDescription(description);
+
     return {
+      offerType,
+      subtypeLabel: normalizeNullableText(subtypeLabel),
       title: normalizeNullableText(title),
       locationId: locationId || undefined,
       locationName: resolvedLocationName || undefined,
@@ -773,14 +961,32 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       latitude,
       longitude,
       startPoint: normalizeNullableText(startPoint),
+      finishPoint: normalizeNullableText(finishPoint),
       meetingPointText: normalizeNullableText(startPoint),
-      description: normalizeNullableText(description),
-      shortDescription: normalizeNullableText(shortDescription),
-      fullDescription: normalizeNullableText(description),
+      meetingLocationId: locationId || undefined,
+      meetingPointLat: latitude,
+      meetingPointLng: longitude,
+      pickupAvailable: transferEnabled,
+      description: normalizedDescription,
+      shortDescription: normalizedShortDescription,
+      fullDescription: normalizedDescription,
       routeDescription: normalizeNullableText(routeDescription),
+      highlights,
       durationMinutes: durationMinutes.trim() ? Number.parseInt(durationMinutes, 10) || null : null,
+      durationDays: durationDays.trim() ? Number.parseInt(durationDays, 10) || null : null,
+      durationNights: durationNights.trim() ? Number.parseInt(durationNights, 10) || null : null,
+      itineraryDays,
+      availabilityMode,
+      availabilityNote: normalizeNullableText(availabilityNote),
+      scheduleText:
+        availabilityMode === ExcursionAvailabilityMode.REGULAR
+          ? regularScheduleSummary
+          : availabilityMode === ExcursionAvailabilityMode.ON_REQUEST
+            ? normalizeNullableText(availabilityNote)
+            : normalizeNullableText(scheduleText),
       priceFrom: priceFrom.trim() ? Number.parseFloat(priceFrom) || null : null,
       currency: "RUB",
+      priceUnitLabel: normalizeNullableText(priceUnitLabel),
       tags,
       format: excursionFormat,
       languageCodes,
@@ -796,10 +1002,19 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         : null,
       hasGuideLicense,
       timeline,
+      extraOptions,
       pricingTiers,
       includedItems,
       excludedItems,
-      transferDetails: normalizeNullableText(transferDetails),
+      accommodationProvided,
+      accommodationType: normalizeNullableText(accommodationType),
+      accommodationNights: accommodationNights.trim()
+        ? Number.parseInt(accommodationNights, 10) || null
+        : null,
+      accommodationFormat: normalizeNullableText(accommodationFormat),
+      mealPlan: normalizeNullableText(mealPlan),
+      accommodationComment: normalizeNullableText(accommodationComment),
+      transferDetails: transferEnabled ? normalizeNullableText(transferDetails) : null,
       cancellationPolicyType: cancellationPolicyType || null,
       cancellationPolicy: normalizeNullableText(cancellationPolicyText),
       faqItems,
@@ -817,18 +1032,37 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       videoUrls,
     };
   }, [
+    accommodationComment,
+    accommodationFormat,
+    accommodationNights,
+    accommodationProvided,
+    accommodationType,
+    additionalClosedDates,
     title,
-    shortDescription,
+    availabilityMode,
+    availabilityNote,
+    daySchedule,
+    durationDays,
+    durationNights,
     locationId,
     locationInput,
     address,
     latitude,
     longitude,
     startPoint,
+    finishPoint,
     description,
+    highlights,
+    itineraryDays,
     routeDescription,
+    isYearRound,
+    seasonDateFrom,
+    seasonDateTo,
+    scheduleComment,
+    scheduleText,
     durationMinutes,
     priceFrom,
+    priceUnitLabel,
     tags,
     excursionFormat,
     languageCodes,
@@ -841,9 +1075,12 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     minBookingNoticeHours,
     hasGuideLicense,
     timeline,
+    extraOptions,
     pricingTiers,
     includedItems,
     excludedItems,
+    mealPlan,
+    transferEnabled,
     transferDetails,
     cancellationPolicyType,
     cancellationPolicyText,
@@ -858,7 +1095,9 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     vkUrl,
     maxUrl,
     okUrl,
+    offerType,
     photoUrls,
+    subtypeLabel,
     videoUrls,
   ]);
 
@@ -894,6 +1133,66 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildAutoSavePayload]);
 
+  // Auto-save schedule rules when schedule fields change
+  useEffect(() => {
+    if (!scheduleAutoSaveInitRef.current) {
+      scheduleAutoSaveInitRef.current = true;
+      return;
+    }
+
+    if (availabilityMode !== ExcursionAvailabilityMode.REGULAR || !isScheduleConfigValid) {
+      return;
+    }
+
+    if (scheduleAutoSaveTimerRef.current) {
+      clearTimeout(scheduleAutoSaveTimerRef.current);
+    }
+
+    scheduleAutoSaveTimerRef.current = setTimeout(async () => {
+      const activeDays = weekdayOrder.filter((day) => daySchedule[day].enabled);
+      if (activeDays.length === 0) return;
+
+      const rules = [];
+      for (const day of activeDays) {
+        const item = daySchedule[day];
+        const fromMinutes = timeToMinutes(item.from);
+        const toMinutes = timeToMinutes(item.to);
+        if (fromMinutes === null || toMinutes === null || toMinutes <= fromMinutes) return;
+        rules.push({
+          dateFrom: isYearRound ? null : seasonDateFrom,
+          dateTo: isYearRound ? null : seasonDateTo,
+          weekdays: [day],
+          timeStarts: [item.from],
+          durationMinutes: toMinutes - fromMinutes,
+        });
+      }
+
+      const normalizedComment = normalizeNullableText(scheduleComment);
+      const exceptions = normalizeIsoDateList(additionalClosedDates).map((date) => ({
+        date,
+        isClosed: true,
+        notes: normalizedComment,
+      }));
+
+      try {
+        await fetch(`/api/excursions/${excursion.id}/schedule-rules`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduleMode: "RULES", rules, exceptions }),
+        });
+      } catch {
+        // silent — non-critical auto-save
+      }
+    }, 3000);
+
+    return () => {
+      if (scheduleAutoSaveTimerRef.current) {
+        clearTimeout(scheduleAutoSaveTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daySchedule, isYearRound, seasonDateFrom, seasonDateTo, additionalClosedDates, scheduleComment, availabilityMode, isScheduleConfigValid]);
+
   const isSeasonLimited = !isYearRound;
 
   type StepStatus = "incomplete" | "partial" | "complete";
@@ -918,9 +1217,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   }
 
   function getMissingRequired(checks: StepFieldCheck[]): string[] {
-    return checks
-      .filter((item) => item.required !== false && !item.done)
-      .map((item) => item.label);
+    return checks.filter((item) => item.required !== false && !item.done).map((item) => item.label);
   }
 
   function buildWizardStepState(label: string, checks: StepFieldCheck[]): WizardStepState {
@@ -931,41 +1228,64 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     };
   }
 
-  // Step 0: Об экскурсии
+  // Step 0: Описание
   const generalChecks: StepFieldCheck[] = [
+    { label: "Тип предложения", done: Boolean(offerType) },
     { label: "Название (минимум 2 символа)", done: title.trim().length >= 2 },
     {
-      label: "Короткое описание (минимум 20 символов)",
-      done: shortDescription.trim().length >= 20,
-    },
-    {
-      label: "Полное описание (минимум 20 символов)",
+      label: "Общее описание (минимум 20 символов)",
       done: description.trim().length >= 20,
     },
-  ];
-  // Step 1: Программа и условия
-  const programChecks: StepFieldCheck[] = [
-    { label: "Длительность (от 15 минут)", done: Number(durationMinutes || 0) >= 15 },
     {
-      label: "Маршрут или таймлайн",
-      done: routeDescription.trim().length >= 10 || timeline.length >= 2,
+      label: "Основная категория",
+      done: tags.length > 0 || Boolean(subtypeLabel.trim()),
       required: false,
     },
   ];
-  // Step 2: Место встречи
-  const locationChecks: StepFieldCheck[] = [
+  // Step 1: Программа и маршрут (includes logistics)
+  const programChecks: StepFieldCheck[] = [
+    {
+      label: isTour ? "Длительность в днях" : "Длительность (от 15 минут)",
+      done: isTour ? Number(durationDays || 0) >= 1 : Number(durationMinutes || 0) >= 15,
+    },
+    {
+      label: isTour ? "Программа по дням или маршрут" : "Таймлайн или маршрут",
+      done: isTour
+        ? itineraryDays.length > 0 || routeDescription.trim().length >= 10
+        : routeDescription.trim().length >= 10 || timeline.length >= 1,
+    },
     { label: "Выбор локации", done: Boolean(locationId) },
+    {
+      label: "Точка старта",
+      done: Boolean(startPoint.trim()),
+    },
   ];
-  // Step 3: Доступность и расписание
+  // Step 2: Расписание
   const scheduleChecks: StepFieldCheck[] = [
-    { label: "Расписание (дни и корректное время)", done: isScheduleConfigValid },
+    {
+      label: "Режим доступности",
+      done: Boolean(availabilityMode),
+    },
+    {
+      label: "Валидная доступность",
+      done:
+        availabilityMode === ExcursionAvailabilityMode.REGULAR
+          ? isScheduleConfigValid
+          : availabilityMode === ExcursionAvailabilityMode.DATED
+            ? departureDates.length > 0
+            : availabilityNote.trim().length >= 2,
+    },
   ];
-  // Step 4: Стоимость
+  // Step 3: Цены и условия
   const pricingChecks: StepFieldCheck[] = [
     { label: "Цена от (больше 0)", done: Number(priceFrom || 0) > 0 },
+    {
+      label: "Единица цены",
+      done: isTour ? priceUnitLabel.trim().length >= 2 : true,
+    },
   ];
-  // Step 5: Организатор и контакты
-  const organizerChecks: StepFieldCheck[] = [
+  // Step 4: Контакты и медиа
+  const contactsMediaChecks: StepFieldCheck[] = [
     {
       label: "Контакты (имя, фамилия, телефон)",
       done:
@@ -973,15 +1293,12 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         contactLastName.trim().length >= 2 &&
         contactPhone.trim().length >= 10,
     },
-  ];
-  // Step 6: Медиа и FAQ
-  const mediaChecks: StepFieldCheck[] = [
     {
       label: `Фотографии (минимум ${excursionPhotoMinForModeration})`,
       done: photoUrls.length >= excursionPhotoMinForModeration,
     },
   ];
-  // Step 7: Проверка и публикация
+  // Step 5: Публикация
   const publishChecks: StepFieldCheck[] = [
     {
       label: "Отправка на модерацию",
@@ -993,13 +1310,11 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   ];
 
   const wizardStepStates: WizardStepState[] = [
-    buildWizardStepState("Об экскурсии", generalChecks),
-    buildWizardStepState("Программа", programChecks),
-    buildWizardStepState("Место встречи", locationChecks),
+    buildWizardStepState("Описание", generalChecks),
+    buildWizardStepState("Программа и маршрут", programChecks),
     buildWizardStepState("Расписание", scheduleChecks),
-    buildWizardStepState("Стоимость", pricingChecks),
-    buildWizardStepState("Организатор", organizerChecks),
-    buildWizardStepState("Медиа и FAQ", mediaChecks),
+    buildWizardStepState("Цены и условия", pricingChecks),
+    buildWizardStepState("Контакты и медиа", contactsMediaChecks),
     buildWizardStepState("Публикация", publishChecks),
   ];
 
@@ -1064,6 +1379,8 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
   function applyExcursion(item: SerializedExcursion) {
     setExcursion(item);
+    setOfferType(item.offerType);
+    setSubtypeLabel(item.subtypeLabel ?? "");
     setTitle(item.title ?? "");
     setLocationId(item.locationId ?? "");
     setLocationInput(item.locationName ?? "");
@@ -1076,10 +1393,17 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     setMapDraftLocationName(item.locationName ?? "");
     setMapDraftLocationId(item.locationId ?? "");
     setStartPoint(item.startPoint ?? "");
-    setDescription(item.description ?? "");
+    setFinishPoint(item.finishPoint ?? "");
+    setDescription(item.description ?? item.fullDescription ?? item.shortDescription ?? "");
     setRouteDescription(item.routeDescription ?? "");
+    setHighlights(item.highlights ?? []);
     setDurationMinutes(item.durationMinutes === null ? "" : String(item.durationMinutes));
+    setDurationDays(item.durationDays === null ? "" : String(item.durationDays));
+    setDurationNights(item.durationNights === null ? "" : String(item.durationNights));
+    setItineraryDays(item.itineraryDays ?? []);
     setScheduleText(item.scheduleText ?? "");
+    setAvailabilityMode(item.availabilityMode);
+    setAvailabilityNote(item.availabilityNote ?? "");
     setPriceFrom(item.priceFrom === null ? "" : String(item.priceFrom));
     setContactFirstName(item.contactFirstName ?? "");
     setContactLastName(item.contactLastName ?? "");
@@ -1093,7 +1417,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     setOkUrl(item.okUrl ?? "");
     setPhotoUrls(item.photoUrls);
     setVideoUrls(item.videoUrls);
-    setShortDescription(item.shortDescription ?? "");
     setTags(item.tags ?? []);
     setExcursionFormat(normalizeExcursionFormat(item.format));
     setLanguageCodes(
@@ -1108,11 +1431,21 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       item.minBookingNoticeHours === null ? "" : String(item.minBookingNoticeHours),
     );
     setTimeline(item.timeline ?? []);
+    setExtraOptions(item.extraOptions ?? []);
     setPricingTiers(item.pricingTiers ?? []);
     setIncludedItems(item.includedItems ?? []);
     setExcludedItems(item.excludedItems ?? []);
     setTransferDetails(item.transferDetails ?? "");
-    setTransferEnabled(Boolean(item.transferDetails));
+    setTransferEnabled(Boolean(item.transferDetails || item.pickupAvailable));
+    setPriceUnitLabel(item.priceUnitLabel ?? "");
+    setAccommodationProvided(item.accommodationProvided);
+    setAccommodationType(item.accommodationType ?? "");
+    setAccommodationNights(
+      item.accommodationNights === null ? "" : String(item.accommodationNights),
+    );
+    setAccommodationFormat(item.accommodationFormat ?? "");
+    setMealPlan(item.mealPlan ?? "");
+    setAccommodationComment(item.accommodationComment ?? "");
     setCancellationPolicyType(item.cancellationPolicyType ?? "");
     setCancellationPolicyText(item.cancellationPolicy ?? "");
     setFaqItems(item.faqItems ?? []);
@@ -1132,7 +1465,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
       const body = (await response.json()) as UpdateExcursionResponse;
       if (!response.ok || !body.item) {
-        setError(body.error ?? "Не удалось сохранить экскурсию");
+        setError(body.error ?? "Не удалось сохранить программу");
         return false;
       }
 
@@ -1185,44 +1518,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   function isSchedulePresetActive(days: WeekdayId[]): boolean {
     const daySet = new Set<WeekdayId>(days);
     return weekdayOrder.every((day) => daySchedule[day].enabled === daySet.has(day));
-  }
-
-  function applyTimeToActiveDays() {
-    if (activeScheduleDays.length === 0) {
-      setError("Сначала включите хотя бы один день работы");
-      return;
-    }
-
-    const fromMinutes = timeToMinutes(bulkTimeFrom);
-    const toMinutes = timeToMinutes(bulkTimeTo);
-    if (fromMinutes === null || toMinutes === null || toMinutes <= fromMinutes) {
-      setError("Проверьте шаблон времени: «До» должно быть позже «С»");
-      return;
-    }
-
-    setDaySchedule((prev) => {
-      const next = { ...prev };
-      for (const day of activeScheduleDays) {
-        next[day] = {
-          ...next[day],
-          from: bulkTimeFrom,
-          to: bulkTimeTo,
-        };
-      }
-      return next;
-    });
-
-    setError("");
-  }
-
-  function addClosedDate() {
-    if (!additionalClosedDateDraft) {
-      return;
-    }
-
-    setAdditionalClosedDates((prev) => normalizeIsoDateList([...prev, additionalClosedDateDraft]));
-    setAdditionalClosedDateDraft("");
-    setError("");
   }
 
   function removeClosedDate(value: string) {
@@ -1287,7 +1582,97 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     };
   }
 
+  function buildSessionsPayload(): Record<string, unknown> | null {
+    if (departureDates.length === 0) {
+      setError("Добавьте хотя бы один заезд");
+      return null;
+    }
+
+    const sessions = departureDates.map((item, index) => {
+      const startAt = buildSessionStartIso(item);
+      if (!startAt) {
+        setError(`Заполните дату и время старта для заезда ${index + 1}`);
+        return null;
+      }
+
+      const endAt = buildSessionEndIso(item);
+      const capacity = item.capacity.trim() ? Number.parseInt(item.capacity, 10) : null;
+      if (capacity !== null && (!Number.isFinite(capacity) || capacity <= 0)) {
+        setError(`Количество мест в заезде ${index + 1} должно быть больше 0`);
+        return null;
+      }
+
+      const priceOverride = item.priceOverride.trim()
+        ? Number.parseFloat(item.priceOverride)
+        : null;
+      if (priceOverride !== null && (!Number.isFinite(priceOverride) || priceOverride < 0)) {
+        setError(`Цена в заезде ${index + 1} указана некорректно`);
+        return null;
+      }
+
+      return {
+        startAt,
+        endAt,
+        capacity,
+        priceOverride,
+      };
+    });
+
+    if (sessions.some((item) => item === null)) {
+      return null;
+    }
+
+    return {
+      sessions,
+    };
+  }
+
+  async function saveSessions(): Promise<boolean> {
+    const payload = buildSessionsPayload();
+    if (!payload) {
+      return false;
+    }
+
+    setError("");
+    setIsSavingSchedule(true);
+
+    try {
+      const response = await fetch(`/api/excursions/${excursion.id}/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setError(body.error ?? "Не удалось сохранить заезды");
+        return false;
+      }
+
+      const firstStart = departureDates
+        .map((item) => item.startDate)
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right))[0];
+      if (firstStart) {
+        setScheduleText(`Ближайший заезд ${formatIsoToDayMonthYear(firstStart)}`);
+      }
+
+      return true;
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  }
+
   async function saveScheduleRules(): Promise<boolean> {
+    if (availabilityMode === ExcursionAvailabilityMode.DATED) {
+      return saveSessions();
+    }
+
+    if (availabilityMode === ExcursionAvailabilityMode.ON_REQUEST) {
+      setScheduleText(availabilityNote.trim() || "По запросу");
+      return true;
+    }
+
     const payload = buildScheduleRulesPayload();
     if (!payload) {
       return false;
@@ -1330,7 +1715,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   function buildFormPayload(): Record<string, unknown> | null {
     const normalizedTitle = title.trim();
     if (normalizedTitle.length < 2) {
-      setError("Название экскурсии должно содержать минимум 2 символа");
+      setError("Название программы должно содержать минимум 2 символа");
       return null;
     }
 
@@ -1342,14 +1727,56 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
     const parsedDuration = durationMinutes.trim()
       ? Number.parseInt(durationMinutes.trim(), 10)
       : null;
-    if (parsedDuration !== null && (!Number.isFinite(parsedDuration) || parsedDuration < 15)) {
-      setError("Длительность должна быть минимум 15 минут");
+    const parsedDurationDays = durationDays.trim()
+      ? Number.parseInt(durationDays.trim(), 10)
+      : null;
+    const parsedDurationNights = durationNights.trim()
+      ? Number.parseInt(durationNights.trim(), 10)
+      : null;
+
+    if (
+      !isTour &&
+      parsedDuration !== null &&
+      (!Number.isFinite(parsedDuration) || parsedDuration < 15)
+    ) {
+      setError("Длительность экскурсии должна быть минимум 15 минут");
       return null;
+    }
+
+    if (isTour) {
+      if (
+        parsedDurationDays === null ||
+        !Number.isFinite(parsedDurationDays) ||
+        parsedDurationDays < 1
+      ) {
+        setError("Для тура укажите количество дней");
+        return null;
+      }
+      if (
+        parsedDurationNights !== null &&
+        (!Number.isFinite(parsedDurationNights) || parsedDurationNights < 0)
+      ) {
+        setError("Количество ночей указано некорректно");
+        return null;
+      }
+      if (
+        parsedDurationNights !== null &&
+        parsedDurationDays !== null &&
+        parsedDurationNights > parsedDurationDays
+      ) {
+        setError("Ночей не может быть больше, чем дней");
+        return null;
+      }
     }
 
     const parsedPrice = priceFrom.trim() ? Number.parseFloat(priceFrom.trim()) : null;
     if (parsedPrice !== null && (!Number.isFinite(parsedPrice) || parsedPrice <= 0)) {
       setError("Цена должна быть больше 0");
+      return null;
+    }
+
+    if (isTour && !priceUnitLabel.trim()) {
+      setError("Для тура укажите единицу цены, например «чел» или «тур»");
       return null;
     }
 
@@ -1369,15 +1796,41 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       scheduleComment,
     });
 
-    if (!scheduleSummary || !isScheduleConfigValid) {
-      setError("Заполните блок расписания: дни, время, период и корректные дополнительные даты");
+    if (availabilityMode === ExcursionAvailabilityMode.REGULAR) {
+      if (!scheduleSummary || !isScheduleConfigValid) {
+        setError("Заполните блок расписания: дни, время, период и корректные дополнительные даты");
+        return null;
+      }
+    }
+
+    if (availabilityMode === ExcursionAvailabilityMode.DATED && departureDates.length === 0) {
+      setError("Добавьте хотя бы один заезд");
+      return null;
+    }
+
+    if (
+      availabilityMode === ExcursionAvailabilityMode.ON_REQUEST &&
+      availabilityNote.trim().length < 2
+    ) {
+      setError("Добавьте комментарий для режима «по запросу»");
       return null;
     }
 
     const normalizedAddress = normalizeNullableText(address);
     const normalizedStartPoint = normalizeNullableText(startPoint);
+    const normalizedFinishPoint = normalizeNullableText(finishPoint);
     const normalizedDescription = normalizeNullableText(description);
     const normalizedRouteDescription = normalizeNullableText(routeDescription);
+    const normalizedSubtypeLabel = normalizeNullableText(subtypeLabel);
+    const normalizedPriceUnitLabel = normalizeNullableText(priceUnitLabel);
+    const normalizedAvailabilityNote = normalizeNullableText(availabilityNote);
+    const normalizedAccommodationType = normalizeNullableText(accommodationType);
+    const normalizedAccommodationFormat = normalizeNullableText(accommodationFormat);
+    const normalizedMealPlan = normalizeNullableText(mealPlan);
+    const normalizedAccommodationComment = normalizeNullableText(accommodationComment);
+    const parsedAccommodationNights = accommodationNights.trim()
+      ? Number.parseInt(accommodationNights, 10)
+      : null;
 
     if (normalizedDescription && normalizedDescription.length < 20) {
       setError("Описание должно содержать минимум 20 символов");
@@ -1389,13 +1842,26 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       return null;
     }
 
-    const normalizedShortDescription = normalizeNullableText(shortDescription);
-    if (normalizedShortDescription && normalizedShortDescription.length < 20) {
-      setError("Короткое описание должно содержать минимум 20 символов");
+    const normalizedShortDescription = buildShortDescription(description);
+
+    if (isTour && itineraryDays.length === 0 && routeDescription.trim().length < 10) {
+      setError("Для тура заполните программу по дням или опишите маршрут");
+      return null;
+    }
+
+    if (!isTour && timeline.length === 0 && routeDescription.trim().length < 10) {
+      setError("Для экскурсии добавьте таймлайн или текстовый маршрут");
+      return null;
+    }
+
+    if (highlights.some((item) => item.trim().length < 2)) {
+      setError("В блоке «Что вас ждёт» все пункты должны быть осмысленными");
       return null;
     }
 
     return {
+      offerType,
+      subtypeLabel: normalizedSubtypeLabel,
       title: normalizedTitle,
       locationId,
       locationName: resolvedLocationName,
@@ -1405,15 +1871,32 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       latitude,
       longitude,
       startPoint: normalizedStartPoint,
+      finishPoint: normalizedFinishPoint,
       meetingPointText: normalizedStartPoint,
+      meetingLocationId: locationId || null,
+      meetingPointLat: latitude,
+      meetingPointLng: longitude,
+      pickupAvailable: transferEnabled,
       description: normalizedDescription,
       shortDescription: normalizedShortDescription,
       fullDescription: normalizedDescription,
       routeDescription: normalizedRouteDescription,
-      durationMinutes: parsedDuration,
-      scheduleText: scheduleSummary,
+      highlights,
+      durationMinutes: isTour ? null : parsedDuration,
+      durationDays: isTour ? parsedDurationDays : null,
+      durationNights: isTour ? parsedDurationNights : null,
+      itineraryDays: isTour ? itineraryDays : [],
+      scheduleText:
+        availabilityMode === ExcursionAvailabilityMode.REGULAR
+          ? scheduleSummary
+          : availabilityMode === ExcursionAvailabilityMode.DATED
+            ? normalizeNullableText(scheduleText)
+            : normalizedAvailabilityNote,
+      availabilityMode,
+      availabilityNote: normalizedAvailabilityNote,
       priceFrom: parsedPrice,
       currency: "RUB",
+      priceUnitLabel: normalizedPriceUnitLabel,
       tags,
       format: excursionFormat,
       languageCodes,
@@ -1428,11 +1911,18 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         ? Number.parseInt(minBookingNoticeHours, 10) || null
         : null,
       hasGuideLicense,
-      timeline,
+      timeline: isTour ? [] : timeline,
+      extraOptions,
       pricingTiers,
       includedItems,
       excludedItems,
-      transferDetails: normalizeNullableText(transferDetails),
+      accommodationProvided,
+      accommodationType: normalizedAccommodationType,
+      accommodationNights: parsedAccommodationNights,
+      accommodationFormat: normalizedAccommodationFormat,
+      mealPlan: normalizedMealPlan,
+      accommodationComment: normalizedAccommodationComment,
+      transferDetails: transferEnabled ? normalizeNullableText(transferDetails) : null,
       cancellationPolicyType: cancellationPolicyType || null,
       cancellationPolicy: normalizeNullableText(cancellationPolicyText),
       faqItems,
@@ -1449,24 +1939,6 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       photoUrls,
       videoUrls,
     };
-  }
-
-  async function saveDraft() {
-    const payload = buildFormPayload();
-    if (!payload) {
-      return;
-    }
-
-    const scheduleSaved = await saveScheduleRules();
-    if (!scheduleSaved) {
-      return;
-    }
-
-    const ok = await patchExcursion(payload);
-    if (ok) {
-      setSuccess("Черновик экскурсии сохранен");
-      router.refresh();
-    }
   }
 
   async function submitForModerationFromPayment(): Promise<boolean> {
@@ -1497,57 +1969,13 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
       return false;
     }
 
-    setSuccess("Экскурсия отправлена на модерацию");
+    setSuccess("Программа отправлена на модерацию");
     router.refresh();
     return true;
   }
 
-  async function togglePublish() {
-    const nextStatus =
-      excursion.status === ExcursionStatus.PUBLISHED
-        ? ExcursionStatus.DRAFT
-        : excursion.status === ExcursionStatus.PENDING_MODERATION
-          ? ExcursionStatus.DRAFT
-          : ExcursionStatus.PENDING_MODERATION;
-
-    if (
-      nextStatus === ExcursionStatus.PENDING_MODERATION &&
-      photoUrls.length < excursionPhotoMinForModeration
-    ) {
-      setError(
-        `Добавьте минимум ${excursionPhotoMinForModeration} фото перед отправкой на модерацию`,
-      );
-      setSuccess("");
-      return;
-    }
-
-    const payload = buildFormPayload();
-    if (!payload) {
-      return;
-    }
-
-    const scheduleSaved = await saveScheduleRules();
-    if (!scheduleSaved) {
-      return;
-    }
-
-    const ok = await patchExcursion({
-      ...payload,
-      status: nextStatus,
-    });
-
-    if (ok) {
-      setSuccess(
-        nextStatus === ExcursionStatus.PENDING_MODERATION
-          ? "Экскурсия отправлена на модерацию"
-          : "Экскурсия переведена в черновик",
-      );
-      router.refresh();
-    }
-  }
-
   async function deleteExcursion() {
-    if (!window.confirm("Удалить экскурсию? Это действие нельзя отменить.")) {
+    if (!window.confirm("Удалить программу? Это действие нельзя отменить.")) {
       return;
     }
 
@@ -1562,11 +1990,11 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
       if (!response.ok) {
         const body = (await response.json()) as { error?: string };
-        setError(body.error ?? "Не удалось удалить экскурсию");
+        setError(body.error ?? "Не удалось удалить программу");
         return;
       }
 
-      router.push("/dashboard/excursions");
+      router.push(listHref);
       router.refresh();
     } finally {
       setIsDeleting(false);
@@ -1600,7 +2028,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         }
 
         if (currentPhotoCount >= excursionPhotoLimit) {
-          setError(`Максимум ${excursionPhotoLimit} фото для экскурсии`);
+          setError(`Максимум ${excursionPhotoLimit} фото для программы`);
           break;
         }
 
@@ -1833,108 +2261,134 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Wizard Stepper */}
+    <div className="space-y-4 sm:space-y-5">
+      {excursion.moderationNotes ? (
+        <section className="rounded-[28px] border border-olive/8 bg-white/95 p-2.5 shadow-[0_18px_36px_-28px_rgba(15,74,64,0.35)] sm:p-4">
+          <div className="flex gap-2 rounded-xl bg-terra/8 p-3">
+            <AppIcon icon={TriangleAlert} className="mt-0.5 h-4 w-4 shrink-0 text-terra" />
+            <div className="text-sm text-olive/85">
+              <p className="font-semibold text-olive">Комментарий модератора</p>
+              <p className="mt-0.5 whitespace-pre-line">{excursion.moderationNotes}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <WizardStepper
         steps={wizardSteps}
         currentStep={currentStep}
         onStepClick={setCurrentStep}
         saveStatus={saveStatus}
+        backHref={backHref}
+        backLabel={backLabel}
       />
 
-      {/* Header - compact and mobile-friendly */}
-      <div className="rounded-2xl border border-olive/8 bg-white p-4 shadow-sm md:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Link
-                href="/dashboard/excursions"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-olive/15 text-olive/60 transition hover:bg-cream hover:text-olive"
-                title="Назад к списку"
-              >
-                <AppIcon icon={ChevronLeft} className="h-4 w-4" />
-              </Link>
-              <h1 className="truncate text-xl font-semibold text-olive md:text-2xl">
-                {excursion.title || "Новая экскурсия"}
-              </h1>
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-olive/60">
-              <span>{formatDuration(excursion.durationMinutes)}</span>
-              {excursion.avgRating > 0 && (
-                <span>
-                  {excursion.avgRating.toFixed(1)} ({excursion.reviewsCount})
-                </span>
-              )}
-            </div>
-          </div>
-          <span className="shrink-0 rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold uppercase text-olive">
-            {excursion.statusLabel}
-          </span>
-        </div>
-
-        {excursion.moderationNotes ? (
-          <div className="mt-3 flex gap-2 rounded-xl bg-terra/8 p-3">
-            <AppIcon icon={TriangleAlert} className="mt-0.5 h-4 w-4 shrink-0 text-terra" />
-            <p className="text-sm text-olive/85">{excursion.moderationNotes}</p>
-          </div>
-        ) : null}
-      </div>
-
-      {/* ===== STEP 0: ОСНОВНОЕ ===== */}
+      {/* ===== STEP 0: ОПИСАНИЕ ===== */}
       {currentStep === 0 && (
-        <section className="wizard-section-enter overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
-          {/* Section header */}
-          <div className="border-b border-olive/8 bg-gradient-to-r from-primary/6 to-transparent px-5 py-4">
+        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Описание программы</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              Заполните основные поля — они помогут туристам найти и понять вашу экскурсию.
+            </p>
+          </div>
+
+          {/* ── Группа 1: Основное ── */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-                <AppIcon icon={PenLine} className="h-4.5 w-4.5" />
-              </div>
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                1
+              </span>
               <div>
-                <h2 className="text-base font-semibold text-olive md:text-lg">Об экскурсии</h2>
+                <p className="text-sm font-semibold text-olive">Тип и название</p>
                 <p className="text-xs text-olive/50">
-                  Название, аннотация, описание, категории и язык проведения
+                  Выберите тип, укажите название и опишите программу
                 </p>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-5 p-5">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,1fr)]">
+              <section className="rounded-xl border border-olive/15 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-olive/70">
+                  Тип предложения
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {OFFER_TYPE_OPTIONS.map((option) => {
+                    const isActive = offerType === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setOfferType(option.value)}
+                        className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
+                          isActive
+                            ? "border-primary bg-primary text-white"
+                            : "border-olive/20 bg-white text-olive hover:border-olive/40"
+                        }`}
+                      >
+                        <span className="block font-semibold">{option.label}</span>
+                        <span
+                          className={`mt-1 block text-xs ${isActive ? "text-white/75" : "text-olive/60"}`}
+                        >
+                          {option.value === "TOUR"
+                            ? "Заезды, программа по дням, проживание и туровая цена."
+                            : "Короткий маршрут, почасовая длительность и расписание."}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <label className="block space-y-1.5 rounded-xl border border-olive/15 bg-white p-3">
+                <span className="text-sm font-medium text-olive">Подтип / вид программы</span>
+                <Input
+                  value={subtypeLabel}
+                  onChange={(event) => setSubtypeLabel(event.target.value)}
+                  placeholder={
+                    isTour
+                      ? "Авторский, многодневный, джип-тур..."
+                      : "Пешеходная, морская, индивидуальная..."
+                  }
+                  list="offer-subtype-presets"
+                  maxLength={120}
+                />
+                <datalist id="offer-subtype-presets">
+                  {(isTour ? OFFER_SUBTYPE_PRESETS.TOUR : OFFER_SUBTYPE_PRESETS.EXCURSION).map(
+                    (item) => (
+                      <option key={item} value={item} />
+                    ),
+                  )}
+                </datalist>
+                <p className="text-xs text-olive/50">
+                  Подтип показывает характер программы, но не заменяет теги и тематику.
+                </p>
+              </label>
+            </div>
+
             {/* Название */}
             <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-olive">Название</span>
+              <span className="text-sm font-medium text-olive">
+                Название <span className="text-terra">*</span>
+              </span>
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 maxLength={120}
-                placeholder="Обзорная экскурсия по Ялте"
+                placeholder={
+                  isTour ? "Авторский тур по Южному берегу" : "Обзорная экскурсия по Ялте"
+                }
               />
               <p className="text-xs text-olive/50">
                 Коротко и по делу, без эмодзи — до 120 символов
               </p>
             </label>
 
-            {/* Короткое описание (аннотация) */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-olive">Короткое описание</span>
-                <span className="tabular-nums text-xs text-olive/50">
-                  {shortDescription.length}/300
+                <span className="text-sm font-medium text-olive">
+                  Описание <span className="text-terra">*</span>
                 </span>
-              </div>
-              <textarea
-                value={shortDescription}
-                onChange={(event) => setShortDescription(event.target.value)}
-                rows={2}
-                maxLength={300}
-                className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="1–2 предложения: суть экскурсии и главное впечатление. Показывается в карточке-превью."
-              />
-            </div>
-
-            {/* Полное описание */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-olive">Полное описание</span>
                 <span className="tabular-nums text-xs text-olive/50">
                   {description.length}/5000
                 </span>
@@ -1945,22 +2399,76 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
                 rows={6}
                 maxLength={5000}
                 className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="Подробно опишите экскурсию: маршрут, что увидят туристы, чем запомнится, какие эмоции получат"
+                placeholder={
+                  isTour
+                    ? "Опишите тур целиком: маршрут, формат, атмосферу, кому он подойдёт, как проходят дни и что в нём особенного."
+                    : "Опишите экскурсию целиком: суть программы, маршрут, что увидят туристы, чем она запомнится и какие эмоции подарит."
+                }
               />
+              <p className="text-xs text-olive/50">
+                Краткое превью для карточек сформируется автоматически из этого текста.
+              </p>
+            </div>
+          </div>
+
+          {/* ── Группа 2: Особенности ── */}
+          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                2
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Преимущества и особенности</p>
+                <p className="text-xs text-olive/50">
+                  Расскажите, чем ваша экскурсия запомнится туристу
+                </p>
+              </div>
             </div>
 
-            <div className="border-t border-olive/8" />
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">Что вас ждёт</h3>
+                <p className="text-xs text-olive/55">
+                  3–6 коротких впечатлений и преимуществ. Выберите из готовых или добавьте свои.
+                  Этот блок показывается отдельно на публичной странице.
+                </p>
+              </div>
+              <IncludedEditor
+                items={highlights}
+                onChange={setHighlights}
+                presets={HIGHLIGHT_PRESETS}
+                placeholder="Например: видовые остановки без спешки"
+              />
+            </div>
+          </div>
 
-            {/* Категории */}
+          {/* ── Группа 3: Категория и формат ── */}
+          <div className="space-y-5 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Категория и формат</p>
+                <p className="text-xs text-olive/50">
+                  Нажимайте на подходящие кнопки — это поможет туристам находить вас в поиске
+                </p>
+              </div>
+            </div>
+
+            {/* Теги */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-olive">Категории</span>
+                <span className="text-sm font-medium text-olive">Дополнительные теги</span>
                 {tags.length > 0 && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                     {tags.length}
                   </span>
                 )}
               </div>
+              <p className="text-xs text-olive/45">
+                Нажмите на тег, чтобы выбрать его. Выбранные теги подсветятся.
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {tagOptions.map((tag) => {
                   const isSelected = tags.some((item) => item.toLowerCase() === tag.toLowerCase());
@@ -2017,7 +2525,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
                         setNewTagDraft("");
                       }
                     }}
-                    placeholder="Добавить категорию"
+                    placeholder="Добавить тег"
                   />
                   <Button
                     type="button"
@@ -2040,7 +2548,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
                 </div>
               ) : (
                 <AddActionButton
-                  label="Добавить категорию"
+                  label="Добавить тег"
                   onClick={() => {
                     setIsAddingTag(true);
                     setError("");
@@ -2051,9 +2559,12 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
             <div className="border-t border-olive/8" />
 
-            {/* Тип экскурсии */}
+            {/* Формат участия */}
             <div className="space-y-2.5">
-              <span className="text-sm font-medium text-olive">Тип экскурсии</span>
+              <span className="text-sm font-medium text-olive">Формат участия</span>
+              <p className="text-xs text-olive/45">
+                Выберите один формат. Активный вариант выделен цветом.
+              </p>
               <div className="flex flex-wrap gap-2">
                 {formatOptions.map(({ id, value, label }) => (
                   <div key={id} className="relative">
@@ -2141,6 +2652,9 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
             {/* Язык проведения */}
             <div className="space-y-2.5">
               <span className="text-sm font-medium text-olive">Язык проведения</span>
+              <p className="text-xs text-olive/45">
+                Нажмите на язык, чтобы добавить или убрать его из списка.
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {languageOptions.map(({ code, label }) => {
                   const isSelected = languageCodes.includes(code);
@@ -2156,9 +2670,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
                             : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
                         }`}
                       >
-                        {isSelected && (
-                          <AppIcon icon={Check} className="h-3 w-3" />
-                        )}
+                        {isSelected && <AppIcon icon={Check} className="h-3 w-3" />}
                         {label}
                       </button>
                       {isSelected && isRemovable && (
@@ -2232,814 +2744,1150 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
       {/* ===== STEP 1: ПРОГРАММА И УСЛОВИЯ ===== */}
       {currentStep === 1 && (
-        <section className="wizard-section-enter space-y-6 rounded-2xl border border-olive/8 bg-white p-4 shadow-sm md:p-6">
-          {/* Section header */}
-          <div className="flex items-center gap-3 border-b border-olive/8 pb-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <AppIcon icon={Map} className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-olive md:text-xl">
-                Программа и условия участия
-              </h2>
-              <p className="text-xs text-olive/55">
-                Длительность, число участников, уровень нагрузки и маршрут
-              </p>
-            </div>
+        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Программа и маршрут</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              Укажите, где проходит экскурсия, сколько она длится и что в неё входит.
+            </p>
           </div>
 
-          {/* Stats cards */}
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-            {/* Duration */}
-            <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/12 bg-olive/[3%] p-3.5 transition hover:border-primary/30 hover:bg-primary/5">
-              <div className="flex items-center gap-1.5">
-                <AppIcon icon={Clock3} className="h-4 w-4" />
-                <span className="text-sm font-medium text-olive">Длительность</span>
-              </div>
-              <Input
-                type="number"
-                min={15}
-                max={10080}
-                value={durationMinutes}
-                onChange={(event) => setDurationMinutes(event.target.value)}
-                placeholder="90"
-              />
-              {durationMinutes ? (
-                <p className="text-xs font-medium text-primary">
-                  {formatDuration(Number(durationMinutes) || null)}
-                </p>
-              ) : (
-                <p className="text-xs text-olive/40">в минутах</p>
-              )}
-            </label>
-
-            {/* Min participants */}
-            <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/12 bg-olive/[3%] p-3.5 transition hover:border-primary/30 hover:bg-primary/5">
-              <div className="flex items-center gap-1.5">
-                <AppIcon icon={UserRound} className="h-4 w-4" />
-                <span className="text-sm font-medium text-olive">Мин. участников</span>
-              </div>
-              <Input
-                type="number"
-                min={1}
-                max={1000}
-                value={minParticipants}
-                onChange={(event) => setMinParticipants(event.target.value)}
-                placeholder="1"
-              />
-              <p className="text-xs text-olive/40">для старта группы</p>
-            </label>
-
-            {/* Max participants */}
-            <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/12 bg-olive/[3%] p-3.5 transition hover:border-primary/30 hover:bg-primary/5">
-              <div className="flex items-center gap-1.5">
-                <AppIcon icon={Users} className="h-4 w-4" />
-                <span className="text-sm font-medium text-olive">Макс. участников</span>
-              </div>
-              <Input
-                type="number"
-                min={1}
-                max={1000}
-                value={maxParticipants}
-                onChange={(event) => setMaxParticipants(event.target.value)}
-                placeholder="20"
-              />
-              <p className="text-xs text-olive/40">человек в группе</p>
-            </label>
-
-            {/* Min age */}
-            <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/12 bg-olive/[3%] p-3.5 transition hover:border-primary/30 hover:bg-primary/5">
-              <div className="flex items-center gap-1.5">
-                <AppIcon icon={CakeSlice} className="h-4 w-4" />
-                <span className="text-sm font-medium text-olive">Мин. возраст</span>
-              </div>
-              <Input
-                type="number"
-                min={0}
-                max={120}
-                value={minAge}
-                onChange={(event) => setMinAge(event.target.value)}
-                placeholder="0"
-              />
-              <p className="text-xs text-olive/40">0 — без ограничений</p>
-            </label>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-          {/* Difficulty level */}
-          <div className="space-y-2.5">
-            <div>
-              <h3 className="text-base font-semibold text-olive">Уровень нагрузки</h3>
-              <p className="text-xs text-olive/65">
-                Помогает туристам понять, подойдёт ли им эта экскурсия физически{" "}
-                <span className="text-olive/40">(необязательно)</span>
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { value: null, label: "Не указано" },
-                  { value: ExcursionDifficulty.EASY, label: "Лёгкая — прогулочный темп" },
-                  { value: ExcursionDifficulty.MEDIUM, label: "Умеренная — средний темп" },
-                  { value: ExcursionDifficulty.HARD, label: "Активная — высокая нагрузка" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={String(opt.value)}
-                  type="button"
-                  onClick={() => setDifficulty(opt.value)}
-                  className={`rounded-xl border px-3.5 py-2 text-sm font-medium transition-all ${
-                    difficulty === opt.value
-                      ? "border-primary bg-primary/8 text-primary shadow-sm"
-                      : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-          {/* Physical requirements */}
-          <div className="space-y-2">
-            <div>
-              <h3 className="text-base font-semibold text-olive">
-                Физические ограничения{" "}
-                <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-              </h3>
-              <p className="text-xs text-olive/65">
-                Укажите, кому экскурсия может не подойти по здоровью или физической форме.
-              </p>
-            </div>
-            <IncludedEditor
-              items={physicalRequirements}
-              onChange={setPhysicalRequirements}
-              presets={PHYSICAL_REQUIREMENTS_PRESETS}
-              placeholder="Добавить ограничение..."
-            />
-          </div>
-
-          {/* What to bring */}
-          <div className="space-y-2">
-            <div>
-              <h3 className="text-base font-semibold text-olive">
-                Что взять с собой{" "}
-                <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-              </h3>
-              <p className="text-xs text-olive/65">
-                Рекомендации по снаряжению, одежде и личным вещам.
-              </p>
-            </div>
-            <IncludedEditor
-              items={whatToBring}
-              onChange={setWhatToBring}
-              presets={WHAT_TO_BRING_PRESETS}
-              placeholder="Добавить пункт..."
-            />
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-          {/* Timeline */}
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 text-terra">
-                  <AppIcon icon={ListChecks} className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-olive">Пошаговый план (таймлайн)</h3>
-                  <p className="mt-0.5 text-xs text-olive/60">
-                    Наглядный план с временем и описанием каждого шага. Если пусто — на карточке
-                    отображается текстовый маршрут.
-                  </p>
-                </div>
-              </div>
-              {timeline.length > 0 && (
-                <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                  {timeline.length}{" "}
-                  {timeline.length === 1 ? "шаг" : timeline.length < 5 ? "шага" : "шагов"}
-                </span>
-              )}
-            </div>
-            <TimelineEditor steps={timeline} onChange={setTimeline} />
-          </div>
-        </section>
-      )}
-
-      {/* ===== STEP 2: МЕСТО ВСТРЕЧИ ===== */}
-      {currentStep === 2 && (
-        <section className="wizard-section-enter overflow-hidden rounded-2xl border border-olive/8 bg-white shadow-sm">
-          {/* Section header */}
-          <div className="border-b border-olive/8 bg-gradient-to-r from-primary/6 to-transparent px-5 py-4">
+          {/* ── Группа 1: Район проведения ── */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-                <AppIcon icon={MapPin} className="h-4.5 w-4.5" />
-              </div>
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                1
+              </span>
               <div>
-                <h2 className="text-base font-semibold text-olive md:text-lg">
-                  Место встречи и логистика
-                </h2>
+                <p className="text-sm font-semibold text-olive">Район проведения</p>
                 <p className="text-xs text-olive/50">
-                  Регион, точка на карте, где собираются участники и условия трансфера
+                  Выберите город, отметьте точку на карте и укажите место сбора
                 </p>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-7 p-5">
-            {/* ── БЛОК: ЛОКАЦИЯ ── */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-olive/8" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-olive/35">
-                  Район проведения
-                </span>
-                <div className="h-px flex-1 bg-olive/8" />
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium text-olive">
+                Населённый пункт <span className="text-terra">*</span>
+              </span>
+              <div className="space-y-1">
+                <Input
+                  value={locationInput}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    const exactMatch = findExactCrimeaLocationByName(nextValue);
+                    setLocationInput(nextValue);
+                    setLocationId(exactMatch?.id ?? "");
+                  }}
+                  list={`excursion-location-suggestions-${excursion.id}`}
+                  placeholder="Ялта, Судак, с. Добровское..."
+                  autoComplete="off"
+                />
+                <datalist id={`excursion-location-suggestions-${excursion.id}`}>
+                  {crimeaLocations.map((location) => (
+                    <option key={location.id} value={location.name} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-olive/45">
+                  Начните вводить название — появится список городов
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-olive/12 bg-cream/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-olive/55 shadow-sm">
+                    <AppIcon icon={MapPin} className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Точка на карте</p>
+                    <p className="text-xs text-olive/50">Необязательно, но повышает доверие</p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={openMapDialog}
+                  className="shrink-0"
+                >
+                  Открыть карту
+                </Button>
               </div>
 
-              {/* Location picker */}
-              <div className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">
-                  Населённый пункт <span className="text-terra">*</span>
-                </span>
-                <div className="space-y-1">
-                  <Input
-                    value={locationInput}
-                    onChange={(event) => {
-                      const nextValue = event.target.value;
-                      setLocationInput(nextValue);
-
-                      const normalized = nextValue.trim().toLowerCase();
-                      const exactMatch = crimeaLocations.find(
-                        (location) => location.name.toLowerCase() === normalized,
-                      );
-                      setLocationId(exactMatch?.id ?? "");
-                    }}
-                    placeholder="Ялта, Судак, с. Добровское..."
-                  />
-                  <p className="text-xs text-olive/45">
-                    Заполнится автоматически при выборе точки на карте
+              <div
+                className="relative overflow-hidden rounded-xl border border-olive/12 bg-cream"
+                style={{ height: 152 }}
+              >
+                <Image
+                  src="/crimea-map-preview.svg"
+                  alt="Превью карты Крыма"
+                  fill
+                  sizes="100vw"
+                  className="scale-110 object-cover object-center"
+                  priority={false}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-midnight/55 via-midnight/15 to-transparent" />
+                <div className="absolute inset-x-3 bottom-3">
+                  <p className="text-xs text-white/75">
+                    {latitude !== null && longitude !== null
+                      ? "Точка выбрана. Откройте карту, чтобы скорректировать координаты."
+                      : "Нажмите «Открыть карту», чтобы выбрать точку на карте Крыма"}
                   </p>
                 </div>
               </div>
 
-              {/* Map point */}
-              <div className="space-y-3 rounded-xl border border-olive/12 bg-cream/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm text-olive/55">
-                      <AppIcon icon={MapPin} className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-olive">Точка на карте</p>
-                      <p className="text-xs text-olive/50">Необязательно, но повышает доверие</p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={openMapDialog}
-                    className="shrink-0"
-                  >
-                    {latitude && longitude ? "Изменить точку" : "Открыть карту"}
-                  </Button>
-                </div>
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-olive/60">Адрес или ориентир</span>
+                <Input
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  placeholder="ул. Ленина 1, рядом с набережной..."
+                />
+              </label>
+            </div>
 
-                <div
-                  className="relative overflow-hidden rounded-xl border border-olive/12 bg-cream"
-                  style={{ height: "152px" }}
-                >
-                  <Image
-                    src="/crimea-map-preview.svg"
-                    alt="Превью карты Крыма"
-                    fill
-                    sizes="100vw"
-                    className="object-cover object-center scale-110"
-                    priority={false}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-midnight/55 via-midnight/15 to-transparent" />
-                  {latitude && longitude ? (
-                    <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/92 px-2.5 py-1.5 text-xs font-semibold text-olive shadow-sm backdrop-blur-sm">
-                        <AppIcon icon={CircleCheckBig} className="h-3 w-3 text-sage" />
-                        Точка выбрана
-                      </span>
-                      <span className="text-xs text-white/70">
-                        {latitude.toFixed(4)}, {longitude.toFixed(4)}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="absolute inset-x-3 bottom-3">
-                      <p className="text-xs text-white/75">
-                        Нажмите «Открыть карту», чтобы выбрать точку на карте Крыма
-                      </p>
-                    </div>
-                  )}
-                </div>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-olive">Стартовая точка</span>
+              <Input
+                value={startPoint}
+                onChange={(event) => setStartPoint(event.target.value)}
+                placeholder="Набережная, автовокзал, у входа в парк..."
+              />
+              <p className="flex items-center gap-1 text-xs text-olive/45">
+                <AppIcon icon={Info} className="h-3 w-3 shrink-0" />
+                Где именно собираются участники перед началом экскурсии
+              </p>
+            </label>
 
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-olive">Точка завершения</span>
+              <Input
+                value={finishPoint}
+                onChange={(event) => setFinishPoint(event.target.value)}
+                placeholder="Если финиш отличается от старта, укажите это здесь"
+              />
+              <p className="text-xs text-olive/45">
+                На публичной карточке этот блок помогает честно показать маршрут и возврат.
+              </p>
+            </label>
+
+            <div className="space-y-3 rounded-xl border border-olive/15 bg-cream/30 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-sm font-medium text-olive">Трансфер включён</span>
+                  <p className="text-xs text-olive/50">
+                    Необязательно{" "}
+                    <span className="text-olive/35">— только если вы организуете доставку</span>
+                  </p>
+                </div>
+                <SeaToggle
+                  size="sm"
+                  pressed={transferEnabled}
+                  onPressedChange={setTransferEnabled}
+                  aria-label="Трансфер включён"
+                />
+              </div>
+
+              {transferEnabled ? (
                 <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Адрес или ориентир</span>
+                  <span className="text-xs font-medium text-olive/60">Детали трансфера</span>
                   <Input
-                    value={address}
-                    onChange={(event) => setAddress(event.target.value)}
-                    placeholder="ул. Ленина 1, рядом с набережной..."
+                    value={transferDetails}
+                    onChange={(event) => setTransferDetails(event.target.value)}
+                    placeholder="Откуда забираете, входит ли это в цену, нужна ли доплата..."
+                    maxLength={300}
                   />
                 </label>
-              </div>
+              ) : null}
+            </div>
+          </div>
 
-              {/* Start point */}
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-olive">Стартовая точка</span>
-                <Input
-                  value={startPoint}
-                  onChange={(event) => setStartPoint(event.target.value)}
-                  placeholder="Набережная, автовокзал, у входа в парк..."
-                />
-                <p className="flex items-center gap-1 text-xs text-olive/45">
-                  <AppIcon icon={Info} className="h-3 w-3 shrink-0" />
-                  Где именно собираются участники перед началом экскурсии
+          {/* ── Группа 2: Параметры экскурсии ── */}
+          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                2
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Параметры экскурсии</p>
+                <p className="text-xs text-olive/50">
+                  Длительность, количество участников и возраст — заполните числовые поля
                 </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+              {isTour ? (
+                <>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <div className="flex items-center gap-1.5">
+                      <AppIcon icon={Clock3} className="h-4 w-4" />
+                      <span className="text-sm font-medium text-olive">Дней</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={durationDays}
+                      onChange={(event) => setDurationDays(event.target.value)}
+                      placeholder="3"
+                    />
+                    <p className="text-xs text-olive/40">Например: 3 дня</p>
+                  </label>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <div className="flex items-center gap-1.5">
+                      <AppIcon icon={Clock3} className="h-4 w-4" />
+                      <span className="text-sm font-medium text-olive">Ночей</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={364}
+                      value={durationNights}
+                      onChange={(event) => setDurationNights(event.target.value)}
+                      placeholder="2"
+                    />
+                    <p className="text-xs text-olive/40">0 — если тур без ночёвки</p>
+                  </label>
+                </>
+              ) : (
+                <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                  <div className="flex items-center gap-1.5">
+                    <AppIcon icon={Clock3} className="h-4 w-4" />
+                    <span className="text-sm font-medium text-olive">Длительность</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min={15}
+                    max={10080}
+                    value={durationMinutes}
+                    onChange={(event) => setDurationMinutes(event.target.value)}
+                    placeholder="90"
+                  />
+                  {durationMinutes ? (
+                    <p className="text-xs font-medium text-primary">
+                      {formatDuration(Number(durationMinutes) || null)}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-olive/40">в минутах</p>
+                  )}
+                </label>
+              )}
+
+              {/* Min participants */}
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <div className="flex items-center gap-1.5">
+                  <AppIcon icon={UserRound} className="h-4 w-4" />
+                  <span className="text-sm font-medium text-olive">Мин. участников</span>
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={minParticipants}
+                  onChange={(event) => setMinParticipants(event.target.value)}
+                  placeholder="1"
+                />
+                <p className="text-xs text-olive/40">для старта группы</p>
               </label>
 
-              {/* Transfer */}
-              <div className="space-y-2 rounded-xl border border-olive/15 bg-cream/30 p-3">
-                <div className="flex items-center justify-between gap-3">
+              {/* Max participants */}
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <div className="flex items-center gap-1.5">
+                  <AppIcon icon={Users} className="h-4 w-4" />
+                  <span className="text-sm font-medium text-olive">Макс. участников</span>
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={maxParticipants}
+                  onChange={(event) => setMaxParticipants(event.target.value)}
+                  placeholder="20"
+                />
+                <p className="text-xs text-olive/40">человек в группе</p>
+              </label>
+
+              {/* Min age */}
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <div className="flex items-center gap-1.5">
+                  <AppIcon icon={CakeSlice} className="h-4 w-4" />
+                  <span className="text-sm font-medium text-olive">Мин. возраст</span>
+                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={minAge}
+                  onChange={(event) => setMinAge(event.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-olive/40">0 — без ограничений</p>
+              </label>
+            </div>
+          </div>
+
+          {/* ── Группа 3: Физическая подготовка ── */}
+          <div className="space-y-5 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Физическая подготовка</p>
+                <p className="text-xs text-olive/50">
+                  Необязательно — но помогает туристу заранее оценить нагрузку
+                </p>
+              </div>
+            </div>
+
+            {/* Difficulty level */}
+            <div className="space-y-2.5">
+              <div>
+                <h3 className="text-base font-semibold text-olive">Уровень нагрузки</h3>
+                <p className="text-xs text-olive/65">
+                  Нажмите на подходящий вариант — активный выделится цветом
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: null, label: "Не указано" },
+                    { value: ExcursionDifficulty.EASY, label: "Лёгкая — прогулочный темп" },
+                    { value: ExcursionDifficulty.MEDIUM, label: "Умеренная — средний темп" },
+                    { value: ExcursionDifficulty.HARD, label: "Активная — высокая нагрузка" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => setDifficulty(opt.value)}
+                    className={`rounded-xl border px-3.5 py-2 text-sm font-medium transition-all ${
+                      difficulty === opt.value
+                        ? "border-primary bg-primary/8 text-primary shadow-sm"
+                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+            {/* Physical requirements */}
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">
+                  Физические ограничения
+                </h3>
+                <p className="text-xs text-olive/65">
+                  Нажмите на подходящие пункты или добавьте свой.
+                  Укажите, кому экскурсия может не подойти.
+                </p>
+              </div>
+              <IncludedEditor
+                items={physicalRequirements}
+                onChange={setPhysicalRequirements}
+                presets={PHYSICAL_REQUIREMENTS_PRESETS}
+                placeholder="Добавить ограничение..."
+              />
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+            {/* What to bring */}
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">
+                  Что взять с собой
+                </h3>
+                <p className="text-xs text-olive/65">
+                  Нажмите на пункты из списка или добавьте свои рекомендации.
+                </p>
+              </div>
+              <IncludedEditor
+                items={whatToBring}
+                onChange={setWhatToBring}
+                presets={WHAT_TO_BRING_PRESETS}
+                placeholder="Добавить пункт..."
+              />
+            </div>
+          </div>
+
+          {/* ── Группа 4: Маршрут и программа ── */}
+          <div className="space-y-5 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                4
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Маршрут и программа</p>
+                <p className="text-xs text-olive/50">
+                  Составьте пошаговый план или опишите маршрут текстом
+                </p>
+              </div>
+            </div>
+
+            {/* Timeline */}
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 text-terra">
+                    <AppIcon icon={ListChecks} className="h-4.5 w-4.5" />
+                  </div>
                   <div>
-                    <span className="text-sm font-medium text-olive">Трансфер включён</span>
-                    <p className="text-xs text-olive/50">
-                      Необязательно{" "}
-                      <span className="text-olive/35">— только если вы организуете доставку</span>
+                    <h3 className="font-semibold text-olive">
+                      {isTour ? "Программа по дням" : "Пошаговый план (таймлайн)"}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-olive/60">
+                      {isTour
+                        ? "Для тура лучше разложить программу по дням: так маршрут выглядит понятнее и убедительнее."
+                        : "Добавляйте шаги по порядку — укажите время и описание. Если пусто — на карточке отображается текстовый маршрут."}
                     </p>
                   </div>
-                  <SeaToggle
-                    size="sm"
-                    pressed={transferEnabled}
-                    onPressedChange={setTransferEnabled}
-                    aria-label="Трансфер включён"
-                  />
                 </div>
-                {transferEnabled && (
-                  <textarea
-                    value={transferDetails}
-                    onChange={(e) => setTransferDetails(e.target.value)}
-                    placeholder="Откуда, куда, во сколько, стоимость или бесплатно..."
-                    maxLength={300}
-                    rows={2}
-                    className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+                {(isTour ? itineraryDays.length : timeline.length) > 0 && (
+                  <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    {isTour
+                      ? `${itineraryDays.length} ${itineraryDays.length === 1 ? "день" : itineraryDays.length < 5 ? "дня" : "дней"}`
+                      : `${timeline.length} ${timeline.length === 1 ? "шаг" : timeline.length < 5 ? "шага" : "шагов"}`}
+                  </span>
                 )}
               </div>
+              {isTour ? (
+                <TourDaysEditor days={itineraryDays} onChange={setItineraryDays} />
+              ) : (
+                <TimelineEditor steps={timeline} onChange={setTimeline} />
+              )}
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">Текстовый маршрут</h3>
+                <p className="text-xs text-olive/55">
+                  Опишите маршрут своими словами — это будет видно на карточке и на публичной странице.
+                </p>
+              </div>
+              <textarea
+                value={routeDescription}
+                onChange={(event) => setRouteDescription(event.target.value)}
+                rows={4}
+                maxLength={5000}
+                className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder={
+                  isTour
+                    ? "Симферополь — Бахчисарай — Севастополь — Ялта. Коротко опишите маршрут и его ценность."
+                    : "Опишите маршрут экскурсии простым человеческим языком"
+                }
+              />
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">
+                  Дополнительные активности / опции
+                </h3>
+                <p className="text-xs text-olive/55">
+                  {isTour
+                    ? "Например: дегустация, СПА, фотосопровождение, одноместное размещение."
+                    : "Можно добавить морскую прогулку, фотосопровождение или другие опции."}
+                </p>
+              </div>
+              <ExtraOptionsEditor items={extraOptions} onChange={setExtraOptions} />
             </div>
           </div>
         </section>
       )}
 
-      {/* ===== STEP 3: ДОСТУПНОСТЬ И РАСПИСАНИЕ ===== */}
-      {currentStep === 3 && (
-        <section className="wizard-section-enter overflow-hidden rounded-2xl border border-olive/8 bg-white shadow-sm">
-          {/* Section header */}
-          <div className="border-b border-olive/8 bg-gradient-to-r from-primary/6 to-transparent px-5 py-4">
+      {/* ===== STEP 2: РАСПИСАНИЕ ===== */}
+      {currentStep === 2 && (
+        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Расписание</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              Настройте, когда туристы смогут записаться на вашу экскурсию.
+            </p>
+          </div>
+
+          {/* ── Группа 1: Режим доступности ── */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-                <AppIcon icon={Clock3} className="h-4.5 w-4.5" />
-              </div>
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                1
+              </span>
               <div>
-                <h2 className="text-base font-semibold text-olive md:text-lg">
-                  Доступность и расписание
-                </h2>
+                <p className="text-sm font-semibold text-olive">Режим доступности</p>
                 <p className="text-xs text-olive/50">
-                  Рабочие дни, время, сезонность и минимальный срок записи
+                  Выберите один из трёх вариантов — от него зависят настройки ниже
                 </p>
               </div>
             </div>
+
+            <p className="text-xs text-olive/60">
+              {isTour
+                ? "Для туров обычно подходят конкретные заезды или режим по запросу."
+                : "Для экскурсий чаще всего подходит регулярное расписание."}
+            </p>
+            <div className="grid gap-2 md:grid-cols-3">
+              {[
+                {
+                  value: ExcursionAvailabilityMode.REGULAR,
+                  label: "Регулярно по расписанию",
+                  description: "Дни недели, время, сезонность и исключения.",
+                },
+                {
+                  value: ExcursionAvailabilityMode.DATED,
+                  label: "Конкретные даты / заезды",
+                  description: "Подходит для туров с фиксированными стартами.",
+                },
+                {
+                  value: ExcursionAvailabilityMode.ON_REQUEST,
+                  label: "По запросу",
+                  description: "Дату согласовываете после обращения туриста.",
+                },
+              ].map((option) => {
+                const isActive = availabilityMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setAvailabilityMode(option.value)}
+                    className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
+                      isActive
+                        ? "border-primary bg-primary text-white"
+                        : "border-olive/20 bg-white text-olive hover:border-olive/40"
+                    }`}
+                  >
+                    <span className="block font-semibold">{option.label}</span>
+                    <span
+                      className={`mt-1 block text-xs ${isActive ? "text-white/75" : "text-olive/60"}`}
+                    >
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="space-y-7 p-5">
-            {/* ── БЛОК: РАСПИСАНИЕ ── */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-olive/8" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-olive/35">
-                  Расписание
-                </span>
-                <div className="h-px flex-1 bg-olive/8" />
-              </div>
-
-              {/* Year-round vs season toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-olive/12 bg-cream/40 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-olive">Период доступности</p>
-                  <p className="text-xs text-olive/55 mt-0.5">
-                    {isYearRound
-                      ? "Экскурсия проводится круглый год"
-                      : "Укажите начало и конец сезона"}
-                  </p>
+          {availabilityMode === ExcursionAvailabilityMode.REGULAR ? (
+            <>
+              {/* ── Группа 2: Расписание (Regular) ── */}
+              <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                    2
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Дни и время работы</p>
+                    <p className="text-xs text-olive/50">
+                      Выберите сезон, рабочие дни и укажите время для каждого дня
+                    </p>
+                  </div>
                 </div>
-                <div className="inline-flex rounded-xl border border-olive/15 bg-white p-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsYearRound(true)}
-                    className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                      isYearRound
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-olive/60 hover:bg-cream"
-                    }`}
-                    aria-pressed={isYearRound}
-                  >
-                    Круглый год
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsYearRound(false)}
-                    className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                      isSeasonLimited
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-olive/60 hover:bg-cream"
-                    }`}
-                    aria-pressed={isSeasonLimited}
-                  >
-                    По сезону
-                  </button>
-                </div>
-              </div>
 
-              {/* Season date pickers */}
-              {isSeasonLimited ? (
-                <div className="grid gap-3 rounded-xl border border-primary/18 bg-primary/5 p-4 md:grid-cols-2">
-                  <label className="block space-y-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
-                      Начало сезона
-                    </span>
-                    <SingleDatePopoverField
-                      value={seasonDateFrom}
-                      onChange={setSeasonDateFrom}
-                      placeholder="Выберите дату"
-                      helperText="Выберите дату начала сезона"
-                      maxDate={seasonDateTo || undefined}
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
-                      Конец сезона
-                    </span>
-                    <SingleDatePopoverField
-                      value={seasonDateTo}
-                      onChange={setSeasonDateTo}
-                      placeholder="Выберите дату"
-                      helperText="Выберите дату окончания сезона"
-                      minDate={seasonDateFrom || undefined}
-                    />
-                  </label>
-                </div>
-              ) : null}
-
-              {/* Days of week */}
-              <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-4">
-                {/* Header with presets */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-olive">Рабочие дни</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {scheduleDayPresets.map((preset) => {
-                      const isPresetActive = isSchedulePresetActive(preset.days);
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => setScheduleDaysEnabled(preset.days)}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
-                            isPresetActive
-                              ? "border-sage/45 bg-sage/20 text-olive"
-                              : "border-olive/15 bg-white text-olive/60 hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      );
-                    })}
+                {/* Year-round vs season toggle */}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-olive/12 bg-white px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Период доступности</p>
+                    <p className="text-xs text-olive/55 mt-0.5">
+                      {isYearRound
+                        ? "Экскурсия проводится круглый год"
+                        : "Укажите начало и конец сезона"}
+                    </p>
+                  </div>
+                  <div className="inline-flex rounded-xl border border-olive/15 bg-cream/60 p-1">
                     <button
                       type="button"
-                      onClick={clearScheduleDays}
-                      className="rounded-lg border border-olive/15 bg-white px-2.5 py-1 text-xs font-semibold text-olive/55 transition hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
+                      onClick={() => setIsYearRound(true)}
+                      className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                        isYearRound
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-olive/60 hover:bg-cream"
+                      }`}
+                      aria-pressed={isYearRound}
                     >
-                      Сброс
+                      Круглый год
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsYearRound(false)}
+                      className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                        isSeasonLimited
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-olive/60 hover:bg-cream"
+                      }`}
+                      aria-pressed={isSeasonLimited}
+                    >
+                      По сезону
                     </button>
                   </div>
                 </div>
 
-                {/* Compact 7-pill day bar */}
-                <div className="grid grid-cols-7 gap-1.5">
-                  {weekdayOrder.map((day) => {
-                    const dayItem = daySchedule[day];
-                    return (
+                {/* Season date pickers */}
+                {isSeasonLimited ? (
+                  <div className="grid gap-3 rounded-xl border border-primary/18 bg-primary/5 p-4 md:grid-cols-2">
+                    <label className="block space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
+                        Начало сезона
+                      </span>
+                      <SingleDatePopoverField
+                        value={seasonDateFrom}
+                        onChange={setSeasonDateFrom}
+                        placeholder="Выберите дату"
+                        helperText="Выберите дату начала сезона"
+                        maxDate={seasonDateTo || undefined}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
+                        Конец сезона
+                      </span>
+                      <SingleDatePopoverField
+                        value={seasonDateTo}
+                        onChange={setSeasonDateTo}
+                        placeholder="Выберите дату"
+                        helperText="Выберите дату окончания сезона"
+                        minDate={seasonDateFrom || undefined}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                {/* Days of week */}
+                <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-4">
+                  {/* Header with presets */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Рабочие дни</p>
+                      <p className="text-xs text-olive/45">
+                        Нажмите на день недели, чтобы включить или выключить его
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {scheduleDayPresets.map((preset) => {
+                        const isPresetActive = isSchedulePresetActive(preset.days);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setScheduleDaysEnabled(preset.days)}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                              isPresetActive
+                                ? "border-sage/45 bg-sage/20 text-olive"
+                                : "border-olive/15 bg-white text-olive/60 hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
                       <button
-                        key={day}
                         type="button"
-                        onClick={() => updateWeekdaySchedule(day, { enabled: !dayItem.enabled })}
-                        className={`flex flex-col items-center rounded-xl border py-2.5 px-1 transition ${
-                          dayItem.enabled
-                            ? "border-sage bg-sage/15 text-olive ring-1 ring-sage/30 shadow-sm"
-                            : "border-olive/12 bg-cream/50 text-olive/45 hover:border-olive/28 hover:bg-cream hover:text-olive/70"
-                        }`}
-                        aria-pressed={dayItem.enabled}
-                        title={weekdayLabels[day]}
+                        onClick={clearScheduleDays}
+                        className="rounded-lg border border-olive/15 bg-white px-2.5 py-1 text-xs font-semibold text-olive/55 transition hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
                       >
-                        <span className="text-xs font-bold">{weekdayShortLabels[day]}</span>
-                        {dayItem.enabled ? (
-                          <span className="mt-0.5 text-[9px] leading-tight text-olive/50 tabular-nums">
-                            {dayItem.from.slice(0, 5)}
-                          </span>
-                        ) : (
-                          <span className="mt-0.5 h-3" />
-                        )}
+                        Сброс
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Time settings — shown when at least one day is active */}
-              {activeScheduleDays.length > 0 ? (
-                <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
-                  {/* Header */}
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-olive">Время работы</p>
-                    <div className="flex items-center gap-1">
-                      {activeScheduleDays.map((day) => (
-                        <span
-                          key={`chip-${day}`}
-                          className="inline-flex rounded-full border border-sage/35 bg-sage/15 px-2 py-0.5 text-[10px] font-semibold text-olive"
-                        >
-                          {weekdayShortLabels[day]}
-                        </span>
-                      ))}
                     </div>
                   </div>
 
-                  {/* Bulk time row */}
-                  <div className="flex items-center gap-3 rounded-lg border border-olive/10 bg-cream/50 px-3 py-2">
-                    <span className="text-xs font-medium text-olive/55 shrink-0">Для всех</span>
-                    <div className="flex items-center gap-2 ml-auto">
-                      <input
-                        type="time"
-                        step={60}
-                        value={bulkTimeFrom}
-                        aria-label="Начало рабочего времени"
-                        onChange={(e) => {
-                          setBulkTimeFrom(e.target.value);
-                          setDaySchedule((prev) => {
-                            const next = { ...prev };
-                            for (const day of weekdayOrder) {
-                              if (prev[day].enabled) next[day] = { ...next[day], from: e.target.value };
-                            }
-                            return next;
-                          });
-                        }}
-                        className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                      />
-                      <span className="text-sm text-olive/40">–</span>
-                      <input
-                        type="time"
-                        step={60}
-                        value={bulkTimeTo}
-                        aria-label="Конец рабочего времени"
-                        onChange={(e) => {
-                          setBulkTimeTo(e.target.value);
-                          setDaySchedule((prev) => {
-                            const next = { ...prev };
-                            for (const day of weekdayOrder) {
-                              if (prev[day].enabled) next[day] = { ...next[day], to: e.target.value };
-                            }
-                            return next;
-                          });
-                        }}
-                        className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Per-day compact list */}
-                  <div className="overflow-hidden rounded-xl border border-olive/10 divide-y divide-olive/8">
-                    {activeScheduleDays.map((day) => {
+                  {/* Compact 7-pill day bar */}
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {weekdayOrder.map((day) => {
                       const dayItem = daySchedule[day];
                       return (
-                        <div
-                          key={`time-${day}`}
-                          className="flex items-center gap-3 bg-white px-3 py-2 transition-colors hover:bg-sage/5"
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() =>
+                            updateWeekdaySchedule(day, { enabled: !dayItem.enabled })
+                          }
+                          className={`flex flex-col items-center rounded-xl border py-2.5 px-1 transition ${
+                            dayItem.enabled
+                              ? "border-sage bg-sage/15 text-olive ring-1 ring-sage/30 shadow-sm"
+                              : "border-olive/12 bg-cream/50 text-olive/45 hover:border-olive/28 hover:bg-cream hover:text-olive/70"
+                          }`}
+                          aria-pressed={dayItem.enabled}
+                          title={weekdayLabels[day]}
                         >
-                          <span className="w-24 shrink-0 text-sm font-semibold text-olive">
-                            {weekdayLabels[day]}
-                          </span>
-                          <div className="flex items-center gap-2 ml-auto">
-                            <input
-                              type="time"
-                              step={60}
-                              value={dayItem.from}
-                              aria-label={`Начало для ${weekdayLabels[day]}`}
-                              onChange={(e) => updateWeekdaySchedule(day, { from: e.target.value })}
-                              className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                            />
-                            <span className="text-sm text-olive/40">–</span>
-                            <input
-                              type="time"
-                              step={60}
-                              value={dayItem.to}
-                              aria-label={`Конец для ${weekdayLabels[day]}`}
-                              onChange={(e) => updateWeekdaySchedule(day, { to: e.target.value })}
-                              className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                            />
-                          </div>
-                        </div>
+                          <span className="text-xs font-bold">{weekdayShortLabels[day]}</span>
+                          {dayItem.enabled ? (
+                            <span className="mt-0.5 text-[9px] leading-tight text-olive/50 tabular-nums">
+                              {dayItem.from.slice(0, 5)}
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 h-3" />
+                          )}
+                        </button>
                       );
                     })}
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-3 rounded-xl border border-dashed border-olive/20 bg-cream/30 px-4 py-3.5">
-                  <AppIcon icon={Clock3} className="h-4.5 w-4.5 shrink-0 opacity-55" />
-                  <p className="text-sm text-olive/45">
-                    Включите рабочие дни выше, чтобы задать время работы
-                  </p>
-                </div>
-              )}
 
-              {/* Closed dates / exceptions */}
-              <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-olive">Нерабочие даты</p>
-                  <p className="text-xs text-olive/50 mt-0.5">
-                    Конкретные дни, когда экскурсия не проводится (праздники, перерыв)
-                  </p>
+                {/* Time settings — shown when at least one day is active */}
+                {activeScheduleDays.length > 0 ? (
+                  <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
+                    {/* Header */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-olive">Время работы</p>
+                        <p className="text-xs text-olive/45">
+                          Задайте время для всех дней сразу или настройте каждый отдельно
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {activeScheduleDays.map((day) => (
+                          <span
+                            key={`chip-${day}`}
+                            className="inline-flex rounded-full border border-sage/35 bg-sage/15 px-2 py-0.5 text-[10px] font-semibold text-olive"
+                          >
+                            {weekdayShortLabels[day]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Bulk time row */}
+                    <div className="flex items-center gap-3 rounded-lg border border-olive/10 bg-cream/50 px-3 py-2">
+                      <span className="text-xs font-medium text-olive/55 shrink-0">Для всех</span>
+                      <div className="flex items-center gap-2 ml-auto">
+                        <input
+                          type="time"
+                          step={60}
+                          value={bulkTimeFrom}
+                          aria-label="Начало рабочего времени"
+                          onChange={(e) => {
+                            setBulkTimeFrom(e.target.value);
+                            setDaySchedule((prev) => {
+                              const next = { ...prev };
+                              for (const day of weekdayOrder) {
+                                if (prev[day].enabled)
+                                  next[day] = { ...next[day], from: e.target.value };
+                              }
+                              return next;
+                            });
+                          }}
+                          className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                        />
+                        <span className="text-sm text-olive/40">–</span>
+                        <input
+                          type="time"
+                          step={60}
+                          value={bulkTimeTo}
+                          aria-label="Конец рабочего времени"
+                          onChange={(e) => {
+                            setBulkTimeTo(e.target.value);
+                            setDaySchedule((prev) => {
+                              const next = { ...prev };
+                              for (const day of weekdayOrder) {
+                                if (prev[day].enabled)
+                                  next[day] = { ...next[day], to: e.target.value };
+                              }
+                              return next;
+                            });
+                          }}
+                          className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Per-day compact list */}
+                    <div className="overflow-hidden rounded-xl border border-olive/10 divide-y divide-olive/8">
+                      {activeScheduleDays.map((day) => {
+                        const dayItem = daySchedule[day];
+                        return (
+                          <div
+                            key={`time-${day}`}
+                            className="flex items-center gap-3 bg-white px-3 py-2 transition-colors hover:bg-sage/5"
+                          >
+                            <span className="w-24 shrink-0 text-sm font-semibold text-olive">
+                              {weekdayLabels[day]}
+                            </span>
+                            <div className="flex items-center gap-2 ml-auto">
+                              <input
+                                type="time"
+                                step={60}
+                                value={dayItem.from}
+                                aria-label={`Начало для ${weekdayLabels[day]}`}
+                                onChange={(e) =>
+                                  updateWeekdaySchedule(day, { from: e.target.value })
+                                }
+                                className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                              />
+                              <span className="text-sm text-olive/40">–</span>
+                              <input
+                                type="time"
+                                step={60}
+                                value={dayItem.to}
+                                aria-label={`Конец для ${weekdayLabels[day]}`}
+                                onChange={(e) =>
+                                  updateWeekdaySchedule(day, { to: e.target.value })
+                                }
+                                className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-dashed border-olive/20 bg-white px-4 py-3.5">
+                    <AppIcon icon={Clock3} className="h-4.5 w-4.5 shrink-0 opacity-55" />
+                    <p className="text-sm text-olive/45">
+                      Включите рабочие дни выше, чтобы задать время работы
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Группа 3: Исключения и дополнительно ── */}
+              <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                    3
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Исключения и дополнительно</p>
+                    <p className="text-xs text-olive/50">
+                      Нерабочие даты, комментарий и минимальный срок записи
+                    </p>
+                  </div>
                 </div>
-                <SingleDatePopoverField
-                  value=""
-                  onChange={(nextValue) => {
-                    if (nextValue) {
-                      setAdditionalClosedDates((prev) =>
-                        normalizeIsoDateList([...prev, nextValue]),
-                      );
-                    }
-                  }}
-                  placeholder="Выберите дату"
-                  helperText="Кликните по дате, чтобы добавить её как нерабочую"
-                />
-                <div className="flex flex-wrap gap-2">
-                  {additionalClosedDates.length === 0 ? (
-                    <span className="text-xs text-olive/40">Нет исключений</span>
-                  ) : (
-                    additionalClosedDates.map((dateValue) => (
-                      <span
-                        key={dateValue}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-olive/15 bg-cream px-3 py-1 text-xs text-olive"
-                      >
-                        {formatIsoToDayMonthYear(dateValue)}
-                        <button
-                          type="button"
-                          className="text-olive/50 transition hover:text-red-600"
-                          onClick={() => removeClosedDate(dateValue)}
-                          aria-label={`Удалить дату ${formatIsoToDayMonthYear(dateValue)}`}
+
+                {/* Closed dates / exceptions */}
+                <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Нерабочие даты</p>
+                    <p className="text-xs text-olive/50 mt-0.5">
+                      Выберите конкретные дни, когда экскурсия не проводится (праздники, перерыв)
+                    </p>
+                  </div>
+                  <SingleDatePopoverField
+                    value=""
+                    onChange={(nextValue) => {
+                      if (nextValue) {
+                        setAdditionalClosedDates((prev) =>
+                          normalizeIsoDateList([...prev, nextValue]),
+                        );
+                      }
+                    }}
+                    placeholder="Выберите дату"
+                    helperText="Кликните по дате, чтобы добавить её как нерабочую"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {additionalClosedDates.length === 0 ? (
+                      <span className="text-xs text-olive/40">Нет исключений</span>
+                    ) : (
+                      additionalClosedDates.map((dateValue) => (
+                        <span
+                          key={dateValue}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-olive/15 bg-cream px-3 py-1 text-xs text-olive"
                         >
-                          ×
-                        </button>
-                      </span>
-                    ))
-                  )}
+                          {formatIsoToDayMonthYear(dateValue)}
+                          <button
+                            type="button"
+                            className="text-olive/50 transition hover:text-red-600"
+                            onClick={() => removeClosedDate(dateValue)}
+                            aria-label={`Удалить дату ${formatIsoToDayMonthYear(dateValue)}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Schedule comment */}
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Комментарий к расписанию</span>
+                  <textarea
+                    value={scheduleComment}
+                    onChange={(event) => setScheduleComment(event.target.value)}
+                    rows={3}
+                    maxLength={400}
+                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="Например: не работаем в государственные праздники..."
+                  />
+                </label>
+
+                {/* Schedule summary */}
+                <div className="flex items-start gap-2.5 rounded-xl border border-olive/12 bg-cream/50 px-4 py-3">
+                  <AppIcon icon={Info} className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
+                  <p className="text-xs text-olive/60">
+                    {isLoadingScheduleRules
+                      ? "Загружаем сохраненные правила расписания..."
+                      : `Сводка: ${
+                          buildScheduleSummary({
+                            isYearRound,
+                            seasonDateFrom,
+                            seasonDateTo,
+                            daySchedule,
+                            additionalClosedDates,
+                            scheduleComment,
+                          }) ??
+                          (scheduleText || "не заполнено")
+                        }`}
+                  </p>
+                </div>
+
+                {/* Min booking notice */}
+                <div className="space-y-2 rounded-xl border border-olive/12 bg-cream/40 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">
+                      Минимальный срок записи{" "}
+                      <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                    </p>
+                    <p className="text-xs text-olive/55 mt-0.5">
+                      Нажмите на подходящий вариант — за сколько часов нужно записаться заранее
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "", label: "Не указано" },
+                      { value: "0", label: "Сегодня" },
+                      { value: "24", label: "За 24 ч" },
+                      { value: "48", label: "За 48 ч" },
+                      { value: "72", label: "За 3 дня" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setMinBookingNoticeHours(opt.value)}
+                        className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition-all ${
+                          minBookingNoticeHours === opt.value
+                            ? "border-primary bg-primary/8 text-primary shadow-sm"
+                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : availabilityMode === ExcursionAvailabilityMode.DATED ? (
+            /* ── Группа 2: Заезды (Dated) ── */
+            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                  2
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-olive">Заезды и конкретные даты</p>
+                  <p className="text-xs text-olive/50">
+                    Добавьте даты старта, укажите количество мест и, если нужно, отдельную цену
+                  </p>
                 </div>
               </div>
 
-              {/* Schedule comment */}
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-olive">Комментарий к расписанию</span>
-                <textarea
-                  value={scheduleComment}
-                  onChange={(event) => setScheduleComment(event.target.value)}
-                  rows={3}
-                  maxLength={400}
-                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="Например: не работаем в государственные праздники..."
-                />
-              </label>
-
-              {/* Schedule summary */}
-              <div className="flex items-start gap-2.5 rounded-xl border border-olive/12 bg-cream/50 px-4 py-3">
-                <AppIcon icon={Info} className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
-                <p className="text-xs text-olive/60">
-                  {isLoadingScheduleRules
-                    ? "Загружаем сохраненные правила расписания..."
-                    : `Сводка: ${
-                        buildScheduleSummary({
-                          isYearRound,
-                          seasonDateFrom,
-                          seasonDateTo,
-                          daySchedule,
-                          additionalClosedDates,
-                          scheduleComment,
-                        }) ??
-                        (scheduleText || "не заполнено")
-                      }`}
-                </p>
+              <div className="rounded-xl border border-olive/15 bg-white p-3">
+                <DepartureDatesEditor items={departureDates} onChange={setDepartureDates} />
               </div>
 
-              {/* Min booking notice */}
-              <div className="space-y-2 rounded-xl border border-olive/12 bg-cream/40 px-4 py-3">
+              <div className="space-y-2 rounded-xl border border-olive/12 bg-white px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-olive">
                     Минимальный срок записи{" "}
                     <span className="text-xs font-normal text-olive/40">(необязательно)</span>
                   </p>
                   <p className="text-xs text-olive/55 mt-0.5">
-                    За сколько часов нужно записаться заранее
+                    За сколько часов или дней до старта нужно успеть записаться
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: "", label: "Не указано" },
-                    { value: "0", label: "Сегодня" },
-                    { value: "24", label: "За 24 ч" },
-                    { value: "48", label: "За 48 ч" },
-                    { value: "72", label: "За 3 дня" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setMinBookingNoticeHours(opt.value)}
-                      className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition-all ${
-                        minBookingNoticeHours === opt.value
-                          ? "border-primary bg-primary/8 text-primary shadow-sm"
-                          : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  max={720}
+                  value={minBookingNoticeHours}
+                  onChange={(event) => setMinBookingNoticeHours(event.target.value)}
+                  placeholder="24"
+                />
               </div>
             </div>
-          </div>
+          ) : (
+            /* ── Группа 2: По запросу ── */
+            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                  2
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-olive">Режим «по запросу»</p>
+                  <p className="text-xs text-olive/50">
+                    Объясните, как согласовывается дата и сколько времени нужно на подтверждение
+                  </p>
+                </div>
+              </div>
+
+              <textarea
+                value={availabilityNote}
+                onChange={(event) => setAvailabilityNote(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="Например: дату согласуем после обращения, подтверждаем в течение 24 часов."
+              />
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-olive">Минимальный срок до заявки</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={720}
+                  value={minBookingNoticeHours}
+                  onChange={(event) => setMinBookingNoticeHours(event.target.value)}
+                  placeholder="48"
+                />
+              </label>
+            </div>
+          )}
         </section>
       )}
 
-      {/* ===== STEP 4: СТОИМОСТЬ ===== */}
-      {currentStep === 4 && (
-        <section className="wizard-section-enter space-y-4 rounded-2xl border border-olive/8 bg-white p-4 shadow-sm md:p-5">
-          <div className="border-b border-olive/8 pb-4">
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Стоимость и условия записи</h2>
-            <p className="mt-0.5 text-xs text-olive/50">Цена, тарифы, что включено и условия отмены</p>
+      {/* ===== STEP 3: ЦЕНЫ И УСЛОВИЯ ===== */}
+      {currentStep === 3 && (
+        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Цены и условия</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              Укажите стоимость, что входит в цену, а что нет.
+            </p>
           </div>
 
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-olive">Цена от (RUB)</span>
-            <Input
-              type="number"
-              min={1}
-              max={1000000}
-              value={priceFrom}
-              onChange={(event) => setPriceFrom(event.target.value)}
-              placeholder="2500"
-            />
-          </label>
-
-          <div className="space-y-2">
-            <div>
-              <h3 className="text-lg text-olive">Ценовые категории</h3>
-              <p className="text-xs text-olive/65">
-                Укажите разные цены для категорий участников (взрослые, дети, группы).
-              </p>
+          {/* ── Группа 1: Стоимость ── */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                1
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Стоимость</p>
+                <p className="text-xs text-olive/50">
+                  Введите минимальную цену и выберите, за что она указана
+                </p>
+              </div>
             </div>
-            <PricingTiersEditor tiers={pricingTiers} onChange={setPricingTiers} />
-          </div>
 
-          <div className="space-y-2">
-            <h3 className="text-lg text-olive">Включено в стоимость</h3>
-            <IncludedEditor
-              items={includedItems}
-              onChange={setIncludedItems}
-              presets={INCLUDED_PRESETS}
-              placeholder="Добавить услугу..."
-            />
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-lg text-olive">Не включено</h3>
-            <IncludedEditor
-              items={excludedItems}
-              onChange={setExcludedItems}
-              presets={EXCLUDED_PRESETS}
-              placeholder="Добавить пункт..."
-            />
-          </div>
-
-          <div className="space-y-2">
             <label className="block space-y-1">
               <span className="text-sm font-medium text-olive">
-                Условия отмены и возврата{" "}
-                <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                Цена от (RUB) <span className="text-terra">*</span>
+              </span>
+              <Input
+                type="number"
+                min={1}
+                max={1000000}
+                value={priceFrom}
+                onChange={(event) => setPriceFrom(event.target.value)}
+                placeholder="2500"
+              />
+            </label>
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">Единица цены</h3>
+                <p className="text-xs text-olive/65">
+                  Нажмите на подходящий вариант или введите свой. Цена показывается вместе с единицей: «за чел», «за группу» и т.д.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PRICE_UNIT_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setPriceUnitLabel(preset)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      priceUnitLabel === preset
+                        ? "border-primary bg-primary/8 text-primary shadow-sm"
+                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <Input
+                value={priceUnitLabel}
+                onChange={(event) => setPriceUnitLabel(event.target.value)}
+                placeholder={isTour ? "Например: тур" : "Например: чел"}
+                maxLength={80}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold text-olive">Ценовые категории</h3>
+                <p className="text-xs text-olive/65">
+                  Добавьте разные цены для категорий: взрослые, дети, группы и т.д.
+                </p>
+              </div>
+              <PricingTiersEditor tiers={pricingTiers} onChange={setPricingTiers} />
+            </div>
+          </div>
+
+          {/* ── Группа 2: Что входит ── */}
+          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                2
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Что входит и не входит</p>
+                <p className="text-xs text-olive/50">
+                  Нажимайте на готовые варианты или добавьте свои — турист сразу увидит, за что платит
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-olive">Включено в стоимость</h3>
+              <IncludedEditor
+                items={includedItems}
+                onChange={setIncludedItems}
+                presets={INCLUDED_PRESETS}
+                placeholder="Добавить услугу..."
+              />
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-olive">Не включено</h3>
+              <IncludedEditor
+                items={excludedItems}
+                onChange={setExcludedItems}
+                presets={EXCLUDED_PRESETS}
+                placeholder="Добавить пункт..."
+              />
+            </div>
+          </div>
+
+          {/* ── Группа 3: Условия отмены ── */}
+          <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Условия отмены</p>
+                <p className="text-xs text-olive/50">
+                  Необязательно — выберите политику из списка или опишите свою
+                </p>
+              </div>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-sm font-medium text-olive">
+                Условия отмены и возврата
               </span>
               <select
                 value={cancellationPolicyType}
@@ -3065,110 +3913,359 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
               />
             )}
           </div>
+
+          {/* ── Группа 4: Проживание и питание (для туров) ── */}
+          {(isTour || accommodationProvided !== null || accommodationComment.trim()) && (
+            <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  4
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-olive">Проживание и питание</p>
+                  <p className="text-xs text-olive/50">
+                    Для туров — укажите тип размещения и формат питания. Скрывается, если не заполнено.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <p className="w-full text-xs text-olive/45">Нажмите на подходящий вариант:</p>
+                {[
+                  { value: true, label: "Проживание включено" },
+                  { value: false, label: "Без проживания" },
+                ].map((option) => (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    onClick={() => setAccommodationProvided(option.value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      accommodationProvided === option.value
+                        ? "border-primary bg-primary/8 text-primary shadow-sm"
+                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Тип проживания</span>
+                  <Input
+                    value={accommodationType}
+                    onChange={(event) => setAccommodationType(event.target.value)}
+                    placeholder="Гостевой дом, отель, кемпинг"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Ночей проживания</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={364}
+                    value={accommodationNights}
+                    onChange={(event) => setAccommodationNights(event.target.value)}
+                    placeholder="2"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Формат размещения</span>
+                  <Input
+                    value={accommodationFormat}
+                    onChange={(event) => setAccommodationFormat(event.target.value)}
+                    placeholder="2-местные номера, single по запросу"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Питание</span>
+                  <Input
+                    value={mealPlan}
+                    onChange={(event) => setMealPlan(event.target.value)}
+                    list="meal-plan-presets"
+                    placeholder="Выберите или впишите вариант"
+                  />
+                  <datalist id="meal-plan-presets">
+                    {TOUR_MEAL_PLAN_OPTIONS.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                </label>
+              </div>
+
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-olive">
+                  Комментарий по проживанию и питанию
+                </span>
+                <textarea
+                  value={accommodationComment}
+                  onChange={(event) => setAccommodationComment(event.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="Например: размещение по 2 человека, завтрак включён, одноместный номер за доплату."
+                />
+              </label>
+            </div>
+          )}
         </section>
       )}
 
-      {/* ===== STEP 5: ОРГАНИЗАТОР ===== */}
-      {currentStep === 5 && (
-        <section className="wizard-section-enter space-y-4 rounded-2xl border border-olive/8 bg-white p-4 shadow-sm md:p-5">
-          <div className="border-b border-olive/8 pb-4">
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Организатор и контакты</h2>
-            <p className="mt-0.5 text-xs text-olive/50">
-              Хотя бы один прямой канал связи обязателен для публикации
-            </p>
-          </div>
+      {/* ===== STEP 4: КОНТАКТЫ И МЕДИА ===== */}
+      {currentStep === 4 && (
+        <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <h2 className="text-lg font-semibold text-olive md:text-xl">Контакты и медиа</h2>
 
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-olive">Контакты</h3>
-              <p className="text-xs text-olive/65">
-                Имя, фамилия и телефон нужны для модерации. Укажите хотя бы один публичный канал
-                связи — телефон, WhatsApp или Telegram.
-              </p>
+          <div className="space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                <AppIcon icon={Phone} className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold text-olive">Контакты</h3>
+                <p className="text-sm text-olive/65">
+                  Имя, фамилия и телефон нужны для модерации. Укажите хотя бы один публичный канал
+                  связи: телефон, WhatsApp или Telegram.
+                </p>
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Имя</span>
-                <Input
-                  value={contactFirstName}
-                  onChange={(event) => setContactFirstName(event.target.value)}
-                  placeholder="Иван"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Фамилия</span>
-                <Input
-                  value={contactLastName}
-                  onChange={(event) => setContactLastName(event.target.value)}
-                  placeholder="Иванов"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Телефон</span>
-                <Input
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
-                  placeholder="+7 (999) 123-45-67"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Email (необязательно)</span>
-                <Input
-                  type="email"
-                  value={contactEmail}
-                  onChange={(event) => setContactEmail(event.target.value)}
-                  placeholder="mail@example.com"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">
-                  Сайт экскурсии (необязательно)
-                </span>
-                <Input
-                  type="url"
-                  value={websiteUrl}
-                  onChange={(event) => setWebsiteUrl(event.target.value)}
-                  placeholder="https://example.com"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">WhatsApp (необязательно)</span>
-                <Input
-                  type="url"
-                  value={whatsappUrl}
-                  onChange={(event) => setWhatsappUrl(event.target.value)}
-                  placeholder="https://wa.me/79991234567"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Telegram (необязательно)</span>
-                <Input
-                  type="text"
-                  value={telegramUrl}
-                  onChange={(event) => setTelegramUrl(event.target.value)}
-                  placeholder="@username или username"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">VK (необязательно)</span>
-                <Input
-                  type="url"
-                  value={vkUrl}
-                  onChange={(event) => setVkUrl(event.target.value)}
-                  placeholder="https://vk.com/username"
-                />
-              </label>
-              <label className="block space-y-1 md:col-span-2">
-                <span className="text-sm font-medium text-olive">
-                  Одноклассники (необязательно)
-                </span>
-                <Input
-                  type="url"
-                  value={okUrl}
-                  onChange={(event) => setOkUrl(event.target.value)}
-                  placeholder="https://ok.ru/profile/..."
-                />
-              </label>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Основные данные
+              </p>
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    value={contactFirstName}
+                    onChange={(event) => setContactFirstName(event.target.value)}
+                    placeholder="Имя *"
+                    aria-label="Имя"
+                    className="pl-10"
+                  />
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    value={contactLastName}
+                    onChange={(event) => setContactLastName(event.target.value)}
+                    placeholder="Фамилия *"
+                    aria-label="Фамилия"
+                    className="pl-10"
+                  />
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="tel"
+                    value={contactPhone}
+                    onChange={(event) => setContactPhone(event.target.value)}
+                    placeholder="Телефон *"
+                    aria-label="Телефон"
+                    className="pl-10"
+                  />
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={Mail} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(event) => setContactEmail(event.target.value)}
+                    placeholder="Email"
+                    aria-label="Email"
+                    className="pl-10 pr-10"
+                  />
+                  {contactEmail ? (
+                    <button
+                      type="button"
+                      onClick={() => setContactEmail("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить email"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Мессенджеры и соцсети
+              </p>
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <span
+                    className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                      shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]"
+                    }`}
+                  >
+                    {shouldShowWebsiteFavicon ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={websiteFaviconUrl!}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-4 w-4 rounded-sm object-contain"
+                        onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                      />
+                    ) : (
+                      <AppIcon icon={Globe} className="h-4 w-4" />
+                    )}
+                  </span>
+                  <Input
+                    type="url"
+                    value={websiteUrl}
+                    onChange={(event) => setWebsiteUrl(event.target.value)}
+                    placeholder="Сайт экскурсии"
+                    aria-label="Сайт экскурсии"
+                    className="pl-10 pr-10"
+                  />
+                  {websiteUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setWebsiteUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить сайт экскурсии"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                    <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="url"
+                    value={whatsappUrl}
+                    onChange={(event) => setWhatsappUrl(event.target.value)}
+                    placeholder="WhatsApp URL"
+                    aria-label="WhatsApp"
+                    className="pl-10 pr-10"
+                  />
+                  {whatsappUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setWhatsappUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить WhatsApp"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                    <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="text"
+                    value={telegramUrl}
+                    onChange={(event) => setTelegramUrl(event.target.value)}
+                    placeholder="Telegram: @username или username"
+                    aria-label="Telegram"
+                    className="pl-10 pr-10"
+                  />
+                  {telegramUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setTelegramUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить Telegram"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                    <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="url"
+                    value={vkUrl}
+                    onChange={(event) => setVkUrl(event.target.value)}
+                    placeholder="ВКонтакте URL"
+                    aria-label="ВКонтакте"
+                    className="pl-10 pr-10"
+                  />
+                  {vkUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setVkUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить ВКонтакте"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                    <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="url"
+                    value={maxUrl}
+                    onChange={(event) => setMaxUrl(event.target.value)}
+                    placeholder="Max URL"
+                    aria-label="Max"
+                    className="pl-10 pr-10"
+                  />
+                  {maxUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setMaxUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить Max"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                    <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="url"
+                    value={okUrl}
+                    onChange={(event) => setOkUrl(event.target.value)}
+                    placeholder="Одноклассники URL"
+                    aria-label="Одноклассники"
+                    className="pl-10 pr-10"
+                  />
+                  {okUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setOkUrl("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Очистить Одноклассники"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3193,18 +4290,9 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
               />
             </div>
           </div>
-        </section>
-      )}
 
-      {/* ===== STEP 6: МЕДИА И FAQ ===== */}
-      {currentStep === 6 && (
-        <section className="wizard-section-enter space-y-4 rounded-2xl border border-olive/8 bg-white p-4 shadow-sm md:p-5">
-          <div className="border-b border-olive/8 pb-4">
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Медиа и FAQ</h2>
-            <p className="mt-0.5 text-xs text-olive/50">
-              Минимум 3 фото для публикации, видео и ответы на частые вопросы — необязательно
-            </p>
-          </div>
+          {/* ── БЛОК: МЕДИА ── */}
+          <div className="border-t border-olive/8" />
 
           <div className="space-y-3">
             <div>
@@ -3217,7 +4305,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
             <button
               type="button"
               onClick={() => photoFileInputRef.current?.click()}
-              className="inline-flex h-[62px] w-full items-center justify-center gap-3 rounded-2xl border border-sand bg-white px-4 text-base font-semibold text-olive transition hover:border-olive/32 focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
+              className="inline-flex h-[52px] w-full items-center justify-center gap-3 rounded-xl border border-olive/20 bg-white px-4 text-sm font-semibold text-olive transition hover:border-olive/40 focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
               disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
             >
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-2xl leading-none text-primary">
@@ -3244,7 +4332,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
             {photoUrls.length < excursionPhotoMinForModeration ? (
               <p className="text-xs text-terra">
                 Добавьте ещё {excursionPhotoMinForModeration - photoUrls.length} фото, чтобы
-                отправить экскурсию на модерацию.
+                отправить программу на модерацию.
               </p>
             ) : null}
 
@@ -3284,8 +4372,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-olive">
-              Видео (URL){" "}
-              <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+              Видео (URL) <span className="text-xs font-normal text-olive/40">(необязательно)</span>
             </label>
             <div className="flex gap-2">
               <Input
@@ -3328,7 +4415,7 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
                 <span className="text-xs font-normal text-olive/40">(необязательно)</span>
               </h3>
               <p className="text-xs text-olive/65">
-                FAQ отображается на публичной странице экскурсии.
+                FAQ отображается на публичной странице программы.
               </p>
             </div>
             <FaqEditor items={faqItems} onChange={setFaqItems} />
@@ -3336,8 +4423,8 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         </section>
       )}
 
-      {/* ===== STEP 7: ПРОВЕРКА И ПУБЛИКАЦИЯ ===== */}
-      {currentStep === 7 && (
+      {/* ===== STEP 5: ПУБЛИКАЦИЯ ===== */}
+      {currentStep === 5 && (
         <ExcursionPaymentPanel
           excursionId={excursion.id}
           excursionTitle={title || excursion.title || ""}
@@ -3349,10 +4436,14 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
               | "NEEDS_FIX"
               | "REJECTED"
           }
-          isReady={wizardSteps.slice(0, 7).every((s) => s.status === "complete")}
+          isReady={wizardSteps.slice(0, 5).every((s) => s.status === "complete")}
           readinessReasons={missingRequiredByStep
-            .filter((step) => step.index < 7)
+            .filter((step) => step.index < 5)
             .map((step) => `Раздел «${step.label}»: ${step.items.join(", ")}`)}
+          adminMode={adminMode}
+          moderationHref={moderationHref}
+          listHref={adminMode ? listHref : undefined}
+          listLabel={adminMode ? "К списку экскурсий" : undefined}
           onSubmitModeration={submitForModerationFromPayment}
           onStatusChange={() => {
             router.refresh();
@@ -3360,77 +4451,16 @@ export function ExcursionEditor({ initialExcursion }: ExcursionEditorProps) {
         />
       )}
 
-      {/* Sticky bottom navigation bar */}
-      <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 border-t border-olive/10 bg-white/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:rounded-2xl md:border md:border-olive/8 md:px-5 md:py-4 md:shadow-sm md:backdrop-blur-none">
-        {/* Step navigation */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {currentStep > 0 ? (
-              <button
-                type="button"
-                onClick={() => setCurrentStep((s) => s - 1)}
-                className="inline-flex items-center gap-1 rounded-xl border border-olive/15 px-3 py-2 text-sm font-medium text-olive/70 transition hover:bg-cream hover:text-olive"
-              >
-                <AppIcon icon={ChevronLeft} className="h-4 w-4" />
-                <span className="hidden sm:inline">Назад</span>
-              </button>
-            ) : (
-              <div />
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => void saveDraft()}
-              disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-            >
-              {isSaving || isSavingSchedule ? "Сохранение..." : "Сохранить"}
-            </Button>
-
-            {currentStep < 7 ? (
-              <button
-                type="button"
-                onClick={() => setCurrentStep((s) => s + 1)}
-                className="inline-flex items-center gap-1 rounded-xl bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/15"
-              >
-                <span>{currentStep === 6 ? "К публикации" : "Далее"}</span>
-                <AppIcon icon={ChevronRight} className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Publish/Delete actions */}
-        {(currentStep === 7 || isClientReady) && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-olive/8 pt-2 md:mt-3 md:pt-3">
-            {excursion.status === ExcursionStatus.PUBLISHED ||
-            excursion.status === ExcursionStatus.PENDING_MODERATION ? (
-              <Button
-                variant="secondary"
-                onClick={() => void togglePublish()}
-                disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-              >
-                {getSubmitButtonLabel(excursion.status)}
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={() => setCurrentStep(7)}
-                disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-              >
-                К публикации
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={() => void deleteExcursion()}
-              disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-              className="ml-auto inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-red-500/70 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            >
-              {isDeleting ? "Удаление..." : "Удалить"}
-            </button>
-          </div>
-        )}
+      {/* Delete action */}
+      <div className="flex justify-end px-1">
+        <button
+          type="button"
+          onClick={() => void deleteExcursion()}
+          disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
+          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-red-500/70 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+        >
+          {isDeleting ? "Удаление..." : "Удалить программу"}
+        </button>
       </div>
 
       {isMapDialogOpen ? (

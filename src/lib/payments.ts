@@ -20,7 +20,7 @@ export type TariffQuote = {
 
 export type SerializedPayment = {
   id: string;
-  propertyId: string;
+  propertyId: string | null;
   ownerId: string;
   amount: number;
   tariffCode: string;
@@ -49,7 +49,21 @@ export type PlacementCoverageState = {
 
 export const PLACEMENT_VALIDITY_DAYS = 365;
 
-export function getPaymentStatusLabel(status: PaymentStatus): string {
+export function getPaymentStatusLabel(status: PaymentStatus, provider?: PaymentProvider): string {
+  if (provider === PaymentProvider.MANAGER) {
+    switch (status) {
+      case PaymentStatus.CREATED:
+      case PaymentStatus.PENDING:
+        return "Ожидает подтверждения менеджером";
+      case PaymentStatus.SUCCEEDED:
+        return "Оплата подтверждена менеджером";
+      case PaymentStatus.CANCELED:
+        return "Отклонено менеджером";
+      default:
+        return status;
+    }
+  }
+
   switch (status) {
     case PaymentStatus.CREATED:
       return "Создан";
@@ -61,6 +75,19 @@ export function getPaymentStatusLabel(status: PaymentStatus): string {
       return "Отменен";
     default:
       return status;
+  }
+}
+
+export function getProviderLabel(provider: PaymentProvider): string {
+  switch (provider) {
+    case PaymentProvider.YOOKASSA:
+      return "ЮKassa";
+    case PaymentProvider.MANAGER:
+      return "Через менеджера";
+    case PaymentProvider.MOCK:
+      return "Тестовый";
+    default:
+      return provider;
   }
 }
 
@@ -138,7 +165,7 @@ export function getTariffQuote(input: { roomCount: number; propertyType: string 
 
 export function serializePayment(payment: {
   id: string;
-  propertyId: string;
+  propertyId: string | null;
   ownerId: string;
   amount: Prisma.Decimal;
   tariffCode: string;
@@ -162,7 +189,7 @@ export function serializePayment(payment: {
     tariffCode: payment.tariffCode,
     roomCount: payment.roomCount,
     status: payment.status,
-    statusLabel: getPaymentStatusLabel(payment.status),
+    statusLabel: getPaymentStatusLabel(payment.status, payment.provider),
     provider: payment.provider,
     providerPaymentId: payment.providerPaymentId,
     confirmationUrl: payment.confirmationUrl,

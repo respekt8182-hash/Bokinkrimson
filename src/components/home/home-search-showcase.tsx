@@ -7,12 +7,12 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
-  CircleCheckBig,
   Clock3,
   Globe2,
-  House,
   LocateFixed,
   MapPin,
+  Phone,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import {
@@ -63,6 +63,8 @@ type CalendarMonth = {
 type HomeSearchShowcaseProps = {
   cities: HomeCityShowcaseItem[];
   locationSuggestions: string[];
+  publishedPropertiesCount: number | null;
+  publishedExcursionsCount: number | null;
 };
 
 type SearchSuggestionType = "location" | "hotel";
@@ -145,6 +147,10 @@ const rubFormatter = new Intl.NumberFormat("ru-RU", {
 
 const yearFormatter = new Intl.NumberFormat("ru-RU", {
   useGrouping: false,
+});
+
+const countFormatter = new Intl.NumberFormat("ru-RU", {
+  maximumFractionDigits: 0,
 });
 
 function normalizeLocation(value: string): string {
@@ -718,7 +724,12 @@ function SuggestionLeadingIcon(props: {
   );
 }
 
-export function HomeSearchShowcase({ cities, locationSuggestions }: HomeSearchShowcaseProps) {
+export function HomeSearchShowcase({
+  cities,
+  locationSuggestions,
+  publishedPropertiesCount,
+  publishedExcursionsCount,
+}: HomeSearchShowcaseProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -779,6 +790,41 @@ export function HomeSearchShowcase({ cities, locationSuggestions }: HomeSearchSh
   const calendarMonths = useMemo(() => buildCalendarMonths(new Date(), calendarMonthCount), []);
   const firstMonthKey = calendarMonths[0]?.key ?? "";
   const isLocationEmpty = searchValue.trim().length === 0;
+  const housingStat = useMemo(() => {
+    if (publishedPropertiesCount !== null) {
+      return {
+        value: countFormatter.format(publishedPropertiesCount),
+        label: pluralize(publishedPropertiesCount, [
+          "объект жилья",
+          "объекта жилья",
+          "объектов жилья",
+        ]),
+      };
+    }
+
+    return {
+      value: String(cities.length),
+      label: `${pluralize(cities.length, ["курорт", "курорта", "курортов"])} на витрине`,
+    };
+  }, [cities.length, publishedPropertiesCount]);
+  const excursionStat = useMemo(() => {
+    if (publishedExcursionsCount !== null) {
+      return {
+        value: countFormatter.format(publishedExcursionsCount),
+        label: pluralize(publishedExcursionsCount, ["экскурсия", "экскурсии", "экскурсий"]),
+      };
+    }
+
+    return {
+      value: "2",
+      label: "направления отдыха",
+    };
+  }, [publishedExcursionsCount]);
+  const locationCountLabel = `${pluralize(locationSuggestions.length, [
+    "населенный пункт",
+    "населенных пункта",
+    "населенных пунктов",
+  ])} Крыма`;
 
   const locationByNormalizedName = useMemo(() => {
     const map = new Map<string, string>();
@@ -2542,45 +2588,43 @@ export function HomeSearchShowcase({ cities, locationSuggestions }: HomeSearchSh
         </form>
       </section>
 
-      {/* ── Trust / stats strip ── */}
-      <div className="mx-auto mt-4 grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="flex items-center gap-3 rounded-2xl bg-white/80 p-3.5 ring-1 ring-olive/10">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <AppIcon icon={House} className="h-5 w-5 text-[color:var(--icon-stay)]" />
+      {/* ── Why choose us ── */}
+      <div className="mx-auto mt-6 max-w-5xl">
+        <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
+          Почему выбирают «Крым Вокруг»?
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Card 1 */}
+          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
+              <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
+            </div>
+            <h3 className="text-base font-bold text-midnight">Только проверенные объявления</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+              Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих владельцев жилья в Крыму.
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-base font-bold leading-none text-midnight">5 000+</p>
-            <p className="mt-0.5 truncate text-xs text-olive/60">объектов жилья</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3 rounded-2xl bg-white/80 p-3.5 ring-1 ring-olive/10">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 text-terra">
-            <AppIcon icon={MapPin} className="h-5 w-5 text-[color:var(--icon-location)]" />
+          {/* Card 2 */}
+          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
+              <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
+            </div>
+            <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+              Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию — вы экономите!
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-base font-bold leading-none text-midnight">150+</p>
-            <p className="mt-0.5 truncate text-xs text-olive/60">экскурсий</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3 rounded-2xl bg-white/80 p-3.5 ring-1 ring-olive/10">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
-            <AppIcon icon={Globe2} className="h-5 w-5 text-[color:var(--icon-site)]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-base font-bold leading-none text-midnight">12</p>
-            <p className="mt-0.5 truncate text-xs text-olive/60">городов Крыма</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 rounded-2xl bg-white/80 p-3.5 ring-1 ring-olive/10">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
-            <AppIcon icon={CircleCheckBig} className="h-5 w-5 text-[color:var(--icon-highlight)]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-base font-bold leading-none text-midnight">100%</p>
-            <p className="mt-0.5 truncate text-xs text-olive/60">проверенные хозяева</p>
+          {/* Card 3 */}
+          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 lg:col-span-1">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
+              <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
+            </div>
+            <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+              {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label} и {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
+            </p>
           </div>
         </div>
       </div>

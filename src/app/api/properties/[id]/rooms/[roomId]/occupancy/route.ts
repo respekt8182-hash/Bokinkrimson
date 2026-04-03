@@ -1,7 +1,7 @@
 // Room occupancy endpoint: list/create booking blocks used by owner chessboard availability workflow.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEditorSession } from "@/lib/editor-access";
 import { serializeRoomOccupancy } from "@/lib/occupancy";
 import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate } from "@/lib/pricing";
@@ -11,30 +11,38 @@ type RouteContext = {
   params: Promise<{ id: string; roomId: string }>;
 };
 
-async function getOwnedRoom(propertyId: string, roomId: string, userId: string) {
+async function getAccessibleRoom(
+  propertyId: string,
+  roomId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   return db.room.findFirst({
     where: {
       id: roomId,
       propertyId,
       isActive: true,
-      property: {
-        ownerId: userId,
-        ownerDeletedAt: null,
-      },
+      property: editor?.isAdmin
+        ? {
+            ownerDeletedAt: null,
+          }
+        : {
+            ownerId: editor?.id,
+            ownerDeletedAt: null,
+          },
     },
     select: { id: true },
   });
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
-  const room = await getOwnedRoom(id, roomId, session.id);
+  const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room) {
     return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
@@ -68,14 +76,14 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const session = await getSession();
+  const editor = await getEditorSession();
 
-  if (!session) {
+  if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
-  const room = await getOwnedRoom(id, roomId, session.id);
+  const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room) {
     return NextResponse.json({ error: "Номер не найден" }, { status: 404 });

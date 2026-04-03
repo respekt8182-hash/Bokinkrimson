@@ -33,20 +33,18 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
           applications: true,
           payments: true,
           reviews: true,
-          adminActions: true,
           passwordResetRequests: true,
         },
       },
       passwordResetRequests: {
         orderBy: [{ createdAt: "desc" }],
         take: 20,
-        include: {
-          processedBy: {
-            select: {
-              firstName: true,
-              lastName: true,
-            },
-          },
+        select: {
+          id: true,
+          status: true,
+          processedAt: true,
+          processedById: true,
+          createdAt: true,
         },
       },
     },
@@ -98,7 +96,6 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
           <p>Заявки: {user._count.applications}</p>
           <p>Платежи: {user._count.payments}</p>
           <p>Отзывы: {user._count.reviews}</p>
-          <p>Админ-действия: {user._count.adminActions}</p>
         </div>
       </section>
 
@@ -132,9 +129,7 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
                         : "-"}
                     </td>
                     <td className="py-2 text-olive">
-                      {request.processedBy
-                        ? `${request.processedBy.firstName} ${request.processedBy.lastName}`
-                        : "-"}
+                      {request.processedById ?? "-"}
                     </td>
                   </tr>
                 ))}
