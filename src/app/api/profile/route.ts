@@ -1,19 +1,17 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   buildSessionUser,
   comparePasswords,
   createSessionToken,
-  getSessionCookieOptions,
   getSession,
+  getSessionCookieOptions,
   hashPassword,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
-import { areDatabaseColumnsAvailable, db } from "@/lib/db";
-import {
-  createSecurityToken,
-  hashSecurityToken,
-  sendSecurityEmail,
-} from "@/lib/security-emails";
+import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { buildUserPasswordUpdateData } from "@/lib/passwords";
+import { isDatabaseSchemaMissingError, logDatabaseFallbackOnce } from "@/lib/prisma-errors";
 import {
   createRateLimiter,
   RateLimitBackendUnavailableError,
@@ -28,22 +26,11 @@ const passwordChangeLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 8,
 });
-const USER_EMAIL_CHANGE_COLUMNS = [
-  "pendingEmail",
-  "emailChangeTokenHash",
-  "emailChangeTokenExpiresAt",
-  "emailChangeRequestedAt",
-  "emailVerifiedAt",
-] as const;
-const USER_PASSWORD_SECURITY_COLUMNS = ["passwordChangedAt", "sessionVersion"] as const;
 
 function serializeProfile(user: {
   id: string;
   firstName: string;
   lastName: string;
-  email: string | null;
-  pendingEmail: string | null;
-  emailChangeTokenExpiresAt: Date | null;
   phone: string;
   avatarUrl: string | null;
   role: "USER" | "ADMIN";
@@ -54,9 +41,6 @@ function serializeProfile(user: {
     id: user.id,
     firstName: user.firstName,
     lastName: user.lastName,
-    email: user.email,
-    pendingEmail: user.pendingEmail,
-    pendingEmailExpiresAt: user.emailChangeTokenExpiresAt?.toISOString() ?? null,
     phone: user.phone,
     avatarUrl: user.avatarUrl,
     role: user.role,
@@ -72,15 +56,11 @@ async function getCurrentUser(userId: string) {
       id: true,
       firstName: true,
       lastName: true,
-      email: true,
-      pendingEmail: true,
-      emailChangeTokenExpiresAt: true,
       phone: true,
       avatarUrl: true,
       role: true,
       createdAt: true,
       updatedAt: true,
-      passwordHash: true,
     },
   });
 }
@@ -119,7 +99,12 @@ export async function PATCH(request: Request) {
 
   const parsed = updateProfileSchema.safeParse(payload);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Проверьте корректность данных профиля" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: parsed.error.issues[0]?.message ?? "Проверьте корректность данных профиля",
+      },
+      { status: 400 },
+    );
   }
 
   const existing = await getCurrentUser(session.id);
@@ -127,68 +112,21 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   }
 
-  const requestedPhone = parsed.data.phone?.trim()
-    ? normalizeUserPhone(parsed.data.phone)
-    : existing.phone;
-  const requestedEmail = parsed.data.email?.trim().toLowerCase() || null;
-  const shouldStartEmailVerification =
-    requestedEmail !== null &&
-    requestedEmail.length > 0 &&
-    requestedEmail !== (existing.email?.trim().toLowerCase() ?? null);
+  const requestedPhone = normalizeUserPhone(parsed.data.phone);
 
-  if (parsed.data.phone?.trim()) {
-    const phoneOwner = await db.user.findFirst({
-      where: {
-        id: { not: existing.id },
-        phone: {
-          in: buildUserPhoneLookupCandidates(parsed.data.phone),
-        },
+  const phoneOwner = await db.user.findFirst({
+    where: {
+      id: { not: existing.id },
+      phone: {
+        in: buildUserPhoneLookupCandidates(parsed.data.phone),
       },
-      select: { id: true },
-    });
+    },
+    select: { id: true },
+  });
 
-    if (phoneOwner) {
-      return NextResponse.json(
-        { error: "Такой телефон уже используется" },
-        { status: 409 },
-      );
-    }
+  if (phoneOwner) {
+    return NextResponse.json({ error: "Такой телефон уже используется" }, { status: 409 });
   }
-
-  if (
-    shouldStartEmailVerification &&
-    !(await areDatabaseColumnsAvailable("User", USER_EMAIL_CHANGE_COLUMNS))
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          "Смена email временно недоступна: база данных еще не обновлена до последней миграции.",
-      },
-      { status: 503 },
-    );
-  }
-
-  if (shouldStartEmailVerification) {
-    const emailOwner = await db.user.findFirst({
-      where: {
-        id: { not: existing.id },
-        email: requestedEmail,
-      },
-      select: { id: true },
-    });
-
-    if (emailOwner) {
-      return NextResponse.json(
-        { error: "Такой email уже используется" },
-        { status: 409 },
-      );
-    }
-  }
-
-  const now = new Date();
-  const emailToken = shouldStartEmailVerification ? createSecurityToken() : null;
-  const emailTokenHash = emailToken ? hashSecurityToken(emailToken) : null;
-  const emailTokenExpiresAt = emailToken ? new Date(now.getTime() + 24 * 60 * 60 * 1000) : null;
 
   const updated = await db.user.update({
     where: { id: existing.id },
@@ -196,22 +134,11 @@ export async function PATCH(request: Request) {
       firstName: parsed.data.firstName.trim(),
       lastName: parsed.data.lastName.trim(),
       phone: requestedPhone,
-      ...(shouldStartEmailVerification
-        ? {
-            pendingEmail: requestedEmail,
-            emailChangeTokenHash: emailTokenHash,
-            emailChangeTokenExpiresAt: emailTokenExpiresAt,
-            emailChangeRequestedAt: now,
-          }
-        : {}),
     },
     select: {
       id: true,
       firstName: true,
       lastName: true,
-      email: true,
-      pendingEmail: true,
-      emailChangeTokenExpiresAt: true,
       phone: true,
       avatarUrl: true,
       role: true,
@@ -220,29 +147,10 @@ export async function PATCH(request: Request) {
     },
   });
 
-  if (shouldStartEmailVerification && requestedEmail && emailToken && emailTokenExpiresAt) {
-    const verificationUrl = new URL("/api/profile/email/verify", request.url);
-    verificationUrl.searchParams.set("token", emailToken);
-
-    await sendSecurityEmail({
-      to: requestedEmail,
-      subject: "Подтвердите смену email",
-      text: [
-        "Мы получили запрос на смену email для вашей учетной записи.",
-        `Подтвердите новый адрес по ссылке: ${verificationUrl.toString()}`,
-        `Ссылка действует до ${emailTokenExpiresAt.toISOString()}.`,
-        "Если это были не вы, просто проигнорируйте письмо.",
-      ].join("\n\n"),
-    });
-  }
-
   const sessionUser = await buildSessionUser(updated.id);
   const response = NextResponse.json({
     item: serializeProfile(updated),
-    emailVerificationRequired: shouldStartEmailVerification,
-    message: shouldStartEmailVerification
-      ? "Новый email сохранён как ожидающий подтверждения. Подтвердите адрес по ссылке из письма."
-      : "Профиль сохранён.",
+    message: "Профиль сохранён.",
   });
 
   if (sessionUser) {
@@ -266,7 +174,9 @@ export async function PUT(request: Request) {
     const limit = await passwordChangeLimiter.limit(`${session.id}:${ip}`);
     if (!limit.allowed) {
       return NextResponse.json(
-        { error: `Слишком много попыток. Повторите через ${limit.retryAfterSeconds} сек.` },
+        {
+          error: `Слишком много попыток. Повторите через ${limit.retryAfterSeconds} сек.`,
+        },
         {
           status: 429,
           headers: {
@@ -288,16 +198,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Проверьте корректность пароля" }, { status: 400 });
     }
 
-    if (!(await areDatabaseColumnsAvailable("User", USER_PASSWORD_SECURITY_COLUMNS))) {
-      return NextResponse.json(
-        {
-          error:
-            "Смена пароля временно недоступна: база данных еще не обновлена до последней миграции.",
-        },
-        { status: 503 },
-      );
-    }
-
     const user = await db.user.findUnique({
       where: { id: session.id },
       select: { id: true, passwordHash: true },
@@ -315,26 +215,35 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Текущий пароль указан неверно" }, { status: 400 });
     }
 
+    const now = new Date();
     const passwordHash = await hashPassword(parsed.data.newPassword);
-    await db.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: session.id },
-        data: {
-          passwordHash,
-          passwordChangedAt: new Date(),
-          sessionVersion: {
-            increment: 1,
-          },
-        },
-      });
+    const passwordUpdateData = await buildUserPasswordUpdateData(passwordHash, now);
 
-      await tx.passwordResetToken.deleteMany({
+    await db.user.update({
+      where: { id: session.id },
+      data: passwordUpdateData,
+    });
+
+    try {
+      await db.passwordResetToken.deleteMany({
         where: {
           userId: session.id,
           usedAt: null,
         },
       });
-    });
+    } catch (error) {
+      if (isDatabaseSchemaMissingError(error)) {
+        logDatabaseFallbackOnce(
+          "profile-password-token-cleanup-compat",
+          "Profile password change skipped PasswordResetToken cleanup because the reset-token table is missing. Apply the latest Prisma migration when DB owner access is available.",
+        );
+      } else {
+        logger.warn("Profile password change could not clear outstanding reset tokens", {
+          userId: session.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
 
     const sessionUser = await buildSessionUser(session.id);
     const response = NextResponse.json({ ok: true });
@@ -346,7 +255,10 @@ export async function PUT(request: Request) {
 
     return response;
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
       return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
     }
 

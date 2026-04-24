@@ -1,5 +1,7 @@
-import { PasswordResetRequestStatus } from "@prisma/client";
+﻿import { PasswordResetRequestStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { hashPassword } from "@/lib/auth";
 import {
   ensureAuthDatabaseAvailable,
   getAuthDatabaseUnavailableMessage,
@@ -8,16 +10,115 @@ import {
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
-import { isDatabaseSchemaMissingError } from "@/lib/prisma-errors";
-import {
-  createSecurityToken,
-  hashSecurityToken,
-  sendSecurityEmail,
-} from "@/lib/security-emails";
+import { logger } from "@/lib/logger";
+import { buildUserPasswordUpdateData } from "@/lib/passwords";
+import { isDatabaseSchemaMissingError, logDatabaseFallbackOnce } from "@/lib/prisma-errors";
+import { createSecurityToken, hashSecurityToken, sendSecurityEmail } from "@/lib/security-emails";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+const adminDirectPasswordResetSchema = z
+  .object({
+    mode: z.literal("direct"),
+    newPassword: z.string().min(8, "Пароль должен содержать минимум 8 символов").max(128),
+    confirmPassword: z
+      .string()
+      .min(8, "Подтверждение должно содержать минимум 8 символов")
+      .max(128),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Пароли не совпадают",
+    path: ["confirmPassword"],
+  });
+
+async function bestEffortDeleteActiveResetTokens(userId: string) {
+  try {
+    await db.passwordResetToken.deleteMany({
+      where: {
+        userId,
+        usedAt: null,
+      },
+    });
+  } catch (error) {
+    if (isDatabaseSchemaMissingError(error)) {
+      logDatabaseFallbackOnce(
+        "admin-direct-password-token-cleanup-compat",
+        "Admin direct password reset skipped PasswordResetToken cleanup because the reset-token table is missing. Apply the latest Prisma migration when DB owner access is available.",
+      );
+      return;
+    }
+
+    logger.warn("Admin direct password reset could not clear active reset tokens", {
+      userId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
+async function bestEffortCompletePendingResetRequests(
+  userId: string,
+  adminId: string,
+  processedAt: Date,
+): Promise<number> {
+  try {
+    const updated = await db.passwordResetRequest.updateMany({
+      where: {
+        userId,
+        status: PasswordResetRequestStatus.PENDING,
+      },
+      data: {
+        status: PasswordResetRequestStatus.COMPLETED,
+        processedById: adminId,
+        processedAt,
+      },
+    });
+
+    return updated.count;
+  } catch (error) {
+    if (isDatabaseSchemaMissingError(error)) {
+      logDatabaseFallbackOnce(
+        "admin-direct-password-request-compat",
+        "Admin direct password reset skipped PasswordResetRequest completion because the reset-request table is missing. Apply the latest Prisma migration when DB owner access is available.",
+      );
+      return 0;
+    }
+
+    logger.warn("Admin direct password reset could not complete pending reset requests", {
+      userId,
+      adminId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return 0;
+  }
+}
+
+async function bestEffortWriteAdminAuditLog(input: {
+  adminUserId: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  details?: Record<string, unknown>;
+}) {
+  try {
+    await writeAdminAuditLog(db, input);
+  } catch (error) {
+    if (isDatabaseSchemaMissingError(error)) {
+      logDatabaseFallbackOnce(
+        "admin-direct-password-audit-compat",
+        "Admin direct password reset skipped audit logging because the admin audit table is missing. Apply the latest Prisma migration when DB owner access is available.",
+      );
+      return;
+    }
+
+    logger.warn("Admin direct password reset could not write audit log", {
+      adminUserId: input.adminUserId,
+      targetId: input.targetId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
 
 export async function POST(request: Request, context: RouteContext) {
   const admin = await getAdminSession();
@@ -37,6 +138,30 @@ export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   try {
+    let directResetInput: z.infer<typeof adminDirectPasswordResetSchema> | null = null;
+    const contentType = request.headers.get("content-type") ?? "";
+
+    if (contentType.includes("application/json")) {
+      let payload: unknown;
+      try {
+        payload = await request.json();
+      } catch {
+        return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+      }
+
+      const parsed = adminDirectPasswordResetSchema.safeParse(payload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: parsed.error.issues[0]?.message ?? "Проверьте новый пароль",
+          },
+          { status: 400 },
+        );
+      }
+
+      directResetInput = parsed.data;
+    }
+
     const existingUser = await db.user.findUnique({
       where: { id },
       select: {
@@ -55,14 +180,62 @@ export async function POST(request: Request, context: RouteContext) {
 
     if (existingUser.deletedAt) {
       return NextResponse.json(
-        { error: "Нельзя сбросить пароль профиля, который ожидает удаления" },
+        {
+          error: "Нельзя сбросить пароль профиля, который ожидает удаления",
+        },
         { status: 409 },
       );
     }
 
+    if (directResetInput) {
+      const now = new Date();
+      const passwordHash = await hashPassword(directResetInput.newPassword);
+      const passwordUpdateData = await buildUserPasswordUpdateData(passwordHash, now);
+
+      await db.user.update({
+        where: { id: existingUser.id },
+        data: passwordUpdateData,
+      });
+
+      await bestEffortDeleteActiveResetTokens(existingUser.id);
+      const completedRequestsCount = await bestEffortCompletePendingResetRequests(
+        existingUser.id,
+        admin.id,
+        now,
+      );
+
+      await bestEffortWriteAdminAuditLog({
+        adminUserId: admin.id,
+        action: "reset_password_set_direct",
+        targetType: "user",
+        targetId: existingUser.id,
+        details: {
+          email: existingUser.email,
+          role: existingUser.role,
+          completedRequestsCount,
+          outcome: "direct_password_update",
+        },
+      });
+
+      return NextResponse.json({
+        item: {
+          id: existingUser.id,
+          email: existingUser.email,
+          firstName: existingUser.firstName,
+          lastName: existingUser.lastName,
+          role: existingUser.role,
+          passwordUpdatedAt: now.toISOString(),
+          passwordUpdatedDirectly: true,
+          resetByAdminId: admin.id,
+        },
+      });
+    }
+
     if (!existingUser.email) {
       return NextResponse.json(
-        { error: "У пользователя нет подтвержденного email для доставки ссылки сброса" },
+        {
+          error: "У пользователя нет подтвержденного email для доставки ссылки сброса",
+        },
         { status: 409 },
       );
     }
@@ -144,10 +317,7 @@ export async function POST(request: Request, context: RouteContext) {
     });
   } catch (error) {
     if (isAuthDatabaseUnavailable(error)) {
-      return NextResponse.json(
-        { error: getAuthDatabaseUnavailableMessage() },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: getAuthDatabaseUnavailableMessage() }, { status: 503 });
     }
 
     if (isDatabaseSchemaMissingError(error)) {

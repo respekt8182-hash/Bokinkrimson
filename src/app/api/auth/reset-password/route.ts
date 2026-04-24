@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+﻿import { NextResponse } from "next/server";
 import { hashPassword } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { buildUserPasswordUpdateData } from "@/lib/passwords";
 import { isDatabaseSchemaMissingError } from "@/lib/prisma-errors";
 import {
   createRateLimiter,
@@ -29,7 +30,9 @@ export async function POST(request: Request) {
     const limit = await resetPasswordLimiter.limit(ip);
     if (!limit.allowed) {
       return NextResponse.json(
-        { error: `Слишком много попыток. Повторите через ${limit.retryAfterSeconds} сек.` },
+        {
+          error: `Слишком много попыток. Повторите через ${limit.retryAfterSeconds} сек.`,
+        },
         {
           status: 429,
           headers: {
@@ -65,23 +68,20 @@ export async function POST(request: Request) {
 
     if (!resetToken) {
       return NextResponse.json(
-        { error: "Ссылка для сброса недействительна или уже истекла" },
+        {
+          error: "Ссылка для сброса недействительна или уже истекла",
+        },
         { status: 400 },
       );
     }
 
     const passwordHash = await hashPassword(parsed.data.newPassword);
+    const passwordUpdateData = await buildUserPasswordUpdateData(passwordHash, now);
 
     await db.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: resetToken.userId },
-        data: {
-          passwordHash,
-          passwordChangedAt: now,
-          sessionVersion: {
-            increment: 1,
-          },
-        },
+        data: passwordUpdateData,
       });
 
       await tx.passwordResetToken.update({
@@ -105,7 +105,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
       return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
     }
 

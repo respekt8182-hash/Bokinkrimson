@@ -86,8 +86,7 @@ const optionalPhoneSchema = z
 export const updateProfileSchema = z.object({
   firstName: z.string().trim().min(2, "Имя должно содержать минимум 2 символа").max(80),
   lastName: z.string().trim().min(2, "Фамилия должна содержать минимум 2 символа").max(80),
-  email: z.string().trim().email("Введите корректный email").optional().or(z.literal("")),
-  phone: optionalPhoneSchema,
+  phone: authPhoneSchema,
 });
 
 export const changePasswordSchema = z
@@ -151,16 +150,19 @@ function optionalNormalizedProfileUrlSchema(
   normalizer: (value: string | null | undefined) => string | null,
   example: string,
 ) {
-  return z.preprocess((value) => {
-    if (typeof value !== "string") {
-      return value;
-    }
+  return z.preprocess(
+    (value) => {
+      if (typeof value !== "string") {
+        return value;
+      }
 
-    const normalized = normalizer(value);
-    return normalized ?? value.trim();
-  }, optionalHttpUrlSchema(fieldLabel).refine((value) => !value || Boolean(normalizer(value)), {
-    message: `${fieldLabel}: укажите корректную ссылку вида ${example}`,
-  }));
+      const normalized = normalizer(value);
+      return normalized ?? value.trim();
+    },
+    optionalHttpUrlSchema(fieldLabel).refine((value) => !value || Boolean(normalizer(value)), {
+      message: `${fieldLabel}: укажите корректную ссылку вида ${example}`,
+    }),
+  );
 }
 
 const photoUrlSchema = z
@@ -252,7 +254,11 @@ export const propertyStep4Schema = z.object({
   whatsappUrl: optionalHttpUrlSchema("WhatsApp"),
   telegramUrl: optionalTelegramUrlSchema("Telegram"),
   vkUrl: optionalNormalizedProfileUrlSchema("VK", normalizeVkProfileUrl, "https://vk.com/username"),
-  maxUrl: optionalNormalizedProfileUrlSchema("Max", normalizeMaxProfileUrl, "https://max.ru/username"),
+  maxUrl: optionalNormalizedProfileUrlSchema(
+    "Max",
+    normalizeMaxProfileUrl,
+    "https://max.ru/username",
+  ),
   okUrl: optionalNormalizedProfileUrlSchema(
     "Одноклассники",
     normalizeOkProfileUrl,

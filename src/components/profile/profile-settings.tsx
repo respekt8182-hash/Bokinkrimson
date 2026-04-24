@@ -1,7 +1,9 @@
-"use client";
+﻿"use client";
 
 import {
   Camera,
+  ChevronDown,
+  ChevronUp,
   CircleAlert,
   CircleCheckBig,
   CloudUpload,
@@ -52,6 +54,14 @@ function AlertCircleIcon({ className }: { className?: string }) {
   return <AppIcon icon={CircleAlert} className={className} />;
 }
 
+function ChevronDownIcon({ className }: { className?: string }) {
+  return <AppIcon icon={ChevronDown} className={className} />;
+}
+
+function ChevronUpIcon({ className }: { className?: string }) {
+  return <AppIcon icon={ChevronUp} className={className} />;
+}
+
 // ── Status message ─────────────────────────────────────────────────────────────
 
 function StatusMessage({ type, message }: { type: "error" | "success"; message: string }) {
@@ -91,7 +101,6 @@ type ProfileItem = {
   id: string;
   firstName: string;
   lastName: string;
-  email: string | null;
   phone: string | null;
   avatarUrl: string | null;
   updatedAt: string;
@@ -99,8 +108,6 @@ type ProfileItem = {
 
 type ProfileSettingsProps = {
   initialProfile: ProfileItem;
-  emailChangeAvailable?: boolean;
-  emailChangeUnavailableReason?: string | null;
   passwordChangeAvailable?: boolean;
   passwordChangeUnavailableReason?: string | null;
 };
@@ -117,7 +124,10 @@ function normalizeMimeType(value: string): string {
 function getFileExtension(fileName: string): string {
   const lastDot = fileName.lastIndexOf(".");
   if (lastDot < 0) return "";
-  return fileName.slice(lastDot + 1).toLowerCase().trim();
+  return fileName
+    .slice(lastDot + 1)
+    .toLowerCase()
+    .trim();
 }
 
 function detectSupportedAvatarUploadType(file: File): SupportedAvatarUploadType | null {
@@ -137,10 +147,49 @@ function detectSupportedAvatarUploadType(file: File): SupportedAvatarUploadType 
   return null;
 }
 
-function getInitials(input: { firstName: string; lastName: string; email: string | null }): string {
+function getInitials(input: { firstName: string; lastName: string }): string {
   const first = input.firstName.trim().slice(0, 1);
-  const fallback = input.lastName.trim().slice(0, 1) || (input.email?.trim().slice(0, 1) ?? "");
+  const fallback = input.lastName.trim().slice(0, 1);
   return (first || fallback || "?").toUpperCase();
+}
+
+function formatPhoneForInput(value: string | null | undefined): string {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (!digits) return "";
+
+  const normalized =
+    digits.length === 10
+      ? `7${digits}`
+      : digits.length === 11 && digits.startsWith("8")
+        ? `7${digits.slice(1)}`
+        : digits;
+
+  if (normalized.length === 11 && normalized.startsWith("7")) {
+    const area = normalized.slice(1, 4);
+    const prefix = normalized.slice(4, 7);
+    const part1 = normalized.slice(7, 9);
+    const part2 = normalized.slice(9, 11);
+
+    let formatted = "+7";
+    if (area) {
+      formatted += ` (${area}`;
+      if (area.length === 3) {
+        formatted += ")";
+      }
+    }
+    if (prefix) {
+      formatted += area.length === 3 ? ` ${prefix}` : prefix;
+    }
+    if (part1) {
+      formatted += `-${part1}`;
+    }
+    if (part2) {
+      formatted += `-${part2}`;
+    }
+    return formatted;
+  }
+
+  return `+${normalized}`;
 }
 
 function formatMegabytes(bytes: number): string {
@@ -233,7 +282,9 @@ async function createCroppedAvatarFile(input: {
   }
   if (!blob) throw new Error("Не удалось сохранить обрезанный файл");
   if (blob.size > imageSizeLimitBytes) {
-    throw new Error("Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно");
+    throw new Error(
+      "Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно",
+    );
   }
 
   const ext = blob.type === "image/webp" ? "webp" : "jpg";
@@ -252,8 +303,6 @@ type CropEditorState = {
 
 export function ProfileSettings({
   initialProfile,
-  emailChangeAvailable = true,
-  emailChangeUnavailableReason = null,
   passwordChangeAvailable = true,
   passwordChangeUnavailableReason = null,
 }: ProfileSettingsProps) {
@@ -262,8 +311,7 @@ export function ProfileSettings({
   const [profileForm, setProfileForm] = useState({
     firstName: initialProfile.firstName,
     lastName: initialProfile.lastName,
-    email: initialProfile.email ?? "",
-    phone: initialProfile.phone ?? "",
+    phone: formatPhoneForInput(initialProfile.phone),
   });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -278,6 +326,7 @@ export function ProfileSettings({
   const [profileSuccess, setProfileSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [isPasswordSectionOpen, setIsPasswordSectionOpen] = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -286,21 +335,37 @@ export function ProfileSettings({
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null);
 
   const initials = useMemo(
-    () => getInitials({ firstName: profile.firstName, lastName: profile.lastName, email: profile.email }),
-    [profile.email, profile.firstName, profile.lastName],
+    () => getInitials({ firstName: profile.firstName, lastName: profile.lastName }),
+    [profile.firstName, profile.lastName],
   );
-  const isEmailFieldDisabled = !emailChangeAvailable;
   const isPasswordSectionDisabled = !passwordChangeAvailable;
 
   async function saveProfile() {
     setProfileError("");
     setProfileSuccess("");
+
+    const formattedPhone = formatPhoneForInput(profileForm.phone);
+    const phoneDigits = formattedPhone.replace(/\D/g, "");
+
+    if (!phoneDigits) {
+      setProfileError("Введите номер телефона");
+      return;
+    }
+
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      setProfileError("Введите корректный номер телефона");
+      return;
+    }
+
     setIsProfileSaving(true);
     try {
       const response = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileForm),
+        body: JSON.stringify({
+          ...profileForm,
+          phone: formattedPhone,
+        }),
       });
       const body = (await response.json()) as { error?: string; item?: ProfileItem };
       if (!response.ok || !body.item) {
@@ -311,8 +376,7 @@ export function ProfileSettings({
       setProfileForm({
         firstName: body.item.firstName,
         lastName: body.item.lastName,
-        email: body.item.email ?? "",
-        phone: body.item.phone ?? "",
+        phone: formatPhoneForInput(body.item.phone),
       });
       setProfileSuccess("Профиль сохранен.");
       router.refresh();
@@ -359,7 +423,10 @@ export function ProfileSettings({
       const formData = new FormData();
       formData.append("file", file);
       const response = await fetch("/api/profile/avatar", { method: "POST", body: formData });
-      const body = (await response.json()) as { error?: string; item?: { avatarUrl: string | null } };
+      const body = (await response.json()) as {
+        error?: string;
+        item?: { avatarUrl: string | null };
+      };
       if (!response.ok || !body.item) {
         setAvatarError(body.error ?? "Не удалось загрузить фото");
         return false;
@@ -383,14 +450,19 @@ export function ProfileSettings({
       return;
     }
     if (file.size > imageSizeLimitBytes) {
-      setAvatarError("Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно");
+      setAvatarError(
+        "Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно",
+      );
       return;
     }
 
     setIsAvatarProcessing(true);
     try {
       const meta = await readImageMetaFromFile(file);
-      if (meta.naturalWidth < avatarMinimumSourceSide || meta.naturalHeight < avatarMinimumSourceSide) {
+      if (
+        meta.naturalWidth < avatarMinimumSourceSide ||
+        meta.naturalHeight < avatarMinimumSourceSide
+      ) {
         URL.revokeObjectURL(meta.imageUrl);
         setAvatarError(
           `Минимальный размер фото: ${avatarMinimumSourceSide} × ${avatarMinimumSourceSide} пикселей.`,
@@ -478,151 +550,142 @@ export function ProfileSettings({
 
       {/* ── Sections ───────────────────────────────────────────────────────── */}
       <div className="space-y-5">
-          {/* ── Avatar section ──────────────────────────────────────────── */}
-          <section id="avatar" className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10">
-            <div className="flex items-center gap-3 border-b border-olive/8 px-5 py-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
-                <CameraIcon className="h-4 w-4" />
-              </div>
-              <h2 className="font-semibold text-olive">Фото профиля</h2>
+        {/* ── Avatar section ──────────────────────────────────────────── */}
+        <section
+          id="avatar"
+          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-olive/8 px-5 py-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
+              <CameraIcon className="h-4 w-4" />
             </div>
-            <div className="p-5">
-              <div className="flex flex-wrap items-center gap-5">
-                <div
-                  className={`h-24 w-24 shrink-0 overflow-hidden rounded-full bg-cream ring-2 transition ${
-                    profile.avatarUrl ? "ring-primary/30" : "ring-olive/12"
-                  }`}
-                >
-                  {profile.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={profile.avatarUrl}
-                      alt="Аватар профиля"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-olive/40">
-                      {initials}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    <label
-                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition ${
-                        isBusy ? "cursor-not-allowed bg-primary/55" : "bg-primary hover:bg-primary/88"
-                      }`}
-                    >
-                      <UploadCloudIcon className="h-4 w-4" />
-                      {isBusy ? "Обработка..." : "Загрузить фото"}
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
-                        className="hidden"
-                        disabled={isBusy}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void handleFileSelect(file);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    {profile.avatarUrl ? (
-                      <Button variant="ghost" disabled={isBusy} onClick={() => void removeAvatar()}>
-                        Удалить фото
-                      </Button>
-                    ) : null}
+            <h2 className="font-semibold text-olive">Фото профиля</h2>
+          </div>
+          <div className="p-5">
+            <div className="flex flex-wrap items-center gap-5">
+              <div
+                className={`h-24 w-24 shrink-0 overflow-hidden rounded-full bg-cream ring-2 transition ${
+                  profile.avatarUrl ? "ring-primary/30" : "ring-olive/12"
+                }`}
+              >
+                {profile.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.avatarUrl}
+                    alt="Аватар профиля"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-olive/40">
+                    {initials}
                   </div>
-                  <p className="text-xs text-olive/45">
-                    PNG, JPEG, WEBP или HEIC · до {formatMegabytes(imageSizeLimitBytes)}
-                  </p>
-                </div>
+                )}
               </div>
-              <StatusMessage type="error" message={avatarError} />
-              <StatusMessage type="success" message={avatarSuccess} />
-            </div>
-          </section>
-
-          {/* ── Personal data section ────────────────────────────────────── */}
-          <section
-            id="personal"
-            className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
-          >
-            <div className="flex items-center gap-3 border-b border-olive/8 px-5 py-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
-                <UserIcon className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-olive">Основные данные</h2>
-                <p className="text-xs text-olive/45">Имя, фамилия и контакты</p>
-              </div>
-            </div>
-            <div className="p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Имя</span>
-                  <Input
-                    value={profileForm.firstName}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Фамилия</span>
-                  <Input
-                    value={profileForm.lastName}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Email</span>
-                  <Input
-                    type="email"
-                    value={profileForm.email}
-                    disabled={isEmailFieldDisabled}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                    className={isEmailFieldDisabled ? "cursor-not-allowed bg-cream text-olive/60" : undefined}
-                  />
-                  {isEmailFieldDisabled ? (
-                    <p className="text-xs text-amber-700">{emailChangeUnavailableReason}</p>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition ${
+                      isBusy ? "cursor-not-allowed bg-primary/55" : "bg-primary hover:bg-primary/88"
+                    }`}
+                  >
+                    <UploadCloudIcon className="h-4 w-4" />
+                    {isBusy ? "Обработка..." : "Загрузить фото"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                      className="hidden"
+                      disabled={isBusy}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleFileSelect(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  {profile.avatarUrl ? (
+                    <Button variant="ghost" disabled={isBusy} onClick={() => void removeAvatar()}>
+                      Удалить фото
+                    </Button>
                   ) : null}
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">
-                    Телефон
-                    <span className="ml-1.5 text-xs font-normal text-olive/40">(необязательно)</span>
-                  </span>
-                  <Input
-                    type="tel"
-                    placeholder="+7 (___) ___-__-__"
-                    value={profileForm.phone}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, phone: event.target.value }))
-                    }
-                  />
-                </label>
+                </div>
+                <p className="text-xs text-olive/45">
+                  PNG, JPEG, WEBP или HEIC · до {formatMegabytes(imageSizeLimitBytes)}
+                </p>
               </div>
-              <div className="mt-5">
-                <Button onClick={() => void saveProfile()} disabled={isProfileSaving}>
-                  {isProfileSaving ? "Сохранение..." : "Сохранить изменения"}
-                </Button>
-              </div>
-              <StatusMessage type="error" message={profileError} />
-              <StatusMessage type="success" message={profileSuccess} />
             </div>
-          </section>
+            <StatusMessage type="error" message={avatarError} />
+            <StatusMessage type="success" message={avatarSuccess} />
+          </div>
+        </section>
 
-          {/* ── Password section ─────────────────────────────────────────── */}
-          <section
-            id="password"
-            className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
-          >
-            <div className="flex items-center gap-3 border-b border-olive/8 px-5 py-4">
+        {/* ── Personal data section ────────────────────────────────────── */}
+        <section
+          id="personal"
+          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
+        >
+          <div className="flex items-center gap-3 border-b border-olive/8 px-5 py-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
+              <UserIcon className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-olive">Основные данные</h2>
+              <p className="text-xs text-olive/45">Имя, фамилия и контакты</p>
+            </div>
+          </div>
+          <div className="p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Имя</span>
+                <Input
+                  value={profileForm.firstName}
+                  onChange={(event) =>
+                    setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Фамилия</span>
+                <Input
+                  value={profileForm.lastName}
+                  onChange={(event) =>
+                    setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Телефон</span>
+                <Input
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+7 (___) ___-__-__"
+                  required
+                  value={profileForm.phone}
+                  onChange={(event) =>
+                    setProfileForm((prev) => ({
+                      ...prev,
+                      phone: formatPhoneForInput(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="mt-5">
+              <Button onClick={() => void saveProfile()} disabled={isProfileSaving}>
+                {isProfileSaving ? "Сохранение..." : "Сохранить изменения"}
+              </Button>
+            </div>
+            <StatusMessage type="error" message={profileError} />
+            <StatusMessage type="success" message={profileSuccess} />
+          </div>
+        </section>
+
+        {/* ── Password section ─────────────────────────────────────────── */}
+        <section
+          id="password"
+          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-olive/8 px-5 py-4">
+            <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
                 <LockIcon className="h-4 w-4" />
               </div>
@@ -631,6 +694,21 @@ export function ProfileSettings({
                 <p className="text-xs text-olive/45">Обновите пароль для входа</p>
               </div>
             </div>
+            <button
+              type="button"
+              aria-expanded={isPasswordSectionOpen}
+              onClick={() => setIsPasswordSectionOpen((value) => !value)}
+              className="inline-flex items-center gap-2 rounded-xl border border-olive/12 px-3.5 py-2 text-sm font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
+            >
+              {isPasswordSectionOpen ? "Скрыть" : "Открыть"}
+              {isPasswordSectionOpen ? (
+                <ChevronUpIcon className="h-4 w-4" />
+              ) : (
+                <ChevronDownIcon className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+          {isPasswordSectionOpen ? (
             <div className={`p-5${isPasswordSectionDisabled ? " opacity-70" : ""}`}>
               <AvailabilityNotice
                 message={isPasswordSectionDisabled ? passwordChangeUnavailableReason : null}
@@ -645,7 +723,10 @@ export function ProfileSettings({
                       value={passwordForm.currentPassword}
                       disabled={isPasswordSectionDisabled}
                       onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+                        setPasswordForm((prev) => ({
+                          ...prev,
+                          currentPassword: event.target.value,
+                        }))
                       }
                       className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
                     />
@@ -691,7 +772,10 @@ export function ProfileSettings({
                       value={passwordForm.confirmPassword}
                       disabled={isPasswordSectionDisabled}
                       onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                        setPasswordForm((prev) => ({
+                          ...prev,
+                          confirmPassword: event.target.value,
+                        }))
                       }
                       className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
                     />
@@ -717,7 +801,12 @@ export function ProfileSettings({
               <StatusMessage type="error" message={passwordError} />
               <StatusMessage type="success" message={passwordSuccess} />
             </div>
-          </section>
+          ) : (
+            <div className="p-5 text-sm text-olive/60">
+              Форма скрыта для безопасности. Нажмите «Открыть», чтобы сменить пароль.
+            </div>
+          )}
+        </section>
       </div>
     </>
   );
