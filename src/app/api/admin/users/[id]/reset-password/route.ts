@@ -1,20 +1,19 @@
-﻿// API route handler for /api/admin/users/[id]/reset-password.
 import { PasswordResetRequestStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import {
   ensureAuthDatabaseAvailable,
   getAuthDatabaseUnavailableMessage,
   isAuthDatabaseUnavailable,
 } from "@/lib/auth-route-db";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
-import { hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { generateTemporaryPassword } from "@/lib/passwords";
-
-const resetPasswordSchema = z.object({
-  newPassword: z.string().min(8, "Новый пароль должен содержать минимум 8 символов").optional(),
-});
+import { isDatabaseSchemaMissingError } from "@/lib/prisma-errors";
+import {
+  createSecurityToken,
+  hashSecurityToken,
+  sendSecurityEmail,
+} from "@/lib/security-emails";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -37,27 +36,6 @@ export async function POST(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
 
-  let customPassword: string | undefined;
-  let payload: unknown = null;
-
-  try {
-    payload = await request.json();
-  } catch {
-    payload = null;
-  }
-
-  if (payload !== null) {
-    const body = resetPasswordSchema.safeParse(payload);
-    if (!body.success) {
-      return NextResponse.json(
-        { error: body.error.issues[0]?.message ?? "Проверьте корректность нового пароля" },
-        { status: 400 },
-      );
-    }
-
-    customPassword = body.data.newPassword;
-  }
-
   try {
     const existingUser = await db.user.findUnique({
       where: { id },
@@ -67,21 +45,48 @@ export async function POST(request: Request, context: RouteContext) {
         firstName: true,
         lastName: true,
         role: true,
+        deletedAt: true,
       },
     });
 
-    if (!existingUser) {
+    if (!existingUser || existingUser.role !== "USER") {
       return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
     }
 
-    const temporaryPassword = customPassword ?? generateTemporaryPassword(10);
-    const passwordHash = await hashPassword(temporaryPassword);
-    const now = new Date();
+    if (existingUser.deletedAt) {
+      return NextResponse.json(
+        { error: "Нельзя сбросить пароль профиля, который ожидает удаления" },
+        { status: 409 },
+      );
+    }
 
-    const completedRequestsCount = await db.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: existingUser.id },
-        data: { passwordHash },
+    if (!existingUser.email) {
+      return NextResponse.json(
+        { error: "У пользователя нет подтвержденного email для доставки ссылки сброса" },
+        { status: 409 },
+      );
+    }
+
+    const resetToken = createSecurityToken();
+    const tokenHash = hashSecurityToken(resetToken);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+
+    await db.$transaction(async (tx) => {
+      await tx.passwordResetToken.deleteMany({
+        where: {
+          userId: existingUser.id,
+          usedAt: null,
+        },
+      });
+
+      await tx.passwordResetToken.create({
+        data: {
+          userId: existingUser.id,
+          tokenHash,
+          expiresAt,
+          issuedByAdminId: admin.id,
+        },
       });
 
       const updatedRequests = await tx.passwordResetRequest.updateMany({
@@ -96,21 +101,33 @@ export async function POST(request: Request, context: RouteContext) {
         },
       });
 
-      await tx.adminActionLog.create({
-        data: {
-          adminUserId: admin.id,
-          action: "reset_password",
-          targetType: "user",
-          targetId: existingUser.id,
-          details: {
-            email: existingUser.email,
-            role: existingUser.role,
-            completedRequestsCount: updatedRequests.count,
-          },
+      await writeAdminAuditLog(tx, {
+        adminUserId: admin.id,
+        action: "reset_password_issue_token",
+        targetType: "user",
+        targetId: existingUser.id,
+        details: {
+          email: existingUser.email,
+          role: existingUser.role,
+          completedRequestsCount: updatedRequests.count,
+          expiresAt: expiresAt.toISOString(),
+          outcome: "issued",
         },
       });
+    });
 
-      return updatedRequests.count;
+    const resetUrl = new URL("/auth/reset-password", request.url);
+    resetUrl.searchParams.set("token", resetToken);
+
+    await sendSecurityEmail({
+      to: existingUser.email,
+      subject: "Сброс пароля",
+      text: [
+        "Для вашей учетной записи был запрошен сброс пароля.",
+        `Перейдите по ссылке: ${resetUrl.toString()}`,
+        `Ссылка действует до ${expiresAt.toISOString()}.`,
+        "Если вы не запрашивали сброс, проигнорируйте это письмо.",
+      ].join("\n\n"),
     });
 
     return NextResponse.json({
@@ -120,16 +137,25 @@ export async function POST(request: Request, context: RouteContext) {
         firstName: existingUser.firstName,
         lastName: existingUser.lastName,
         role: existingUser.role,
-        completedRequestsCount,
-        resetAt: now.toISOString(),
+        resetIssuedAt: now.toISOString(),
+        resetExpiresAt: expiresAt.toISOString(),
         resetByAdminId: admin.id,
       },
-      temporaryPassword,
     });
   } catch (error) {
     if (isAuthDatabaseUnavailable(error)) {
       return NextResponse.json(
         { error: getAuthDatabaseUnavailableMessage() },
+        { status: 503 },
+      );
+    }
+
+    if (isDatabaseSchemaMissingError(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Сброс пароля временно недоступен: база данных еще не обновлена до последней миграции.",
+        },
         { status: 503 },
       );
     }

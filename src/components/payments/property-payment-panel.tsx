@@ -22,7 +22,6 @@ import {
 } from "@/lib/payments";
 
 type PaymentStatusValue = "CREATED" | "PENDING" | "SUCCEEDED" | "CANCELED";
-type PaymentProviderValue = "MOCK" | "YOOKASSA" | "MANAGER";
 type PropertyStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
 
 type PaymentReadinessIssue = {
@@ -49,6 +48,7 @@ type PropertyPaymentPanelProps = {
   initialReadiness: PaymentReadiness;
   initialPlacement: PlacementCoverageState;
   initialPayments: SerializedPayment[];
+  previewHref?: string | null;
 };
 
 type PaymentsApiResponse = {
@@ -65,11 +65,6 @@ type PaymentRouteResponse = {
   item?: SerializedPayment;
   redirectUrl?: string | null;
   paidUntil?: string | null;
-};
-
-type PaymentMockResponse = {
-  error?: string;
-  item?: SerializedPayment;
 };
 
 type ModerationSubmitResponse = {
@@ -129,6 +124,7 @@ export function PropertyPaymentPanel({
   initialReadiness,
   initialPlacement,
   initialPayments,
+  previewHref = null,
 }: PropertyPaymentPanelProps) {
   const [propertyStatus, setPropertyStatus] = useState<PropertyStatusValue>(initialPropertyStatus);
   const [pendingEditStatus, setPendingEditStatus] = useState<PropertyStatusValue | null>(
@@ -141,7 +137,6 @@ export function PropertyPaymentPanel({
   const [isCreating, setIsCreating] = useState(false);
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isTempPaying, setIsTempPaying] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("YOOKASSA");
   const [managerRequested, setManagerRequested] = useState(false);
   const [error, setError] = useState("");
@@ -293,7 +288,7 @@ export function PropertyPaymentPanel({
         return;
       }
 
-      setMessage("Платеж создан. Для mock-режима подтвердите результат кнопками ниже.");
+      setMessage("Платеж создан. Проверьте статус чуть позже.");
       await refreshPayments();
     } finally {
       setIsCreating(false);
@@ -368,119 +363,6 @@ export function PropertyPaymentPanel({
       }
     } finally {
       setIsUpdating(false);
-    }
-  }
-
-  async function applyMockResult(action: "succeed" | "cancel") {
-    if (!latestPayment) {
-      return;
-    }
-
-    setIsUpdating(true);
-    setError("");
-    setMessage("");
-    try {
-      const response = await fetch(`/api/payments/${latestPayment.id}/mock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-
-      const body = (await response.json()) as PaymentMockResponse;
-
-      if (!response.ok || !body.item) {
-        setError(
-          body.error ?? "Не удалось изменить статус mock-платежа",
-        );
-        return;
-      }
-
-      const paymentItem = body.item;
-      setPayments((prev) => prev.map((item) => (item.id === paymentItem.id ? paymentItem : item)));
-
-      if (body.item.status === "SUCCEEDED") {
-        const nextState = await refreshPayments();
-        setMessage(getSuccessfulPaymentMessage(nextState));
-      } else if (body.item.status === "CANCELED") {
-        setMessage("Платеж отменен. Можно создать новый.");
-      }
-    } finally {
-      setIsUpdating(false);
-    }
-  }
-
-  const canUseTempPayButton =
-    readiness.ready && (workflowStatus === "DRAFT" || workflowStatus === "REJECTED");
-
-  async function runTempPayment() {
-    if (!canUseTempPayButton) {
-      return;
-    }
-
-    setIsTempPaying(true);
-    setError("");
-    setMessage("");
-
-    try {
-      if (canSubmitModerationWithPaidPlacement) {
-        await submitForModeration();
-        return;
-      }
-
-      let targetPayment: SerializedPayment | null =
-        latestPayment && latestPayment.provider === "MOCK" && isOpenPayment(latestPayment.status)
-          ? latestPayment
-          : null;
-
-      if (!targetPayment) {
-        const createResponse = await fetch(`/api/properties/${propertyId}/payments`, {
-          method: "POST",
-        });
-        const createBody = (await createResponse.json()) as PaymentRouteResponse;
-
-        if (!createResponse.ok) {
-          if (
-            createBody.item &&
-            createBody.item.provider === "MOCK" &&
-            isOpenPayment(createBody.item.status)
-          ) {
-            targetPayment = createBody.item;
-          } else {
-            setError(
-              createBody.error ?? "Не удалось создать временный mock-платеж",
-            );
-            return;
-          }
-        } else if (createBody.item) {
-          targetPayment = createBody.item;
-        }
-      }
-
-      if (!targetPayment) {
-        setError("Не найден платеж для временного подтверждения.");
-        return;
-      }
-
-      const mockResponse = await fetch(`/api/payments/${targetPayment.id}/mock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "succeed" }),
-      });
-      const mockBody = (await mockResponse.json()) as PaymentMockResponse;
-
-      if (!mockResponse.ok || !mockBody.item) {
-        setError(
-          mockBody.error ?? "Не удалось зачесть временную оплату",
-        );
-        return;
-      }
-
-      const paymentItem = mockBody.item;
-      setPayments((prev) => [paymentItem, ...prev.filter((item) => item.id !== paymentItem.id)]);
-      const nextState = await refreshPayments();
-      setMessage(getSuccessfulPaymentMessage(nextState));
-    } finally {
-      setIsTempPaying(false);
     }
   }
 
@@ -797,29 +679,6 @@ export function PropertyPaymentPanel({
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod("YOOKASSA")}
-                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                    paymentMethod === "YOOKASSA"
-                      ? "border-primary bg-primary/5"
-                      : "border-olive/15 bg-white hover:border-olive/30"
-                  }`}
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
-                  }`}>
-                    <AppIcon icon={CreditCard} className={`h-5 w-5 ${
-                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
-                    }`} />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-semibold ${
-                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
-                    }`}>Онлайн-оплата</p>
-                    <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setPaymentMethod("MANAGER")}
                   className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
                     paymentMethod === "MANAGER"
@@ -841,6 +700,29 @@ export function PropertyPaymentPanel({
                     <p className="text-xs text-olive/55">Перевод на карту / по реквизитам</p>
                   </div>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("YOOKASSA")}
+                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
+                    paymentMethod === "YOOKASSA"
+                      ? "border-primary bg-primary/5"
+                      : "border-olive/15 bg-white hover:border-olive/30"
+                  }`}
+                >
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
+                  }`}>
+                    <AppIcon icon={CreditCard} className={`h-5 w-5 ${
+                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
+                    }`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${
+                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
+                    }`}>Онлайн-оплата</p>
+                    <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
+                  </div>
+                </button>
               </div>
             </div>
           )}
@@ -854,7 +736,7 @@ export function PropertyPaymentPanel({
                     ? submitForModeration()
                     : createPayment())
                 }
-                disabled={primaryActionDisabled || isTempPaying}
+                disabled={primaryActionDisabled}
               >
                 {isCreating || isSubmittingModeration
                   ? primaryActionPendingLabel
@@ -865,6 +747,16 @@ export function PropertyPaymentPanel({
                       : "Перейти к оплате"}
               </Button>
             )}
+            {readiness.ready && previewHref ? (
+              <a
+                href={previewHref}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center rounded-xl border border-primary/25 px-4 py-2 text-sm font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/6"
+              >
+                Предпросмотр
+              </a>
+            ) : null}
             <div className="mx-1 h-5 w-px bg-olive/15 hidden sm:block" />
             <Button variant="ghost" onClick={() => void refreshPayments()} disabled={isUpdating}>
               {isUpdating ? "Обновление..." : "Обновить"}
@@ -928,24 +820,6 @@ export function PropertyPaymentPanel({
                 </Button>
               ) : null}
 
-              {latestPayment.provider === "MOCK" ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void applyMockResult("succeed")}
-                    disabled={isUpdating}
-                  >
-                    Смоделировать успех
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => void applyMockResult("cancel")}
-                    disabled={isUpdating}
-                  >
-                    Смоделировать отмену
-                  </Button>
-                </>
-              ) : null}
             </div>
           ) : null}
 

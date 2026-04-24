@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import {
+  countOwnerActivePropertyDrafts,
+  OWNER_ACTIVE_PROPERTY_DRAFT_LIMIT,
+} from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
-import { purgeExpiredPropertyDraftsForOwner, serializeProperty } from "@/lib/properties";
+import {
+  createPropertyDraft,
+  purgeExpiredPropertyDraftsForOwner,
+  serializeProperty,
+} from "@/lib/properties";
 
 // List + create draft properties for current authenticated owner.
 export async function GET() {
@@ -51,9 +59,24 @@ export async function POST() {
 
   await purgeExpiredPropertyDraftsForOwner(db, session.id);
 
-  const property = await db.property.create({
-    data: {
-      ownerId: session.id,
+  const activeDraftsCount = await countOwnerActivePropertyDrafts(db, session.id);
+  if (activeDraftsCount >= OWNER_ACTIVE_PROPERTY_DRAFT_LIMIT) {
+    return NextResponse.json(
+      {
+        error:
+          "Доступно не больше 3 активных черновиков объектов. Опубликуйте или удалите один из текущих черновиков.",
+      },
+      { status: 409 },
+    );
+  }
+
+  const created = await createPropertyDraft(db, {
+    ownerId: session.id,
+  });
+
+  const property = await db.property.findUniqueOrThrow({
+    where: {
+      id: created.id,
     },
     include: {
       media: {

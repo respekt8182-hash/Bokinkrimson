@@ -30,6 +30,12 @@ import { Button } from "@/components/ui/button";
 import { FieldAdornmentIcon } from "@/components/ui/field-adornment-icon";
 import { cn } from "@/lib/cn";
 import type { HomeCityShowcaseItem } from "@/lib/home-cities";
+import {
+  buildExcursionsLocationPath,
+  buildHousingLocationPath,
+  excursionsHubPath,
+  housingHubPath,
+} from "@/lib/seo/routes";
 
 const directionLabels = {
   housing: "Жильё",
@@ -65,6 +71,7 @@ type HomeSearchShowcaseProps = {
   locationSuggestions: string[];
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
+  initialPopularSuggestionsByDirection?: Record<Direction, HomeSearchSuggestionItem[]>;
 };
 
 type SearchSuggestionType = "location" | "hotel";
@@ -393,10 +400,7 @@ function parseSuggestionItem(value: unknown): HomeSearchSuggestionItem | null {
     type: candidate.type,
     id: candidate.id.trim().slice(0, 120),
     name: candidate.name.trim().slice(0, 120),
-    subtitle:
-      typeof candidate.subtitle === "string"
-        ? candidate.subtitle.trim().slice(0, 180)
-        : "",
+    subtitle: typeof candidate.subtitle === "string" ? candidate.subtitle.trim().slice(0, 180) : "",
     locationId:
       typeof candidate.locationId === "string" && candidate.locationId.trim().length > 0
         ? candidate.locationId.trim().slice(0, 120)
@@ -535,11 +539,7 @@ function upsertRecentSearchEntry(
 ): RecentSearchEntry[] {
   const deduped = entries.filter(
     (item) =>
-      !(
-        item.type === next.type &&
-        item.direction === next.direction &&
-        item.id === next.id
-      ),
+      !(item.type === next.type && item.direction === next.direction && item.id === next.id),
   );
 
   return [next, ...deduped]
@@ -591,9 +591,7 @@ function normalizeStoredGuestsState(value: unknown): GuestsState {
   }
 
   const candidate = value as Partial<GuestsState>;
-  const adults = clampGuests(
-    typeof candidate.adults === "number" ? candidate.adults : 2,
-  );
+  const adults = clampGuests(typeof candidate.adults === "number" ? candidate.adults : 2);
   const childrenAges = Array.isArray(candidate.childrenAges)
     ? candidate.childrenAges
         .map((item) => (typeof item === "number" ? Math.round(item) : Number.NaN))
@@ -621,12 +619,9 @@ function parsePersistedSearchState(raw: string): PersistedHomeSearchState | null
 
   const candidate = parsed as PersistedHomeSearchState;
   return {
-    direction:
-      candidate.direction === "excursions" ? "excursions" : "housing",
+    direction: candidate.direction === "excursions" ? "excursions" : "housing",
     searchValue:
-      typeof candidate.searchValue === "string"
-        ? candidate.searchValue.slice(0, 120)
-        : "",
+      typeof candidate.searchValue === "string" ? candidate.searchValue.slice(0, 120) : "",
     housingDates: {
       checkIn: normalizeStoredIsoDate(candidate.housingDates?.checkIn),
       checkOut: normalizeStoredIsoDate(candidate.housingDates?.checkOut),
@@ -654,14 +649,15 @@ function formatCardPrice(value: number, direction: Direction): string {
   return `от ${money} / сутки`;
 }
 
-function buildCityHref(input: { direction: Direction; location: string }): string {
-  const params = new URLSearchParams({
-    direction: input.direction,
-    location: input.location,
-    guests: "2",
-  });
+function buildCityHref(input: {
+  direction: Direction;
+  locationId: string;
+}): string {
+  if (input.direction === "housing") {
+    return buildHousingLocationPath(input.locationId);
+  }
 
-  return `/search?${params.toString()}`;
+  return buildExcursionsLocationPath(input.locationId);
 }
 
 function CalendarIcon(props: { className?: string }) {
@@ -729,13 +725,23 @@ export function HomeSearchShowcase({
   locationSuggestions,
   publishedPropertiesCount,
   publishedExcursionsCount,
+  initialPopularSuggestionsByDirection,
 }: HomeSearchShowcaseProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const seededPopularSuggestions = useMemo(
+    () => ({
+      housing: initialPopularSuggestionsByDirection?.housing ?? [],
+      excursions: initialPopularSuggestionsByDirection?.excursions ?? [],
+    }),
+    [initialPopularSuggestionsByDirection],
+  );
 
   const [direction, setDirection] = useState<Direction>("housing");
   const [searchValue, setSearchValue] = useState("");
-  const [selectedSuggestion, setSelectedSuggestion] = useState<HomeSearchSuggestionItem | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<HomeSearchSuggestionItem | null>(
+    null,
+  );
   const [housingDates, setHousingDates] = useState<DateRangeState>({
     checkIn: "",
     checkOut: "",
@@ -764,7 +770,9 @@ export function HomeSearchShowcase({
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isSearchDropdownMounted, setIsSearchDropdownMounted] = useState(false);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
-  const [popularSuggestions, setPopularSuggestions] = useState<HomeSearchSuggestionItem[]>([]);
+  const [popularSuggestions, setPopularSuggestions] = useState<HomeSearchSuggestionItem[]>(
+    seededPopularSuggestions.housing,
+  );
   const [matchSuggestions, setMatchSuggestions] = useState<HomeSearchSuggestionItem[]>([]);
   const [recentEntries, setRecentEntries] = useState<RecentSearchEntry[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -844,13 +852,43 @@ export function HomeSearchShowcase({
   }, [cities, locationSuggestions]);
 
   const recentSuggestions = useMemo(
-    () =>
-      toRecentSuggestionItems(
-        recentEntries.filter((entry) => entry.direction === direction),
-      ),
+    () => toRecentSuggestionItems(recentEntries.filter((entry) => entry.direction === direction)),
     [recentEntries, direction],
   );
   const normalizedSearchQuery = searchValue.trim();
+  useEffect(() => {
+    const expiresAt = Date.now() + homeSearchSuggestionsCacheTtlMs;
+    for (const directionKey of ["housing", "excursions"] as const) {
+      const popular = seededPopularSuggestions[directionKey];
+      if (popular.length === 0) {
+        continue;
+      }
+
+      suggestionsCacheRef.current.set(`${directionKey}|`, {
+        payload: {
+          recent: [],
+          popular,
+          matches: [],
+        },
+        expiresAt,
+      });
+    }
+  }, [seededPopularSuggestions]);
+
+  useEffect(() => {
+    if (normalizedSearchQuery.length > 0) {
+      return;
+    }
+
+    const popular = seededPopularSuggestions[direction];
+    if (popular.length === 0) {
+      return;
+    }
+
+    setPopularSuggestions(popular);
+    setMatchSuggestions([]);
+  }, [direction, normalizedSearchQuery, seededPopularSuggestions]);
+
   const isSuggestionQueryMode = normalizedSearchQuery.length > 0;
   const shownPopularSuggestions = useMemo(
     () => (isSuggestionQueryMode ? [] : popularSuggestions),
@@ -895,12 +933,7 @@ export function HomeSearchShowcase({
     }
 
     return options;
-  }, [
-    isSuggestionQueryMode,
-    recentSuggestions,
-    shownPopularSuggestions,
-    shownMatchSuggestions,
-  ]);
+  }, [isSuggestionQueryMode, recentSuggestions, shownPopularSuggestions, shownMatchSuggestions]);
   const matchLocationSuggestionEntries = useMemo(
     () =>
       shownMatchSuggestions
@@ -1411,7 +1444,12 @@ export function HomeSearchShowcase({
   );
 
   useEffect(() => {
-    if (openedPanel !== "date" || direction !== "housing" || !housingDates.checkIn || housingDates.checkOut) {
+    if (
+      openedPanel !== "date" ||
+      direction !== "housing" ||
+      !housingDates.checkIn ||
+      housingDates.checkOut
+    ) {
       setHoverHousingDate("");
     }
   }, [openedPanel, direction, housingDates.checkIn, housingDates.checkOut]);
@@ -1530,61 +1568,61 @@ export function HomeSearchShowcase({
     }
 
     const abortController = new AbortController();
-    const timeoutId = window.setTimeout(async () => {
-      setIsSuggestionsLoading(true);
+    const timeoutId = window.setTimeout(
+      async () => {
+        setIsSuggestionsLoading(true);
 
-      try {
-        const params = new URLSearchParams({
-          direction,
-          query,
-          include,
-          limit: "12",
-        });
-        const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
-          signal: abortController.signal,
-        });
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = parseSuggestionsResponse(await response.json());
-        suggestionsCacheRef.current.set(cacheKey, {
-          payload,
-          expiresAt: Date.now() + homeSearchSuggestionsCacheTtlMs,
-        });
-        setPopularSuggestions(payload.popular);
-        setMatchSuggestions(payload.matches);
-
-        trackSearchAnalytics("search_suggestion_shown", {
-          direction,
-          queryLength: query.length,
-          recentCount: recentSuggestions.length,
-          popularCount: payload.popular.length,
-          matchesCount: payload.matches.length,
-        });
-        if (query.length > 0 && payload.matches.length === 0) {
-          trackSearchAnalytics("search_no_results", {
+        try {
+          const isEmptyQuery = query.length === 0;
+          const params = new URLSearchParams({
             direction,
             query,
+            include: isEmptyQuery ? "locations" : include,
+            limit: isEmptyQuery ? "5" : "12",
           });
+          const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
+            credentials: "omit",
+            signal: abortController.signal,
+          });
+          if (!response.ok) {
+            return;
+          }
+
+          const payload = parseSuggestionsResponse(await response.json());
+          suggestionsCacheRef.current.set(cacheKey, {
+            payload,
+            expiresAt: Date.now() + homeSearchSuggestionsCacheTtlMs,
+          });
+          setPopularSuggestions(payload.popular);
+          setMatchSuggestions(payload.matches);
+
+          trackSearchAnalytics("search_suggestion_shown", {
+            direction,
+            queryLength: query.length,
+            recentCount: recentSuggestions.length,
+            popularCount: payload.popular.length,
+            matchesCount: payload.matches.length,
+          });
+          if (query.length > 0 && payload.matches.length === 0) {
+            trackSearchAnalytics("search_no_results", {
+              direction,
+              query,
+            });
+          }
+        } catch {
+          // Ignore aborted or transient network errors in autocomplete flow.
+        } finally {
+          setIsSuggestionsLoading(false);
         }
-      } catch {
-        // Ignore aborted or transient network errors in autocomplete flow.
-      } finally {
-        setIsSuggestionsLoading(false);
-      }
-    }, query.length === 0 ? 0 : homeSearchSuggestionsDebounceMs);
+      },
+      query.length === 0 ? 0 : homeSearchSuggestionsDebounceMs,
+    );
 
     return () => {
       abortController.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [
-    isSearchDropdownOpen,
-    normalizedSearchQuery,
-    direction,
-    recentSuggestions.length,
-  ]);
+  }, [isSearchDropdownOpen, normalizedSearchQuery, direction, recentSuggestions.length]);
 
   useEffect(() => {
     if (activeSuggestionIndex < searchDropdownOptions.length) {
@@ -1662,7 +1700,6 @@ export function HomeSearchShowcase({
       normalizeLocation(selectedSuggestion.name) === normalizeLocation(normalizedQuery);
     const safeGuests = clampGuests(activeGuestsTotal);
     const params = new URLSearchParams({
-      direction,
       guests: String(safeGuests),
     });
 
@@ -1712,7 +1749,8 @@ export function HomeSearchShowcase({
     }
 
     closeSearchDropdown();
-    router.push(`/search?${params.toString()}`);
+    const basePath = direction === "housing" ? housingHubPath : excursionsHubPath;
+    router.push(`${basePath}?${params.toString()}`);
   };
 
   const renderSuggestionButton = (
@@ -1727,9 +1765,7 @@ export function HomeSearchShowcase({
 
     const isActive = searchDropdownOptions[activeSuggestionIndex]?.key === option.key;
     const nameContent =
-      section === "matches"
-        ? renderSuggestionName(item.name, normalizedSearchQuery)
-        : item.name;
+      section === "matches" ? renderSuggestionName(item.name, normalizedSearchQuery) : item.name;
 
     return (
       <button
@@ -1758,12 +1794,16 @@ export function HomeSearchShowcase({
 
   return (
     <>
-      <section className="relative mx-auto max-w-5xl rounded-3xl bg-white/94 p-4 ring-1 ring-olive/12 md:p-8">
+      <section className="relative mx-auto max-w-5xl rounded-3xl border border-white/65 bg-[linear-gradient(160deg,rgba(255,255,255,0.97)_0%,rgba(250,248,245,0.98)_44%,rgba(244,237,227,0.94)_100%)] p-4 shadow-[0_30px_70px_-42px_rgba(58,43,35,0.28)] ring-1 ring-olive/8 md:p-8">
         {/* Ambient decorative orbs — clipped to section, isolated so popovers can overflow */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
-          <div className="absolute -left-28 -top-28 h-80 w-80 rounded-full bg-primary/8 blur-3xl" />
-          <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
-          <div className="absolute right-1/4 top-0 h-40 w-40 rounded-full bg-sage/20 blur-2xl" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
+        >
+          <div className="absolute inset-0 bg-[linear-gradient(124deg,rgba(15,118,110,0.045)_0%,rgba(255,255,255,0)_34%),linear-gradient(180deg,rgba(242,196,77,0.07)_0%,rgba(255,255,255,0)_24%),linear-gradient(135deg,rgba(255,255,255,0)_58%,rgba(167,101,73,0.05)_84%,rgba(242,196,77,0.08)_100%)]" />
+          <div className="absolute right-[-9%] top-6 h-40 w-[34%] rotate-[9deg] rounded-[36px] border border-white/35 bg-[linear-gradient(135deg,rgba(255,255,255,0.32),rgba(255,255,255,0.02))] opacity-60" />
+          <div className="absolute -bottom-10 right-12 h-24 w-56 rounded-full bg-[linear-gradient(90deg,rgba(242,196,77,0.10),rgba(255,255,255,0))] opacity-70" />
+          <div className="absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.9),transparent)]" />
         </div>
         <div className="mb-6 text-center">
           <h1 className="mt-3 text-3xl text-midnight sm:text-4xl md:text-5xl md:leading-tight">
@@ -1809,12 +1849,10 @@ export function HomeSearchShowcase({
                   closeSearchDropdown();
                 }}
                 className={cn(
-                  "relative z-10 rounded-lg px-3 py-2 text-sm font-semibold",
+                  "relative z-10 min-h-11 rounded-lg px-3 py-2 text-sm font-semibold",
                   "outline-none transition-all duration-300 ease-out active:scale-[0.97]",
                   "focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 focus-visible:ring-offset-foam motion-reduce:transition-none",
-                  direction === item
-                    ? "text-white"
-                    : "text-olive/72 hover:text-olive",
+                  direction === item ? "text-white" : "text-olive/72 hover:text-olive",
                 )}
               >
                 {directionLabels[item]}
@@ -1879,7 +1917,9 @@ export function HomeSearchShowcase({
                       if (prev < 0) {
                         return searchDropdownOptions.length - 1;
                       }
-                      return (prev - 1 + searchDropdownOptions.length) % searchDropdownOptions.length;
+                      return (
+                        (prev - 1 + searchDropdownOptions.length) % searchDropdownOptions.length
+                      );
                     });
                     return;
                   }
@@ -1915,9 +1955,7 @@ export function HomeSearchShowcase({
                 <div
                   className={cn(
                     "animated-popover absolute left-0 top-[calc(100%+8px)] z-40 w-full overflow-hidden rounded-2xl border border-sand bg-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.6)]",
-                    isSearchDropdownOpen
-                      ? "popover-enter"
-                      : "popover-exit pointer-events-none",
+                    isSearchDropdownOpen ? "popover-enter" : "popover-exit pointer-events-none",
                   )}
                 >
                   <div
@@ -1937,7 +1975,9 @@ export function HomeSearchShowcase({
                       </div>
                     ) : null}
 
-                    {!isSuggestionsLoading && !isSuggestionQueryMode && recentSuggestions.length > 0 ? (
+                    {!isSuggestionsLoading &&
+                    !isSuggestionQueryMode &&
+                    recentSuggestions.length > 0 ? (
                       <div className="pb-1">
                         <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
                           Ранее вы уже искали
@@ -1950,7 +1990,9 @@ export function HomeSearchShowcase({
                       </div>
                     ) : null}
 
-                    {!isSuggestionsLoading && !isSuggestionQueryMode && shownPopularSuggestions.length > 0 ? (
+                    {!isSuggestionsLoading &&
+                    !isSuggestionQueryMode &&
+                    shownPopularSuggestions.length > 0 ? (
                       <div className="pb-1">
                         <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
                           Популярные направления
@@ -1963,7 +2005,9 @@ export function HomeSearchShowcase({
                       </div>
                     ) : null}
 
-                    {!isSuggestionsLoading && isSuggestionQueryMode && shownMatchSuggestions.length > 0 ? (
+                    {!isSuggestionsLoading &&
+                    isSuggestionQueryMode &&
+                    shownMatchSuggestions.length > 0 ? (
                       <div className="pb-1">
                         {matchLocationSuggestionEntries.length > 0 ? (
                           <>
@@ -2051,13 +2095,14 @@ export function HomeSearchShowcase({
                   <div
                     className={cn(
                       "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:bottom-auto xl:right-auto xl:left-0 xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
-                      openedPanel === "date"
-                        ? "popover-enter"
-                        : "popover-exit pointer-events-none",
+                      openedPanel === "date" ? "popover-enter" : "popover-exit pointer-events-none",
                     )}
                   >
                     {/* Mobile drag handle */}
-                    <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden" />
+                    <div
+                      aria-hidden="true"
+                      className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden"
+                    />
                     <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)]">
                       <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 xl:block">
                         {calendarMonths.map((month) => (
@@ -2098,7 +2143,7 @@ export function HomeSearchShowcase({
                                 setIsChildAgeSelectExpanded(false);
                               }}
                               className={cn(
-                                "rounded-full px-3 py-1 text-xs font-semibold transition",
+                                "inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
                                 isExcursionAnyDate
                                   ? "bg-primary text-white"
                                   : "bg-white text-olive ring-1 ring-olive/15 hover:bg-cream",
@@ -2113,7 +2158,11 @@ export function HomeSearchShowcase({
                           ref={monthListRef}
                           className="max-h-[68dvh] touch-pan-y overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
                           onMouseLeave={() => {
-                            if (direction === "housing" && housingDates.checkIn && !housingDates.checkOut) {
+                            if (
+                              direction === "housing" &&
+                              housingDates.checkIn &&
+                              !housingDates.checkOut
+                            ) {
                               setHoverHousingDate("");
                             }
                           }}
@@ -2156,8 +2205,8 @@ export function HomeSearchShowcase({
                                     direction === "housing" &&
                                     Boolean(
                                       housingDates.checkIn &&
-                                        housingPreviewCheckOut &&
-                                        housingPreviewCheckOut > housingDates.checkIn,
+                                      housingPreviewCheckOut &&
+                                      housingPreviewCheckOut > housingDates.checkIn,
                                     );
                                   const isHousingMiddle =
                                     direction === "housing" &&
@@ -2194,9 +2243,7 @@ export function HomeSearchShowcase({
                                         ) {
                                           return;
                                         }
-                                        setHoverHousingDate(
-                                          iso > housingDates.checkIn ? iso : "",
-                                        );
+                                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
                                       }}
                                       onFocus={() => {
                                         if (
@@ -2207,9 +2254,7 @@ export function HomeSearchShowcase({
                                         ) {
                                           return;
                                         }
-                                        setHoverHousingDate(
-                                          iso > housingDates.checkIn ? iso : "",
-                                        );
+                                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
                                       }}
                                       onClick={() =>
                                         direction === "housing"
@@ -2275,7 +2320,7 @@ export function HomeSearchShowcase({
                 aria-expanded={openedPanel === "guests"}
                 className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
               >
-                <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/60">
+                <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/72">
                   {guestsFieldLabel}
                 </span>
                 <span className="block truncate pr-12 text-sm font-semibold">
@@ -2311,7 +2356,7 @@ export function HomeSearchShowcase({
                             onClick={() => updateAdults(direction, activeGuests.adults - 1)}
                             disabled={activeGuests.adults <= 1}
                             aria-label="Уменьшить количество взрослых"
-                            className="h-8 w-8 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                            className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             -
                           </button>
@@ -2326,7 +2371,7 @@ export function HomeSearchShowcase({
                               maxGuestsCount
                             }
                             aria-label="Увеличить количество взрослых"
-                            className="h-8 w-8 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                            className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             +
                           </button>
@@ -2398,12 +2443,7 @@ export function HomeSearchShowcase({
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            addChild(
-                              direction,
-                              pendingChildAgeValue,
-                            )
-                          }
+                          onClick={() => addChild(direction, pendingChildAgeValue)}
                           disabled={
                             !pendingChildAgeValue ||
                             activeGuests.adults + activeGuests.childrenAges.length >= maxGuestsCount
@@ -2568,7 +2608,7 @@ export function HomeSearchShowcase({
                       type="button"
                       onClick={() => setExcursionRadius(km)}
                       className={cn(
-                        "relative z-10 flex-1 py-[5px] text-center text-sm font-semibold",
+                        "relative z-10 flex-1 min-h-10 min-w-10 py-2 text-center text-sm font-semibold",
                         "cursor-pointer rounded-[13px] outline-none",
                         "transition-colors duration-200",
                         "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1",
@@ -2601,7 +2641,8 @@ export function HomeSearchShowcase({
             </div>
             <h3 className="text-base font-bold text-midnight">Только проверенные объявления</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих владельцев жилья в Крыму.
+              Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих
+              владельцев жилья в Крыму.
             </p>
           </div>
 
@@ -2612,7 +2653,8 @@ export function HomeSearchShowcase({
             </div>
             <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию — вы экономите!
+              Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию — вы
+              экономите!
             </p>
           </div>
 
@@ -2623,7 +2665,8 @@ export function HomeSearchShowcase({
             </div>
             <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label} и {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
+              {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label} и{" "}
+              {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
             </p>
           </div>
         </div>
@@ -2639,21 +2682,21 @@ export function HomeSearchShowcase({
           </div>
         </div>
 
-        <div className="mt-6 -mx-4 overflow-x-auto px-4 pb-2 md:mx-0 md:overflow-visible md:px-0 md:pb-0">
-          <div className="flex w-max gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {cities.map((city) => {
+        <div className="mt-6 -mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:snap-none md:overflow-visible md:px-0 md:pb-0">
+          <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+            {cities.map((city, cityIndex) => {
               const price =
                 direction === "housing" ? city.housingPriceFrom : city.excursionPriceFrom;
               const href = buildCityHref({
                 direction,
-                location: city.locationName,
+                locationId: city.locationId,
               });
 
               return (
                 <Link
                   key={city.key}
                   href={href}
-                  className="group relative block w-[220px] shrink-0 overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 md:w-full md:rounded-[44px]"
+                  className="group relative block w-[240px] shrink-0 snap-start overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
                 >
                   <div className="relative aspect-[3/4] w-full bg-cream">
                     <Image
@@ -2661,6 +2704,7 @@ export function HomeSearchShowcase({
                       alt={city.title}
                       fill
                       sizes="(max-width: 767px) 220px, (max-width: 1023px) 48vw, (max-width: 1279px) 32vw, 25vw"
+                      priority={cityIndex < 4}
                       className="object-cover object-center transition duration-500 group-hover:scale-[1.06]"
                     />
                     {/* gradient overlay */}

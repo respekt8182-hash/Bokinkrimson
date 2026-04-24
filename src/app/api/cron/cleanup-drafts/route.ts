@@ -1,4 +1,4 @@
-// Cron endpoint: delete property drafts older than 14 days (including storage files).
+// Cron endpoint: delete empty property/excursion drafts older than 15 days.
 //
 // Call daily via any external scheduler (Vercel Cron, GitHub Actions, system cron):
 //   GET /api/cron/cleanup-drafts
@@ -7,6 +7,7 @@
 // Vercel Cron sends the Authorization header automatically when CRON_SECRET is set.
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { purgeExpiredExcursionDrafts } from "@/lib/excursions";
 import { purgeExpiredPropertyDrafts } from "@/lib/properties";
 
 function isAuthorized(req: NextRequest): boolean {
@@ -21,9 +22,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const deleted = await purgeExpiredPropertyDrafts(db);
-    console.log(`[cron/cleanup-drafts] deleted=${deleted}`);
-    return NextResponse.json({ deleted });
+    const [deletedProperties, deletedExcursions] = await Promise.all([
+      purgeExpiredPropertyDrafts(db),
+      purgeExpiredExcursionDrafts(db),
+    ]);
+    console.log(
+      `[cron/cleanup-drafts] deletedProperties=${deletedProperties} deletedExcursions=${deletedExcursions}`,
+    );
+    return NextResponse.json({
+      deletedProperties,
+      deletedExcursions,
+      deleted: deletedProperties + deletedExcursions,
+    });
   } catch (error) {
     console.error("[cron/cleanup-drafts]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

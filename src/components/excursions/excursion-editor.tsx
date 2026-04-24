@@ -8,7 +8,6 @@ import {
   ExcursionStatus,
 } from "@prisma/client";
 import {
-  CakeSlice,
   Check,
   CircleCheckBig,
   CircleX,
@@ -22,7 +21,6 @@ import {
   Plus,
   TriangleAlert,
   UserRound,
-  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -32,6 +30,7 @@ import {
   DepartureDatesEditor,
   type DepartureDateItem,
 } from "@/components/excursions/editor/departure-dates-editor";
+import { ContentPhotoManager } from "@/components/excursions/editor/content-photo-manager";
 import { ExtraOptionsEditor } from "@/components/excursions/editor/extra-options-editor";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 import { Button } from "@/components/ui/button";
@@ -47,17 +46,41 @@ import { IncludedEditor } from "@/components/excursions/editor/included-editor";
 import { FaqEditor } from "@/components/excursions/editor/faq-editor";
 import { TourDaysEditor } from "@/components/excursions/editor/tour-days-editor";
 import { ExcursionPaymentPanel } from "@/components/payments/excursion-payment-panel";
-import { crimeaLocations, imageSizeLimitBytes } from "@/lib/constants";
+import { cn } from "@/lib/cn";
+import { crimeaLocations } from "@/lib/constants";
 import { isTourOffer } from "@/lib/excursion-offers";
 import type { SerializedExcursion } from "@/lib/excursions";
+import {
+  accommodationPhotoUploadFormatsLabel,
+  accommodationPhotoUploadLimitsLabel,
+  detectSupportedPhotoUploadType,
+  getAccommodationPhotoUploadSizeError,
+  getAccommodationPhotoUploadSizeLimitBytes,
+  getUnsupportedAccommodationPhotoFormatError,
+} from "@/lib/photo-upload";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+} from "@/lib/contact-links";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { buildWebsiteFaviconUrl } from "@/lib/website-favicon";
 import {
   type ExcursionExtraOption,
   type TimelineStep,
   type ItineraryDay,
+  type ItineraryItemLabel,
   type PricingTier,
   type FaqItem,
+  type ExcursionSectionPhotoGroupKey,
+  type ExcursionSectionPhotoGroups,
+  EXCURSION_PROGRAM_PHOTO_LIMIT,
+  EXCURSION_SECTION_PHOTO_LIMIT,
+  collectExcursionSectionPhotoUrls,
+  formatItineraryItemCount,
+  getItineraryDayPhotoUrls,
+  getItineraryProgramTitle,
+  getTimelineStepPhotoUrls,
   EXCURSION_CATEGORY_TAGS,
   INCLUDED_PRESETS,
   EXCLUDED_PRESETS,
@@ -67,8 +90,20 @@ import {
   OFFER_TYPE_OPTIONS,
   PRICE_UNIT_PRESETS,
   PHYSICAL_REQUIREMENTS_PRESETS,
-  TOUR_MEAL_PLAN_OPTIONS,
   WHAT_TO_BRING_PRESETS,
+  // V2 Tour types
+  TOUR_KIND_OPTIONS,
+  TRANSPORT_MODE_OPTIONS,
+  DEPARTURE_MODE_OPTIONS,
+  ROOM_TYPE_OPTIONS,
+  MEAL_PLAN_OPTIONS,
+  ACCOMMODATION_TYPE_OPTIONS,
+  EQUIPMENT_PROVIDED_PRESETS,
+  DOCUMENTS_REQUIRED_PRESETS,
+  normalizeExcursionSectionPhotoGroups,
+  resolveItineraryItemLabel,
+  requiresAccommodationBlock,
+  requiresSafetyBlock,
 } from "@/types/excursions";
 
 type ExcursionEditorProps = {
@@ -79,6 +114,7 @@ type ExcursionEditorProps = {
   backLabel?: string;
   listHref?: string;
   moderationHref?: string | null;
+  previewHref?: string | null;
 };
 
 type UpdateExcursionResponse = {
@@ -94,8 +130,57 @@ type ReverseGeocodeItem = {
 
 const excursionPhotoLimit = 12;
 const excursionPhotoMinForModeration = 3;
-const excursionPhotoAccept = "image/jpeg,image/png,image/heic,image/heif";
-type SupportedExcursionPhotoUploadType = "jpeg" | "png" | "heic" | "heif";
+const sectionPhotoFieldConfigs: Array<{
+  key: ExcursionSectionPhotoGroupKey;
+  title: string;
+  description: string;
+  addLabel: string;
+  emptyText: string;
+}> = [
+  {
+    key: "dates",
+    title: "Фото для дат и доступности",
+    description: "Показываются в разделе с датами, заездами и условиями бронирования.",
+    addLabel: "Добавить фото дат",
+    emptyText: "Фото для раздела дат пока не выбраны.",
+  },
+  {
+    key: "program",
+    title: "Фото программы",
+    description:
+      "Показываются в общей секции программы, если нужно отдельное фото над списком дней или этапов.",
+    addLabel: "Добавить фото программы",
+    emptyText: "Фото для общего блока программы пока не выбраны.",
+  },
+  {
+    key: "logistics",
+    title: "Фото логистики",
+    description: "Показываются рядом со стартом, маршрутом и логистическими деталями.",
+    addLabel: "Добавить фото логистики",
+    emptyText: "Фото для блока логистики пока не выбраны.",
+  },
+  {
+    key: "accommodation",
+    title: "Фото проживания",
+    description: "Показываются в блоке проживания и размещения.",
+    addLabel: "Добавить фото проживания",
+    emptyText: "Фото проживания пока не выбраны.",
+  },
+  {
+    key: "included",
+    title: "Фото для блока «Что включено»",
+    description: "Показываются рядом с включенными услугами, питанием и дополнительными условиями.",
+    addLabel: "Добавить фото включенного",
+    emptyText: "Фото для блока «Что включено» пока не выбраны.",
+  },
+  {
+    key: "requirements",
+    title: "Фото подготовки",
+    description: "Показываются в разделе требований, документов и подготовки к поездке.",
+    addLabel: "Добавить фото подготовки",
+    emptyText: "Фото для блока подготовки пока не выбраны.",
+  },
+];
 type WeekdayId = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 type WeekdaySchedule = {
@@ -156,8 +241,6 @@ type FormatOption = {
   label: string;
 };
 
-
-
 const weekdayOrder: WeekdayId[] = [1, 2, 3, 4, 5, 6, 0];
 
 const weekdayLabels: Record<WeekdayId, string> = {
@@ -175,7 +258,7 @@ const weekdayShortLabels: Record<WeekdayId, string> = {
   1: "Пн",
   2: "Вт",
   3: "Ср",
-  4: "Чт",
+  4: "Р§С‚",
   5: "Пт",
   6: "Сб",
 };
@@ -205,7 +288,6 @@ const defaultFormatOptions: FormatOption[] = [
   { id: "individual", value: ExcursionFormat.INDIVIDUAL, label: "Индивидуальная" },
   { id: "vip", value: ExcursionFormat.VIP, label: "VIP" },
 ];
-
 
 const defaultCategoryTagSet = new Set(EXCURSION_CATEGORY_TAGS.map((item) => item.toLowerCase()));
 const defaultLanguageCodeSet = new Set(
@@ -263,40 +345,6 @@ function buildShortDescription(value: string): string | null {
   }
 
   return `${normalized.slice(0, shortDescriptionMaxLength - 3).trimEnd()}...`;
-}
-
-function normalizeMimeType(value: string): string {
-  return value.toLowerCase().split(";")[0]?.trim() ?? "";
-}
-
-function getFileExtension(fileName: string): string {
-  const lastDot = fileName.lastIndexOf(".");
-  if (lastDot < 0) {
-    return "";
-  }
-
-  return fileName
-    .slice(lastDot + 1)
-    .toLowerCase()
-    .trim();
-}
-
-function detectSupportedExcursionPhotoUploadType(
-  file: File,
-): SupportedExcursionPhotoUploadType | null {
-  const mime = normalizeMimeType(file.type);
-  if (mime === "image/jpeg") return "jpeg";
-  if (mime === "image/png") return "png";
-  if (mime === "image/heic") return "heic";
-  if (mime === "image/heif") return "heif";
-
-  const extension = getFileExtension(file.name);
-  if (extension === "jpg" || extension === "jpeg") return "jpeg";
-  if (extension === "png") return "png";
-  if (extension === "heic") return "heic";
-  if (extension === "heif") return "heif";
-
-  return null;
 }
 
 function normalizeLocation(value: string): string {
@@ -366,7 +414,7 @@ function formatDuration(minutes: number | null): string {
   }
 
   if (restMinutes === 0) {
-    return `${hours} ч`;
+    return `${hours} С‡`;
   }
 
   return `${hours} ч ${restMinutes} мин`;
@@ -511,6 +559,7 @@ export function ExcursionEditor({
   backLabel = "Все программы",
   listHref = "/dashboard/excursions",
   moderationHref = null,
+  previewHref = null,
 }: ExcursionEditorProps) {
   const router = useRouter();
   const [excursion, setExcursion] = useState(initialExcursion);
@@ -555,6 +604,13 @@ export function ExcursionEditor({
   const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>(
     initialExcursion.itineraryDays ?? [],
   );
+  const [itineraryItemLabel, setItineraryItemLabel] = useState<ItineraryItemLabel>(() =>
+    resolveItineraryItemLabel(initialExcursion.itineraryDays?.[0]?.itemLabel),
+  );
+  const normalizedItineraryDays = useMemo(
+    () => itineraryDays.map((day) => ({ ...day, itemLabel: itineraryItemLabel })),
+    [itineraryDays, itineraryItemLabel],
+  );
   const [scheduleText, setScheduleText] = useState(initialExcursion.scheduleText ?? "");
   const [availabilityMode, setAvailabilityMode] = useState<ExcursionAvailabilityMode>(
     initialExcursion.availabilityMode,
@@ -575,6 +631,7 @@ export function ExcursionEditor({
   const [contactFirstName, setContactFirstName] = useState(initialExcursion.contactFirstName ?? "");
   const [contactLastName, setContactLastName] = useState(initialExcursion.contactLastName ?? "");
   const [contactPhone, setContactPhone] = useState(initialExcursion.contactPhone ?? "");
+  const [contactPhone2, setContactPhone2] = useState(initialExcursion.contactPhone2 ?? "");
   const [contactEmail, setContactEmail] = useState(initialExcursion.contactEmail ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialExcursion.websiteUrl ?? "");
   const [whatsappUrl, setWhatsappUrl] = useState(initialExcursion.whatsappUrl ?? "");
@@ -582,8 +639,21 @@ export function ExcursionEditor({
   const [vkUrl, setVkUrl] = useState(initialExcursion.vkUrl ?? "");
   const [maxUrl, setMaxUrl] = useState(initialExcursion.maxUrl ?? "");
   const [okUrl, setOkUrl] = useState(initialExcursion.okUrl ?? "");
+  const [showContactEmail, setShowContactEmail] = useState(Boolean(initialExcursion.contactEmail));
+  const [showWebsite, setShowWebsite] = useState(Boolean(initialExcursion.websiteUrl));
+  const [showWhatsapp, setShowWhatsapp] = useState(Boolean(initialExcursion.whatsappUrl));
+  const [showTelegram, setShowTelegram] = useState(Boolean(initialExcursion.telegramUrl));
+  const [showVk, setShowVk] = useState(Boolean(initialExcursion.vkUrl));
+  const [showMax, setShowMax] = useState(Boolean(initialExcursion.maxUrl));
+  const [showOk, setShowOk] = useState(Boolean(initialExcursion.okUrl));
   const [failedWebsiteFaviconUrl, setFailedWebsiteFaviconUrl] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState(initialExcursion.photoUrls);
+  const [sectionPhotoGroups, setSectionPhotoGroups] = useState<ExcursionSectionPhotoGroups>(() =>
+    normalizeExcursionSectionPhotoGroups(initialExcursion.sectionPhotoGroups),
+  );
+  const [programPhotoUploadKey, setProgramPhotoUploadKey] = useState<string | null>(null);
+  const [sectionPhotoUploadKey, setSectionPhotoUploadKey] =
+    useState<ExcursionSectionPhotoGroupKey | null>(null);
   const [videoUrls, setVideoUrls] = useState(initialExcursion.videoUrls);
   const [videoUrlInput, setVideoUrlInput] = useState("");
   // --- Wizard state ---
@@ -699,6 +769,42 @@ export function ExcursionEditor({
   const [accommodationComment, setAccommodationComment] = useState(
     initialExcursion.accommodationComment ?? "",
   );
+  const [accommodationStars, setAccommodationStars] = useState(
+    initialExcursion.accommodationStars ?? "",
+  );
+  const [roomTypes, setRoomTypes] = useState<string[]>(initialExcursion.roomTypes ?? []);
+  const [singleSupplementAvailable, setSingleSupplementAvailable] = useState<boolean | null>(
+    initialExcursion.singleSupplementAvailable ?? null,
+  );
+  const [singleSupplementPrice, setSingleSupplementPrice] = useState(
+    initialExcursion.singleSupplementPrice === null
+      ? ""
+      : String(initialExcursion.singleSupplementPrice),
+  );
+  const [mealDetails, setMealDetails] = useState(initialExcursion.mealDetails ?? "");
+  // Tour logistics
+  const [tourKind, setTourKind] = useState<string | null>(initialExcursion.tourKind ?? null);
+  const [transportModes, setTransportModes] = useState<string[]>(
+    initialExcursion.transportModes ?? [],
+  );
+  const [departureMode, setDepartureMode] = useState<string | null>(
+    initialExcursion.departureMode ?? null,
+  );
+  const [arrivalInfo, setArrivalInfo] = useState(initialExcursion.arrivalInfo ?? "");
+  const [departureInfo, setDepartureInfo] = useState(initialExcursion.departureInfo ?? "");
+  // Safety & documents
+  const [documentsRequired, setDocumentsRequired] = useState<string[]>(
+    initialExcursion.documentsRequired ?? [],
+  );
+  const [insuranceIncluded, setInsuranceIncluded] = useState<boolean | null>(
+    initialExcursion.insuranceIncluded ?? null,
+  );
+  const [insuranceComment, setInsuranceComment] = useState(initialExcursion.insuranceComment ?? "");
+  const [equipmentProvided, setEquipmentProvided] = useState<string[]>(
+    initialExcursion.equipmentProvided ?? [],
+  );
+  const [safetyInfo, setSafetyInfo] = useState(initialExcursion.safetyInfo ?? "");
+  const [routeConditions, setRouteConditions] = useState(initialExcursion.routeConditions ?? "");
   const [departureDates, setDepartureDates] = useState<DepartureDateItem[]>([]);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -706,7 +812,6 @@ export function ExcursionEditor({
   const newTagInputRef = useRef<HTMLInputElement | null>(null);
   const newFormatInputRef = useRef<HTMLInputElement | null>(null);
   const newLanguageInputRef = useRef<HTMLInputElement | null>(null);
-  const photoFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
@@ -716,6 +821,27 @@ export function ExcursionEditor({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const isTour = isTourOffer(offerType);
+  const reusableSectionPhotoLibrary = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...photoUrls,
+          ...collectExcursionSectionPhotoUrls(sectionPhotoGroups),
+          ...normalizedItineraryDays.flatMap((day) => getItineraryDayPhotoUrls(day)),
+          ...timeline.flatMap((step) => getTimelineStepPhotoUrls(step)),
+        ]),
+      ),
+    [normalizedItineraryDays, photoUrls, sectionPhotoGroups, timeline],
+  );
+
+  // в”Ђв”Ђ Visibility rules в”Ђв”Ђ
+  const showAccommodationBlock = requiresAccommodationBlock({
+    offerType,
+    durationNights: durationNights.trim() ? Number(durationNights) : null,
+    accommodationProvided,
+  });
+  const showSafetyBlock = requiresSafetyBlock({ tourKind, transportModes });
+  const showTourLogistics = isTour;
 
   const activeScheduleDays = useMemo(
     () => weekdayOrder.filter((day) => daySchedule[day].enabled),
@@ -975,7 +1101,7 @@ export function ExcursionEditor({
       durationMinutes: durationMinutes.trim() ? Number.parseInt(durationMinutes, 10) || null : null,
       durationDays: durationDays.trim() ? Number.parseInt(durationDays, 10) || null : null,
       durationNights: durationNights.trim() ? Number.parseInt(durationNights, 10) || null : null,
-      itineraryDays,
+      itineraryDays: normalizedItineraryDays,
       availabilityMode,
       availabilityNote: normalizeNullableText(availabilityNote),
       scheduleText:
@@ -1012,8 +1138,28 @@ export function ExcursionEditor({
         ? Number.parseInt(accommodationNights, 10) || null
         : null,
       accommodationFormat: normalizeNullableText(accommodationFormat),
+      accommodationStars: normalizeNullableText(accommodationStars),
+      roomTypes,
+      singleSupplementAvailable,
+      singleSupplementPrice: singleSupplementPrice.trim()
+        ? Number.parseFloat(singleSupplementPrice) || null
+        : null,
       mealPlan: normalizeNullableText(mealPlan),
+      mealDetails: normalizeNullableText(mealDetails),
       accommodationComment: normalizeNullableText(accommodationComment),
+      // Tour logistics
+      tourKind: tourKind || null,
+      transportModes,
+      departureMode: departureMode || null,
+      arrivalInfo: normalizeNullableText(arrivalInfo),
+      departureInfo: normalizeNullableText(departureInfo),
+      // Safety & documents
+      documentsRequired,
+      insuranceIncluded,
+      insuranceComment: normalizeNullableText(insuranceComment),
+      equipmentProvided,
+      safetyInfo: normalizeNullableText(safetyInfo),
+      routeConditions: normalizeNullableText(routeConditions),
       transferDetails: transferEnabled ? normalizeNullableText(transferDetails) : null,
       cancellationPolicyType: cancellationPolicyType || null,
       cancellationPolicy: normalizeNullableText(cancellationPolicyText),
@@ -1021,14 +1167,16 @@ export function ExcursionEditor({
       contactFirstName: normalizeNullableText(contactFirstName),
       contactLastName: normalizeNullableText(contactLastName),
       contactPhone: normalizeNullableText(contactPhone),
+      contactPhone2: normalizeNullableText(contactPhone2),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
       whatsappUrl: normalizeNullableText(whatsappUrl),
       telegramUrl: normalizeTelegramProfileUrl(telegramUrl),
-      vkUrl: normalizeNullableText(vkUrl),
-      maxUrl: normalizeNullableText(maxUrl),
-      okUrl: normalizeNullableText(okUrl),
+      vkUrl: normalizeVkProfileUrl(vkUrl),
+      maxUrl: normalizeMaxProfileUrl(maxUrl),
+      okUrl: normalizeOkProfileUrl(okUrl),
       photoUrls,
+      sectionPhotoGroups,
       videoUrls,
     };
   }, [
@@ -1053,7 +1201,7 @@ export function ExcursionEditor({
     finishPoint,
     description,
     highlights,
-    itineraryDays,
+    normalizedItineraryDays,
     routeDescription,
     isYearRound,
     seasonDateFrom,
@@ -1088,6 +1236,7 @@ export function ExcursionEditor({
     contactFirstName,
     contactLastName,
     contactPhone,
+    contactPhone2,
     contactEmail,
     websiteUrl,
     whatsappUrl,
@@ -1097,8 +1246,25 @@ export function ExcursionEditor({
     okUrl,
     offerType,
     photoUrls,
+    sectionPhotoGroups,
     subtypeLabel,
     videoUrls,
+    tourKind,
+    transportModes,
+    departureMode,
+    arrivalInfo,
+    departureInfo,
+    accommodationStars,
+    roomTypes,
+    singleSupplementAvailable,
+    singleSupplementPrice,
+    mealDetails,
+    documentsRequired,
+    insuranceIncluded,
+    insuranceComment,
+    equipmentProvided,
+    safetyInfo,
+    routeConditions,
   ]);
 
   useEffect(() => {
@@ -1181,7 +1347,7 @@ export function ExcursionEditor({
           body: JSON.stringify({ scheduleMode: "RULES", rules, exceptions }),
         });
       } catch {
-        // silent — non-critical auto-save
+        // silent - non-critical auto-save
       }
     }, 3000);
 
@@ -1191,7 +1357,16 @@ export function ExcursionEditor({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daySchedule, isYearRound, seasonDateFrom, seasonDateTo, additionalClosedDates, scheduleComment, availabilityMode, isScheduleConfigValid]);
+  }, [
+    daySchedule,
+    isYearRound,
+    seasonDateFrom,
+    seasonDateTo,
+    additionalClosedDates,
+    scheduleComment,
+    availabilityMode,
+    isScheduleConfigValid,
+  ]);
 
   const isSeasonLimited = !isYearRound;
 
@@ -1228,44 +1403,45 @@ export function ExcursionEditor({
     };
   }
 
-  // Step 0: Описание
-  const generalChecks: StepFieldCheck[] = [
+  // Step 0: Тип и описание
+  const step0Checks: StepFieldCheck[] = [
     { label: "Тип предложения", done: Boolean(offerType) },
     { label: "Название (минимум 2 символа)", done: title.trim().length >= 2 },
+    { label: "Краткое описание (минимум 20 символов)", done: description.trim().length >= 20 },
     {
-      label: "Общее описание (минимум 20 символов)",
-      done: description.trim().length >= 20,
-    },
-    {
-      label: "Основная категория",
+      label: "Категория или теги",
       done: tags.length > 0 || Boolean(subtypeLabel.trim()),
       required: false,
     },
+    { label: "Вид тура", done: !isTour || Boolean(tourKind), required: false },
   ];
-  // Step 1: Программа и маршрут (includes logistics)
-  const programChecks: StepFieldCheck[] = [
+  // Step 1: География и маршрут
+  const step1Checks: StepFieldCheck[] = [
+    { label: "Выбор локации", done: Boolean(locationId) },
+    { label: "Точка старта", done: Boolean(startPoint.trim()) },
     {
-      label: isTour ? "Длительность в днях" : "Длительность (от 15 минут)",
-      done: isTour ? Number(durationDays || 0) >= 1 : Number(durationMinutes || 0) >= 15,
+      label: "Адрес или координаты",
+      done: Boolean(address.trim()) || (latitude !== null && longitude !== null),
+      required: false,
     },
+  ];
+  // Step 2: Программа
+  const step2Checks: StepFieldCheck[] = [
     {
-      label: isTour ? "Программа по дням или маршрут" : "Таймлайн или маршрут",
+      label: isTour ? "Программа тура или маршрут" : "Таймлайн или маршрут",
       done: isTour
         ? itineraryDays.length > 0 || routeDescription.trim().length >= 10
         : routeDescription.trim().length >= 10 || timeline.length >= 1,
     },
-    { label: "Выбор локации", done: Boolean(locationId) },
-    {
-      label: "Точка старта",
-      done: Boolean(startPoint.trim()),
-    },
+    { label: "Хайлайты", done: highlights.length > 0, required: false },
   ];
-  // Step 2: Расписание
-  const scheduleChecks: StepFieldCheck[] = [
+  // Step 3: Расписание и группа (merged old steps 3+4)
+  const step3Checks: StepFieldCheck[] = [
     {
-      label: "Режим доступности",
-      done: Boolean(availabilityMode),
+      label: isTour ? "Длительность в днях" : "Длительность (от 15 минут)",
+      done: isTour ? Number(durationDays || 0) >= 1 : Number(durationMinutes || 0) >= 15,
     },
+    { label: "Режим доступности", done: Boolean(availabilityMode) },
     {
       label: "Валидная доступность",
       done:
@@ -1275,17 +1451,21 @@ export function ExcursionEditor({
             ? departureDates.length > 0
             : availabilityNote.trim().length >= 2,
     },
+    { label: "Формат", done: Boolean(excursionFormat), required: false },
+    { label: "Язык", done: languageCodes.length > 0, required: false },
   ];
-  // Step 3: Цены и условия
-  const pricingChecks: StepFieldCheck[] = [
+  // Step 4: Цена и условия (merged old steps 5+6)
+  const step4Checks: StepFieldCheck[] = [
     { label: "Цена от (больше 0)", done: Number(priceFrom || 0) > 0 },
-    {
-      label: "Единица цены",
-      done: isTour ? priceUnitLabel.trim().length >= 2 : true,
-    },
+    { label: "Единица цены", done: isTour ? priceUnitLabel.trim().length >= 2 : true },
+    { label: "Что включено", done: includedItems.length > 0, required: false },
   ];
-  // Step 4: Контакты и медиа
-  const contactsMediaChecks: StepFieldCheck[] = [
+  // Step 5: Медиа и контакты (merged old steps 7+8)
+  const step5Checks: StepFieldCheck[] = [
+    {
+      label: `Фотографии (минимум ${excursionPhotoMinForModeration})`,
+      done: photoUrls.length >= excursionPhotoMinForModeration,
+    },
     {
       label: "Контакты (имя, фамилия, телефон)",
       done:
@@ -1293,13 +1473,6 @@ export function ExcursionEditor({
         contactLastName.trim().length >= 2 &&
         contactPhone.trim().length >= 10,
     },
-    {
-      label: `Фотографии (минимум ${excursionPhotoMinForModeration})`,
-      done: photoUrls.length >= excursionPhotoMinForModeration,
-    },
-  ];
-  // Step 5: Публикация
-  const publishChecks: StepFieldCheck[] = [
     {
       label: "Отправка на модерацию",
       done:
@@ -1310,12 +1483,12 @@ export function ExcursionEditor({
   ];
 
   const wizardStepStates: WizardStepState[] = [
-    buildWizardStepState("Описание", generalChecks),
-    buildWizardStepState("Программа и маршрут", programChecks),
-    buildWizardStepState("Расписание", scheduleChecks),
-    buildWizardStepState("Цены и условия", pricingChecks),
-    buildWizardStepState("Контакты и медиа", contactsMediaChecks),
-    buildWizardStepState("Публикация", publishChecks),
+    buildWizardStepState("Тип и описание", step0Checks),
+    buildWizardStepState("География", step1Checks),
+    buildWizardStepState("Программа", step2Checks),
+    buildWizardStepState("Расписание и группа", step3Checks),
+    buildWizardStepState("Цена и условия", step4Checks),
+    buildWizardStepState("Медиа и контакты", step5Checks),
   ];
 
   const wizardSteps = wizardStepStates.map((step) => ({
@@ -1401,6 +1574,7 @@ export function ExcursionEditor({
     setDurationDays(item.durationDays === null ? "" : String(item.durationDays));
     setDurationNights(item.durationNights === null ? "" : String(item.durationNights));
     setItineraryDays(item.itineraryDays ?? []);
+    setItineraryItemLabel(resolveItineraryItemLabel(item.itineraryDays?.[0]?.itemLabel));
     setScheduleText(item.scheduleText ?? "");
     setAvailabilityMode(item.availabilityMode);
     setAvailabilityNote(item.availabilityNote ?? "");
@@ -1408,6 +1582,7 @@ export function ExcursionEditor({
     setContactFirstName(item.contactFirstName ?? "");
     setContactLastName(item.contactLastName ?? "");
     setContactPhone(item.contactPhone ?? "");
+    setContactPhone2(item.contactPhone2 ?? "");
     setContactEmail(item.contactEmail ?? "");
     setWebsiteUrl(item.websiteUrl ?? "");
     setWhatsappUrl(item.whatsappUrl ?? "");
@@ -1415,7 +1590,15 @@ export function ExcursionEditor({
     setVkUrl(item.vkUrl ?? "");
     setMaxUrl(item.maxUrl ?? "");
     setOkUrl(item.okUrl ?? "");
+    setShowContactEmail(Boolean(item.contactEmail));
+    setShowWebsite(Boolean(item.websiteUrl));
+    setShowWhatsapp(Boolean(item.whatsappUrl));
+    setShowTelegram(Boolean(item.telegramUrl));
+    setShowVk(Boolean(item.vkUrl));
+    setShowMax(Boolean(item.maxUrl));
+    setShowOk(Boolean(item.okUrl));
     setPhotoUrls(item.photoUrls);
+    setSectionPhotoGroups(normalizeExcursionSectionPhotoGroups(item.sectionPhotoGroups));
     setVideoUrls(item.videoUrls);
     setTags(item.tags ?? []);
     setExcursionFormat(normalizeExcursionFormat(item.format));
@@ -1444,14 +1627,35 @@ export function ExcursionEditor({
       item.accommodationNights === null ? "" : String(item.accommodationNights),
     );
     setAccommodationFormat(item.accommodationFormat ?? "");
+    setAccommodationStars(item.accommodationStars ?? "");
+    setRoomTypes(item.roomTypes ?? []);
+    setSingleSupplementAvailable(item.singleSupplementAvailable ?? null);
+    setSingleSupplementPrice(
+      item.singleSupplementPrice === null ? "" : String(item.singleSupplementPrice),
+    );
     setMealPlan(item.mealPlan ?? "");
+    setMealDetails(item.mealDetails ?? "");
     setAccommodationComment(item.accommodationComment ?? "");
+    setTourKind(item.tourKind ?? null);
+    setTransportModes(item.transportModes ?? []);
+    setDepartureMode(item.departureMode ?? null);
+    setArrivalInfo(item.arrivalInfo ?? "");
+    setDepartureInfo(item.departureInfo ?? "");
+    setDocumentsRequired(item.documentsRequired ?? []);
+    setInsuranceIncluded(item.insuranceIncluded ?? null);
+    setInsuranceComment(item.insuranceComment ?? "");
+    setEquipmentProvided(item.equipmentProvided ?? []);
+    setSafetyInfo(item.safetyInfo ?? "");
+    setRouteConditions(item.routeConditions ?? "");
     setCancellationPolicyType(item.cancellationPolicyType ?? "");
     setCancellationPolicyText(item.cancellationPolicy ?? "");
     setFaqItems(item.faqItems ?? []);
   }
 
-  async function patchExcursion(payload: Record<string, unknown>): Promise<boolean> {
+  async function patchExcursion(
+    payload: Record<string, unknown>,
+    options: { applyResponse?: boolean } = {},
+  ): Promise<SerializedExcursion | null> {
     setIsSaving(true);
     setError("");
     setSuccess("");
@@ -1466,11 +1670,15 @@ export function ExcursionEditor({
       const body = (await response.json()) as UpdateExcursionResponse;
       if (!response.ok || !body.item) {
         setError(body.error ?? "Не удалось сохранить программу");
-        return false;
+        return null;
       }
 
-      applyExcursion(body.item);
-      return true;
+      if (options.applyResponse === false) {
+        setExcursion(body.item);
+      } else {
+        applyExcursion(body.item);
+      }
+      return body.item;
     } finally {
       setIsSaving(false);
     }
@@ -1845,7 +2053,7 @@ export function ExcursionEditor({
     const normalizedShortDescription = buildShortDescription(description);
 
     if (isTour && itineraryDays.length === 0 && routeDescription.trim().length < 10) {
-      setError("Для тура заполните программу по дням или опишите маршрут");
+      setError("Для тура заполните программу по пунктам или опишите маршрут");
       return null;
     }
 
@@ -1885,7 +2093,7 @@ export function ExcursionEditor({
       durationMinutes: isTour ? null : parsedDuration,
       durationDays: isTour ? parsedDurationDays : null,
       durationNights: isTour ? parsedDurationNights : null,
-      itineraryDays: isTour ? itineraryDays : [],
+      itineraryDays: isTour ? normalizedItineraryDays : [],
       scheduleText:
         availabilityMode === ExcursionAvailabilityMode.REGULAR
           ? scheduleSummary
@@ -1929,15 +2137,41 @@ export function ExcursionEditor({
       contactFirstName: normalizeNullableText(contactFirstName),
       contactLastName: normalizeNullableText(contactLastName),
       contactPhone: normalizeNullableText(contactPhone),
+      contactPhone2: normalizeNullableText(contactPhone2),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
       whatsappUrl: normalizeNullableText(whatsappUrl),
       telegramUrl: normalizeTelegramProfileUrl(telegramUrl),
-      vkUrl: normalizeNullableText(vkUrl),
-      maxUrl: normalizeNullableText(maxUrl),
-      okUrl: normalizeNullableText(okUrl),
+      vkUrl: normalizeVkProfileUrl(vkUrl),
+      maxUrl: normalizeMaxProfileUrl(maxUrl),
+      okUrl: normalizeOkProfileUrl(okUrl),
       photoUrls,
+      sectionPhotoGroups,
       videoUrls,
+      // Tour logistics
+      tourKind: isTour && tourKind ? normalizeNullableText(tourKind) : null,
+      transportModes: isTour ? transportModes : [],
+      departureMode: isTour && departureMode ? normalizeNullableText(departureMode) : null,
+      arrivalInfo: isTour ? normalizeNullableText(arrivalInfo) : null,
+      departureInfo: isTour ? normalizeNullableText(departureInfo) : null,
+      // Accommodation (enhanced)
+      accommodationStars: accommodationProvided ? normalizeNullableText(accommodationStars) : null,
+      roomTypes: accommodationProvided ? roomTypes : [],
+      singleSupplementAvailable: accommodationProvided ? singleSupplementAvailable : null,
+      singleSupplementPrice:
+        accommodationProvided && singleSupplementAvailable && singleSupplementPrice.trim()
+          ? Number.parseFloat(singleSupplementPrice) || null
+          : null,
+      // Meals
+      mealDetails: isTour ? normalizeNullableText(mealDetails) : null,
+      // Safety & documents
+      documentsRequired: isTour ? documentsRequired : [],
+      insuranceIncluded: isTour ? insuranceIncluded : null,
+      insuranceComment:
+        isTour && insuranceIncluded ? normalizeNullableText(insuranceComment) : null,
+      equipmentProvided: showSafetyBlock ? equipmentProvided : [],
+      safetyInfo: showSafetyBlock ? normalizeNullableText(safetyInfo) : null,
+      routeConditions: showSafetyBlock ? normalizeNullableText(routeConditions) : null,
     };
   }
 
@@ -1972,6 +2206,21 @@ export function ExcursionEditor({
     setSuccess("Программа отправлена на модерацию");
     router.refresh();
     return true;
+  }
+
+  async function prepareExcursionForPayment(): Promise<boolean> {
+    const payload = buildFormPayload();
+    if (!payload) {
+      return false;
+    }
+
+    const scheduleSaved = await saveScheduleRules();
+    if (!scheduleSaved) {
+      return false;
+    }
+
+    const saved = await patchExcursion(payload);
+    return saved !== null;
   }
 
   async function deleteExcursion() {
@@ -2014,16 +2263,23 @@ export function ExcursionEditor({
       let currentPhotoCount = photoUrls.length;
 
       for (const file of Array.from(fileList)) {
-        const uploadType = detectSupportedExcursionPhotoUploadType(file);
+        const uploadType = detectSupportedPhotoUploadType({
+          mimeType: file.type,
+          fileName: file.name,
+        });
         if (!uploadType) {
-          setError("Формат не поддерживается. Загрузите JPG, PNG или HEIC.");
+          setError(getUnsupportedAccommodationPhotoFormatError());
           continue;
         }
 
-        if ((uploadType === "jpeg" || uploadType === "png") && file.size > imageSizeLimitBytes) {
-          setError(
-            "Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно",
-          );
+        if (
+          file.size >
+          getAccommodationPhotoUploadSizeLimitBytes({
+            mimeType: file.type,
+            fileName: file.name,
+          })
+        ) {
+          setError(getAccommodationPhotoUploadSizeError());
           continue;
         }
 
@@ -2068,6 +2324,406 @@ export function ExcursionEditor({
       setSuccess("Фото удалено");
       router.refresh();
     }
+  }
+
+  async function movePhoto(photoIndex: number, direction: -1 | 1) {
+    const nextPhotoIndex = photoIndex + direction;
+    if (nextPhotoIndex < 0 || nextPhotoIndex >= photoUrls.length) {
+      return;
+    }
+
+    const previousPhotoUrls = photoUrls;
+    const nextPhotoUrls = [...photoUrls];
+    [nextPhotoUrls[photoIndex], nextPhotoUrls[nextPhotoIndex]] = [
+      nextPhotoUrls[nextPhotoIndex],
+      nextPhotoUrls[photoIndex],
+    ];
+
+    setPhotoUrls(nextPhotoUrls);
+    const saved = await patchExcursion({ photoUrls: nextPhotoUrls }, { applyResponse: false });
+    if (!saved) {
+      setPhotoUrls(previousPhotoUrls);
+      return;
+    }
+
+    setSuccess("Порядок фото в верхней галерее обновлён");
+    router.refresh();
+  }
+
+  function buildProgramPhotoTargetKey(kind: "day" | "step", index: number): string {
+    return `${kind}-${index}`;
+  }
+
+  async function cleanupUploadedContentPhoto(url: string) {
+    await fetch(`/api/excursions/${excursion.id}/content-photos`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    }).catch(() => null);
+  }
+
+  async function persistSectionPhotoGroupChange(
+    key: ExcursionSectionPhotoGroupKey,
+    nextPhotoUrls: string[],
+    successMessage: string,
+  ): Promise<boolean> {
+    const previousGroups = sectionPhotoGroups;
+    const nextGroups: ExcursionSectionPhotoGroups = {
+      ...sectionPhotoGroups,
+      [key]: nextPhotoUrls,
+    };
+
+    setSectionPhotoGroups(nextGroups);
+    const saved = await patchExcursion(
+      { sectionPhotoGroups: nextGroups },
+      { applyResponse: false },
+    );
+    if (!saved) {
+      setSectionPhotoGroups(previousGroups);
+      return false;
+    }
+
+    setSuccess(successMessage);
+    router.refresh();
+    return true;
+  }
+
+  async function uploadSectionPhotos(
+    key: ExcursionSectionPhotoGroupKey,
+    fileList: FileList | null,
+  ) {
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setSectionPhotoUploadKey(key);
+
+    try {
+      let currentPhotoUrls = sectionPhotoGroups[key];
+
+      for (const file of Array.from(fileList)) {
+        const uploadType = detectSupportedPhotoUploadType({
+          mimeType: file.type,
+          fileName: file.name,
+        });
+        if (!uploadType) {
+          setError(getUnsupportedAccommodationPhotoFormatError());
+          continue;
+        }
+
+        if (
+          file.size >
+          getAccommodationPhotoUploadSizeLimitBytes({
+            mimeType: file.type,
+            fileName: file.name,
+          })
+        ) {
+          setError(getAccommodationPhotoUploadSizeError());
+          continue;
+        }
+
+        if (currentPhotoUrls.length >= EXCURSION_SECTION_PHOTO_LIMIT) {
+          setError(`Для одного раздела доступно не более ${EXCURSION_SECTION_PHOTO_LIMIT} фото.`);
+          break;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`/api/excursions/${excursion.id}/content-photos`, {
+          method: "POST",
+          body: formData,
+        });
+        const body = (await response.json()) as { error?: string; url?: string };
+
+        if (!response.ok || !body.url) {
+          setError(body.error ?? "Не удалось загрузить фото для раздела");
+          continue;
+        }
+
+        const nextPhotoUrls = [...currentPhotoUrls, body.url];
+        const saved = await persistSectionPhotoGroupChange(
+          key,
+          nextPhotoUrls,
+          "Фото раздела добавлено",
+        );
+        if (!saved) {
+          await cleanupUploadedContentPhoto(body.url);
+          continue;
+        }
+
+        currentPhotoUrls = nextPhotoUrls;
+      }
+    } finally {
+      setSectionPhotoUploadKey(null);
+    }
+  }
+
+  async function moveSectionPhoto(
+    key: ExcursionSectionPhotoGroupKey,
+    photoIndex: number,
+    direction: -1 | 1,
+  ) {
+    const currentPhotoUrls = sectionPhotoGroups[key];
+    const nextPhotoIndex = photoIndex + direction;
+    if (nextPhotoIndex < 0 || nextPhotoIndex >= currentPhotoUrls.length) {
+      return;
+    }
+
+    const nextPhotoUrls = [...currentPhotoUrls];
+    [nextPhotoUrls[photoIndex], nextPhotoUrls[nextPhotoIndex]] = [
+      nextPhotoUrls[nextPhotoIndex],
+      nextPhotoUrls[photoIndex],
+    ];
+
+    await persistSectionPhotoGroupChange(key, nextPhotoUrls, "Порядок фото раздела обновлён");
+  }
+
+  async function removeSectionPhoto(key: ExcursionSectionPhotoGroupKey, photoIndex: number) {
+    const currentPhotoUrls = sectionPhotoGroups[key];
+    const nextPhotoUrls = currentPhotoUrls.filter((_, index) => index !== photoIndex);
+    if (nextPhotoUrls.length === currentPhotoUrls.length) {
+      return;
+    }
+
+    await persistSectionPhotoGroupChange(key, nextPhotoUrls, "Фото раздела удалено");
+  }
+
+  async function addExistingPhotoToSection(
+    key: ExcursionSectionPhotoGroupKey,
+    photoUrl: string,
+  ): Promise<void> {
+    const currentPhotoUrls = sectionPhotoGroups[key];
+    if (currentPhotoUrls.includes(photoUrl)) {
+      return;
+    }
+    if (currentPhotoUrls.length >= EXCURSION_SECTION_PHOTO_LIMIT) {
+      setError(`Для одного раздела доступно не более ${EXCURSION_SECTION_PHOTO_LIMIT} фото.`);
+      return;
+    }
+
+    await persistSectionPhotoGroupChange(
+      key,
+      [...currentPhotoUrls, photoUrl],
+      "Фото добавлено в раздел",
+    );
+  }
+
+  async function persistItineraryDayPhotoChange(
+    nextDays: ItineraryDay[],
+    previousDays: ItineraryDay[],
+    successMessage: string,
+  ): Promise<boolean> {
+    setItineraryDays(nextDays);
+    const saved = await patchExcursion({ itineraryDays: nextDays }, { applyResponse: false });
+    if (!saved) {
+      setItineraryDays(previousDays);
+      return false;
+    }
+
+    setSuccess(successMessage);
+    router.refresh();
+    return true;
+  }
+
+  async function persistTimelinePhotoChange(
+    nextTimeline: TimelineStep[],
+    previousTimeline: TimelineStep[],
+    successMessage: string,
+  ): Promise<boolean> {
+    setTimeline(nextTimeline);
+    const saved = await patchExcursion({ timeline: nextTimeline }, { applyResponse: false });
+    if (!saved) {
+      setTimeline(previousTimeline);
+      return false;
+    }
+
+    setSuccess(successMessage);
+    router.refresh();
+    return true;
+  }
+
+  async function uploadProgramPhotos(
+    kind: "day" | "step",
+    targetIndex: number,
+    fileList: FileList | null,
+  ) {
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setProgramPhotoUploadKey(buildProgramPhotoTargetKey(kind, targetIndex));
+
+    try {
+      let currentDays = itineraryDays;
+      let currentTimeline = timeline;
+
+      for (const file of Array.from(fileList)) {
+        const uploadType = detectSupportedPhotoUploadType({
+          mimeType: file.type,
+          fileName: file.name,
+        });
+        if (!uploadType) {
+          setError(getUnsupportedAccommodationPhotoFormatError());
+          continue;
+        }
+
+        if (
+          file.size >
+          getAccommodationPhotoUploadSizeLimitBytes({
+            mimeType: file.type,
+            fileName: file.name,
+          })
+        ) {
+          setError(getAccommodationPhotoUploadSizeError());
+          continue;
+        }
+
+        const currentPhotoCount =
+          kind === "day"
+            ? getItineraryDayPhotoUrls(currentDays[targetIndex]).length
+            : getTimelineStepPhotoUrls(currentTimeline[targetIndex]).length;
+
+        if (currentPhotoCount >= EXCURSION_PROGRAM_PHOTO_LIMIT) {
+          setError(`Для одного блока доступно не более ${EXCURSION_PROGRAM_PHOTO_LIMIT} фото.`);
+          break;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`/api/excursions/${excursion.id}/content-photos`, {
+          method: "POST",
+          body: formData,
+        });
+        const body = (await response.json()) as { error?: string; url?: string };
+
+        if (!response.ok || !body.url) {
+          setError(body.error ?? "Не удалось загрузить фото программы");
+          continue;
+        }
+
+        if (kind === "day") {
+          const previousDays = currentDays;
+          const nextDays = currentDays.map((day, index) =>
+            index === targetIndex
+              ? {
+                  ...day,
+                  photoUrls: [...getItineraryDayPhotoUrls(day), body.url!],
+                }
+              : day,
+          );
+          const saved = await persistItineraryDayPhotoChange(
+            nextDays,
+            previousDays,
+            "Фото дня программы добавлено",
+          );
+          if (!saved) {
+            await cleanupUploadedContentPhoto(body.url);
+            continue;
+          }
+          currentDays = nextDays;
+        } else {
+          const previousTimeline = currentTimeline;
+          const nextTimeline = currentTimeline.map((step, index) =>
+            index === targetIndex
+              ? {
+                  ...step,
+                  photoUrls: [...getTimelineStepPhotoUrls(step), body.url!],
+                }
+              : step,
+          );
+          const saved = await persistTimelinePhotoChange(
+            nextTimeline,
+            previousTimeline,
+            "Фото шага маршрута добавлено",
+          );
+          if (!saved) {
+            await cleanupUploadedContentPhoto(body.url);
+            continue;
+          }
+          currentTimeline = nextTimeline;
+        }
+      }
+    } finally {
+      setProgramPhotoUploadKey(null);
+    }
+  }
+
+  async function moveItineraryDayPhoto(dayIndex: number, photoIndex: number, direction: -1 | 1) {
+    const currentPhotoUrls = getItineraryDayPhotoUrls(itineraryDays[dayIndex]);
+    const nextPhotoIndex = photoIndex + direction;
+    if (nextPhotoIndex < 0 || nextPhotoIndex >= currentPhotoUrls.length) {
+      return;
+    }
+
+    const nextPhotoUrls = [...currentPhotoUrls];
+    [nextPhotoUrls[photoIndex], nextPhotoUrls[nextPhotoIndex]] = [
+      nextPhotoUrls[nextPhotoIndex],
+      nextPhotoUrls[photoIndex],
+    ];
+
+    const previousDays = itineraryDays;
+    const nextDays = itineraryDays.map((day, index) =>
+      index === dayIndex ? { ...day, photoUrls: nextPhotoUrls } : day,
+    );
+
+    await persistItineraryDayPhotoChange(nextDays, previousDays, "Порядок фото дня обновлён");
+  }
+
+  async function removeItineraryDayPhoto(dayIndex: number, photoIndex: number) {
+    const currentPhotoUrls = getItineraryDayPhotoUrls(itineraryDays[dayIndex]);
+    const nextPhotoUrls = currentPhotoUrls.filter((_, index) => index !== photoIndex);
+    if (nextPhotoUrls.length === currentPhotoUrls.length) {
+      return;
+    }
+
+    const previousDays = itineraryDays;
+    const nextDays = itineraryDays.map((day, index) =>
+      index === dayIndex ? { ...day, photoUrls: nextPhotoUrls } : day,
+    );
+
+    await persistItineraryDayPhotoChange(nextDays, previousDays, "Фото дня удалено");
+  }
+
+  async function moveTimelinePhoto(stepIndex: number, photoIndex: number, direction: -1 | 1) {
+    const currentPhotoUrls = getTimelineStepPhotoUrls(timeline[stepIndex]);
+    const nextPhotoIndex = photoIndex + direction;
+    if (nextPhotoIndex < 0 || nextPhotoIndex >= currentPhotoUrls.length) {
+      return;
+    }
+
+    const nextPhotoUrls = [...currentPhotoUrls];
+    [nextPhotoUrls[photoIndex], nextPhotoUrls[nextPhotoIndex]] = [
+      nextPhotoUrls[nextPhotoIndex],
+      nextPhotoUrls[photoIndex],
+    ];
+
+    const previousTimeline = timeline;
+    const nextTimeline = timeline.map((step, index) =>
+      index === stepIndex ? { ...step, photoUrls: nextPhotoUrls } : step,
+    );
+
+    await persistTimelinePhotoChange(nextTimeline, previousTimeline, "Порядок фото шага обновлён");
+  }
+
+  async function removeTimelinePhoto(stepIndex: number, photoIndex: number) {
+    const currentPhotoUrls = getTimelineStepPhotoUrls(timeline[stepIndex]);
+    const nextPhotoUrls = currentPhotoUrls.filter((_, index) => index !== photoIndex);
+    if (nextPhotoUrls.length === currentPhotoUrls.length) {
+      return;
+    }
+
+    const previousTimeline = timeline;
+    const nextTimeline = timeline.map((step, index) =>
+      index === stepIndex ? { ...step, photoUrls: nextPhotoUrls } : step,
+    );
+
+    await persistTimelinePhotoChange(nextTimeline, previousTimeline, "Фото шага удалено");
   }
 
   function addVideoUrl() {
@@ -2401,12 +3057,17 @@ export function ExcursionEditor({
                 className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
                 placeholder={
                   isTour
-                    ? "Опишите тур целиком: маршрут, формат, атмосферу, кому он подойдёт, как проходят дни и что в нём особенного."
-                    : "Опишите экскурсию целиком: суть программы, маршрут, что увидят туристы, чем она запомнится и какие эмоции подарит."
+                    ? "Опишите тур: маршрут, формат, длительность, ключевые точки программы и организационные детали."
+                    : "Опишите экскурсию: маршрут, формат, продолжительность, что входит в программу и как проходит выезд."
                 }
               />
               <p className="text-xs text-olive/50">
                 Краткое превью для карточек сформируется автоматически из этого текста.
+              </p>
+              <p className="mt-2 rounded-2xl border border-primary/10 bg-primary/5 px-3.5 py-3 text-xs leading-6 text-olive/72">
+                Основные фото используются в верхней галерее карточки. Для разделов страницы можно
+                назначить отдельные подборки в блоке «Медиа» ниже. Фото для программы по дням и
+                шагам маршрута по-прежнему добавляются прямо внутри соответствующего дня или шага.
               </p>
             </div>
           </div>
@@ -2420,7 +3081,7 @@ export function ExcursionEditor({
               <div>
                 <p className="text-sm font-semibold text-olive">Преимущества и особенности</p>
                 <p className="text-xs text-olive/50">
-                  Расскажите, чем ваша экскурсия запомнится туристу
+                  Укажите ключевые особенности программы без рекламных формулировок
                 </p>
               </div>
             </div>
@@ -2429,15 +3090,15 @@ export function ExcursionEditor({
               <div>
                 <h3 className="text-base font-semibold text-olive">Что вас ждёт</h3>
                 <p className="text-xs text-olive/55">
-                  3–6 коротких впечатлений и преимуществ. Выберите из готовых или добавьте свои.
-                  Этот блок показывается отдельно на публичной странице.
+                  3–6 коротких и конкретных пунктов. Выберите из готовых или добавьте свои. Этот
+                  блок показывается на публичной карточке отдельным списком.
                 </p>
               </div>
               <IncludedEditor
                 items={highlights}
                 onChange={setHighlights}
                 presets={HIGHLIGHT_PRESETS}
-                placeholder="Например: видовые остановки без спешки"
+                placeholder="Например: старт из Ялты, мини-группа до 8 человек"
               />
             </div>
           </div>
@@ -2739,16 +3400,106 @@ export function ExcursionEditor({
               )}
             </div>
           </div>
+
+          {/* ── Tour-specific: вид тура, транспорт, режим заездов ── */}
+          {showTourLogistics && (
+            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                  T
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-olive">Параметры тура</p>
+                  <p className="text-xs text-olive/50">
+                    Укажите вид тура, транспорт и режим заездов
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Вид тура</span>
+                <div className="flex flex-wrap gap-2">
+                  {TOUR_KIND_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setTourKind(tourKind === option.value ? null : option.value)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                        tourKind === option.value
+                          ? "border-primary bg-primary/8 text-primary shadow-sm"
+                          : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Транспорт</span>
+                <p className="text-xs text-olive/50">Выберите все подходящие варианты</p>
+                <div className="flex flex-wrap gap-2">
+                  {TRANSPORT_MODE_OPTIONS.map((option) => {
+                    const isSelected = transportModes.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() =>
+                          setTransportModes((prev) =>
+                            isSelected
+                              ? prev.filter((m) => m !== option.value)
+                              : [...prev, option.value],
+                          )
+                        }
+                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                          isSelected
+                            ? "border-primary bg-primary/8 text-primary shadow-sm"
+                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Режим заездов</span>
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {DEPARTURE_MODE_OPTIONS.map((option) => {
+                    const isActive = departureMode === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setDepartureMode(isActive ? null : option.value)}
+                        className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                          isActive
+                            ? "border-primary bg-primary text-white"
+                            : "border-olive/20 bg-white text-olive hover:border-olive/40"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
-      {/* ===== STEP 1: ПРОГРАММА И УСЛОВИЯ ===== */}
+      {/* ===== STEP 1: ГЕОГРАФИЯ И МАРШРУТ ===== */}
       {currentStep === 1 && (
         <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
           <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Программа и маршрут</h2>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">География и маршрут</h2>
             <p className="mt-1 text-sm text-olive/55">
-              Укажите, где проходит экскурсия, сколько она длится и что в неё входит.
+              Укажите, где проходит {isTour ? "тур" : "экскурсия"}, место сбора и точки маршрута.
             </p>
           </div>
 
@@ -2868,7 +3619,7 @@ export function ExcursionEditor({
                 placeholder="Если финиш отличается от старта, укажите это здесь"
               />
               <p className="text-xs text-olive/45">
-                На публичной карточке этот блок помогает честно показать маршрут и возврат.
+                Этот текст показывается в блоке логистики на публичной карточке.
               </p>
             </label>
 
@@ -2902,222 +3653,55 @@ export function ExcursionEditor({
               ) : null}
             </div>
           </div>
+        </section>
+      )}
 
-          {/* ── Группа 2: Параметры экскурсии ── */}
-          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                2
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Параметры экскурсии</p>
-                <p className="text-xs text-olive/50">
-                  Длительность, количество участников и возраст — заполните числовые поля
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              {isTour ? (
-                <>
-                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                    <div className="flex items-center gap-1.5">
-                      <AppIcon icon={Clock3} className="h-4 w-4" />
-                      <span className="text-sm font-medium text-olive">Дней</span>
-                    </div>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={durationDays}
-                      onChange={(event) => setDurationDays(event.target.value)}
-                      placeholder="3"
-                    />
-                    <p className="text-xs text-olive/40">Например: 3 дня</p>
-                  </label>
-                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                    <div className="flex items-center gap-1.5">
-                      <AppIcon icon={Clock3} className="h-4 w-4" />
-                      <span className="text-sm font-medium text-olive">Ночей</span>
-                    </div>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={364}
-                      value={durationNights}
-                      onChange={(event) => setDurationNights(event.target.value)}
-                      placeholder="2"
-                    />
-                    <p className="text-xs text-olive/40">0 — если тур без ночёвки</p>
-                  </label>
-                </>
-              ) : (
-                <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                  <div className="flex items-center gap-1.5">
-                    <AppIcon icon={Clock3} className="h-4 w-4" />
-                    <span className="text-sm font-medium text-olive">Длительность</span>
-                  </div>
-                  <Input
-                    type="number"
-                    min={15}
-                    max={10080}
-                    value={durationMinutes}
-                    onChange={(event) => setDurationMinutes(event.target.value)}
-                    placeholder="90"
-                  />
-                  {durationMinutes ? (
-                    <p className="text-xs font-medium text-primary">
-                      {formatDuration(Number(durationMinutes) || null)}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-olive/40">в минутах</p>
-                  )}
-                </label>
-              )}
-
-              {/* Min participants */}
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <div className="flex items-center gap-1.5">
-                  <AppIcon icon={UserRound} className="h-4 w-4" />
-                  <span className="text-sm font-medium text-olive">Мин. участников</span>
-                </div>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={minParticipants}
-                  onChange={(event) => setMinParticipants(event.target.value)}
-                  placeholder="1"
-                />
-                <p className="text-xs text-olive/40">для старта группы</p>
-              </label>
-
-              {/* Max participants */}
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <div className="flex items-center gap-1.5">
-                  <AppIcon icon={Users} className="h-4 w-4" />
-                  <span className="text-sm font-medium text-olive">Макс. участников</span>
-                </div>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={maxParticipants}
-                  onChange={(event) => setMaxParticipants(event.target.value)}
-                  placeholder="20"
-                />
-                <p className="text-xs text-olive/40">человек в группе</p>
-              </label>
-
-              {/* Min age */}
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <div className="flex items-center gap-1.5">
-                  <AppIcon icon={CakeSlice} className="h-4 w-4" />
-                  <span className="text-sm font-medium text-olive">Мин. возраст</span>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={minAge}
-                  onChange={(event) => setMinAge(event.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-xs text-olive/40">0 — без ограничений</p>
-              </label>
-            </div>
+      {/* ===== STEP 2: ПРОГРАММА ===== */}
+      {currentStep === 2 && (
+        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Программа</h2>
+            <p className="mt-1 text-sm text-olive/55">
+              {isTour
+                ? "Опишите маршрут, программу по пунктам и дополнительные опции."
+                : "Опишите маршрут, таймлайн и дополнительные опции."}
+            </p>
           </div>
 
-          {/* ── Группа 3: Физическая подготовка ── */}
-          <div className="space-y-5 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
-                3
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Физическая подготовка</p>
-                <p className="text-xs text-olive/50">
-                  Необязательно — но помогает туристу заранее оценить нагрузку
-                </p>
-              </div>
-            </div>
-
-            {/* Difficulty level */}
-            <div className="space-y-2.5">
-              <div>
-                <h3 className="text-base font-semibold text-olive">Уровень нагрузки</h3>
-                <p className="text-xs text-olive/65">
-                  Нажмите на подходящий вариант — активный выделится цветом
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    { value: null, label: "Не указано" },
-                    { value: ExcursionDifficulty.EASY, label: "Лёгкая — прогулочный темп" },
-                    { value: ExcursionDifficulty.MEDIUM, label: "Умеренная — средний темп" },
-                    { value: ExcursionDifficulty.HARD, label: "Активная — высокая нагрузка" },
-                  ] as const
-                ).map((opt) => (
+          {/* в”Ђв”Ђ Highlight chips в”Ђв”Ђ */}
+          <div className="space-y-3 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <p className="text-sm font-semibold text-olive">Хайлайты</p>
+            <p className="text-xs text-olive/50">Ключевые фишки, которые зацепят туриста (до 6)</p>
+            <div className="flex flex-wrap gap-2">
+              {HIGHLIGHT_PRESETS.map((preset) => {
+                const isSelected = highlights.includes(preset);
+                return (
                   <button
-                    key={String(opt.value)}
+                    key={preset}
                     type="button"
-                    onClick={() => setDifficulty(opt.value)}
-                    className={`rounded-xl border px-3.5 py-2 text-sm font-medium transition-all ${
-                      difficulty === opt.value
+                    onClick={() =>
+                      setHighlights((prev) =>
+                        isSelected
+                          ? prev.filter((h) => h !== preset)
+                          : prev.length < 6
+                            ? [...prev, preset]
+                            : prev,
+                      )
+                    }
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      isSelected
                         ? "border-primary bg-primary/8 text-primary shadow-sm"
                         : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
                     }`}
                   >
-                    {opt.label}
+                    {preset}
                   </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-            {/* Physical requirements */}
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">
-                  Физические ограничения
-                </h3>
-                <p className="text-xs text-olive/65">
-                  Нажмите на подходящие пункты или добавьте свой.
-                  Укажите, кому экскурсия может не подойти.
-                </p>
-              </div>
-              <IncludedEditor
-                items={physicalRequirements}
-                onChange={setPhysicalRequirements}
-                presets={PHYSICAL_REQUIREMENTS_PRESETS}
-                placeholder="Добавить ограничение..."
-              />
-            </div>
-
-            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-            {/* What to bring */}
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">
-                  Что взять с собой
-                </h3>
-                <p className="text-xs text-olive/65">
-                  Нажмите на пункты из списка или добавьте свои рекомендации.
-                </p>
-              </div>
-              <IncludedEditor
-                items={whatToBring}
-                onChange={setWhatToBring}
-                presets={WHAT_TO_BRING_PRESETS}
-                placeholder="Добавить пункт..."
-              />
+                );
+              })}
             </div>
           </div>
 
-          {/* ── Группа 4: Маршрут и программа ── */}
+          {/* ── Маршрут и программа (duration/participants/physical moved to steps 3-4) ── */}
           <div className="space-y-5 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
@@ -3140,11 +3724,13 @@ export function ExcursionEditor({
                   </div>
                   <div>
                     <h3 className="font-semibold text-olive">
-                      {isTour ? "Программа по дням" : "Пошаговый план (таймлайн)"}
+                      {isTour
+                        ? getItineraryProgramTitle(itineraryItemLabel)
+                        : "Пошаговый план (таймлайн)"}
                     </h3>
                     <p className="mt-0.5 text-xs text-olive/60">
                       {isTour
-                        ? "Для тура лучше разложить программу по дням: так маршрут выглядит понятнее и убедительнее."
+                        ? "Разложите программу по пунктам: это может быть план по дням, этапам, шагам или любым логичным блокам маршрута."
                         : "Добавляйте шаги по порядку — укажите время и описание. Если пусто — на карточке отображается текстовый маршрут."}
                     </p>
                   </div>
@@ -3152,15 +3738,65 @@ export function ExcursionEditor({
                 {(isTour ? itineraryDays.length : timeline.length) > 0 && (
                   <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
                     {isTour
-                      ? `${itineraryDays.length} ${itineraryDays.length === 1 ? "день" : itineraryDays.length < 5 ? "дня" : "дней"}`
+                      ? formatItineraryItemCount(itineraryItemLabel, itineraryDays.length)
                       : `${timeline.length} ${timeline.length === 1 ? "шаг" : timeline.length < 5 ? "шага" : "шагов"}`}
                   </span>
                 )}
               </div>
               {isTour ? (
-                <TourDaysEditor days={itineraryDays} onChange={setItineraryDays} />
+                <TourDaysEditor
+                  days={itineraryDays}
+                  itemLabel={itineraryItemLabel}
+                  onChange={setItineraryDays}
+                  onItemLabelChange={setItineraryItemLabel}
+                  onUploadPhotos={(dayIndex, files) =>
+                    void uploadProgramPhotos("day", dayIndex, files)
+                  }
+                  onMovePhoto={(dayIndex, photoIndex, direction) =>
+                    void moveItineraryDayPhoto(dayIndex, photoIndex, direction)
+                  }
+                  onRemovePhoto={(dayIndex, photoIndex) =>
+                    void removeItineraryDayPhoto(dayIndex, photoIndex)
+                  }
+                  disabled={
+                    Boolean(programPhotoUploadKey) ||
+                    isUploadingPhotos ||
+                    isSaving ||
+                    isSavingSchedule ||
+                    isDeleting
+                  }
+                  uploadingDayIndex={
+                    programPhotoUploadKey?.startsWith("day-")
+                      ? Number.parseInt(programPhotoUploadKey.slice(4), 10)
+                      : null
+                  }
+                />
               ) : (
-                <TimelineEditor steps={timeline} onChange={setTimeline} />
+                <TimelineEditor
+                  steps={timeline}
+                  onChange={setTimeline}
+                  onUploadPhotos={(stepIndex, files) =>
+                    void uploadProgramPhotos("step", stepIndex, files)
+                  }
+                  onMovePhoto={(stepIndex, photoIndex, direction) =>
+                    void moveTimelinePhoto(stepIndex, photoIndex, direction)
+                  }
+                  onRemovePhoto={(stepIndex, photoIndex) =>
+                    void removeTimelinePhoto(stepIndex, photoIndex)
+                  }
+                  disabled={
+                    Boolean(programPhotoUploadKey) ||
+                    isUploadingPhotos ||
+                    isSaving ||
+                    isSavingSchedule ||
+                    isDeleting
+                  }
+                  uploadingStepIndex={
+                    programPhotoUploadKey?.startsWith("step-")
+                      ? Number.parseInt(programPhotoUploadKey.slice(5), 10)
+                      : null
+                  }
+                />
               )}
             </div>
 
@@ -3170,7 +3806,8 @@ export function ExcursionEditor({
               <div>
                 <h3 className="text-base font-semibold text-olive">Текстовый маршрут</h3>
                 <p className="text-xs text-olive/55">
-                  Опишите маршрут своими словами — это будет видно на карточке и на публичной странице.
+                  Опишите маршрут своими словами — это будет видно на карточке и на публичной
+                  странице.
                 </p>
               </div>
               <textarea
@@ -3206,14 +3843,97 @@ export function ExcursionEditor({
         </section>
       )}
 
-      {/* ===== STEP 2: РАСПИСАНИЕ ===== */}
-      {currentStep === 2 && (
+      {/* ===== STEP 3: ДЛИТЕЛЬНОСТЬ И ДОСТУПНОСТЬ ===== */}
+      {currentStep === 3 && (
         <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
           <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Расписание</h2>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">
+              Длительность и доступность
+            </h2>
             <p className="mt-1 text-sm text-olive/55">
-              Настройте, когда туристы смогут записаться на вашу экскурсию.
+              Укажите длительность и настройте, когда туристы смогут записаться.
             </p>
+          </div>
+
+          {/* в”Ђв”Ђ Duration block в”Ђв”Ђ */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <p className="text-sm font-semibold text-olive">Длительность</p>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {isTour ? (
+                <>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <div className="flex items-center gap-1.5">
+                      <AppIcon icon={Clock3} className="h-4 w-4" />
+                      <span className="text-sm font-medium text-olive">
+                        Дней <span className="text-terra">*</span>
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={durationDays}
+                      onChange={(e) => setDurationDays(e.target.value)}
+                      placeholder="3"
+                    />
+                  </label>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <div className="flex items-center gap-1.5">
+                      <AppIcon icon={Clock3} className="h-4 w-4" />
+                      <span className="text-sm font-medium text-olive">Ночей</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={364}
+                      value={durationNights}
+                      onChange={(e) => setDurationNights(e.target.value)}
+                      placeholder="2"
+                    />
+                    <p className="text-xs text-olive/40">0 — без ночёвок</p>
+                  </label>
+                </>
+              ) : (
+                <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                  <div className="flex items-center gap-1.5">
+                    <AppIcon icon={Clock3} className="h-4 w-4" />
+                    <span className="text-sm font-medium text-olive">
+                      Длительность (мин) <span className="text-terra">*</span>
+                    </span>
+                  </div>
+                  <Input
+                    type="number"
+                    min={15}
+                    max={10080}
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(e.target.value)}
+                    placeholder="90"
+                  />
+                  {durationMinutes ? (
+                    <p className="text-xs font-medium text-primary">
+                      {formatDuration(Number(durationMinutes) || null)}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-olive/40">в минутах</p>
+                  )}
+                </label>
+              )}
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <div className="flex items-center gap-1.5">
+                  <AppIcon icon={Clock3} className="h-4 w-4" />
+                  <span className="text-sm font-medium text-olive">Мин. бронирование</span>
+                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  max={720}
+                  value={minBookingNoticeHours}
+                  onChange={(e) => setMinBookingNoticeHours(e.target.value)}
+                  placeholder="24"
+                />
+                <p className="text-xs text-olive/40">часов до старта</p>
+              </label>
+            </div>
           </div>
 
           {/* ── Группа 1: Режим доступности ── */}
@@ -3407,9 +4127,7 @@ export function ExcursionEditor({
                         <button
                           key={day}
                           type="button"
-                          onClick={() =>
-                            updateWeekdaySchedule(day, { enabled: !dayItem.enabled })
-                          }
+                          onClick={() => updateWeekdaySchedule(day, { enabled: !dayItem.enabled })}
                           className={`flex flex-col items-center rounded-xl border py-2.5 px-1 transition ${
                             dayItem.enabled
                               ? "border-sage bg-sage/15 text-olive ring-1 ring-sage/30 shadow-sm"
@@ -3432,7 +4150,7 @@ export function ExcursionEditor({
                   </div>
                 </div>
 
-                {/* Time settings — shown when at least one day is active */}
+                {/* Time settings - shown when at least one day is active */}
                 {activeScheduleDays.length > 0 ? (
                   <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
                     {/* Header */}
@@ -3477,7 +4195,7 @@ export function ExcursionEditor({
                           }}
                           className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
                         />
-                        <span className="text-sm text-olive/40">–</span>
+                        <span className="text-sm text-olive/40">-</span>
                         <input
                           type="time"
                           step={60}
@@ -3522,15 +4240,13 @@ export function ExcursionEditor({
                                 }
                                 className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
                               />
-                              <span className="text-sm text-olive/40">–</span>
+                              <span className="text-sm text-olive/40">-</span>
                               <input
                                 type="time"
                                 step={60}
                                 value={dayItem.to}
                                 aria-label={`Конец для ${weekdayLabels[day]}`}
-                                onChange={(e) =>
-                                  updateWeekdaySchedule(day, { to: e.target.value })
-                                }
+                                onChange={(e) => updateWeekdaySchedule(day, { to: e.target.value })}
                                 className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
                               />
                             </div>
@@ -3599,7 +4315,7 @@ export function ExcursionEditor({
                             onClick={() => removeClosedDate(dateValue)}
                             aria-label={`Удалить дату ${formatIsoToDayMonthYear(dateValue)}`}
                           >
-                            ×
+                            Г—
                           </button>
                         </span>
                       ))
@@ -3751,14 +4467,356 @@ export function ExcursionEditor({
               </label>
             </div>
           )}
+          {/* ── Группа и требования (inline in step 3) ── */}
+          <div className="mt-2 border-t border-olive/8 pt-6">
+            <h3 className="text-base font-semibold text-olive">Группа и требования</h3>
+            <p className="mt-1 text-sm text-olive/55">
+              Формат проведения, размер группы, язык и физичес��ие требования.
+            </p>
+          </div>
+
+          {/* Format, participants, age */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <p className="text-sm font-semibold text-olive">Формат и размер группы</p>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <span className="text-sm font-medium text-olive">Мин. участников</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={minParticipants}
+                  onChange={(e) => setMinParticipants(e.target.value)}
+                  placeholder="1"
+                />
+              </label>
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <span className="text-sm font-medium text-olive">Макс. участников</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={maxParticipants}
+                  onChange={(e) => setMaxParticipants(e.target.value)}
+                  placeholder="20"
+                />
+              </label>
+              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                <span className="text-sm font-medium text-olive">Мин. возраст</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={minAge}
+                  onChange={(e) => setMinAge(e.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-olive/40">0 — ��ез ограничений</p>
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-olive">Сложность</p>
+              <div className="flex gap-2">
+                {(["EASY", "MEDIUM", "HARD"] as ExcursionDifficulty[]).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setDifficulty(difficulty === level ? null : level)}
+                    className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                      difficulty === level
+                        ? "border-primary bg-primary/8 text-primary"
+                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"
+                    }`}
+                  >
+                    {level === "EASY" ? "Лёгкая" : level === "MEDIUM" ? "Средняя" : "Сложная"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Physical requirements & what to bring */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <p className="text-sm font-semibold text-olive">Физические требования</p>
+            <p className="text-xs text-olive/55">
+              Укажите, если есть ограничения по здоровью или физической форме.
+            </p>
+            <IncludedEditor
+              items={physicalRequirements}
+              onChange={setPhysicalRequirements}
+              presets={PHYSICAL_REQUIREMENTS_PRESETS}
+              placeholder="Хорошая физическая форма"
+            />
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <p className="text-sm font-semibold text-olive">Что взять с собой</p>
+            <p className="text-xs text-olive/55">
+              Подскажите участникам, что пригодится в поездке.
+            </p>
+            <IncludedEditor
+              items={whatToBring}
+              onChange={setWhatToBring}
+              presets={WHAT_TO_BRING_PRESETS}
+              placeholder="Удобная обувь"
+            />
+          </div>
+
+          {/* Safety block for active tours */}
+          {showSafetyBlock && (
+            <div className="space-y-4 rounded-2xl border border-terra/20 bg-terra/5 p-4 shadow-sm sm:p-5">
+              <p className="text-sm font-semibold text-olive">Безопасность и условия маршрута</p>
+              <p className="text-xs text-olive/55">
+                Для активных туров в��жно указать условия маршрута, снаряжение и правила
+                безопасности.
+              </p>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-olive">Условия маршрута</span>
+                <textarea
+                  value={routeConditions}
+                  onChange={(e) => setRouteConditions(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="Горная местность, грунтовые дороги, броды..."
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-olive">Информация о безопасности</span>
+                <textarea
+                  value={safetyInfo}
+                  onChange={(e) => setSafetyInfo(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="Обязательно наличие спасательного жилета, инструктаж перед выездом..."
+                />
+              </label>
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-olive">Предоста��ляемое снаряжение</span>
+                <div className="flex flex-wrap gap-2">
+                  {EQUIPMENT_PROVIDED_PRESETS.map((item) => {
+                    const isSelected = equipmentProvided.includes(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() =>
+                          setEquipmentProvided((prev) =>
+                            isSelected ? prev.filter((e) => e !== item) : [...prev, item],
+                          )
+                        }
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Documents & insurance for tours */}
+          {isTour && (
+            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
+              <p className="text-sm font-semibold text-olive">Документы и страховка</p>
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-olive">Необходимые документы</span>
+                <div className="flex flex-wrap gap-2">
+                  {DOCUMENTS_REQUIRED_PRESETS.map((item) => {
+                    const isSelected = documentsRequired.includes(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() =>
+                          setDocumentsRequired((prev) =>
+                            isSelected ? prev.filter((d) => d !== item) : [...prev, item],
+                          )
+                        }
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <SeaToggle
+                  pressed={insuranceIncluded === true}
+                  onPressedChange={(val) => setInsuranceIncluded(val)}
+                />
+                <span className="text-sm font-medium text-olive">
+                  Страховка включе��а в стоимость
+                </span>
+              </div>
+              {insuranceIncluded && (
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-olive/60">Комментарий к страховке</span>
+                  <Input
+                    value={insuranceComment}
+                    onChange={(e) => setInsuranceComment(e.target.value)}
+                    placeholder="Базовая медицинская, покрывает несчастные случаи..."
+                    maxLength={500}
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* Accommodation block for multi-day tours */}
+          {showAccommodationBlock && (
+            <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm sm:p-5">
+              <p className="text-sm font-semibold text-olive">Проживание</p>
+              <div className="flex items-center gap-3">
+                <SeaToggle
+                  pressed={accommodationProvided === true}
+                  onPressedChange={(val) => setAccommodationProvided(val)}
+                />
+                <span className="text-sm font-medium text-olive">Проживание включено</span>
+              </div>
+              {accommodationProvided && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium text-olive">Тип размещения</span>
+                    <div className="flex flex-wrap gap-2">
+                      {ACCOMMODATION_TYPE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            setAccommodationType(accommodationType === opt.value ? "" : opt.value)
+                          }
+                          className={`rounded-xl border px-3 py-2 text-sm transition ${accommodationType === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-olive">Количество ночей</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={364}
+                      value={accommodationNights}
+                      onChange={(e) => setAccommodationNights(e.target.value)}
+                      placeholder="2"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-olive">Уровень / звёзды</span>
+                    <Input
+                      value={accommodationStars}
+                      onChange={(e) => setAccommodationStars(e.target.value)}
+                      placeholder="3*, комфорт"
+                      maxLength={20}
+                    />
+                  </label>
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium text-olive">Типы номеров</span>
+                    <div className="flex flex-wrap gap-2">
+                      {ROOM_TYPE_OPTIONS.map((opt) => {
+                        const sel = roomTypes.includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() =>
+                              setRoomTypes((prev) =>
+                                sel ? prev.filter((r) => r !== opt.value) : [...prev, opt.value],
+                              )
+                            }
+                            className={`rounded-xl border px-3 py-2 text-sm transition ${sel ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {accommodationProvided && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <SeaToggle
+                      pressed={singleSupplementAvailable === true}
+                      onPressedChange={(val) => setSingleSupplementAvailable(val)}
+                    />
+                    <span className="text-sm text-olive">Доплата за одноместное размещение</span>
+                  </div>
+                  {singleSupplementAvailable && (
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-olive/60">Сумма доплаты (RUB)</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={singleSupplementPrice}
+                        onChange={(e) => setSingleSupplementPrice(e.target.value)}
+                        placeholder="3000"
+                      />
+                    </label>
+                  )}
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-olive/60">
+                      Комментарий к проживанию
+                    </span>
+                    <Input
+                      value={accommodationComment}
+                      onChange={(e) => setAccommodationComment(e.target.value)}
+                      placeholder="Размещение в гостевых домах Южного берега"
+                      maxLength={1000}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Meal plan */}
+          {isTour && (
+            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
+              <p className="text-sm font-semibold text-olive">Питание</p>
+              <div className="flex flex-wrap gap-2">
+                {MEAL_PLAN_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setMealPlan(mealPlan === opt.value ? "" : opt.value)}
+                    className={`rounded-xl border px-3 py-2 text-sm transition ${mealPlan === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {mealPlan === "CUSTOM" && (
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-olive/60">Подро��ности о питании</span>
+                  <textarea
+                    value={mealDetails}
+                    onChange={(e) => setMealDetails(e.target.value)}
+                    rows={2}
+                    maxLength={1000}
+                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="Пункт 1 — обед в ресторане, пункт 2 — завтрак в отеле + пикник..."
+                  />
+                </label>
+              )}
+            </div>
+          )}
         </section>
       )}
 
-      {/* ===== STEP 3: ЦЕНЫ И УСЛОВИЯ ===== */}
-      {currentStep === 3 && (
+      {/* ===== STEP 4: ЦЕНА И УСЛОВИЯ (merged old steps 5+6) ===== */}
+      {currentStep === 4 && (
         <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
           <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Цены и условия</h2>
+            <h2 className="text-lg font-semibold text-olive md:text-xl">Цена и условия</h2>
             <p className="mt-1 text-sm text-olive/55">
               Укажите стоимость, что входит в цену, а что нет.
             </p>
@@ -3796,7 +4854,8 @@ export function ExcursionEditor({
               <div>
                 <h3 className="text-base font-semibold text-olive">Единица цены</h3>
                 <p className="text-xs text-olive/65">
-                  Нажмите на подходящий вариант или введите свой. Цена показывается вместе с единицей: «за чел», «за группу» и т.д.
+                  Нажмите на подходящий вариант или введите свой. Цена показывается вместе с
+                  единицей: «за чел», «за группу» и т.д.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -3834,44 +4893,7 @@ export function ExcursionEditor({
             </div>
           </div>
 
-          {/* ── Группа 2: Что входит ── */}
-          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                2
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Что входит и не входит</p>
-                <p className="text-xs text-olive/50">
-                  Нажимайте на готовые варианты или добавьте свои — турист сразу увидит, за что платит
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-base font-semibold text-olive">Включено в стоимость</h3>
-              <IncludedEditor
-                items={includedItems}
-                onChange={setIncludedItems}
-                presets={INCLUDED_PRESETS}
-                placeholder="Добавить услугу..."
-              />
-            </div>
-
-            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-            <div className="space-y-2">
-              <h3 className="text-base font-semibold text-olive">Не включено</h3>
-              <IncludedEditor
-                items={excludedItems}
-                onChange={setExcludedItems}
-                presets={EXCLUDED_PRESETS}
-                placeholder="Добавить пункт..."
-              />
-            </div>
-          </div>
-
-          {/* ── Группа 3: Условия отмены ── */}
+          {/* ── Группа 2: Условия отмены ── */}
           <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
@@ -3886,9 +4908,7 @@ export function ExcursionEditor({
             </div>
 
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-olive">
-                Условия отмены и возврата
-              </span>
+              <span className="text-sm font-medium text-olive">Условия отмены и возврата</span>
               <select
                 value={cancellationPolicyType}
                 onChange={(e) => setCancellationPolicyType(e.target.value)}
@@ -3914,126 +4934,76 @@ export function ExcursionEditor({
             )}
           </div>
 
-          {/* ── Группа 4: Проживание и питание (для туров) ── */}
-          {(isTour || accommodationProvided !== null || accommodationComment.trim()) && (
-            <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  4
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-olive">Проживание и питание</p>
-                  <p className="text-xs text-olive/50">
-                    Для туров — укажите тип размещения и формат питания. Скрывается, если не заполнено.
-                  </p>
-                </div>
+          {/* ── Что включено (inline in step 4) ── */}
+          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Включено в стоимость</p>
+                <p className="text-xs text-olive/50">
+                  Что турист получает по умолчанию: гид, билеты, трансфер и т.д.
+                </p>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <p className="w-full text-xs text-olive/45">Нажмите на подходящий вариант:</p>
-                {[
-                  { value: true, label: "Проживание включено" },
-                  { value: false, label: "Без проживания" },
-                ].map((option) => (
-                  <button
-                    key={String(option.value)}
-                    type="button"
-                    onClick={() => setAccommodationProvided(option.value)}
-                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                      accommodationProvided === option.value
-                        ? "border-primary bg-primary/8 text-primary shadow-sm"
-                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Тип проживания</span>
-                  <Input
-                    value={accommodationType}
-                    onChange={(event) => setAccommodationType(event.target.value)}
-                    placeholder="Гостевой дом, отель, кемпинг"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Ночей проживания</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={364}
-                    value={accommodationNights}
-                    onChange={(event) => setAccommodationNights(event.target.value)}
-                    placeholder="2"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Формат размещения</span>
-                  <Input
-                    value={accommodationFormat}
-                    onChange={(event) => setAccommodationFormat(event.target.value)}
-                    placeholder="2-местные номера, single по запросу"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Питание</span>
-                  <Input
-                    value={mealPlan}
-                    onChange={(event) => setMealPlan(event.target.value)}
-                    list="meal-plan-presets"
-                    placeholder="Выберите или впишите вариант"
-                  />
-                  <datalist id="meal-plan-presets">
-                    {TOUR_MEAL_PLAN_OPTIONS.map((item) => (
-                      <option key={item} value={item} />
-                    ))}
-                  </datalist>
-                </label>
-              </div>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-olive">
-                  Комментарий по проживанию и питанию
-                </span>
-                <textarea
-                  value={accommodationComment}
-                  onChange={(event) => setAccommodationComment(event.target.value)}
-                  rows={3}
-                  maxLength={1000}
-                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="Например: размещение по 2 человека, завтрак включён, одноместный номер за доплату."
-                />
-              </label>
             </div>
-          )}
+            <IncludedEditor
+              items={includedItems}
+              onChange={setIncludedItems}
+              presets={INCLUDED_PRESETS}
+              placeholder="Добавить услугу..."
+            />
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                4
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-olive">Не включено</p>
+                <p className="text-xs text-olive/50">
+                  Что оплачивается дополнительно: питание, сувениры, личные расходы
+                </p>
+              </div>
+            </div>
+            <IncludedEditor
+              items={excludedItems}
+              onChange={setExcludedItems}
+              presets={EXCLUDED_PRESETS}
+              placeholder="Добавить пункт..."
+            />
+          </div>
         </section>
       )}
 
-      {/* ===== STEP 4: КОНТАКТЫ И МЕДИА ===== */}
-      {currentStep === 4 && (
+      {/* ===== STEP 5: МЕДИА И КОНТАКТЫ (merged old steps 7+8) ===== */}
+      {currentStep === 5 && (
         <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <h2 className="text-lg font-semibold text-olive md:text-xl">Контакты и медиа</h2>
+          <h2 className="text-lg font-semibold text-olive md:text-xl">Медиа и контакты</h2>
 
+          {/* в”Ђв”Ђ Contacts block в”Ђв”Ђ */}
           <div className="space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
                 <AppIcon icon={Phone} className="h-5 w-5" />
               </div>
-              <div className="space-y-1">
+              <div>
                 <h3 className="text-xl font-semibold text-olive">Контакты</h3>
-                <p className="text-sm text-olive/65">
-                  Имя, фамилия и телефон нужны для модерации. Укажите хотя бы один публичный канал
-                  связи: телефон, WhatsApp или Telegram.
+                <p className="mt-0.5 text-sm text-olive/55">
+                  Как гости и модерация смогут с вами связаться
                 </p>
               </div>
             </div>
 
+            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+              Имя, фамилия и основной телефон нужны для модерации. Добавьте второй номер,
+              мессенджеры и соцсети, чтобы гостям было удобнее связаться с вами.
+            </p>
+
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-                Основные данные
+                Основные данные (обязательно)
               </p>
               <div className="space-y-2.5">
                 <div className="relative">
@@ -4078,27 +5048,62 @@ export function ExcursionEditor({
 
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Mail} className="h-4 w-4" />
+                    <AppIcon icon={Phone} className="h-4 w-4" />
                   </span>
                   <Input
-                    type="email"
-                    value={contactEmail}
-                    onChange={(event) => setContactEmail(event.target.value)}
-                    placeholder="Email"
-                    aria-label="Email"
-                    className="pl-10 pr-10"
+                    type="tel"
+                    value={contactPhone2}
+                    onChange={(event) => setContactPhone2(event.target.value)}
+                    placeholder="Телефон 2"
+                    aria-label="Телефон 2"
+                    className="pl-10"
                   />
-                  {contactEmail ? (
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Дополнительно
+              </p>
+              <div className="space-y-2.5">
+                {showContactEmail ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={Mail} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="email"
+                      value={contactEmail}
+                      onChange={(event) => setContactEmail(event.target.value)}
+                      placeholder="Email"
+                      aria-label="Email"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setContactEmail("")}
+                      onClick={() => {
+                        setContactEmail("");
+                        setShowContactEmail(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить email"
+                      aria-label="Очистить Email"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowContactEmail(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                    >
+                      <AppIcon icon={Mail} className="h-4 w-4" />
+                      Email
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4107,164 +5112,253 @@ export function ExcursionEditor({
                 Мессенджеры и соцсети
               </p>
               <div className="space-y-2.5">
-                <div className="relative">
-                  <span
-                    className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${
-                      shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]"
-                    }`}
-                  >
-                    {shouldShowWebsiteFavicon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={websiteFaviconUrl!}
-                        alt=""
-                        aria-hidden="true"
-                        className="h-4 w-4 rounded-sm object-contain"
-                        onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
-                      />
-                    ) : (
-                      <AppIcon icon={Globe} className="h-4 w-4" />
-                    )}
-                  </span>
-                  <Input
-                    type="url"
-                    value={websiteUrl}
-                    onChange={(event) => setWebsiteUrl(event.target.value)}
-                    placeholder="Сайт экскурсии"
-                    aria-label="Сайт экскурсии"
-                    className="pl-10 pr-10"
-                  />
-                  {websiteUrl ? (
+                {showWebsite ? (
+                  <div className="relative">
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2",
+                        shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]",
+                      )}
+                    >
+                      {shouldShowWebsiteFavicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={websiteFaviconUrl!}
+                          alt=""
+                          aria-hidden="true"
+                          className="h-4 w-4 rounded-sm object-contain"
+                          onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                        />
+                      ) : (
+                        <AppIcon icon={Globe} className="h-4 w-4" />
+                      )}
+                    </span>
+                    <Input
+                      type="url"
+                      value={websiteUrl}
+                      onChange={(event) => setWebsiteUrl(event.target.value)}
+                      placeholder="Сайт экскурсии"
+                      aria-label="Сайт экскурсии"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setWebsiteUrl("")}
+                      onClick={() => {
+                        setWebsiteUrl("");
+                        setShowWebsite(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить сайт экскурсии"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="url"
-                    value={whatsappUrl}
-                    onChange={(event) => setWhatsappUrl(event.target.value)}
-                    placeholder="WhatsApp URL"
-                    aria-label="WhatsApp"
-                    className="pl-10 pr-10"
-                  />
-                  {whatsappUrl ? (
+                {showWhatsapp ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="url"
+                      value={whatsappUrl}
+                      onChange={(event) => setWhatsappUrl(event.target.value)}
+                      placeholder="WhatsApp URL"
+                      aria-label="WhatsApp"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setWhatsappUrl("")}
+                      onClick={() => {
+                        setWhatsappUrl("");
+                        setShowWhatsapp(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить WhatsApp"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="text"
-                    value={telegramUrl}
-                    onChange={(event) => setTelegramUrl(event.target.value)}
-                    placeholder="Telegram: @username или username"
-                    aria-label="Telegram"
-                    className="pl-10 pr-10"
-                  />
-                  {telegramUrl ? (
+                {showTelegram ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="text"
+                      value={telegramUrl}
+                      onChange={(event) => setTelegramUrl(event.target.value)}
+                      placeholder="Telegram: @username или username"
+                      aria-label="Telegram"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setTelegramUrl("")}
+                      onClick={() => {
+                        setTelegramUrl("");
+                        setShowTelegram(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить Telegram"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="url"
-                    value={vkUrl}
-                    onChange={(event) => setVkUrl(event.target.value)}
-                    placeholder="ВКонтакте URL"
-                    aria-label="ВКонтакте"
-                    className="pl-10 pr-10"
-                  />
-                  {vkUrl ? (
+                {showVk ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="url"
+                      value={vkUrl}
+                      onChange={(event) => setVkUrl(event.target.value)}
+                      placeholder="ВКонтакте URL"
+                      aria-label="ВКонтакте"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setVkUrl("")}
+                      onClick={() => {
+                        setVkUrl("");
+                        setShowVk(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить ВКонтакте"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="url"
-                    value={maxUrl}
-                    onChange={(event) => setMaxUrl(event.target.value)}
-                    placeholder="Max URL"
-                    aria-label="Max"
-                    className="pl-10 pr-10"
-                  />
-                  {maxUrl ? (
+                {showMax ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="url"
+                      value={maxUrl}
+                      onChange={(event) => setMaxUrl(event.target.value)}
+                      placeholder="Max URL"
+                      aria-label="Max"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setMaxUrl("")}
+                      onClick={() => {
+                        setMaxUrl("");
+                        setShowMax(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить Max"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="url"
-                    value={okUrl}
-                    onChange={(event) => setOkUrl(event.target.value)}
-                    placeholder="Одноклассники URL"
-                    aria-label="Одноклассники"
-                    className="pl-10 pr-10"
-                  />
-                  {okUrl ? (
+                {showOk ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="url"
+                      value={okUrl}
+                      onChange={(event) => setOkUrl(event.target.value)}
+                      placeholder="Одноклассники URL"
+                      aria-label="Одноклассники"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setOkUrl("")}
+                      onClick={() => {
+                        setOkUrl("");
+                        setShowOk(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
                       aria-label="Очистить Одноклассники"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
+
+                {(!showWebsite ||
+                  !showWhatsapp ||
+                  !showTelegram ||
+                  !showVk ||
+                  !showMax ||
+                  !showOk) && (
+                  <div className="flex flex-wrap gap-2">
+                    {!showWebsite && (
+                      <button
+                        type="button"
+                        onClick={() => setShowWebsite(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                      >
+                        <AppIcon icon={Globe} className="h-4 w-4" />
+                        Сайт
+                      </button>
+                    )}
+                    {!showWhatsapp && (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhatsapp(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10 focus:outline-none"
+                      >
+                        <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                        WhatsApp
+                      </button>
+                    )}
+                    {!showTelegram && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTelegram(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10 focus:outline-none"
+                      >
+                        <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                        Telegram
+                      </button>
+                    )}
+                    {!showVk && (
+                      <button
+                        type="button"
+                        onClick={() => setShowVk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10 focus:outline-none"
+                      >
+                        <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                        ВКонтакте
+                      </button>
+                    )}
+                    {!showMax && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMax(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10 focus:outline-none"
+                      >
+                        <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                        Max
+                      </button>
+                    )}
+                    {!showOk && (
+                      <button
+                        type="button"
+                        onClick={() => setShowOk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10 focus:outline-none"
+                      >
+                        <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                        Одноклассники
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -4294,80 +5388,131 @@ export function ExcursionEditor({
           {/* ── БЛОК: МЕДИА ── */}
           <div className="border-t border-olive/8" />
 
-          <div className="space-y-3">
+          <div className="space-y-5">
             <div>
-              <h3 className="text-base font-semibold text-olive">Фотографии</h3>
+              <h3 className="text-base font-semibold text-olive">Медиа</h3>
               <p className="text-sm text-olive/70">
-                Загрузите от {excursionPhotoMinForModeration} до {excursionPhotoLimit} фото.
-                Поддерживаются JPEG, PNG и HEIC.
+                Основные фото используются в верхней галерее карточки. Ниже можно отдельно назначить
+                фото для конкретных разделов страницы. Поддерживаются{" "}
+                {accommodationPhotoUploadFormatsLabel}. Ограничения по размеру:{" "}
+                {accommodationPhotoUploadLimitsLabel}.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => photoFileInputRef.current?.click()}
-              className="inline-flex h-[52px] w-full items-center justify-center gap-3 rounded-xl border border-olive/20 bg-white px-4 text-sm font-semibold text-olive transition hover:border-olive/40 focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
-              disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
-            >
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-2xl leading-none text-primary">
-                +
-              </span>
-              <span>{isUploadingPhotos ? "Загрузка..." : "Добавить"}</span>
-            </button>
-            <input
-              ref={photoFileInputRef}
-              type="file"
-              multiple
-              accept={excursionPhotoAccept}
-              onChange={(event) => {
-                void uploadPhotos(event.currentTarget.files);
-                event.currentTarget.value = "";
-              }}
-              className="sr-only"
-              disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
-            />
-            <p className="text-xs text-olive/65">
-              Сейчас загружено {photoUrls.length}/{excursionPhotoLimit}. Для модерации нужно минимум{" "}
-              {excursionPhotoMinForModeration} фото.
-            </p>
-            {photoUrls.length < excursionPhotoMinForModeration ? (
-              <p className="text-xs text-terra">
-                Добавьте ещё {excursionPhotoMinForModeration - photoUrls.length} фото, чтобы
-                отправить программу на модерацию.
-              </p>
-            ) : null}
 
-            {photoUrls.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-olive/25 px-3 py-4 text-sm text-olive/65">
-                Фото пока не загружены.
+            <div className="space-y-3">
+              <ContentPhotoManager
+                title="Верхняя галерея карточки"
+                description="Первое фото используется как обложка. Порядок фото сохраняется."
+                photoUrls={photoUrls}
+                limit={excursionPhotoLimit}
+                addLabel="Добавить в галерею"
+                emptyText="Фото для верхней галереи пока не загружены."
+                disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
+                isUploading={isUploadingPhotos}
+                onUpload={(files) => void uploadPhotos(files)}
+                onMove={(photoIndex, direction) => void movePhoto(photoIndex, direction)}
+                onRemove={(photoIndex) => void removePhoto(photoIndex)}
+              />
+
+              <p className="text-xs text-olive/65">
+                Сейчас загружено {photoUrls.length}/{excursionPhotoLimit}. Для модерации нужно
+                минимум {excursionPhotoMinForModeration} фото.
               </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {photoUrls.map((url, index) => (
-                  <article
-                    key={`${url}-${index}`}
-                    className="overflow-hidden rounded-xl border border-olive/15 bg-white"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`Фото экскурсии ${index + 1}`}
-                      className="h-40 w-full object-cover"
-                    />
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-olive/70">
-                      <span>Фото {index + 1}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => void removePhoto(index)}
-                        disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
-                      >
-                        Удалить
-                      </Button>
-                    </div>
-                  </article>
-                ))}
+              {photoUrls.length < excursionPhotoMinForModeration ? (
+                <p className="text-xs text-terra">
+                  Добавьте ещё {excursionPhotoMinForModeration - photoUrls.length} фото, чтобы
+                  отправить карточку на модерацию.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-olive">Фото по разделам</h4>
+                <p className="text-xs text-olive/60">
+                  Для каждого раздела можно загрузить отдельные фото или добавить их из уже
+                  загруженных.
+                </p>
               </div>
-            )}
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                {sectionPhotoFieldConfigs.map((sectionConfig) => {
+                  const selectedUrls = sectionPhotoGroups[sectionConfig.key];
+                  const reusablePhotos = reusableSectionPhotoLibrary.filter(
+                    (url) => !selectedUrls.includes(url),
+                  );
+
+                  return (
+                    <div
+                      key={sectionConfig.key}
+                      className="space-y-3 rounded-2xl border border-olive/10 bg-white/70 p-4"
+                    >
+                      <ContentPhotoManager
+                        title={sectionConfig.title}
+                        description={sectionConfig.description}
+                        photoUrls={selectedUrls}
+                        limit={EXCURSION_SECTION_PHOTO_LIMIT}
+                        addLabel={sectionConfig.addLabel}
+                        emptyText={sectionConfig.emptyText}
+                        disabled={
+                          Boolean(programPhotoUploadKey) ||
+                          Boolean(sectionPhotoUploadKey) ||
+                          isUploadingPhotos ||
+                          isSaving ||
+                          isSavingSchedule ||
+                          isDeleting
+                        }
+                        isUploading={sectionPhotoUploadKey === sectionConfig.key}
+                        onUpload={(files) => void uploadSectionPhotos(sectionConfig.key, files)}
+                        onMove={(photoIndex, direction) =>
+                          void moveSectionPhoto(sectionConfig.key, photoIndex, direction)
+                        }
+                        onRemove={(photoIndex) =>
+                          void removeSectionPhoto(sectionConfig.key, photoIndex)
+                        }
+                      />
+
+                      {reusablePhotos.length > 0 ? (
+                        <div className="rounded-2xl border border-dashed border-olive/15 bg-cream/25 p-3">
+                          <p className="text-xs font-medium text-olive/65">
+                            Использовать уже загруженные фото
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {reusablePhotos.slice(0, 6).map((url, index) => (
+                              <button
+                                key={`${sectionConfig.key}-${url}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  void addExistingPhotoToSection(sectionConfig.key, url)
+                                }
+                                disabled={
+                                  Boolean(sectionPhotoUploadKey) ||
+                                  isUploadingPhotos ||
+                                  isSaving ||
+                                  isSavingSchedule ||
+                                  isDeleting
+                                }
+                                className="flex items-center gap-3 rounded-xl border border-olive/12 bg-white px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className="h-12 w-12 rounded-lg object-cover"
+                                />
+                                <span className="text-xs font-medium text-olive/70">
+                                  Добавить фото
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -4423,10 +5568,11 @@ export function ExcursionEditor({
         </section>
       )}
 
-      {/* ===== STEP 5: ПУБЛИКАЦИЯ ===== */}
+      {/* ===== STEP 5 (continued): ПУБЛИКАЦИЯ ===== */}
       {currentStep === 5 && (
         <ExcursionPaymentPanel
           excursionId={excursion.id}
+          offerType={offerType}
           excursionTitle={title || excursion.title || ""}
           status={
             excursion.status as
@@ -4444,6 +5590,8 @@ export function ExcursionEditor({
           moderationHref={moderationHref}
           listHref={adminMode ? listHref : undefined}
           listLabel={adminMode ? "К списку экскурсий" : undefined}
+          previewHref={previewHref}
+          onBeforePay={prepareExcursionForPayment}
           onSubmitModeration={submitForModerationFromPayment}
           onStatusChange={() => {
             router.refresh();

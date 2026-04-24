@@ -11,17 +11,28 @@ type RootShellProps = {
   footer: React.ReactNode;
 };
 
+function shouldShowSupportChat(pathname: string) {
+  if (pathname === "/dashboard") {
+    return true;
+  }
+
+  return ["/dashboard/profile", "/dashboard/chessboard", "/dashboard/objects", "/dashboard/excursions"].some(
+    (prefix) => pathname.startsWith(prefix),
+  );
+}
+
 export function RootShell({ children, header, footer }: RootShellProps) {
   const pathname = usePathname() ?? "";
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAdminRoute = pathname.startsWith("/admin");
-  const showChatWidget = !isDashboardRoute && !isAdminRoute;
+  const showSiteChrome = !isDashboardRoute && !isAdminRoute;
+  const showChatWidget = shouldShowSupportChat(pathname);
 
   return (
     <div className="flex min-h-screen flex-col">
-      {isDashboardRoute ? null : header}
-      <main className={cn("flex-1", isDashboardRoute ? "pb-0" : "pb-3")}>{children}</main>
-      {isDashboardRoute ? null : footer}
+      {showSiteChrome ? header : null}
+      <main className={cn("flex-1", showSiteChrome ? "pb-3" : "pb-0")}>{children}</main>
+      {showSiteChrome ? footer : null}
       {showChatWidget && <DeferredSupportChatWidget />}
     </div>
   );

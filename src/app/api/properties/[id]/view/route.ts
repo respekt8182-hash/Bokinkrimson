@@ -1,8 +1,8 @@
 // POST /api/properties/[id]/view — public endpoint to track property page views.
 // Called client-side on property detail page mount; no auth required.
 import { NextResponse } from "next/server";
-import { PropertyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -20,8 +20,7 @@ export async function POST(_: Request, context: RouteContext) {
   const updated = await db.property.updateMany({
     where: {
       id: propertyId,
-      status: PropertyStatus.PUBLISHED,
-      ownerDeletedAt: null,
+      ...buildPublishedPropertyVisibilityWhere(),
     },
     data: { profileViews: { increment: 1 } },
   });

@@ -1,4 +1,12 @@
-// Layout wrapper for route segment /auth.
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-8 md:px-6 md:py-10">

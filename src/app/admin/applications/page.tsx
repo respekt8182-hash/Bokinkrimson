@@ -1,5 +1,11 @@
 // Next.js page for route /admin/applications.
 import { ApplicationEntityType, ApplicationStatus, type Prisma } from "@prisma/client";
+import {
+  AdminEmptyState,
+  AdminPageHeader,
+  AdminStatCard,
+  adminInputClass,
+} from "@/components/admin/admin-ui";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import {
@@ -27,7 +33,7 @@ const applicationStatuses = [
 
 const entityTypes = [
   { id: "ALL", label: "Все типы" },
-  { id: "PROPERTY", label: "Жилье" },
+  { id: "PROPERTY", label: "Жильё" },
   { id: "EXCURSION", label: "Экскурсии" },
 ] as const;
 
@@ -155,29 +161,17 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
   };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl text-olive">Заявки (админ)</h1>
-      <p className="text-sm text-olive/70">
-        Просмотр всех заявок по жилью и экскурсиям с фильтрами по статусу, типу и городу.
-      </p>
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Заявки"
+        description="Входящие заявки по жилью и экскурсиям."
+      />
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">Всего</p>
-          <p className="text-xl font-semibold text-olive">{stats.total}</p>
-        </div>
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">Новые</p>
-          <p className="text-xl font-semibold text-olive">{stats.newCount}</p>
-        </div>
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">В работе</p>
-          <p className="text-xl font-semibold text-olive">{stats.inProgressCount}</p>
-        </div>
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">Закрытые</p>
-          <p className="text-xl font-semibold text-olive">{stats.closedCount}</p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminStatCard label="Всего" value={stats.total} />
+        <AdminStatCard label="Новые" value={stats.newCount} />
+        <AdminStatCard label="В работе" value={stats.inProgressCount} />
+        <AdminStatCard label="Закрытые" value={stats.closedCount} />
       </div>
 
       <form className="grid gap-3 rounded-2xl border border-olive/10 bg-white p-4 md:grid-cols-4">
@@ -186,7 +180,7 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           <select
             name="status"
             defaultValue={selectedStatus}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
+            className={adminInputClass}
           >
             {applicationStatuses.map((status) => (
               <option key={status.id} value={status.id}>
@@ -200,7 +194,7 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           <select
             name="entityType"
             defaultValue={selectedEntityType}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
+            className={adminInputClass}
           >
             {entityTypes.map((type) => (
               <option key={type.id} value={type.id}>
@@ -214,7 +208,7 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           <select
             name="locationId"
             defaultValue={selectedLocationId}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
+            className={adminInputClass}
           >
             <option value="">Все города</option>
             {locationDirectory.map((location) => (
@@ -225,27 +219,28 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           </select>
         </label>
         <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Поиск (триграммы)</span>
+          <span className="text-sm font-medium text-olive">Поиск</span>
           <input
             type="search"
             name="q"
             defaultValue={query}
             placeholder="Контакт, объект, организатор..."
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
+            className={adminInputClass}
           />
         </label>
         <button
           type="submit"
-          className="md:col-span-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+          className="md:col-span-4 inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
         >
           Применить фильтры
         </button>
       </form>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-olive/30 p-4 text-sm text-olive/70">
-          Заявки не найдены.
-        </p>
+        <AdminEmptyState
+          title="Заявки не найдены"
+          description="Измените фильтры или очистите поиск."
+        />
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
@@ -343,4 +338,3 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
     </div>
   );
 }
-

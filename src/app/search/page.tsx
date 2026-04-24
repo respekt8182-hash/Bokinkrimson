@@ -1,16 +1,32 @@
-﻿import { HousingCatalogClient } from "@/components/public/housing-catalog-client";
+import type { Metadata } from "next";
+import { HousingCatalogClient } from "@/components/public/housing-catalog-client";
 import { ExcursionSearchResults } from "@/components/public/excursion-search-results";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { SeoBreadcrumbs } from "@/components/seo/seo-breadcrumbs";
+import { SeoHubLinks, type SeoHubLinkGroup } from "@/components/seo/seo-hub-links";
+import { propertyTypes } from "@/lib/constants";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getExcursionSeoDirectoryData, getPublicExcursionCatalog } from "@/lib/public-excursions";
 import { getPublicCatalog } from "@/lib/public-properties";
+import {
+  getPopularExcursionSuggestions,
+  getPopularHousingSuggestions,
+} from "@/lib/search-suggestions";
+import {
+  buildHousingHubPath,
+  buildHousingLocationPath,
+  buildToursHubPath,
+} from "@/lib/seo/routes";
+import { buildCollectionPageStructuredData, buildBreadcrumbListStructuredData } from "@/lib/seo/structured-data";
+import { buildSearchMetadata, getSearchSeoState } from "@/lib/seo/search-metadata";
 
-// Unified public search page for both directions:
-// - housing catalog
-// - excursions catalog
-// Direction is controlled by query param `direction`.
 type SearchPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  return buildSearchMetadata(await searchParams);
+}
 
 function pick(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
@@ -69,19 +85,145 @@ function appendStayParamsToPath(
   return hash ? `${nextPath}#${hash}` : nextPath;
 }
 
+function toLocationSuggestions(
+  items: Array<{
+    type: string;
+    id: string;
+    name: string;
+    subtitle: string;
+  }>,
+): Array<{
+  type: "location";
+  id: string;
+  name: string;
+  subtitle: string;
+}> {
+  return items
+    .filter((item): item is (typeof items)[number] & { type: "location" } => item.type === "location")
+    .map((item) => ({
+      type: "location",
+      id: item.id,
+      name: item.name,
+      subtitle: item.subtitle,
+    }));
+}
+
+function buildHousingHubGroups(input: {
+  location: string;
+  locationId?: string;
+  popularLocations: Array<{ id: string; name: string }>;
+}): SeoHubLinkGroup[] {
+  const groups: SeoHubLinkGroup[] = [];
+
+  if (input.popularLocations.length > 0) {
+    groups.push({
+      title: "Популярные города",
+      links: input.popularLocations.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: buildHousingLocationPath(item.id),
+      })),
+    });
+  }
+
+  if (input.location) {
+    groups.push({
+      title: `Типы жилья ${input.location ? "в выбранной локации" : "в Крыму"}`,
+      links: propertyTypes.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: buildHousingHubPath({ location: input.location, propertyType: item.id }),
+      })),
+    });
+  }
+
+  return groups;
+}
+
+function buildExcursionHubGroups(input: {
+  direction: "excursions" | "tours";
+  directory: Awaited<ReturnType<typeof getExcursionSeoDirectoryData>>;
+  popularLocations: Array<{ id: string; name: string }>;
+}): SeoHubLinkGroup[] {
+  if (input.direction === "tours") {
+    return [
+      {
+        title: "Популярные города для туров",
+        links: input.popularLocations.slice(0, 8).map((item) => ({
+          label: item.name,
+          href: buildToursHubPath({ location: item.name }),
+        })),
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Города",
+      links: input.directory.cities.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: `/excursions/${item.slug}`,
+      })),
+    },
+    {
+      title: "Категории",
+      links: input.directory.categories.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: `/excursions/category/${item.slug}`,
+      })),
+    },
+    {
+      title: "Районы",
+      links: input.directory.districts.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: `/excursions/district/${item.slug}`,
+      })),
+    },
+  ];
+}
+
+function SearchIntro({
+  breadcrumbs,
+  lead,
+}: {
+  breadcrumbs: Array<{ name: string; path: string }>;
+  lead: string;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
+      <SeoBreadcrumbs items={breadcrumbs} />
+      <section className="mt-4 rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10 md:p-5">
+        <p className="text-sm leading-7 text-olive/72">{lead}</p>
+      </section>
+    </div>
+  );
+}
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
-  const [locationDirectory, excursionSeoDirectory] = await Promise.all([
+  const seoState = await getSearchSeoState(params);
+  const normalizedDirection = seoState.direction;
+  const direction = normalizedDirection === "housing" ? "housing" : "excursions";
+  const [
+    locationDirectory,
+    excursionSeoDirectory,
+    popularHousingSuggestions,
+    popularExcursionSuggestions,
+  ] = await Promise.all([
     getLocationDirectoryItems(),
     getExcursionSeoDirectoryData(),
+    direction === "housing" ? getPopularHousingSuggestions() : Promise.resolve([]),
+    direction === "excursions" ? getPopularExcursionSuggestions() : Promise.resolve([]),
   ]);
-  // Query parser supports both current and legacy param names to keep old links working.
-  const directionRaw = pick(params.direction) || pick(params.type) || "housing";
-  const direction = directionRaw === "excursions" ? "excursions" : "housing";
+  const popularHousingLocationSuggestions = toLocationSuggestions(popularHousingSuggestions);
+  const popularExcursionLocationSuggestions = toLocationSuggestions(popularExcursionSuggestions);
+
   const textQuery = pick(params.q) || pick(params.query);
   const location = pick(params.location);
-  const propertyType = pick(params.propertyType);
+  const offerType =
+    pick(params.offerType) ||
+    (normalizedDirection === "tours" ? "tour" : "");
+  const propertyType =
+    pick(params.propertyType) ||
+    (direction === "housing" && normalizedDirection !== "housing" ? normalizedDirection : "");
   const district = pick(params.district);
   const category = pick(params.category);
   const format = pick(params.format);
@@ -110,11 +252,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const petsAllowed = petsAllowedRaw === "1" || petsAllowedRaw === "true";
   const pageRaw = Number.parseInt(pick(params.page) || "1", 10);
   const page = Number.isFinite(pageRaw) ? Math.max(1, pageRaw) : 1;
+  const canEmitSearchSchema = seoState.index;
 
-  // Excursions branch keeps its own filters and card layout.
   if (direction === "excursions") {
     const peopleRaw = Number.parseInt(guests, 10);
     const result = await getPublicExcursionCatalog({
+      offerType: offerType === "tour" || offerType === "excursion" ? offerType : undefined,
       query: textQuery,
       location,
       district,
@@ -152,20 +295,52 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       page,
       pageSize: 30,
     });
+    const linkGroups = buildExcursionHubGroups({
+      direction: normalizedDirection === "tours" ? "tours" : "excursions",
+      directory: excursionSeoDirectory,
+      popularLocations: popularExcursionLocationSuggestions,
+    });
 
     return (
-      <ExcursionSearchResults
-        items={result.items}
-        filters={result.filters}
-        pagination={{ page: result.page, totalPages: result.totalPages, total: result.total }}
-        districts={excursionSeoDirectory.districts}
-        categories={excursionSeoDirectory.categories}
-        locationNames={excursionSeoDirectory.cities.map((c) => c.name)}
-      />
+      <>
+        {canEmitSearchSchema ? (
+          <>
+            <JsonLd data={buildBreadcrumbListStructuredData(seoState.breadcrumbItems)} />
+            <JsonLd
+              data={buildCollectionPageStructuredData({
+                path: seoState.canonicalPath,
+                name: seoState.heading,
+                description: seoState.description,
+                items: result.items.slice(0, 12).map((item) => ({
+                  name: item.title,
+                  path: item.path,
+                  image: item.coverImageUrl,
+                })),
+              })}
+            />
+          </>
+        ) : null}
+
+        <SearchIntro breadcrumbs={seoState.breadcrumbItems} lead={seoState.lead} />
+
+        <ExcursionSearchResults
+          items={result.items}
+          filters={result.filters}
+          pagination={{ page: result.page, totalPages: result.totalPages, total: result.total }}
+          districts={excursionSeoDirectory.districts}
+          categories={excursionSeoDirectory.categories}
+          locationNames={excursionSeoDirectory.cities.map((item) => item.name)}
+          initialPopularLocationSuggestions={popularExcursionLocationSuggestions}
+          catalogDirection={normalizedDirection === "tours" ? "tours" : "excursions"}
+        />
+
+        <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 md:px-6">
+          <SeoHubLinks groups={linkGroups} />
+        </div>
+      </>
     );
   }
 
-  // Housing branch reuses property catalog domain service.
   const guestsCountRaw = Number.parseInt(guests, 10);
   const minRatingValue = Number.parseFloat(minRating);
   const normalizedMinRating =
@@ -180,6 +355,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     sort === "popular_desc"
       ? sort
       : "";
+
   const initialHousingResult = await getPublicCatalog({
     query: textQuery,
     location,
@@ -198,9 +374,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     page: 1,
     pageSize: 30,
   });
+
   const initialSortParam =
     initialHousingResult.filters.sort === "relevance" ? "" : initialHousingResult.filters.sort;
-  // Preserve stay params in card links so details pages open with the same stay context.
   const initialItemsWithStayParams = initialHousingResult.items.map((item) => ({
     ...item,
     path: appendStayParamsToPath(item.path, {
@@ -211,47 +387,71 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       guestsChildren,
     }),
   }));
+  const housingHubGroups = buildHousingHubGroups({
+    location: initialHousingResult.filters.locationName ?? location,
+    locationId: initialHousingResult.filters.locationId ?? undefined,
+    popularLocations: popularHousingLocationSuggestions,
+  });
 
   return (
-    <HousingCatalogClient
-      initialResponse={{
-        items: initialItemsWithStayParams,
-        total: initialHousingResult.total,
-        page: 1,
-        pageSize: 30,
-        totalPages: initialHousingResult.totalPages,
-        hasMore: initialHousingResult.totalPages > 1,
-      }}
-      initialFilters={{
-        direction: "housing",
-        query: textQuery,
-        location,
-        locationId: initialHousingResult.filters.locationId ?? "",
-        propertyType,
-        checkIn,
-        checkOut,
-        guests,
-        guestsAdults,
-        guestsChildren,
-        minPrice,
-        maxPrice,
-        sort: initialSortParam,
-        minRating,
-        hasPhotos,
-        hasReviews,
-        familyFriendly,
-        petsAllowed,
-      }}
-      locationNames={locationDirectory.map((item) => item.name)}
-      initialLocationLabel={initialHousingResult.filters.locationName ?? (location || "весь Крым")}
-    />
+    <>
+      {canEmitSearchSchema ? (
+        <>
+          <JsonLd data={buildBreadcrumbListStructuredData(seoState.breadcrumbItems)} />
+          <JsonLd
+            data={buildCollectionPageStructuredData({
+              path: seoState.canonicalPath,
+              name: seoState.heading,
+              description: seoState.description,
+              items: initialHousingResult.items.slice(0, 12).map((item) => ({
+                name: item.name,
+                path: item.path,
+                image: item.coverImageUrl,
+              })),
+            })}
+          />
+        </>
+      ) : null}
+
+      <SearchIntro breadcrumbs={seoState.breadcrumbItems} lead={seoState.lead} />
+
+      <HousingCatalogClient
+        initialResponse={{
+          items: initialItemsWithStayParams,
+          total: initialHousingResult.total,
+          page: 1,
+          pageSize: 30,
+          totalPages: initialHousingResult.totalPages,
+          hasMore: initialHousingResult.totalPages > 1,
+        }}
+        initialFilters={{
+          direction: "housing",
+          query: textQuery,
+          location,
+          locationId: initialHousingResult.filters.locationId ?? "",
+          propertyType,
+          checkIn,
+          checkOut,
+          guests,
+          guestsAdults,
+          guestsChildren,
+          minPrice,
+          maxPrice,
+          sort: initialSortParam,
+          minRating,
+          hasPhotos,
+          hasReviews,
+          familyFriendly,
+          petsAllowed,
+        }}
+        locationNames={locationDirectory.map((item) => item.name)}
+        initialPopularLocationSuggestions={popularHousingLocationSuggestions}
+        initialLocationLabel={initialHousingResult.filters.locationName ?? (location || "весь Крым")}
+      />
+
+      <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 md:px-6">
+        <SeoHubLinks groups={housingHubGroups} />
+      </div>
+    </>
   );
-
-  
 }
-
-
-
-
-
-

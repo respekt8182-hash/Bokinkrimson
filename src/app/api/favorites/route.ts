@@ -1,7 +1,7 @@
-import { PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 function readPropertyIds(raw: string | null): string[] {
   if (!raw) {
@@ -57,8 +57,7 @@ export async function POST(request: Request) {
   const property = await db.property.findFirst({
     where: {
       id: propertyId,
-      status: PropertyStatus.PUBLISHED,
-      ownerDeletedAt: null,
+      ...buildPublishedPropertyVisibilityWhere(),
     },
     select: {
       id: true,

@@ -4,7 +4,7 @@
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PhoneInput, type PhoneInputValue } from "@/components/ui/phone-input";
-import { forgotPasswordSchema } from "@/lib/schemas";
+import { forgotPasswordSchema } from "@/lib/schemas/auth";
 
 export function ForgotPasswordForm() {
   const [isDone, setIsDone] = useState(false);

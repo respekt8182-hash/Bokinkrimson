@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { trackPublicEntityView } from "@/lib/client-view-tracking";
 
 type ExcursionViewTrackerProps = {
   excursionId: string;
 };
 
-// Fires a single POST to the excursion view-tracking endpoint on first mount.
-// Renders nothing — purely a side-effect component.
 export function ExcursionViewTracker({ excursionId }: ExcursionViewTrackerProps) {
   useEffect(() => {
-    fetch(`/api/excursions/${excursionId}/view`, { method: "POST" }).catch(() => {});
+    trackPublicEntityView({
+      storageKey: `excursion-view:${excursionId}`,
+      url: `/api/excursions/${excursionId}/view`,
+    });
   }, [excursionId]);
 
   return null;

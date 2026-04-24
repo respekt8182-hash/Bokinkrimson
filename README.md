@@ -37,6 +37,7 @@ Stage 13 implementation for the booking service focused on Crimea:
 
 Project map and onboarding notes: `docs/DEVELOPER_GUIDE.md`
 Release/operations runbook: `docs/RELEASE_RUNBOOK.md`
+Self-hosted Ubuntu VPS deploy for `krymvokrug.ru`: `docs/VPS_DEPLOY.md`
 
 ## Environment
 
@@ -45,8 +46,13 @@ Copy `.env.example` to `.env` and set values:
 ```bash
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/boking?schema=public"
 JWT_SECRET="your-long-random-secret"
+ADMIN_LOGIN="admin"
+ADMIN_PASSWORD_HASH="\$2b\$10\$your-bcrypt-hash"
+ADMIN_JWT_SECRET="your-long-random-admin-secret"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 CSRF_TRUSTED_ORIGINS="http://192.168.1.50:3000 http://boking.local:3000"
+RATE_LIMIT_MODE="auto"
+SECURITY_EMAIL_DELIVERY_MODE="log"
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY="your-yandex-maps-key"
 YANDEX_GEOCODER_API_KEY="your-yandex-geocoder-key"
 S3_ENDPOINT="https://your-s3-endpoint"
@@ -64,7 +70,9 @@ YOOKASSA_RETURN_URL="http://localhost:3000/dashboard/objects"
 `NEXT_PUBLIC_YANDEX_MAPS_API_KEY` is used by the client map widget.  
 `YANDEX_GEOCODER_API_KEY` is used by backend geocoding API routes.
 `CSRF_TRUSTED_ORIGINS` is optional and lets you explicitly allow extra origins for mutating `/api/*` requests, for example when testing from a phone over local network or behind a reverse proxy.
-If YooKassa variables are empty, the app works in mock payment mode.
+`RATE_LIMIT_MODE="memory"` is a good default for a single VPS node. Use `upstash` when you need a shared external rate-limit backend.
+When you store a bcrypt hash in `.env` / `.env.local`, escape each `$` as `\$`, otherwise Next.js treats parts of the hash as variable expansion and `ADMIN_PASSWORD_HASH` may become empty at runtime.
+If YooKassa variables are empty, the project still starts normally; online payments stay disabled until you configure them, while the manager payment flow remains available.
 If you run multiple local projects against one PostgreSQL server, give each project its own database name (and ideally its own DB user) in `.env` to avoid mixing credentials and data.
 
 ## Run locally
@@ -80,14 +88,24 @@ App: `http://localhost:3000`
 
 ## Admin access
 
-Users are created with role `USER` by default.
-To access `/admin`, set role `ADMIN` in PostgreSQL:
+Admin login for `/admin/login` is configured through environment variables:
+
+```bash
+ADMIN_LOGIN="admin"
+ADMIN_PASSWORD_HASH="\$2b\$10\$your-bcrypt-hash"
+ADMIN_JWT_SECRET="your-long-random-admin-secret"
+```
+
+Important: in `.env` files, escape each `$` inside the bcrypt hash as `\$`.
+
+Owner/user accounts are created with role `USER` by default.
+If you also need database-backed admin rights for legacy flows, set role `ADMIN` in PostgreSQL:
 
 ```sql
 UPDATE "User" SET "role" = 'ADMIN' WHERE "email" = 'admin@example.com';
 ```
 
-Recommended: keep admin as a dedicated account (not an owner account).
+Recommended: keep admin access as a dedicated account and do not reuse an owner account.
 
 ## Database
 

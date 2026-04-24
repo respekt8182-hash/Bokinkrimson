@@ -1,8 +1,8 @@
-// Property document endpoint: owner-only delete for a single uploaded object document.
+// Property document endpoint: controlled download and delete for owner/admin document access.
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { deleteFromStorage } from "@/lib/storage";
+import { getEditorSession } from "@/lib/editor-access";
+import { deleteFromStorage, readFromStorage } from "@/lib/storage";
 
 type RouteContext = {
   params: Promise<{
@@ -11,14 +11,11 @@ type RouteContext = {
   }>;
 };
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await getSession();
-
-  if (!session) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
-  const { id, documentId } = await context.params;
+async function getAccessibleDocument(
+  propertyId: string,
+  documentId: string,
+  editor: Awaited<ReturnType<typeof getEditorSession>>,
+) {
   const document = await db.propertyDocument.findUnique({
     where: { id: documentId },
     include: {
@@ -34,11 +31,56 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   if (
     !document ||
-    document.propertyId !== id ||
-    document.property.ownerId !== session.id ||
-    document.property.ownerDeletedAt
+    document.propertyId !== propertyId ||
+    document.property.ownerDeletedAt ||
+    (!editor?.isAdmin && document.property.ownerId !== editor?.id)
   ) {
-    return NextResponse.json({ error: "Документ не найден" }, { status: 404 });
+    return null;
+  }
+
+  return document;
+}
+
+export async function GET(_request: Request, context: RouteContext) {
+  const editor = await getEditorSession();
+
+  if (!editor) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const { id, documentId } = await context.params;
+  const document = await getAccessibleDocument(id, documentId, editor);
+
+  if (!document) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  }
+
+  const stored = await readFromStorage(document.storageKey);
+
+  return new NextResponse(new Uint8Array(stored.body), {
+    status: 200,
+    headers: {
+      "Content-Type": stored.contentType,
+      "Content-Length": String(stored.contentLength),
+      "Content-Disposition": `attachment; filename="${document.fileName}"`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const editor = await getEditorSession();
+
+  if (!editor) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const { id, documentId } = await context.params;
+  const document = await getAccessibleDocument(id, documentId, editor);
+
+  if (!document) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
   await db.propertyDocument.delete({

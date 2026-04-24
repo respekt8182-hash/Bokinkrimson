@@ -77,6 +77,16 @@ function StatusMessage({ type, message }: { type: "error" | "success"; message: 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+function AvailabilityNotice({ message }: { message: string | null }) {
+  if (!message) return null;
+
+  return (
+    <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200/80">
+      {message}
+    </div>
+  );
+}
+
 type ProfileItem = {
   id: string;
   firstName: string;
@@ -89,6 +99,10 @@ type ProfileItem = {
 
 type ProfileSettingsProps = {
   initialProfile: ProfileItem;
+  emailChangeAvailable?: boolean;
+  emailChangeUnavailableReason?: string | null;
+  passwordChangeAvailable?: boolean;
+  passwordChangeUnavailableReason?: string | null;
 };
 
 const avatarCanvasSize = 640;
@@ -236,7 +250,13 @@ type CropEditorState = {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
+export function ProfileSettings({
+  initialProfile,
+  emailChangeAvailable = true,
+  emailChangeUnavailableReason = null,
+  passwordChangeAvailable = true,
+  passwordChangeUnavailableReason = null,
+}: ProfileSettingsProps) {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileItem>(initialProfile);
   const [profileForm, setProfileForm] = useState({
@@ -269,6 +289,8 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
     () => getInitials({ firstName: profile.firstName, lastName: profile.lastName, email: profile.email }),
     [profile.email, profile.firstName, profile.lastName],
   );
+  const isEmailFieldDisabled = !emailChangeAvailable;
+  const isPasswordSectionDisabled = !passwordChangeAvailable;
 
   async function saveProfile() {
     setProfileError("");
@@ -302,6 +324,10 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
   async function savePassword() {
     setPasswordError("");
     setPasswordSuccess("");
+    if (isPasswordSectionDisabled) {
+      setPasswordError(passwordChangeUnavailableReason ?? "Смена пароля временно недоступна.");
+      return;
+    }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setPasswordError("Новые пароли не совпадают.");
       return;
@@ -556,10 +582,15 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
                   <Input
                     type="email"
                     value={profileForm.email}
+                    disabled={isEmailFieldDisabled}
                     onChange={(event) =>
                       setProfileForm((prev) => ({ ...prev, email: event.target.value }))
                     }
+                    className={isEmailFieldDisabled ? "cursor-not-allowed bg-cream text-olive/60" : undefined}
                   />
+                  {isEmailFieldDisabled ? (
+                    <p className="text-xs text-amber-700">{emailChangeUnavailableReason}</p>
+                  ) : null}
                 </label>
                 <label className="space-y-1.5">
                   <span className="text-sm font-medium text-olive">
@@ -600,7 +631,10 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
                 <p className="text-xs text-olive/45">Обновите пароль для входа</p>
               </div>
             </div>
-            <div className="p-5">
+            <div className={`p-5${isPasswordSectionDisabled ? " opacity-70" : ""}`}>
+              <AvailabilityNotice
+                message={isPasswordSectionDisabled ? passwordChangeUnavailableReason : null}
+              />
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-1.5 sm:col-span-2">
                   <span className="text-sm font-medium text-olive">Текущий пароль</span>
@@ -609,12 +643,18 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
                       type={showCurrent ? "text" : "password"}
                       autoComplete="current-password"
                       value={passwordForm.currentPassword}
+                      disabled={isPasswordSectionDisabled}
                       onChange={(event) =>
                         setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
                       }
-                      className="pr-9"
+                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
                     />
-                    <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70">
+                    <button
+                      type="button"
+                      disabled={isPasswordSectionDisabled}
+                      onClick={() => setShowCurrent((v) => !v)}
+                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       {showCurrent ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
@@ -626,12 +666,18 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
                       type={showNew ? "text" : "password"}
                       autoComplete="new-password"
                       value={passwordForm.newPassword}
+                      disabled={isPasswordSectionDisabled}
                       onChange={(event) =>
                         setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
                       }
-                      className="pr-9"
+                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
                     />
-                    <button type="button" onClick={() => setShowNew((v) => !v)} className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70">
+                    <button
+                      type="button"
+                      disabled={isPasswordSectionDisabled}
+                      onClick={() => setShowNew((v) => !v)}
+                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       {showNew ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
@@ -643,19 +689,28 @@ export function ProfileSettings({ initialProfile }: ProfileSettingsProps) {
                       type={showConfirm ? "text" : "password"}
                       autoComplete="new-password"
                       value={passwordForm.confirmPassword}
+                      disabled={isPasswordSectionDisabled}
                       onChange={(event) =>
                         setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
                       }
-                      className="pr-9"
+                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
                     />
-                    <button type="button" onClick={() => setShowConfirm((v) => !v)} className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70">
+                    <button
+                      type="button"
+                      disabled={isPasswordSectionDisabled}
+                      onClick={() => setShowConfirm((v) => !v)}
+                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
                 </label>
               </div>
               <div className="mt-5">
-                <Button onClick={() => void savePassword()} disabled={isPasswordSaving}>
+                <Button
+                  onClick={() => void savePassword()}
+                  disabled={isPasswordSaving || isPasswordSectionDisabled}
+                >
                   {isPasswordSaving ? "Сохранение..." : "Изменить пароль"}
                 </Button>
               </div>

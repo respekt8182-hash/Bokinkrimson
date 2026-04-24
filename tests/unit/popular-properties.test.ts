@@ -34,7 +34,10 @@ vi.mock("@/lib/public-properties", () => ({
   buildPublicPropertyPath: vi.fn(() => "/property/test"),
 }));
 
-import { getPopularProperties } from "../../src/lib/popular-properties";
+async function loadGetPopularProperties() {
+  vi.resetModules();
+  return (await import("../../src/lib/popular-properties")).getPopularProperties;
+}
 
 describe("popular properties fallback", () => {
   beforeEach(() => {
@@ -45,6 +48,8 @@ describe("popular properties fallback", () => {
 
   it("returns an empty list without querying Prisma when the database is unreachable", async () => {
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(false);
+
+    const getPopularProperties = await loadGetPopularProperties();
 
     await expect(getPopularProperties()).resolves.toEqual([]);
     expect(dbMocks.propertyFindMany).not.toHaveBeenCalled();
@@ -63,6 +68,8 @@ describe("popular properties fallback", () => {
         "P1001",
       ),
     );
+
+    const getPopularProperties = await loadGetPopularProperties();
 
     await expect(getPopularProperties()).resolves.toEqual([]);
     expect(dbMocks.propertyFindMany).toHaveBeenCalledTimes(1);

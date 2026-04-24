@@ -20,11 +20,11 @@ export type SupportedPhotoUploadType = "jpeg" | "png" | "heic" | "heif" | "webp"
 export type UploadMediaOwner = "property" | "room";
 export type UploadMediaType = "IMAGE" | "VIDEO";
 
-export const accommodationJpegPngUploadSizeLimitBytes = 10 * 1024 * 1024;
-export const accommodationPhotoUploadSizeLimitBytes = 20 * 1024 * 1024;
+export const accommodationJpegPngUploadSizeLimitBytes = 15 * 1024 * 1024;
+export const accommodationPhotoUploadSizeLimitBytes = 30 * 1024 * 1024;
 export const accommodationPhotoUploadFormatsLabel = "JPG/JPEG, PNG, HEIC/HEIF и WEBP";
 export const accommodationPhotoUploadLimitsLabel =
-  "JPG/JPEG и PNG до 10 МБ, HEIC/HEIF и WEBP до 20 МБ";
+  `JPG/JPEG и PNG до ${formatUploadMegabytes(accommodationJpegPngUploadSizeLimitBytes)}, HEIC/HEIF и WEBP до ${formatUploadMegabytes(accommodationPhotoUploadSizeLimitBytes)}`;
 export const accommodationPhotoUploadAccept = Array.from(
   new Set([
     ...supportedPhotoUploadMimeTypes,

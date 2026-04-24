@@ -5,6 +5,9 @@ import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { cn } from "@/lib/cn";
 import { propertyTypes } from "@/lib/constants";
+import { housingHubPath } from "@/lib/seo/routes";
+
+const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
 export type SidebarFilterOutput = {
   propertyType: string;
@@ -102,14 +105,8 @@ export function HousingSearchSidebarFilters({
   const leftPercent = ((rangeMin - minBound) / sliderSpan) * 100;
   const rightPercent = ((rangeMax - minBound) / sliderSpan) * 100;
 
-  const formattedMin = useMemo(
-    () => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(rangeMin),
-    [rangeMin],
-  );
-  const formattedMax = useMemo(
-    () => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(rangeMax),
-    [rangeMax],
-  );
+  const formattedMin = useMemo(() => ruNumberFormat.format(rangeMin), [rangeMin]);
+  const formattedMax = useMemo(() => ruNumberFormat.format(rangeMax), [rangeMax]);
 
   function updateMin(nextValue: number) {
     const normalized = clamp(Math.floor(nextValue / PRICE_STEP) * PRICE_STEP, minBound, rangeMax);
@@ -142,12 +139,11 @@ export function HousingSearchSidebarFilters({
   return (
     <form
       method="GET"
-      action="/search"
+      action={housingHubPath}
       onSubmit={handleFormSubmit}
       className="space-y-3 rounded-2xl bg-white/96 p-3.5 ring-1 ring-olive/10"
       id={formId}
     >
-      <input type="hidden" name="direction" value="housing" />
       {query ? <input type="hidden" name="q" value={query} /> : null}
       {location ? <input type="hidden" name="location" value={location} /> : null}
       {checkIn ? <input type="hidden" name="checkIn" value={checkIn} /> : null}
@@ -168,7 +164,7 @@ export function HousingSearchSidebarFilters({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-olive">Фильтры поиска</h2>
         <Link
-          href="/search?direction=housing"
+          href={housingHubPath}
           className="inline-flex h-8 items-center rounded-lg border border-olive/18 px-2.5 text-xs font-semibold text-olive transition hover:bg-cream/70"
         >
           Сбросить

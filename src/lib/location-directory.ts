@@ -1,11 +1,12 @@
-import { CustomLocationStatus, type Prisma } from "@prisma/client";
+import { CustomLocationStatus } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { crimeaLocationById, crimeaLocationIds, crimeaLocations } from "@/lib/constants";
 import {
   findCrimeaSettlementById,
   findCrimeaSettlementByName,
   getCrimeaSettlementDirectoryItems,
 } from "@/lib/crimea-settlements";
-import { db } from "@/lib/db";
+import { db, type DbTransactionClient } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import {
   isConfiguredDatabaseReachable,
@@ -56,7 +57,7 @@ const cyrillicToLatinMap: Record<string, string> = {
 };
 
 type ResolvePropertyLocationInput = {
-  tx: Prisma.TransactionClient;
+  tx: DbTransactionClient;
   locationId?: string | null;
   locationName: string;
   sourcePropertyId: string;
@@ -130,7 +131,8 @@ async function readLocationDirectorySourceRows() {
   }
 }
 
-export async function getLocationDirectoryItems(): Promise<LocationDirectoryItem[]> {
+const getCachedLocationDirectoryItems = unstable_cache(
+  async (): Promise<LocationDirectoryItem[]> => {
   const [approvedCustomLocations, excursionLocations] = await readLocationDirectorySourceRows();
   const officialSettlements = await getCrimeaSettlementDirectoryItems();
 
@@ -150,6 +152,13 @@ export async function getLocationDirectoryItems(): Promise<LocationDirectoryItem
   }
 
   return Array.from(dedupedByName.values());
+  },
+  ["location-directory-v1"],
+  { revalidate: 1800 },
+);
+
+export async function getLocationDirectoryItems(): Promise<LocationDirectoryItem[]> {
+  return getCachedLocationDirectoryItems();
 }
 
 export async function searchLocationDirectory(
@@ -170,7 +179,7 @@ export async function searchLocationDirectory(
 }
 
 async function createUniqueCustomLocationSlug(
-  tx: Prisma.TransactionClient,
+  tx: DbTransactionClient,
   locationName: string,
 ): Promise<string> {
   const base = slugifyLocationName(locationName) || "crimea-location";

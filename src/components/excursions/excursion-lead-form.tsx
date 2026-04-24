@@ -1,12 +1,15 @@
 "use client";
 
-import { CalendarDays, Check, Copy, Phone, User, Users, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { CalendarDays, Check, Copy, MessageSquareText, Users, X } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { AppIcon } from "@/components/ui/app-icon";
-import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
+import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
 import { cn } from "@/lib/cn";
+import { buildExcursionLeadMessage, getOfferLabels } from "@/lib/lead-message-author";
 
 type ExcursionLeadFormProps = {
+  offerType?: string | null;
   excursionTitle: string;
   priceLabel: string;
   durationLabel: string;
@@ -15,219 +18,235 @@ type ExcursionLeadFormProps = {
   telegramUrl: string | null;
   phone: string | null;
   organizerName: string;
+  onCopySuccess?: (() => void) | null;
 };
 
+function buildPreviewMeta(params: {
+  offerType?: string | null;
+  locationName: string | null;
+  priceLabel: string;
+  durationLabel: string;
+}): string[] {
+  const offer = getOfferLabels(params.offerType);
+
+  return [offer.badge, params.locationName, params.priceLabel, params.durationLabel].filter(
+    (item): item is string => Boolean(item?.trim()),
+  );
+}
+
 export function ExcursionLeadForm({
+  offerType = null,
   excursionTitle,
   priceLabel,
   durationLabel,
   locationName,
-  whatsappUrl,
-  telegramUrl,
-  phone,
   organizerName,
+  onCopySuccess = null,
 }: ExcursionLeadFormProps) {
-  const [name, setName] = useState("");
-  const [userPhone, setUserPhone] = useState("");
   const [date, setDate] = useState("");
   const [guests, setGuests] = useState("");
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
 
-  const buildMessage = useCallback(() => {
-    const lines: string[] = [
-      "Добрый день! Нашёл вашу программу на сайте \"Крым Вокруг\".",
-      "",
-      `Интересует: "${excursionTitle}"`,
-    ];
-    if (locationName) lines.push(`Локация: ${locationName}`);
-    if (name.trim()) lines.push(`Имя: ${name.trim()}`);
-    if (userPhone.trim()) lines.push(`Телефон: ${userPhone.trim()}`);
-    if (date) {
-      const d = new Date(date);
-      const formatted = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
-      lines.push(`Желаемая дата: ${formatted}`);
-    }
-    if (guests.trim()) lines.push(`Количество человек: ${guests.trim()}`);
-    if (message.trim()) {
-      lines.push("");
-      lines.push(`Комментарий: ${message.trim()}`);
-    }
-    lines.push("");
-    lines.push("Буду благодарен за ответ!");
-    return lines.join("\n");
-  }, [excursionTitle, locationName, name, userPhone, date, guests, message]);
+  const dateId = useId();
+  const guestsId = useId();
+  const messageId = useId();
 
-  const handleCopy = useCallback(async () => {
-    const text = buildMessage();
+  const previewMessage = useMemo(
+    () =>
+      buildExcursionLeadMessage({
+        authorGender,
+        offerType,
+        organizerName,
+        excursionTitle,
+        locationName,
+        date,
+        guests,
+        message,
+      }),
+    [authorGender, offerType, organizerName, excursionTitle, locationName, date, guests, message],
+  );
+
+  const previewMeta = useMemo(
+    () =>
+      buildPreviewMeta({
+        offerType,
+        locationName,
+        priceLabel,
+        durationLabel,
+      }),
+    [offerType, locationName, priceLabel, durationLabel],
+  );
+
+  const inputClassName =
+    "w-full rounded-2xl border border-olive/10 bg-white px-4 py-3 pl-11 text-sm text-olive placeholder:text-olive/32 outline-none transition hover:border-olive/18 focus:border-primary/40 focus:ring-2 focus:ring-primary/8";
+
+  async function handleCopy() {
+    let didCopy = false;
+
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(previewMessage);
+      didCopy = true;
     } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
+      const textArea = document.createElement("textarea");
+      textArea.value = previewMessage;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      didCopy = document.execCommand("copy");
+      document.body.removeChild(textArea);
     }
+
+    if (!didCopy) {
+      return;
+    }
+
+    if (onCopySuccess) {
+      onCopySuccess();
+      return;
+    }
+
     setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  }, [buildMessage]);
-
-  const encodedMessage = encodeURIComponent(buildMessage());
-
-  const whatsappHref = whatsappUrl
-    ? `${whatsappUrl}${whatsappUrl.includes("?") ? "&" : "?"}text=${encodedMessage}`
-    : null;
-
-  const telegramHref = telegramUrl
-    ? telegramUrl
-    : null;
+    window.setTimeout(() => setCopied(false), 2500);
+  }
 
   return (
     <div className="space-y-4">
-      <form ref={formRef} className="space-y-3" onSubmit={(e) => e.preventDefault()}>
-        {/* Name */}
-        <div className="relative">
-          <label htmlFor="lead-name" className="sr-only">Ваше имя</label>
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/30">
-            <AppIcon icon={User} className="h-4 w-4" />
-          </span>
-          <input
-            id="lead-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ваше имя"
-            className="w-full rounded-xl border border-olive/12 bg-cream/40 py-3 pl-10 pr-4 text-sm text-olive placeholder:text-olive/35 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-          />
+      <div className="rounded-[26px] border border-olive/10 bg-[linear-gradient(180deg,rgba(245,240,229,0.95),rgba(255,255,255,0.98))] p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/70">
+              Готовое сообщение
+            </p>
+          </div>
+          <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-primary shadow-sm">
+            <AppIcon icon={MessageSquareText} className="h-4.5 w-4.5" />
+          </div>
         </div>
 
-        {/* Phone */}
-        <div className="relative">
-          <label htmlFor="lead-phone" className="sr-only">Телефон</label>
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/30">
-            <AppIcon icon={Phone} className="h-4 w-4" />
-          </span>
-          <input
-            id="lead-phone"
-            type="tel"
-            value={userPhone}
-            onChange={(e) => setUserPhone(e.target.value)}
-            placeholder="+7 (___) ___-__-__"
-            className="w-full rounded-xl border border-olive/12 bg-cream/40 py-3 pl-10 pr-4 text-sm text-olive placeholder:text-olive/35 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-          />
+        <div className="mt-3 rounded-[22px] border border-white/80 bg-white/90 p-4 shadow-[0_14px_34px_rgba(74,59,37,0.08)]">
+          <pre className="whitespace-pre-wrap break-words font-[family-name:var(--font-body)] text-[13px] leading-relaxed text-olive/84">
+            {previewMessage}
+          </pre>
         </div>
 
-        {/* Date & Guests row */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <LeadMessageAuthorToggle
+          value={authorGender}
+          onChange={(value) => {
+            setAuthorGender(value);
+            setCopied(false);
+          }}
+          className="mt-3"
+        />
+
+        {previewMeta.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {previewMeta.map((item, index) => (
+              <span
+                key={`${item}-${index}`}
+                className="inline-flex rounded-full border border-olive/10 bg-white/80 px-3 py-1 text-[11px] font-medium text-olive/62"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
+            Детали заявки
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed text-olive/60">
+            Эти данные сразу подставятся в текст выше.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="relative">
-            <label htmlFor="lead-date" className="sr-only">Дата</label>
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/30">
+            <label htmlFor={dateId} className="sr-only">
+              Дата экскурсии
+            </label>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-olive/28">
               <AppIcon icon={CalendarDays} className="h-4 w-4" />
             </span>
             <input
-              id="lead-date"
+              id={dateId}
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-olive/12 bg-cream/40 py-3 pl-10 pr-3 text-sm text-olive placeholder:text-olive/35 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+              onChange={(event) => {
+                setDate(event.target.value);
+                setCopied(false);
+              }}
+              className={inputClassName}
             />
           </div>
+
           <div className="relative">
-            <label htmlFor="lead-guests" className="sr-only">Кол-во человек</label>
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/30">
+            <label htmlFor={guestsId} className="sr-only">
+              Количество человек
+            </label>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-olive/28">
               <AppIcon icon={Users} className="h-4 w-4" />
             </span>
             <input
-              id="lead-guests"
+              id={guestsId}
               type="number"
               min={1}
               max={100}
               value={guests}
-              onChange={(e) => setGuests(e.target.value)}
-              placeholder="Человек"
-              className="w-full rounded-xl border border-olive/12 bg-cream/40 py-3 pl-10 pr-3 text-sm text-olive placeholder:text-olive/35 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+              onChange={(event) => {
+                setGuests(event.target.value);
+                setCopied(false);
+              }}
+              placeholder="Количество человек"
+              className={inputClassName}
             />
           </div>
         </div>
 
-        {/* Message */}
-        <div>
-          <label htmlFor="lead-message" className="sr-only">Комментарий</label>
+        <div className="relative">
+          <label htmlFor={messageId} className="sr-only">
+            Дополнительные вопросы или пожелания
+          </label>
+          <span className="pointer-events-none absolute left-4 top-4 text-olive/28">
+            <AppIcon icon={MessageSquareText} className="h-4 w-4" />
+          </span>
           <textarea
-            id="lead-message"
+            id={messageId}
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Комментарий или вопрос (необязательно)"
-            rows={2}
-            className="w-full resize-none rounded-xl border border-olive/12 bg-cream/40 px-4 py-3 text-sm text-olive placeholder:text-olive/35 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+            onChange={(event) => {
+              setMessage(event.target.value);
+              setCopied(false);
+            }}
+            placeholder="Например: хотим приватный формат, будем с ребёнком, нужен трансфер или есть вопрос по маршруту."
+            rows={4}
+            className="min-h-[112px] w-full resize-none rounded-2xl border border-olive/10 bg-white px-4 py-3 pl-11 text-sm text-olive placeholder:text-olive/32 outline-none transition hover:border-olive/18 focus:border-primary/40 focus:ring-2 focus:ring-primary/8"
           />
         </div>
-      </form>
-
-      {/* Send buttons */}
-      <div className="space-y-2">
-        {whatsappHref && (
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#20BD5A] active:scale-[0.98]"
-          >
-            <ContactBrandMark brand="whatsapp" className="h-5 w-5" />
-            Написать в WhatsApp
-          </a>
-        )}
-        {telegramHref && (
-          <a
-            href={telegramHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#2AABEE] py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#229ED9] active:scale-[0.98]"
-          >
-            <ContactBrandMark brand="telegram" className="h-5 w-5" />
-            Написать в Telegram
-          </a>
-        )}
-        {!whatsappHref && !telegramHref && phone && (
-          <a
-            href={`tel:${phone}`}
-            className="btn-primary flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white"
-          >
-            <AppIcon icon={Phone} className="h-4 w-4" />
-            Позвонить
-          </a>
-        )}
       </div>
 
-      {/* Copy message button */}
       <button
         type="button"
         onClick={handleCopy}
         className={cn(
-          "flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition active:scale-[0.98]",
-          copied
-            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-            : "border-olive/15 bg-white text-olive/70 hover:bg-cream hover:text-olive",
+          "inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
+          copied ? "bg-emerald-600 text-white" : "bg-[#e8621a] text-white hover:bg-[#d45615]",
         )}
       >
         <AppIcon icon={copied ? Check : Copy} className="h-4 w-4" />
-        {copied ? "Сообщение скопировано!" : "Скопировать сообщение"}
+        {copied ? "Скопировано" : "Копировать"}
       </button>
 
-      <p className="text-center text-[11px] text-olive/35">
-        Заполните форму и отправьте сообщение организатору в мессенджер
+      <p className="text-center text-[11px] leading-5 text-olive/35">
+        Данные не сохраняются на сайте
       </p>
     </div>
   );
 }
-
-/* ─── Mobile Lead Modal ─── */
 
 type ExcursionLeadModalProps = ExcursionLeadFormProps & {
   open: boolean;
@@ -235,6 +254,7 @@ type ExcursionLeadModalProps = ExcursionLeadFormProps & {
   priceTo: number | null;
   priceFrom: number | null;
   currency: string;
+  title?: string;
 };
 
 export function ExcursionLeadModal({
@@ -243,9 +263,16 @@ export function ExcursionLeadModal({
   priceTo,
   priceFrom,
   currency,
+  title = "Заявка на бронирование",
   ...formProps
 }: ExcursionLeadModalProps) {
-  if (!open) return null;
+  void priceTo;
+  void priceFrom;
+  void currency;
+
+  if (!open) {
+    return null;
+  }
 
   return (
     <>
@@ -253,20 +280,19 @@ export function ExcursionLeadModal({
         type="button"
         aria-label="Закрыть"
         onClick={onClose}
-        className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px]"
+        className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px] animate-in fade-in duration-200"
       />
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-x-3 bottom-3 z-[51] flex max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-[440px] sm:rounded-2xl"
+        className="fixed inset-x-3 bottom-3 z-[51] flex max-h-[85vh] flex-col rounded-[28px] bg-white shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-300 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:zoom-in-95 sm:slide-in-from-bottom-0"
       >
-        {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-olive/10 px-5 py-3.5">
           <div>
-            <h3 className="text-[15px] font-semibold text-olive">Оставить заявку</h3>
-            <p className="text-xs text-olive/50">
+            <h3 className="text-[15px] font-semibold text-olive">{title}</h3>
+            <p className="text-xs text-olive/45">
               {formProps.priceLabel}
-              {formProps.durationLabel ? ` · ${formProps.durationLabel}` : ""}
+              {formProps.durationLabel ? ` В· ${formProps.durationLabel}` : ""}
             </p>
           </div>
           <button
@@ -275,13 +301,12 @@ export function ExcursionLeadModal({
             aria-label="Закрыть"
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/16 text-olive/70 transition hover:bg-cream"
           >
-            <AppIcon icon={X} className="h-3.5 w-3.5" />
+            <AppIcon icon={X} className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <ExcursionLeadForm {...formProps} />
+          <ExcursionLeadForm {...formProps} onCopySuccess={onClose} />
         </div>
       </div>
     </>

@@ -3,7 +3,7 @@ import { Prisma, ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
-import { db } from "@/lib/db";
+import { db, type DbTransactionClient } from "@/lib/db";
 import { refreshEntityReviewStats, serializeReview } from "@/lib/reviews";
 
 type RouteContext = {
@@ -15,7 +15,7 @@ const moderateReviewSchema = z.object({
 });
 
 async function refreshSummaryForReview(
-  tx: Prisma.TransactionClient,
+  tx: DbTransactionClient,
   review: { entityType: ReviewEntityType; propertyId: string | null; excursionId: string | null },
 ) {
   return review.entityType === ReviewEntityType.PROPERTY && review.propertyId

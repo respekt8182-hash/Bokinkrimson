@@ -6,11 +6,13 @@ import { type ReactNode, useEffect } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ContentPhotoManager } from "@/components/excursions/editor/content-photo-manager";
 import { TimelineStepIcon } from "@/components/ui/timeline-step-icon";
 import { cn } from "@/lib/cn";
 import {
+  EXCURSION_PROGRAM_PHOTO_LIMIT,
+  getTimelineStepPhotoUrls,
   type TimelineStep,
-  type TimelineStepIcon as TimelineStepIconName,
   TIMELINE_DURATION_OPTIONS,
   TIMELINE_ICONS,
   TIMELINE_ICON_LABELS,
@@ -22,6 +24,11 @@ const EMPTY_DURATION_VALUE = "__empty__";
 type TimelineEditorProps = {
   steps: TimelineStep[];
   onChange: (steps: TimelineStep[]) => void;
+  onUploadPhotos: (stepIndex: number, files: FileList | null) => void;
+  onMovePhoto: (stepIndex: number, photoIndex: number, direction: -1 | 1) => void;
+  onRemovePhoto: (stepIndex: number, photoIndex: number) => void;
+  disabled?: boolean;
+  uploadingStepIndex?: number | null;
 };
 
 type StepFieldProps = {
@@ -41,6 +48,7 @@ function newStep(index: number): TimelineStep {
     description: "",
     location: "",
     icon: "sightseeing",
+    photoUrls: [],
   };
 }
 
@@ -112,7 +120,15 @@ function StepField({ label, htmlFor, hint, className, children }: StepFieldProps
   );
 }
 
-export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
+export function TimelineEditor({
+  steps,
+  onChange,
+  onUploadPhotos,
+  onMovePhoto,
+  onRemovePhoto,
+  disabled = false,
+  uploadingStepIndex = null,
+}: TimelineEditorProps) {
   useEffect(() => {
     function closeAllIconPickers(except?: Element | null) {
       const openedPickers = document.querySelectorAll<HTMLElement>(
@@ -210,6 +226,7 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
         {steps.map((step, index) => {
           const activeIcon = step.icon ?? "sightseeing";
           const durationOptions = getDurationOptions(step.duration ?? "");
+          const stepPhotoUrls = getTimelineStepPhotoUrls(step);
           const titleId = `timeline-step-${index}-title`;
           const locationId = `timeline-step-${index}-location`;
           const timeId = `timeline-step-${index}-time`;
@@ -253,9 +270,7 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                             )}
                             onClick={(event) => {
                               updateStep(index, "icon", icon);
-                              event.currentTarget
-                                .closest("details")
-                                ?.removeAttribute("open");
+                              event.currentTarget.closest("details")?.removeAttribute("open");
                             }}
                           >
                             <TimelineStepIcon icon={icon} className="h-5 w-5" />
@@ -272,7 +287,7 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                     <button
                       type="button"
                       onClick={() => moveUp(index)}
-                      disabled={index === 0}
+                      disabled={disabled || index === 0}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--text-muted)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
                       title="Переместить вверх"
                       aria-label={`Переместить шаг ${step.step} вверх`}
@@ -282,7 +297,7 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                     <button
                       type="button"
                       onClick={() => moveDown(index)}
-                      disabled={index === steps.length - 1}
+                      disabled={disabled || index === steps.length - 1}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--text-muted)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
                       title="Переместить вниз"
                       aria-label={`Переместить шаг ${step.step} вниз`}
@@ -292,7 +307,8 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                     <button
                       type="button"
                       onClick={() => removeStep(index)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--danger)] transition hover:bg-red-50"
+                      disabled={disabled}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--danger)] transition hover:bg-red-50 disabled:opacity-40"
                       title="Удалить шаг"
                       aria-label={`Удалить шаг ${step.step}`}
                     >
@@ -332,17 +348,13 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                         <select
                           id={durationId}
                           value={
-                            step.duration?.trim()
-                              ? step.duration.trim()
-                              : EMPTY_DURATION_VALUE
+                            step.duration?.trim() ? step.duration.trim() : EMPTY_DURATION_VALUE
                           }
                           onChange={(event) =>
                             updateStep(
                               index,
                               "duration",
-                              event.target.value === EMPTY_DURATION_VALUE
-                                ? ""
-                                : event.target.value,
+                              event.target.value === EMPTY_DURATION_VALUE ? "" : event.target.value,
                             )
                           }
                           className="h-[46px] w-full appearance-none rounded-xl border border-olive/18 bg-white px-3.5 pr-10 text-sm font-medium text-olive outline-none transition hover:border-olive/30 focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -385,6 +397,20 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
                       className="w-full resize-none rounded-xl border border-[color:var(--border)] bg-white px-3.5 py-3 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/20"
                     />
                   </StepField>
+
+                  <ContentPhotoManager
+                    title="Фото шага"
+                    description="Эти фото показываются рядом с соответствующим шагом маршрута."
+                    photoUrls={stepPhotoUrls}
+                    limit={EXCURSION_PROGRAM_PHOTO_LIMIT}
+                    addLabel="Добавить фото шага"
+                    emptyText="Фото для этого шага пока не выбраны."
+                    disabled={disabled}
+                    isUploading={uploadingStepIndex === index}
+                    onUpload={(files) => onUploadPhotos(index, files)}
+                    onMove={(photoIndex, direction) => onMovePhoto(index, photoIndex, direction)}
+                    onRemove={(photoIndex) => onRemovePhoto(index, photoIndex)}
+                  />
                 </div>
               </div>
             </div>
@@ -393,7 +419,13 @@ export function TimelineEditor({ steps, onChange }: TimelineEditorProps) {
       </div>
 
       {steps.length < 20 ? (
-        <Button type="button" variant="ghost" onClick={addStep} className="w-full border-dashed">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={addStep}
+          className="w-full border-dashed"
+          disabled={disabled}
+        >
           + Добавить шаг
         </Button>
       ) : null}

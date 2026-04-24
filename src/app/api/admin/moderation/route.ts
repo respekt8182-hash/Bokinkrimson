@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
+import { buildOffsetPagination, parsePagination } from "@/lib/pagination";
 import {
   buildPropertyWorkflowStatusWhere,
   getPropertyWorkflowStatusLabel,
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim() ?? "";
   const dateFrom = toDateStart(searchParams.get("dateFrom"));
   const dateTo = toDateEnd(searchParams.get("dateTo"));
+  const pagination = parsePagination({ request, defaultLimit: 25, maxLimit: 100 });
 
   const status =
     statusParam === "ALL"
@@ -92,8 +94,10 @@ export async function GET(request: Request) {
         )
       : rows;
 
+  const pagedItems = items.slice(pagination.offset, pagination.offset + pagination.limit);
+
   return NextResponse.json({
-    items: items.map((item) => ({
+    items: pagedItems.map((item) => ({
       id: item.id,
       name: item.name,
       type: item.type,
@@ -117,5 +121,6 @@ export async function GET(request: Request) {
       updatedAt: item.updatedAt.toISOString(),
       createdAt: item.createdAt.toISOString(),
     })),
+    pagination: buildOffsetPagination(pagination, pagedItems.length, items.length),
   });
 }

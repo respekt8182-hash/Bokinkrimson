@@ -1,6 +1,6 @@
 // Domain/service module for cn.
-import { clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
 
-export function cn(...values: Array<string | false | null | undefined>) {
+export function cn(...values: ClassValue[]) {
   return clsx(values);
 }

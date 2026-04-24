@@ -3,6 +3,7 @@ import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { buildOffsetPagination, parsePagination } from "@/lib/pagination";
 
 export async function GET(request: NextRequest) {
   const admin = await getAdminSession();
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const statusFilter = searchParams.get("status") ?? "PENDING";
   const providerFilter = searchParams.get("provider") ?? "MANAGER";
+  const pagination = parsePagination({ request, defaultLimit: 25, maxLimit: 100 });
 
   const whereStatus: PaymentStatus[] =
     statusFilter === "ALL"
@@ -24,42 +26,52 @@ export async function GET(request: NextRequest) {
 
   const whereProvider: PaymentProvider[] =
     providerFilter === "ALL"
-      ? [PaymentProvider.MOCK, PaymentProvider.YOOKASSA, PaymentProvider.MANAGER]
+      ? [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER]
       : [providerFilter as PaymentProvider];
 
-  const payments = await db.payment.findMany({
-    where: {
-      provider: { in: whereProvider },
-      status: { in: whereStatus },
-    },
-    orderBy: [{ createdAt: "desc" }],
-    include: {
-      property: {
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          type: true,
+  const [payments, total] = await Promise.all([
+    db.payment.findMany({
+      where: {
+        provider: { in: whereProvider },
+        status: { in: whereStatus },
+      },
+      orderBy: [{ createdAt: "desc" }],
+      skip: pagination.offset,
+      take: pagination.limit,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            type: true,
+          },
+        },
+        excursion: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+          },
         },
       },
-      excursion: {
-        select: {
-          id: true,
-          title: true,
-          status: true,
-        },
+    }),
+    db.payment.count({
+      where: {
+        provider: { in: whereProvider },
+        status: { in: whereStatus },
       },
-      owner: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          phone: true,
-          email: true,
-        },
-      },
-    },
-  });
+    }),
+  ]);
 
   return NextResponse.json({
     items: payments.map((p) => ({
@@ -88,5 +100,6 @@ export async function GET(request: NextRequest) {
         email: p.owner.email,
       },
     })),
+    pagination: buildOffsetPagination(pagination, payments.length, total),
   });
 }

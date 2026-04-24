@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HousingSearchDateRangeField } from "@/components/public/housing-search-date-range-field";
 import { cn } from "@/lib/cn";
+import { excursionsHubPath, housingHubPath } from "@/lib/seo/routes";
 import { useEffect, useState, type FormEvent } from "react";
 
 type LocationInputProps = {
@@ -109,17 +110,29 @@ export function SearchForm() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    // Keep search state in query params so links are shareable and SSR-friendly.
-    const params = new URLSearchParams({
-      direction,
-      q: query,
-      location,
-      guests: String(guests),
-      checkIn,
-      checkOut,
-    });
+    const pathname = direction === "housing" ? housingHubPath : excursionsHubPath;
+    const params = new URLSearchParams();
 
-    window.location.href = `/search?${params.toString()}`;
+    if (query) {
+      params.set("q", query);
+    }
+
+    if (location) {
+      params.set("location", location);
+    }
+
+    params.set("guests", String(guests));
+
+    if (checkIn) {
+      params.set("checkIn", checkIn);
+    }
+
+    if (checkOut) {
+      params.set("checkOut", checkOut);
+    }
+
+    const queryString = params.toString();
+    window.location.href = queryString ? `${pathname}?${queryString}` : pathname;
   };
 
   return (

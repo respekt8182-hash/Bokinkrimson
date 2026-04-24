@@ -25,6 +25,11 @@ import {
   propertyTypes,
   smokingPolicyOptions,
 } from "@/lib/constants";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+} from "@/lib/contact-links";
 import type { SerializedProperty } from "@/lib/properties";
 import type { SerializedRoom } from "@/lib/rooms";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -515,9 +520,9 @@ export function ObjectWizard({
         listingChannels: listingChannels.trim(),
         whatsappUrl: whatsappUrl.trim(),
         telegramUrl: normalizeTelegramProfileUrl(telegramUrl) ?? "",
-        vkUrl: vkUrl.trim(),
-        maxUrl: maxUrl.trim(),
-        okUrl: okUrl.trim(),
+        vkUrl: normalizeVkProfileUrl(vkUrl) ?? "",
+        maxUrl: normalizeMaxProfileUrl(maxUrl) ?? "",
+        okUrl: normalizeOkProfileUrl(okUrl) ?? "",
         receiveRequests: false,
       },
     });

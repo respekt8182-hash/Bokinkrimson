@@ -1,13 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExcursionStatus } from "@prisma/client";
+import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
+import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
+import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
+import { AdminPageHeader, AdminUnavailableState } from "@/components/admin/admin-ui";
 import { ExcursionEditor } from "@/components/excursions/excursion-editor";
+import { purgeExpiredDeletedExcursions } from "@/lib/admin-entity-lifecycle";
+import {
+  isExcursionSoftDeleteAvailable,
+  isExcursionVisibilityControlAvailable,
+} from "@/lib/admin-schema-compat";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import {
   getExcursionDisplayNumberFromOrderedIds,
-  getExcursionStatusLabel,
   serializeExcursion,
 } from "@/lib/excursions";
+import { getAdminExcursionStatusLabel } from "@/lib/admin-status";
 
 type AdminExcursionEditPageProps = {
   params: Promise<{ id: string }>;
@@ -17,84 +27,165 @@ export default async function AdminExcursionEditPage({
   params,
 }: AdminExcursionEditPageProps) {
   const { id } = await params;
-  const excursion = await db.excursion.findUnique({
-    where: { id },
-    include: {
-      owner: {
-        select: {
-          firstName: true,
-          lastName: true,
-          phone: true,
-          email: true,
-        },
+  await purgeExpiredDeletedExcursions(db, new Date());
+  const [isExcursionVisibilityAvailable, isExcursionSoftDeleteControlsAvailable] =
+    await Promise.all([
+      isExcursionVisibilityControlAvailable(),
+      isExcursionSoftDeleteAvailable(),
+    ]);
+  const excursionVisibilityUnavailableReason = isExcursionVisibilityAvailable
+    ? null
+    : "Переключение видимости недоступно, пока база данных не обновлена до миграции публикации.";
+  const excursionSoftDeleteUnavailableReason = isExcursionSoftDeleteControlsAvailable
+    ? null
+    : "Скрытие и восстановление программы недоступны, пока база данных не обновлена до последней миграции.";
+  const { excursion, ownerExcursionIds, isDatabaseFallback } =
+    await loadDataWithDatabaseFallback(
+      {
+        contextId: "admin-excursions-detail",
+        unavailableMessage:
+          "Admin excursion detail: database is unavailable. Rendering unavailable state.",
+        fallbackEligibleMessage:
+          "Admin excursion detail: database is unavailable or credentials are invalid. Rendering unavailable state.",
       },
-      mainLocation: { select: { name: true } },
-      anchorLocation: { select: { name: true } },
-      district: { select: { name: true } },
-      category: { select: { name: true } },
-      meetingLocation: { select: { name: true } },
-      pickupLocations: { select: { locationId: true } },
-      routeLocations: {
-        select: { locationId: true, sortOrder: true },
-        orderBy: { sortOrder: "asc" },
+      async () => {
+        const excursion = await db.excursion.findUnique({
+          where: { id },
+          include: {
+            owner: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                email: true,
+              },
+            },
+            mainLocation: { select: { name: true } },
+            anchorLocation: { select: { name: true } },
+            district: { select: { name: true } },
+            category: { select: { name: true } },
+            meetingLocation: { select: { name: true } },
+            pickupLocations: { select: { locationId: true } },
+            routeLocations: {
+              select: { locationId: true, sortOrder: true },
+              orderBy: { sortOrder: "asc" },
+            },
+          },
+        });
+
+        if (!excursion) {
+          return {
+            excursion: null,
+            ownerExcursionIds: [],
+            isDatabaseFallback: false,
+          };
+        }
+
+        const ownerExcursionIds = await db.excursion.findMany({
+          where: { ownerId: excursion.ownerId },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true },
+        });
+
+        return {
+          excursion,
+          ownerExcursionIds,
+          isDatabaseFallback: false,
+        };
       },
-    },
-  });
+      { excursion: null, ownerExcursionIds: [], isDatabaseFallback: true },
+    );
+
+  if (isDatabaseFallback) {
+    return (
+      <AdminUnavailableState
+        backHref="/admin/excursions"
+        backLabel="К каталогу экскурсий"
+        title="Карточка экскурсии временно недоступна"
+      />
+    );
+  }
 
   if (!excursion) {
     notFound();
   }
-
-  const ownerExcursionIds = await db.excursion.findMany({
-    where: { ownerId: excursion.ownerId },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true },
-  });
 
   const displayExcursionNumber =
     getExcursionDisplayNumberFromOrderedIds(
       excursion.id,
       ownerExcursionIds.map((item) => item.id),
     ) ?? 1;
+  const isPublished = excursion.status === ExcursionStatus.PUBLISHED;
+  const isPendingDeletion = Boolean(excursion.deletedAt);
+  const statusBits = [getAdminExcursionStatusLabel(excursion.status)];
+  if (isPublished && !excursion.isPublishedVisible && !isPendingDeletion) {
+    statusBits.push("скрыта из публикации");
+  }
+  if (isPendingDeletion) {
+    statusBits.push("ожидает удаления");
+  }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-olive/10 bg-white p-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-olive/45">Админский редактор экскурсии</p>
-          <h1 className="mt-1 text-2xl font-semibold text-olive">
-            {excursion.title ?? "Экскурсия без названия"}
-          </h1>
-          <p className="mt-1 text-sm text-olive/60">{getExcursionStatusLabel(excursion.status)}</p>
-          <p className="mt-2 text-xs text-olive/55">
-            Владелец: {excursion.owner.firstName} {excursion.owner.lastName}
-            {excursion.owner.phone ? `, ${excursion.owner.phone}` : ""}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/excursions"
-            className="rounded-xl border border-olive/20 px-3 py-2 text-sm font-semibold text-olive hover:bg-cream"
-          >
-            К списку
-          </Link>
-          <Link
-            href={`/admin/excursions/${excursion.id}/settings`}
-            className="rounded-xl border border-olive/20 px-3 py-2 text-sm font-semibold text-olive hover:bg-cream"
-          >
-            Быстрая админ-правка
-          </Link>
-          {excursion.status === ExcursionStatus.PENDING_MODERATION ? (
+      <AdminPageHeader
+        eyebrow="Каталог экскурсий"
+        title={excursion.title ?? "Экскурсия без названия"}
+        description={`Статус: ${statusBits.join(" • ")}. Владелец: ${excursion.owner.firstName} ${excursion.owner.lastName}${excursion.owner.phone ? `, ${excursion.owner.phone}` : ""}`}
+        actions={
+          <>
             <Link
-              href={`/admin/moderation/excursions/${excursion.id}`}
-              className="rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-200"
+              href="/admin/excursions"
+              className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
             >
-              Модерация
+              К каталогу экскурсий
             </Link>
-          ) : null}
-        </div>
-      </div>
+            <Link
+              href={`/admin/excursions/${excursion.id}/settings`}
+              className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
+            >
+              Быстрая правка
+            </Link>
+            {excursion.status === ExcursionStatus.PENDING_MODERATION ? (
+              <Link
+                href={`/admin/moderation/excursions/${excursion.id}`}
+                className="inline-flex items-center rounded-2xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-200"
+              >
+                Модерация
+              </Link>
+            ) : null}
+            {excursion.status === ExcursionStatus.DRAFT ? (
+              <AdminDeleteDraftButton
+                endpoint={`/api/admin/excursions/${excursion.id}`}
+                draftLabel="Черновик экскурсии"
+                entityName={excursion.title ?? "Экскурсия без названия"}
+                redirectTo="/admin/excursions"
+                buttonClassName="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
+              />
+            ) : null}
+            {isPublished && !isPendingDeletion ? (
+              <AdminListingVisibilityToggle
+                endpoint={`/api/admin/excursions/${excursion.id}`}
+                entityLabel="программу"
+                isVisible={excursion.isPublishedVisible}
+                disabled={!isExcursionVisibilityAvailable}
+                disabledReason={excursionVisibilityUnavailableReason}
+              />
+            ) : null}
+            {isPublished ? (
+              <AdminSoftDeleteAction
+                deleteEndpoint={`/api/admin/excursions/${excursion.id}`}
+                restoreEndpoint={`/api/admin/excursions/${excursion.id}/restore`}
+                entityLabel="программу"
+                entityName={excursion.title ?? "Экскурсия без названия"}
+                isPendingDeletion={isPendingDeletion}
+                restoreUntil={excursion.deletionExpiresAt?.toISOString() ?? null}
+                disabled={!isExcursionSoftDeleteControlsAvailable}
+                disabledReason={excursionSoftDeleteUnavailableReason}
+              />
+            ) : null}
+          </>
+        }
+      />
 
       <ExcursionEditor
         initialExcursion={serializeExcursion(excursion)}

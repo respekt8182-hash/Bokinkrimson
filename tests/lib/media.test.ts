@@ -4,12 +4,12 @@ import {
   accommodationVideoUploadSizeLimitBytes,
   getAccommodationVideoUploadSizeError,
   validateMediaFile,
-} from "@/lib/media";
+} from "../../src/lib/media";
 import {
   accommodationJpegPngUploadSizeLimitBytes,
   accommodationPhotoUploadSizeLimitBytes,
   getAccommodationPhotoUploadSizeError,
-} from "@/lib/photo-upload";
+} from "../../src/lib/photo-upload";
 
 describe("validateMediaFile", () => {
   it("rejects oversized jpeg images at 10 MB", () => {

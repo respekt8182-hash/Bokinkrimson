@@ -4,8 +4,8 @@
 import {
   CalendarDays,
   CircleCheckBig,
-  Image as ImageIcon,
   ListChecks,
+  MapPin,
   PenLine,
   WalletCards,
   type LucideIcon,
@@ -25,12 +25,12 @@ type StepPresentation = {
 };
 
 const STEP_PRESENTATIONS: StepPresentation[] = [
-  { icon: PenLine, tone: "teal" },       // 0: Описание
-  { icon: ListChecks, tone: "terra" },    // 1: Программа и маршрут
-  { icon: CalendarDays, tone: "gold" },   // 2: Расписание
-  { icon: WalletCards, tone: "emerald" }, // 3: Цены и условия
-  { icon: ImageIcon, tone: "sky" },       // 4: Контакты и медиа
-  { icon: CircleCheckBig, tone: "teal" }, // 5: Публикация
+  { icon: PenLine, tone: "teal" },       // 0: Тип и описание
+  { icon: MapPin, tone: "terra" },        // 1: География и маршрут
+  { icon: ListChecks, tone: "gold" },     // 2: Программа
+  { icon: CalendarDays, tone: "emerald" },// 3: Расписание и группа
+  { icon: WalletCards, tone: "teal" },    // 4: Цена и условия
+  { icon: CircleCheckBig, tone: "emerald" }, // 5: Медиа и контакты
 ];
 
 type WizardStepperProps = {

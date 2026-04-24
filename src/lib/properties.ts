@@ -2,13 +2,20 @@ import {
   MediaType,
   PaymentStatus,
   PetsPolicy,
+  Prisma,
   PropertyStatus,
   SmokingPolicy,
-  type Prisma,
-  type PrismaClient,
 } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { crimeaLocationById, mediaLimits, propertyTypeById } from "@/lib/constants";
+import { areDatabaseColumnsAvailable, type DbClientLike } from "@/lib/db";
+import {
+  EMPTY_DRAFT_RETENTION_DAYS,
+  getEmptyDraftCleanupCutoff,
+  hasNonEmptyText,
+} from "@/lib/draft-cleanup";
 import { ensurePublishedPropertySnapshotBeforeOwnerEdit } from "@/lib/property-public-snapshot";
+import { logDatabaseFallbackOnce } from "@/lib/prisma-errors";
 import { getPlacementCoverageState, getTariffQuote } from "@/lib/payments";
 import { serializeMedia, type SerializedMedia } from "@/lib/media";
 import { deleteFromStorage } from "@/lib/storage";
@@ -140,29 +147,33 @@ export type SerializedProperty = {
   activeRoomsCount: number;
   status: PropertyStatus;
   statusLabel: string;
+  isPublishedVisible: boolean;
+  ownerDeletedAt: string | null;
+  ownerDeletionExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
   progress: PropertyProgress;
 };
 
-type PropertyDraftCleanupClient = PrismaClient | Prisma.TransactionClient;
+type PropertyDraftCleanupClient = DbClientLike;
+const PROPERTY_PUBLICATION_COMPAT_COLUMNS = ["isPublishedVisible"] as const;
 
-export const PROPERTY_DRAFT_RETENTION_DAYS = 14;
+export const PROPERTY_DRAFT_RETENTION_DAYS = EMPTY_DRAFT_RETENTION_DAYS;
 
-function getDraftCleanupCutoff(now: Date = new Date()): Date {
-  const cutoff = new Date(now);
-  cutoff.setDate(cutoff.getDate() - PROPERTY_DRAFT_RETENTION_DAYS);
-  return cutoff;
-}
-
-const DRAFT_STORAGE_SELECT = {
+export const PROPERTY_STORAGE_CLEANUP_SELECT = {
   id: true,
   media: { select: { storageKey: true } },
   rooms: { select: { media: { select: { storageKey: true } } } },
   documents: { select: { storageKey: true } },
 } as const;
 
-async function deleteStorageForDrafts(
+type PropertyStorageCleanupEntry = {
+  media: { storageKey: string }[];
+  rooms: { media: { storageKey: string }[] }[];
+  documents: { storageKey: string }[];
+};
+
+export async function deletePropertyStorageEntries(
   drafts: Array<{
     media: { storageKey: string }[];
     rooms: { media: { storageKey: string }[] }[];
@@ -180,12 +191,192 @@ async function deleteStorageForDrafts(
   }
 }
 
+type PropertyEmptyDraftCandidate = {
+  status: PropertyStatus;
+  type: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  name: string | null;
+  address: string | null;
+  seaDistance: string | null;
+  latitude: Prisma.Decimal | null;
+  longitude: Prisma.Decimal | null;
+  phone: string | null;
+  phoneName: string | null;
+  phone2: string | null;
+  phone2Name: string | null;
+  phone3: string | null;
+  phone3Name: string | null;
+  websiteUrl: string | null;
+  contactEmail: string | null;
+  contactPersonName: string | null;
+  contactPersonRole: string | null;
+  listingChannels: string | null;
+  whatsappUrl: string | null;
+  telegramUrl: string | null;
+  vkUrl: string | null;
+  maxUrl: string | null;
+  okUrl: string | null;
+  description: string | null;
+  checkInFrom: string | null;
+  checkOutUntil: string | null;
+  childrenAllowed: boolean | null;
+  childrenMinAge: number | null;
+  petsPolicy: PetsPolicy | null;
+  smokingPolicy: SmokingPolicy | null;
+  quietHoursEnabled: boolean | null;
+  quietHoursFrom: string | null;
+  quietHoursTo: string | null;
+  parkingInfo: string | null;
+  mealOptions: string | null;
+  prepaymentPolicy: string | null;
+  classificationApplicable: boolean;
+  starRating: number | null;
+  registryNumber: string | null;
+  registryNumberPending: string | null;
+  registryModerationSubmittedAt: Date | null;
+  selfAssessmentPassed: boolean | null;
+  amenities: Array<{ amenityId: string }>;
+  customAmenities: Array<{ name: string }>;
+  media: Array<{ id: string }>;
+  rooms: Array<{ id: string }>;
+  documents: Array<{ id: string }>;
+  payments: Array<{ id: string }>;
+};
+
+const PROPERTY_EMPTY_DRAFT_SELECT = {
+  ...PROPERTY_STORAGE_CLEANUP_SELECT,
+  status: true,
+  type: true,
+  locationId: true,
+  locationName: true,
+  name: true,
+  address: true,
+  seaDistance: true,
+  latitude: true,
+  longitude: true,
+  phone: true,
+  phoneName: true,
+  phone2: true,
+  phone2Name: true,
+  phone3: true,
+  phone3Name: true,
+  websiteUrl: true,
+  contactEmail: true,
+  contactPersonName: true,
+  contactPersonRole: true,
+  listingChannels: true,
+  whatsappUrl: true,
+  telegramUrl: true,
+  vkUrl: true,
+  maxUrl: true,
+  okUrl: true,
+  description: true,
+  checkInFrom: true,
+  checkOutUntil: true,
+  childrenAllowed: true,
+  childrenMinAge: true,
+  petsPolicy: true,
+  smokingPolicy: true,
+  quietHoursEnabled: true,
+  quietHoursFrom: true,
+  quietHoursTo: true,
+  parkingInfo: true,
+  mealOptions: true,
+  prepaymentPolicy: true,
+  classificationApplicable: true,
+  starRating: true,
+  registryNumber: true,
+  registryNumberPending: true,
+  registryModerationSubmittedAt: true,
+  selfAssessmentPassed: true,
+  amenities: { select: { amenityId: true } },
+  customAmenities: { select: { name: true } },
+  media: { select: { id: true, storageKey: true } },
+  rooms: { select: { id: true, media: { select: { storageKey: true } } } },
+  documents: { select: { id: true, storageKey: true } },
+  payments: {
+    where: { status: PaymentStatus.SUCCEEDED },
+    select: { id: true },
+    take: 1,
+  },
+} as const;
+
+export function isPropertyEmptyDraft(candidate: PropertyEmptyDraftCandidate): boolean {
+  if (candidate.status !== PropertyStatus.DRAFT) {
+    return false;
+  }
+
+  const hasMeaningfulText = hasNonEmptyText(
+    candidate.type,
+    candidate.locationId,
+    candidate.locationName,
+    candidate.name,
+    candidate.address,
+    candidate.seaDistance,
+    candidate.phone,
+    candidate.phoneName,
+    candidate.phone2,
+    candidate.phone2Name,
+    candidate.phone3,
+    candidate.phone3Name,
+    candidate.websiteUrl,
+    candidate.contactEmail,
+    candidate.contactPersonName,
+    candidate.contactPersonRole,
+    candidate.listingChannels,
+    candidate.whatsappUrl,
+    candidate.telegramUrl,
+    candidate.vkUrl,
+    candidate.maxUrl,
+    candidate.okUrl,
+    candidate.description,
+    candidate.checkInFrom,
+    candidate.checkOutUntil,
+    candidate.quietHoursFrom,
+    candidate.quietHoursTo,
+    candidate.parkingInfo,
+    candidate.mealOptions,
+    candidate.prepaymentPolicy,
+    candidate.registryNumber,
+    candidate.registryNumberPending,
+  );
+  const hasCoordinates = candidate.latitude !== null || candidate.longitude !== null;
+  const hasConfiguredRules =
+    candidate.childrenAllowed !== null ||
+    candidate.childrenMinAge !== null ||
+    candidate.petsPolicy !== null ||
+    candidate.smokingPolicy !== null ||
+    candidate.quietHoursEnabled !== null;
+  const hasClassificationData =
+    candidate.classificationApplicable ||
+    candidate.starRating !== null ||
+    candidate.registryModerationSubmittedAt !== null ||
+    candidate.selfAssessmentPassed !== null;
+  const hasAttachedData =
+    candidate.amenities.length > 0 ||
+    candidate.customAmenities.length > 0 ||
+    candidate.media.length > 0 ||
+    candidate.rooms.length > 0 ||
+    candidate.documents.length > 0;
+  const hasSuccessfulPayment = candidate.payments.length > 0;
+
+  return !(
+    hasMeaningfulText ||
+    hasCoordinates ||
+    hasConfiguredRules ||
+    hasClassificationData ||
+    hasAttachedData ||
+    hasSuccessfulPayment
+  );
+}
+
 export async function purgeExpiredPropertyDraftsForOwner(
   client: PropertyDraftCleanupClient,
   ownerId: string,
   now: Date = new Date(),
 ): Promise<number> {
-  const cutoff = getDraftCleanupCutoff(now);
+  const cutoff = getEmptyDraftCleanupCutoff(now);
   const where = {
     ownerId,
     ownerDeletedAt: null,
@@ -193,13 +384,17 @@ export async function purgeExpiredPropertyDraftsForOwner(
     updatedAt: { lt: cutoff },
   } satisfies Prisma.PropertyWhereInput;
 
-  const drafts = await client.property.findMany({ where, select: DRAFT_STORAGE_SELECT });
-  if (drafts.length === 0) return 0;
+  const drafts = await client.property.findMany({
+    where,
+    select: PROPERTY_EMPTY_DRAFT_SELECT,
+  });
+  const emptyDrafts = drafts.filter(isPropertyEmptyDraft);
+  if (emptyDrafts.length === 0) return 0;
 
-  await deleteStorageForDrafts(drafts);
+  await deletePropertyStorageEntries(emptyDrafts);
 
   const result = await client.property.deleteMany({
-    where: { id: { in: drafts.map((p) => p.id) } },
+    where: { id: { in: emptyDrafts.map((p) => p.id) } },
   });
   return result.count;
 }
@@ -208,22 +403,88 @@ export async function purgeExpiredPropertyDrafts(
   client: PropertyDraftCleanupClient,
   now: Date = new Date(),
 ): Promise<number> {
-  const cutoff = getDraftCleanupCutoff(now);
+  const cutoff = getEmptyDraftCleanupCutoff(now);
   const where = {
     ownerDeletedAt: null,
     status: PropertyStatus.DRAFT,
     updatedAt: { lt: cutoff },
   } satisfies Prisma.PropertyWhereInput;
 
-  const drafts = await client.property.findMany({ where, select: DRAFT_STORAGE_SELECT });
-  if (drafts.length === 0) return 0;
+  const drafts = await client.property.findMany({
+    where,
+    select: PROPERTY_EMPTY_DRAFT_SELECT,
+  });
+  const emptyDrafts = drafts.filter(isPropertyEmptyDraft);
+  if (emptyDrafts.length === 0) return 0;
 
-  await deleteStorageForDrafts(drafts);
+  await deletePropertyStorageEntries(emptyDrafts);
 
   const result = await client.property.deleteMany({
-    where: { id: { in: drafts.map((p) => p.id) } },
+    where: { id: { in: emptyDrafts.map((p) => p.id) } },
   });
   return result.count;
+}
+
+type CreatePropertyDraftInput = {
+  ownerId: string;
+  name?: string | null;
+  type?: string | null;
+};
+
+export async function createPropertyDraft(
+  client: DbClientLike,
+  input: CreatePropertyDraftInput,
+): Promise<{ id: string }> {
+  const isPublicationSchemaAvailable = await areDatabaseColumnsAvailable(
+    "Property",
+    PROPERTY_PUBLICATION_COMPAT_COLUMNS,
+  );
+
+  if (isPublicationSchemaAvailable) {
+    return client.property.create({
+      data: {
+        ownerId: input.ownerId,
+        name: input.name ?? null,
+        type: input.type ?? null,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  logDatabaseFallbackOnce(
+    "property-create-compat",
+    "Property draft creation is using a legacy insert compatibility path because the database schema is missing publication controls. Apply the latest Prisma migration when DB owner access is available.",
+  );
+
+  const now = new Date();
+  const propertyId = `property_${randomUUID().replace(/-/g, "")}`;
+  const rows = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    INSERT INTO "Property" (
+      "id",
+      "ownerId",
+      "type",
+      "name",
+      "createdAt",
+      "updatedAt"
+    )
+    VALUES (
+      ${propertyId},
+      ${input.ownerId},
+      ${input.type ?? null},
+      ${input.name ?? null},
+      ${now},
+      ${now}
+    )
+    RETURNING "id"
+  `);
+
+  if (rows.length === 0) {
+    throw new Error("Property draft creation did not return an id.");
+  }
+
+  return rows[0];
 }
 
 function hasRequiredPropertyMedia(property: PropertyDraftFields): boolean {
@@ -715,7 +976,7 @@ export function getPropertyAutoModerationUpdate(
 }
 
 export async function autoSubmitPropertyAfterSuccessfulPayment(
-  client: PrismaClient | Prisma.TransactionClient,
+  client: DbClientLike,
   propertyId: string,
 ): Promise<boolean> {
   const property = await client.property.findUnique({
@@ -773,7 +1034,7 @@ export async function autoSubmitPropertyAfterSuccessfulPayment(
 }
 
 export async function markPropertyNeedsRemoderationAfterOwnerEdit(
-  client: PrismaClient | Prisma.TransactionClient,
+  client: DbClientLike,
   propertyId: string,
 ): Promise<void> {
   await Promise.all([
@@ -808,7 +1069,7 @@ export async function markPropertyNeedsRemoderationAfterOwnerEdit(
 }
 
 export async function preparePropertyForPublishedOwnerEdit(
-  client: PrismaClient | Prisma.TransactionClient,
+  client: DbClientLike,
   propertyId: string,
 ): Promise<void> {
   await ensurePublishedPropertySnapshotBeforeOwnerEdit(client, propertyId);
@@ -890,6 +1151,9 @@ export function serializeProperty(property: {
   }>;
   rooms?: Array<{ id: string; prices?: Array<{ id: string }> }>;
   status: PropertyStatus;
+  isPublishedVisible: boolean;
+  ownerDeletedAt: Date | null;
+  ownerDeletionExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   amenities?: Array<{ amenityId: string; amenity: { id: string; name: string; category: string } }>;
@@ -987,6 +1251,11 @@ export function serializeProperty(property: {
       property.moderationNotes,
       property.pendingEditStatus ?? null,
     ),
+    isPublishedVisible: property.isPublishedVisible,
+    ownerDeletedAt: property.ownerDeletedAt ? property.ownerDeletedAt.toISOString() : null,
+    ownerDeletionExpiresAt: property.ownerDeletionExpiresAt
+      ? property.ownerDeletionExpiresAt.toISOString()
+      : null,
     createdAt: property.createdAt.toISOString(),
     updatedAt: property.updatedAt.toISOString(),
     progress,

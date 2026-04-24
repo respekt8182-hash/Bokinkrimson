@@ -7,6 +7,7 @@
 - S3-compatible storage
 - YooKassa keys (or mock mode for non-prod)
 - Domain + SSL certificate
+- For single-node VPS deploy with Docker/Caddy see `docs/VPS_DEPLOY.md`
 
 ## 2) Required env variables
 
@@ -38,9 +39,9 @@ Use `.env.example` as baseline and set production secrets:
 ## 4) Update procedure
 
 1. Pull release commit/tag.
-2. Run `npm ci`.
+2. Run `npm ci` or rebuild the Docker image.
 3. Run `npm run db:deploy`.
-4. Run `npm run build`.
+4. Run `npm run build` or `docker compose -f compose.prod.yml up -d --build`.
 5. Restart process manager (PM2/systemd/container rollout).
 6. Verify smoke checks:
    `/`
@@ -48,6 +49,7 @@ Use `.env.example` as baseline and set production secrets:
    `/search?direction=excursions`
    `/robots.txt`
    `/sitemap.xml`
+   `/api/health`
 
 ## 5) Rollback procedure
 

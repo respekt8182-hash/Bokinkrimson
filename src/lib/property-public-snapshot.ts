@@ -3,10 +3,10 @@ import {
   MediaType,
   PetsPolicy,
   Prisma,
-  PrismaClient,
   PropertyStatus,
   SmokingPolicy,
 } from "@prisma/client";
+import type { DbClientLike } from "@/lib/db";
 import { serializeMedia, type SerializedMedia } from "@/lib/media";
 import { roomInclude, serializeRoom, type SerializedRoom } from "@/lib/rooms";
 import type { FaqItem } from "@/types/excursions";
@@ -96,7 +96,7 @@ export type PropertyPublicSnapshotSource = Prisma.PropertyGetPayload<{
   include: typeof propertyPublicSnapshotInclude;
 }>;
 
-type PropertySnapshotClient = PrismaClient | Prisma.TransactionClient;
+type PropertySnapshotClient = DbClientLike;
 
 function toJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

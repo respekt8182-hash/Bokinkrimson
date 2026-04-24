@@ -1,6 +1,7 @@
 ﻿// Next.js page for route /admin/password-resets.
 import Link from "next/link";
 import { PasswordResetRequestStatus } from "@prisma/client";
+import { AdminEmptyState, AdminPageHeader } from "@/components/admin/admin-ui";
 import { db } from "@/lib/db";
 import { AdminPasswordResetInline } from "@/components/admin/admin-password-reset-inline";
 
@@ -32,13 +33,10 @@ export default async function AdminPasswordResetsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl text-olive">Сбросы паролей</h1>
-        <p className="mt-1 text-sm text-olive/70">
-          Новые запросы появляются после нажатия пользователем «Забыли пароль». Введите новый пароль
-          и нажмите «Подтвердить».
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Сброс паролей"
+        description="Новые запросы на восстановление доступа и история обработки."
+      />
 
       {/* Pending */}
       <div className="space-y-3">
@@ -50,9 +48,10 @@ export default async function AdminPasswordResetsPage() {
         </div>
 
         {pending.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-olive/30 p-4 text-sm text-olive/70">
-            Запросов на сброс пароля пока нет.
-          </p>
+          <AdminEmptyState
+            title="Запросов нет"
+            description="Новые запросы на сброс пароля появятся здесь."
+          />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {pending.map((req) => (

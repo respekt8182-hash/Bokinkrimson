@@ -3,10 +3,13 @@ import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  isDatabaseConfigurationError,
+  isDatabaseConfigurationMessage,
   getConfiguredDatabaseTargetLabel,
   isDatabaseAuthenticationError,
   isDatabaseAuthenticationMessage,
   isDatabaseFallbackEligibleError,
+  isDatabaseSchemaMissingError,
   isDatabaseUnavailableError,
   isDatabaseUnavailableMessage,
 } from "../../src/lib/prisma-errors";
@@ -54,6 +57,20 @@ describe("prisma error helpers", () => {
     expect(isDatabaseAuthenticationError(authError)).toBe(true);
   });
 
+  it("detects missing or invalid DATABASE_URL configuration", () => {
+    expect(
+      isDatabaseConfigurationMessage(
+        "error: Environment variable not found: DATABASE_URL.",
+      ),
+    ).toBe(true);
+    expect(
+      isDatabaseConfigurationMessage(
+        "Error validating datasource `db`: the URL must start with the protocol `postgresql://` or `postgres://`.",
+      ),
+    ).toBe(true);
+    expect(isDatabaseConfigurationMessage("Can't reach database server")).toBe(false);
+  });
+
   it("allows dev fallbacks for both downtime and auth failures", () => {
     const authError = new Prisma.PrismaClientInitializationError(
       "Authentication failed against database server, the provided database credentials are not valid.",
@@ -68,7 +85,44 @@ describe("prisma error helpers", () => {
 
     expect(isDatabaseFallbackEligibleError(authError)).toBe(true);
     expect(isDatabaseFallbackEligibleError(downError)).toBe(true);
+    expect(
+      isDatabaseFallbackEligibleError(
+        new Error("error: Environment variable not found: DATABASE_URL."),
+      ),
+    ).toBe(true);
     expect(isDatabaseFallbackEligibleError(new Error("something else"))).toBe(false);
+  });
+
+  it("classifies missing DATABASE_URL errors as configuration issues", () => {
+    const configError = new Prisma.PrismaClientInitializationError(
+      "error: Environment variable not found: DATABASE_URL.",
+      "6.16.2",
+    );
+
+    expect(isDatabaseConfigurationError(configError)).toBe(true);
+    expect(isDatabaseUnavailableError(configError)).toBe(false);
+    expect(isDatabaseAuthenticationError(configError)).toBe(false);
+  });
+
+  it("detects missing database tables and columns as schema gaps", () => {
+    const missingTableError = new Prisma.PrismaClientKnownRequestError(
+      "The table does not exist in the current database.",
+      {
+        clientVersion: "6.16.2",
+        code: "P2021",
+      },
+    );
+    const missingColumnError = new Prisma.PrismaClientKnownRequestError(
+      "The column does not exist in the current database.",
+      {
+        clientVersion: "6.16.2",
+        code: "P2022",
+      },
+    );
+
+    expect(isDatabaseSchemaMissingError(missingTableError)).toBe(true);
+    expect(isDatabaseSchemaMissingError(missingColumnError)).toBe(true);
+    expect(isDatabaseSchemaMissingError(new Error("other"))).toBe(false);
   });
 
   it("returns a masked label without exposing the password", () => {

@@ -1,8 +1,11 @@
 // Next.js page for route /admin/moderation/excursions/[id].
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminMediaPreview } from "@/components/admin/admin-media-preview";
 import { ExcursionModerationActions } from "@/components/admin/excursion-moderation-actions";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
+import { AdminUnavailableState } from "@/components/admin/admin-ui";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { getExcursionStatusLabel } from "@/lib/excursions";
 import { buildPublicExcursionPath } from "@/lib/public-excursions";
@@ -41,30 +44,53 @@ export default async function AdminModerationExcursionPage({
 }: AdminModerationExcursionPageProps) {
   const { id } = await params;
 
-  const excursion = await db.excursion.findUnique({
-    where: { id },
-    include: {
-      owner: {
-        select: {
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
-      reviews: {
-        orderBy: [{ createdAt: "desc" }],
-        take: 100,
+  const { excursion, isDatabaseFallback } = await loadDataWithDatabaseFallback(
+    {
+      contextId: "admin-excursion-moderation-detail",
+      unavailableMessage:
+        "Admin excursion moderation detail: database is unavailable. Rendering unavailable state.",
+      fallbackEligibleMessage:
+        "Admin excursion moderation detail: database is unavailable or credentials are invalid. Rendering unavailable state.",
+    },
+    async () => ({
+      excursion: await db.excursion.findUnique({
+        where: { id },
         include: {
-          user: {
+          owner: {
             select: {
               firstName: true,
               lastName: true,
+              email: true,
+            },
+          },
+          reviews: {
+            orderBy: [{ createdAt: "desc" }],
+            take: 100,
+            include: {
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-  });
+      }),
+      isDatabaseFallback: false,
+    }),
+    { excursion: null, isDatabaseFallback: true },
+  );
+
+  if (isDatabaseFallback) {
+    return (
+      <AdminUnavailableState
+        backHref="/admin/moderation/excursions"
+        backLabel="К модерации экскурсий"
+        title="Карточка модерации временно недоступна"
+      />
+    );
+  }
 
   if (!excursion) {
     notFound();
@@ -85,7 +111,9 @@ export default async function AdminModerationExcursionPage({
           <p className="text-xs text-olive/60">ID: {excursion.id}</p>
           <p className="mt-1 text-sm text-olive/75">
             Статус:{" "}
-            <span className="font-semibold text-olive">{getExcursionStatusLabel(excursion.status)}</span>
+            <span className="font-semibold text-olive">
+              {getExcursionStatusLabel(excursion.status)}
+            </span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -132,7 +160,10 @@ export default async function AdminModerationExcursionPage({
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Цена и длительность</dt>
             <dd className="font-medium text-olive">
-              {formatMoney(excursion.priceFrom === null ? null : Number(excursion.priceFrom), excursion.currency)}
+              {formatMoney(
+                excursion.priceFrom === null ? null : Number(excursion.priceFrom),
+                excursion.currency,
+              )}
             </dd>
             <dd className="text-olive/75">{formatDuration(excursion.durationMinutes)}</dd>
           </div>
@@ -145,11 +176,12 @@ export default async function AdminModerationExcursionPage({
             {excursion.contactLastName ?? excursion.owner.lastName}
           </p>
           <p>Телефон: {excursion.contactPhone ?? "Не указан"}</p>
+          <p>Телефон 2: {excursion.contactPhone2 ?? "Не указан"}</p>
           <p>Email: {excursion.contactEmail ?? excursion.owner.email}</p>
           <p>Сайт: {excursion.websiteUrl ?? "Не указан"}</p>
           <p>
-            Telegram: {excursion.telegramUrl ?? "Не указан"} • Max: {excursion.maxUrl ?? "Не указан"} •
-            OK: {excursion.okUrl ?? "Не указан"}
+            Telegram: {excursion.telegramUrl ?? "Не указан"} • Max:{" "}
+            {excursion.maxUrl ?? "Не указан"} • OK: {excursion.okUrl ?? "Не указан"}
           </p>
         </div>
 
@@ -184,8 +216,12 @@ export default async function AdminModerationExcursionPage({
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {excursion.photoUrls.map((url) => (
               <div key={url} className="overflow-hidden rounded-xl bg-cream">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={excursion.title ?? "Фото экскурсии"} className="h-44 w-full object-cover" />
+                <AdminMediaPreview
+                  src={url}
+                  alt={excursion.title ?? "Фото экскурсии"}
+                  className="h-44 w-full object-cover"
+                  fallbackLabel="Фото недоступно"
+                />
               </div>
             ))}
           </div>
@@ -197,7 +233,12 @@ export default async function AdminModerationExcursionPage({
           <h2 className="text-xl text-olive">Видео</h2>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {excursion.videoUrls.map((url) => (
-              <video key={url} src={url} controls className="h-56 w-full rounded-xl bg-black/80 object-cover" />
+              <video
+                key={url}
+                src={url}
+                controls
+                className="h-56 w-full rounded-xl bg-black/80 object-cover"
+              />
             ))}
           </div>
         </section>

@@ -869,7 +869,7 @@ export function YandexMapMultiViewer({
   if (!apiKey) {
     return (
       <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-        Добавьте `NEXT_PUBLIC_YANDEX_MAPS_API_KEY` для отображения карты.
+        Добавьте `NEXT_PUBLIC_YANDEX_MAPS_API_KEY` в `.env.local` или `.env` для отображения карты.
       </p>
     );
   }

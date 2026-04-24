@@ -1,50 +1,29 @@
-// Next.js page for route /excursions.
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import SearchPage from "@/app/search/page";
+import { buildSearchMetadata } from "@/lib/seo/search-metadata";
 
 type ExcursionsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function pick(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] ?? "";
-  }
-  return value ?? "";
+export async function generateMetadata({
+  searchParams,
+}: ExcursionsPageProps): Promise<Metadata> {
+  const params = await searchParams;
+
+  return buildSearchMetadata({
+    ...params,
+    direction: "excursions",
+  });
 }
 
 export default async function ExcursionsPage({ searchParams }: ExcursionsPageProps) {
   const params = await searchParams;
-  const query = new URLSearchParams();
 
-  query.set("direction", "excursions");
-  const allowed = [
-    "q",
-    "offerType",
-    "location",
-    "district",
-    "category",
-    "format",
-    "durationBucket",
-    "language",
-    "difficulty",
-    "pickup",
-    "kids",
-    "radiusKm",
-    "checkIn",
-    "checkOut",
-    "guests",
-    "minPrice",
-    "maxPrice",
-    "sort",
-    "page",
-  ] as const;
-
-  for (const key of allowed) {
-    const value = pick(params[key]);
-    if (value) {
-      query.set(key, value);
-    }
-  }
-
-  redirect(`/search?${query.toString()}`);
+  return SearchPage({
+    searchParams: Promise.resolve({
+      ...params,
+      direction: "excursions",
+    }),
+  });
 }

@@ -13,24 +13,29 @@ vi.mock("@/lib/prisma-errors", () => ({
   logDatabaseFallbackOnce: prismaErrorMocks.logDatabaseFallbackOnce,
 }));
 
-import { loadDashboardPageData } from "../../src/lib/dashboard-page-db";
-
 const originalNodeEnv = process.env.NODE_ENV;
+const writableEnv = process.env as Record<string, string | undefined>;
+
+async function loadDashboardPageDb() {
+  vi.resetModules();
+  return import("../../src/lib/dashboard-page-db");
+}
 
 describe("dashboard page database fallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NODE_ENV = originalNodeEnv ?? "test";
+    writableEnv.NODE_ENV = originalNodeEnv ?? "test";
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(true);
     prismaErrorMocks.isDatabaseFallbackEligibleError.mockReturnValue(false);
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    writableEnv.NODE_ENV = originalNodeEnv;
   });
 
   it("returns loader data when the database is reachable", async () => {
     const load = vi.fn(async () => ["property-1"]);
+    const { loadDashboardPageData } = await loadDashboardPageDb();
 
     await expect(
       loadDashboardPageData(
@@ -51,6 +56,7 @@ describe("dashboard page database fallback", () => {
   it("returns fallback data without running the loader when the database is unreachable", async () => {
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(false);
     const load = vi.fn(async () => ["property-1"]);
+    const { loadDashboardPageData } = await loadDashboardPageDb();
 
     await expect(
       loadDashboardPageData(
@@ -73,6 +79,7 @@ describe("dashboard page database fallback", () => {
 
   it("returns fallback data for fallback-eligible Prisma failures", async () => {
     prismaErrorMocks.isDatabaseFallbackEligibleError.mockReturnValue(true);
+    const { loadDashboardPageData } = await loadDashboardPageDb();
 
     await expect(
       loadDashboardPageData(
@@ -96,6 +103,7 @@ describe("dashboard page database fallback", () => {
 
   it("rethrows non-fallback errors", async () => {
     const error = new Error("unexpected");
+    const { loadDashboardPageData } = await loadDashboardPageDb();
 
     await expect(
       loadDashboardPageData(
@@ -113,9 +121,10 @@ describe("dashboard page database fallback", () => {
   });
 
   it("disables the fallback in production", async () => {
-    process.env.NODE_ENV = "production";
+    writableEnv.NODE_ENV = "production";
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(false);
     const error = new Error("db down");
+    const { loadDashboardPageData } = await loadDashboardPageDb();
 
     await expect(
       loadDashboardPageData(

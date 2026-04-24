@@ -120,11 +120,8 @@ export function PropertyReviewsSection({
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>(
-    () =>
-      Object.fromEntries(
-        initialReviews.map((review) => [review.id, review.ownerReply ?? ""]),
-      ),
+  const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialReviews.map((review) => [review.id, review.ownerReply ?? ""])),
   );
   const [replySavingById, setReplySavingById] = useState<Record<string, boolean>>({});
   const [replyErrorById, setReplyErrorById] = useState<Record<string, string>>({});
@@ -235,10 +232,9 @@ export function PropertyReviewsSection({
     setIsLoadingMore(true);
     try {
       const separator = loadMoreUrl.includes("?") ? "&" : "?";
-      const response = await fetch(
-        `${loadMoreUrl}${separator}offset=${items.length}&limit=3`,
-        { cache: "no-store" },
-      );
+      const response = await fetch(`${loadMoreUrl}${separator}offset=${items.length}&limit=3`, {
+        cache: "no-store",
+      });
       const body = (await response.json()) as ReviewsListResponse;
 
       if (!response.ok) {
@@ -256,7 +252,9 @@ export function PropertyReviewsSection({
       if (body.summary) {
         setSummary(body.summary);
       }
-      setHasMore(body.pagination?.hasMore ?? items.length + nextItems.length < summary.reviewsCount);
+      setHasMore(
+        body.pagination?.hasMore ?? items.length + nextItems.length < summary.reviewsCount,
+      );
     } finally {
       setIsLoadingMore(false);
     }
@@ -338,9 +336,7 @@ export function PropertyReviewsSection({
         return;
       }
 
-      setItems((previous) =>
-        previous.map((item) => (item.id === review.id ? body.item! : item)),
-      );
+      setItems((previous) => previous.map((item) => (item.id === review.id ? body.item! : item)));
     } finally {
       setReactionSavingById((previous) => ({ ...previous, [review.id]: false }));
     }
@@ -349,7 +345,7 @@ export function PropertyReviewsSection({
   return (
     <section
       id="reviews"
-      className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+      className="scroll-mt-[132px] rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
@@ -373,7 +369,9 @@ export function PropertyReviewsSection({
 
       <div className="mt-5 flex flex-col gap-3 rounded-[24px] bg-[#f4f6f7] px-4 py-4 ring-1 ring-olive/8 md:flex-row md:items-center md:justify-between md:px-5">
         <div>
-          <p className="text-base font-semibold text-olive">Отдыхали здесь? Поделитесь впечатлениями!</p>
+          <p className="text-base font-semibold text-olive">
+            Отдыхали здесь? Поделитесь впечатлениями!
+          </p>
           <p className="mt-1 text-sm text-olive/60">
             {isOwnerViewer
               ? `Вы владелец ${entityLabel}. Оставлять отзыв нельзя, но можно отвечать на отзывы гостей ниже.`
@@ -463,7 +461,9 @@ export function PropertyReviewsSection({
             >
               {">"}
             </button>
-            <span className="text-sm font-semibold text-olive">{effectiveRating.toFixed(1)} / 5</span>
+            <span className="text-sm font-semibold text-olive">
+              {effectiveRating.toFixed(1)} / 5
+            </span>
           </div>
 
           <textarea
@@ -497,7 +497,8 @@ export function PropertyReviewsSection({
             <div>
               <p className="text-base font-semibold text-olive">Пока нет отзывов</p>
               <p className="mt-1 text-sm leading-6 text-olive/70">
-                Когда гости начнут делиться впечатлениями, здесь появятся рейтинг и подробные комментарии.
+                Когда гости начнут делиться впечатлениями, здесь появятся рейтинг и подробные
+                комментарии.
               </p>
             </div>
           </div>
@@ -532,8 +533,12 @@ export function PropertyReviewsSection({
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="truncate text-lg font-semibold text-olive">{review.userName}</p>
-                        <span className="text-sm text-olive/55">{formatReviewMonth(review.createdAt)}</span>
+                        <p className="truncate text-lg font-semibold text-olive">
+                          {review.userName}
+                        </p>
+                        <span className="text-sm text-olive/55">
+                          {formatReviewMonth(review.createdAt)}
+                        </span>
                       </div>
                       <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-terra">
                         <div className="inline-flex items-center gap-0.5">
@@ -568,7 +573,9 @@ export function PropertyReviewsSection({
                   >
                     <AppIcon icon={ThumbsUp} className="h-3.5 w-3.5" />
                     <span>Да</span>
-                    {review.likesCount > 0 ? <span className="text-xs opacity-70">{review.likesCount}</span> : null}
+                    {review.likesCount > 0 ? (
+                      <span className="text-xs opacity-70">{review.likesCount}</span>
+                    ) : null}
                   </button>
                   <button
                     type="button"
@@ -600,7 +607,9 @@ export function PropertyReviewsSection({
                       {review.ownerReply}
                     </p>
                     {review.ownerRepliedAt ? (
-                      <p className="mt-2 text-xs text-olive/55">{formatDateTime(review.ownerRepliedAt)}</p>
+                      <p className="mt-2 text-xs text-olive/55">
+                        {formatDateTime(review.ownerRepliedAt)}
+                      </p>
                     ) : null}
                   </div>
                 ) : null}
@@ -627,13 +636,17 @@ export function PropertyReviewsSection({
                         disabled={replySavingById[review.id] ?? false}
                         variant="ghost"
                       >
-                        {(replySavingById[review.id] ?? false) ? "Сохранение..." : "Сохранить ответ"}
+                        {(replySavingById[review.id] ?? false)
+                          ? "Сохранение..."
+                          : "Сохранить ответ"}
                       </Button>
                       {replyErrorById[review.id] ? (
                         <span className="text-sm text-red-600">{replyErrorById[review.id]}</span>
                       ) : null}
                       {replySuccessById[review.id] ? (
-                        <span className="text-sm text-green-700">{replySuccessById[review.id]}</span>
+                        <span className="text-sm text-green-700">
+                          {replySuccessById[review.id]}
+                        </span>
                       ) : null}
                     </div>
                   </div>
@@ -644,7 +657,11 @@ export function PropertyReviewsSection({
 
           {hasMore ? (
             <div className="flex justify-center pt-1">
-              <Button variant="ghost" onClick={() => void loadMoreReviews()} disabled={isLoadingMore}>
+              <Button
+                variant="ghost"
+                onClick={() => void loadMoreReviews()}
+                disabled={isLoadingMore}
+              >
                 {isLoadingMore ? "Загружаем..." : "Еще отзывы"}
               </Button>
             </div>

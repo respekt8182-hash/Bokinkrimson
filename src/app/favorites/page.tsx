@@ -1,5 +1,13 @@
-// Next.js page for route /favorites.
-﻿import { LocalFavoritesPage } from "@/components/favorites/local-favorites-page";
+import type { Metadata } from "next";
+import { LocalFavoritesPage } from "@/components/favorites/local-favorites-page";
+
+export const metadata: Metadata = {
+  title: "Избранное",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function FavoritesPage() {
   return (

@@ -1,7 +1,6 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   BadgeCheck,
   Bath,
@@ -13,46 +12,47 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
-  Mail,
   MapPin,
   Phone,
-  RulerDimensionLine,
   Star,
   TriangleAlert,
   User,
-  Users,
   X,
 } from "lucide-react";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
+import { PropertyContactsPanel } from "@/components/contacts/property-contacts-panel";
 import { HousingSearchDateRangeField } from "@/components/public/housing-search-date-range-field";
+import { HousingSearchGuestsField } from "@/components/public/housing-search-guests-field";
 import { ExcursionMapPreview } from "@/components/maps/excursion-map-preview";
 import { PropertyMediaGallery } from "@/components/public/property-media-gallery";
+import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
 import { AppIcon } from "@/components/ui/app-icon";
-import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
-import { FieldAdornmentIcon } from "@/components/ui/field-adornment-icon";
+import { parseDetailedGuestsValue } from "@/components/ui/unified-guests-editor";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
 import { cn } from "@/lib/cn";
+import { buildPropertyLeadMessage } from "@/lib/lead-message-author";
 import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
 import {
   parseMealOptionsValue,
   parseParkingInfoValue,
   parsePrepaymentPolicyValue,
 } from "@/lib/property-rules";
-import type { PublicCatalogItem, PublicPropertyCard } from "@/lib/public-properties";
-import { bedTypeOptions } from "@/lib/room-catalog";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
+} from "@/lib/contact-links";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import type { PublicPropertyCard } from "@/lib/public-properties";
+import { bedTypeOptions } from "@/lib/room-catalog";
 
 type PublicPropertyDetailsProps = {
   item: PublicPropertyCard;
-  similarItems?: PublicCatalogItem[];
   initialIsFavorite: boolean;
   initialCheckIn?: string | null;
   initialCheckOut?: string | null;
@@ -60,7 +60,6 @@ type PublicPropertyDetailsProps = {
   initialAdultsCount?: number | null;
   initialChildrenCount?: number | null;
 };
-
 
 type RoomAmenityItem = {
   key: string;
@@ -79,16 +78,14 @@ type HouseRuleChipConfig = {
   valueClassName?: string;
 };
 
-type ContactChannelLink = {
+type RoomMedia = PublicPropertyCard["rooms"][number]["media"][number];
+
+type MobilePhoneOption = {
   key: string;
   href: string;
   label: string;
-  brand: "whatsapp" | "telegram" | "vk" | "max" | "ok";
+  name: string | null;
 };
-
-type RoomMedia = PublicPropertyCard["rooms"][number]["media"][number];
-
-
 
 function getLocalTodayIso(): string {
   const now = new Date();
@@ -98,8 +95,10 @@ function getLocalTodayIso(): string {
   return `${year}-${month}-${day}`;
 }
 
+const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+
 function formatMoney(value: number, currency: string): string {
-  const amount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+  const amount = ruNumberFormat.format(value);
   if (currency === "RUB") {
     return `${amount} ₽`;
   }
@@ -171,14 +170,6 @@ function getPolicyRuleChipClasses(value: RulePolicyValue) {
   };
 }
 
-function PhoneIcon({ className }: { className?: string }) {
-  return <AppIcon icon={Phone} className={className} />;
-}
-
-function MailIcon({ className }: { className?: string }) {
-  return <AppIcon icon={Mail} className={className} />;
-}
-
 function AlertIcon({ className }: { className?: string }) {
   return <AppIcon icon={TriangleAlert} className={className} />;
 }
@@ -211,17 +202,13 @@ function ChevronRightIcon({ className }: { className?: string }) {
   return <AppIcon icon={ChevronRight} className={className} />;
 }
 
-function RoomFeatureIcon(props: {
-  name: string;
-  featureId?: string;
-  className?: string;
-}) {
+function RoomFeatureIcon(props: { name: string; featureId?: string; className?: string }) {
   const { featureId, className } = props;
   return <AmenityIcon featureId={featureId} className={className} />;
 }
 
 function getRoomAmenityCategory(name: string): RoomAmenityItem["category"] {
-  const value = name.trim().toLowerCase().replaceAll("ё", "е");
+  const value = name.trim().toLowerCase().replaceAll("С‘", "Рµ");
   if (/душ|ванн|туалет|сануз|писсуар|гигиен|биде/.test(value)) {
     return "bathroom";
   }
@@ -271,16 +258,29 @@ type MediaPreviewProps = {
   loading?: "lazy" | "eager";
 };
 
-function MediaPreview({
-  media,
-  alt,
-  className,
-  loading = "lazy",
-}: MediaPreviewProps) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={media.url} alt={alt} loading={loading} decoding="async" className={className} />
-  );
+type MobileMessengerLink = {
+  key: string;
+  href: string;
+  label: string;
+  brand: ContactBrand;
+};
+
+function MediaPreview({ media, alt, className, loading = "lazy" }: MediaPreviewProps) {
+  if (media.type === "IMAGE") {
+    return (
+      <Image
+        src={media.url}
+        alt={alt}
+        fill
+        loading={loading}
+        sizes="(max-width: 768px) 100vw, 400px"
+        className={className}
+      />
+    );
+  }
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={media.url} alt={alt} loading={loading} decoding="async" className={className} />;
 }
 
 function toPetsLabel(value: "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null): string {
@@ -295,21 +295,6 @@ function toSmokingLabel(value: "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null): s
   if (value === "ON_REQUEST") return "По согласованию";
   if (value === "ALLOWED") return "Разрешено";
   return "Не указано";
-}
-
-function normalizePhoneHref(phone: string | null | undefined): string | null {
-  const value = phone?.trim() ?? "";
-  if (!value) {
-    return null;
-  }
-
-  const hasLeadingPlus = value.startsWith("+");
-  const digits = value.replace(/\D/g, "");
-  if (!digits) {
-    return null;
-  }
-
-  return hasLeadingPlus ? `tel:+${digits}` : `tel:${digits}`;
 }
 
 function formatPhoneLabel(phone: string | null | undefined): string | null {
@@ -334,6 +319,122 @@ function formatPhoneLabel(phone: string | null | undefined): string | null {
   }
 
   return value.startsWith("+") ? `+${digits}` : digits;
+}
+
+function normalizePhoneHref(phone: string | null | undefined): string | null {
+  const value = phone?.trim() ?? "";
+  if (!value) {
+    return null;
+  }
+
+  const hasLeadingPlus = value.startsWith("+");
+  const digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  return hasLeadingPlus ? `tel:+${digits}` : `tel:${digits}`;
+}
+
+function buildMobilePhoneOption(params: {
+  key: string;
+  phone: string | null | undefined;
+  label?: string | null;
+  name?: string | null;
+}): MobilePhoneOption | null {
+  const preparedPhone = params.phone?.trim() ?? "";
+  if (!preparedPhone) {
+    return null;
+  }
+
+  const href = normalizePhoneHref(preparedPhone);
+  if (!href) {
+    return null;
+  }
+
+  return {
+    key: params.key,
+    href,
+    label: params.label?.trim() || formatPhoneLabel(preparedPhone) || preparedPhone,
+    name: params.name?.trim() || null,
+  };
+}
+
+function buildMobileMessengerLinks(params: {
+  whatsappUrl: string | null;
+  telegramUrl: string | null;
+  vkUrl: string | null;
+  maxUrl: string | null;
+  okUrl: string | null;
+}): MobileMessengerLink[] {
+  const preparedWhatsappUrl = normalizeWhatsappUrl(params.whatsappUrl);
+  const preparedTelegramUrl = normalizeTelegramProfileUrl(params.telegramUrl);
+  const preparedVkUrl = normalizeVkProfileUrl(params.vkUrl);
+  const preparedMaxUrl = normalizeMaxProfileUrl(params.maxUrl);
+  const preparedOkUrl = normalizeOkProfileUrl(params.okUrl);
+
+  return [
+    preparedWhatsappUrl
+      ? {
+          key: "whatsapp",
+          href: preparedWhatsappUrl,
+          label: "WhatsApp",
+          brand: "whatsapp" as const,
+        }
+      : null,
+    preparedTelegramUrl
+      ? {
+          key: "telegram",
+          href: preparedTelegramUrl,
+          label: "Telegram",
+          brand: "telegram" as const,
+        }
+      : null,
+    preparedVkUrl
+      ? {
+          key: "vk",
+          href: preparedVkUrl,
+          label: "VK",
+          brand: "vk" as const,
+        }
+      : null,
+    preparedMaxUrl
+      ? {
+          key: "max",
+          href: preparedMaxUrl,
+          label: "Max",
+          brand: "max" as const,
+        }
+      : null,
+    preparedOkUrl
+      ? {
+          key: "ok",
+          href: preparedOkUrl,
+          label: "OK",
+          brand: "ok" as const,
+        }
+      : null,
+  ].filter((item): item is MobileMessengerLink => item !== null);
+}
+
+function getMobileMessengerChipClasses(brand: ContactBrand): string {
+  if (brand === "whatsapp") {
+    return "border-[#25D366]/22 bg-[#25D366]/10 shadow-[0_8px_18px_rgba(37,211,102,0.16)]";
+  }
+
+  if (brand === "telegram") {
+    return "border-[#2AABEE]/22 bg-[#2AABEE]/10 shadow-[0_8px_18px_rgba(42,171,238,0.16)]";
+  }
+
+  if (brand === "vk") {
+    return "border-[#0077FF]/20 bg-[#0077FF]/9 shadow-[0_8px_18px_rgba(0,119,255,0.14)]";
+  }
+
+  if (brand === "max") {
+    return "border-[#FF7A1A]/22 bg-[#FF7A1A]/10 shadow-[0_8px_18px_rgba(255,122,26,0.15)]";
+  }
+
+  return "border-[#EE8208]/22 bg-[#EE8208]/10 shadow-[0_8px_18px_rgba(238,130,8,0.15)]";
 }
 
 function getRoomBasePrice(room: PublicPropertyCard["rooms"][number]): {
@@ -460,98 +561,25 @@ function getRoomPriceSummary(
   };
 }
 
-const minAdultsCount = 1;
-const maxAdultsCount = 12;
-const maxChildrenCount = 8;
-const maxGuestsCount = maxAdultsCount + maxChildrenCount;
-
-function clampAdultsCount(value: number): number {
-  if (!Number.isFinite(value)) {
-    return minAdultsCount;
-  }
-
-  return Math.max(minAdultsCount, Math.min(maxAdultsCount, Math.round(value)));
-}
-
-function clampChildrenCount(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(maxChildrenCount, Math.round(value)));
-}
-
-function pluralize(value: number, variants: [string, string, string]): string {
-  const abs = Math.abs(value) % 100;
-  const mod = abs % 10;
-
-  if (abs > 10 && abs < 20) {
-    return variants[2];
-  }
-  if (mod > 1 && mod < 5) {
-    return variants[1];
-  }
-  if (mod === 1) {
-    return variants[0];
-  }
-
-  return variants[2];
-}
-
-function formatChildAgeOption(age: number): string {
-  if (age === 0) {
-    return "до 1 года";
-  }
-
-  return `${age} ${pluralize(age, ["год", "года", "лет"])}`;
-}
-
-function getGuestsFieldValue(adults: number, childrenCount: number): string {
-  const total = adults + childrenCount;
-  return `${total} ${pluralize(total, ["гость", "гостя", "гостей"])}`;
-}
-
 function resolveInitialGuestState(input: {
   initialGuestsCount?: number | null;
   initialAdultsCount?: number | null;
   initialChildrenCount?: number | null;
 }): { adults: number; childrenAges: number[] } {
-  const guestsCount =
-    typeof input.initialGuestsCount === "number" && Number.isFinite(input.initialGuestsCount)
-      ? Math.max(0, Math.round(input.initialGuestsCount))
-      : null;
-  let adults =
-    typeof input.initialAdultsCount === "number" && Number.isFinite(input.initialAdultsCount)
-      ? input.initialAdultsCount
-      : null;
-  let children =
-    typeof input.initialChildrenCount === "number" && Number.isFinite(input.initialChildrenCount)
-      ? input.initialChildrenCount
-      : null;
-
-  if (adults === null && guestsCount !== null) {
-    adults = children !== null ? guestsCount - children : guestsCount;
-  }
-  if (adults === null) {
-    adults = 2;
-  }
-  adults = clampAdultsCount(adults);
-
-  if (children === null && guestsCount !== null) {
-    children = guestsCount - adults;
-  }
-  if (children === null) {
-    children = 0;
-  }
-  children = clampChildrenCount(children);
-
-  const allowedChildren = Math.min(maxChildrenCount, Math.max(0, maxGuestsCount - adults));
-  const normalizedChildren = Math.min(children, allowedChildren);
-
-  return {
-    adults,
-    childrenAges: Array.from({ length: normalizedChildren }, () => 0),
-  };
+  return parseDetailedGuestsValue({
+    guests:
+      typeof input.initialGuestsCount === "number" && Number.isFinite(input.initialGuestsCount)
+        ? String(Math.max(0, Math.round(input.initialGuestsCount)))
+        : undefined,
+    adults:
+      typeof input.initialAdultsCount === "number" && Number.isFinite(input.initialAdultsCount)
+        ? String(Math.max(0, Math.round(input.initialAdultsCount)))
+        : undefined,
+    children:
+      typeof input.initialChildrenCount === "number" && Number.isFinite(input.initialChildrenCount)
+        ? String(Math.max(0, Math.round(input.initialChildrenCount)))
+        : undefined,
+  });
 }
 
 type GuestsPlacementFieldProps = {
@@ -569,299 +597,32 @@ function GuestsPlacementField({
   onChildrenAgesChange,
   onDone,
 }: GuestsPlacementFieldProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [newChildAge, setNewChildAge] = useState("");
-  const [isChildAgeSelectExpanded, setIsChildAgeSelectExpanded] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  const totalGuests = adults + childrenAges.length;
-  const guestsFieldValue = useMemo(
-    () => getGuestsFieldValue(adults, childrenAges.length),
-    [adults, childrenAges.length],
-  );
-
-  const closePanel = useCallback(() => {
-    setIsOpen(false);
-    setIsChildAgeSelectExpanded(false);
-  }, []);
-
-  const updateAdults = useCallback(
-    (value: number) => {
-      const nextAdults = clampAdultsCount(value);
-      const allowedChildren = Math.min(maxChildrenCount, Math.max(0, maxGuestsCount - nextAdults));
-      onAdultsChange(nextAdults);
-      if (childrenAges.length > allowedChildren) {
-        onChildrenAgesChange(childrenAges.slice(0, allowedChildren));
-      }
-    },
-    [childrenAges, onAdultsChange, onChildrenAgesChange],
-  );
-
-  const addChild = useCallback(() => {
-    const age = Number.parseInt(newChildAge, 10);
-    if (!Number.isFinite(age) || age < 0 || age > 17) {
-      return;
-    }
-    if (childrenAges.length >= maxChildrenCount || totalGuests >= maxGuestsCount) {
-      return;
-    }
-
-    onChildrenAgesChange([...childrenAges, age]);
-    setNewChildAge("");
-    setIsChildAgeSelectExpanded(false);
-  }, [childrenAges, newChildAge, onChildrenAgesChange, totalGuests]);
-
-  const updateChildAge = useCallback(
-    (index: number, value: string) => {
-      const age = Number.parseInt(value, 10);
-      if (!Number.isFinite(age) || age < 0 || age > 17) {
-        return;
-      }
-
-      onChildrenAgesChange(
-        childrenAges.map((item, itemIndex) => (itemIndex === index ? age : item)),
-      );
-    },
-    [childrenAges, onChildrenAgesChange],
-  );
-
-  const removeChild = useCallback(
-    (index: number) => {
-      onChildrenAgesChange(childrenAges.filter((_, itemIndex) => itemIndex !== index));
-    },
-    [childrenAges, onChildrenAgesChange],
-  );
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (rootRef.current?.contains(target)) {
-        return;
-      }
-      closePanel();
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      closePanel();
-    };
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [closePanel, isOpen]);
-
   return (
-    <div ref={rootRef} className={cn("relative", isOpen ? "z-[1200]" : "")}>
-      <button
-        type="button"
-        onClick={() => {
-          if (isOpen) {
-            closePanel();
-            return;
-          }
-          setIsOpen(true);
-        }}
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
-        className="relative h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-      >
-        <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/60">
-          Р азмещение
-        </span>
-        <span className="block truncate pr-12 text-sm font-semibold">{guestsFieldValue}</span>
-        <FieldAdornmentIcon icon={Users} shellClassName="right-3.5" />
-      </button>
+    <HousingSearchGuestsField
+      initialGuests={String(adults + childrenAges.length)}
+      initialAdults={String(adults)}
+      initialChildren={String(childrenAges.length)}
+      autoSubmitOnComplete={false}
+      showHiddenInputs={false}
+      buttonClassName="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+      onGuestsChange={({ adults: nextAdults, children: nextChildren }) => {
+        const normalizedAdults = Number.parseInt(nextAdults, 10);
+        const normalizedChildren = Number.parseInt(nextChildren, 10);
 
-      {isOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[1190] bg-primary/30"
-            onClick={closePanel}
-            aria-label="Закрыть выбор гостей"
-          />
-
-          <div className="fixed left-1/2 top-1/2 z-[1200] max-h-[calc(100vh-32px)] w-[min(92vw,412px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)]">
-            <h3 className="text-lg font-semibold text-olive">Гости</h3>
-
-            <div className="mt-3 space-y-3">
-              <section className="rounded-xl border border-sand bg-cream p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-olive">Взрослые</p>
-                    <p className="text-xs text-olive">от 18 лет</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => updateAdults(adults - 1)}
-                      disabled={adults <= minAdultsCount}
-                      aria-label="Уменьшить количество взрослых"
-                      className="h-8 w-8 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      -
-                    </button>
-                    <span className="w-8 text-center text-sm font-semibold text-olive">
-                      {adults}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => updateAdults(adults + 1)}
-                      disabled={totalGuests >= maxGuestsCount}
-                      aria-label="Увеличить количество взрослых"
-                      className="h-8 w-8 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-sand bg-cream p-3">
-                <p className="text-sm font-semibold text-olive">Дети</p>
-                <p className="mt-0.5 text-xs text-olive">Возраст на момент выезда из отеля</p>
-
-                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded={isChildAgeSelectExpanded}
-                      onClick={() => setIsChildAgeSelectExpanded((prev) => !prev)}
-                      className="flex h-10 w-full items-center justify-between rounded-xl border border-sand bg-white px-3 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                    >
-                      <span className="truncate">
-                        {newChildAge
-                          ? formatChildAgeOption(Number.parseInt(newChildAge, 10))
-                          : "Выберите возраст"}
-                      </span>
-                      <ChevronDownIcon
-                        className={cn(
-                          "h-4 w-4 transition-transform duration-200",
-                          isChildAgeSelectExpanded ? "rotate-180" : "",
-                        )}
-                      />
-                    </button>
-                    <div
-                      role="listbox"
-                      className={cn(
-                        "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
-                        isChildAgeSelectExpanded
-                          ? "visible translate-y-0 opacity-100 pointer-events-auto"
-                          : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
-                      )}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        {Array.from({ length: 18 }, (_, age) => (
-                          <button
-                            key={`room-child-age-${age}`}
-                            type="button"
-                            role="option"
-                            aria-selected={newChildAge === String(age)}
-                            onClick={() => {
-                              setNewChildAge(String(age));
-                              setIsChildAgeSelectExpanded(false);
-                            }}
-                            className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30 hover:bg-cream"
-                          >
-                            {formatChildAgeOption(age)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={addChild}
-                    disabled={
-                      !newChildAge ||
-                      totalGuests >= maxGuestsCount ||
-                      childrenAges.length >= maxChildrenCount
-                    }
-                    className="h-10 rounded-xl border border-sand bg-white px-3 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Добавить
-                  </button>
-                </div>
-
-                <div className="mt-2 space-y-2">
-                  {childrenAges.length === 0 ? (
-                    <p className="text-xs text-olive">Дети не добавлены</p>
-                  ) : (
-                    childrenAges.map((age, index) => (
-                      <div
-                        key={`room-child-${index}-${age}`}
-                        className="grid grid-cols-[1fr_minmax(0,120px)_auto] items-center gap-2 rounded-lg bg-white px-2 py-1.5"
-                      >
-                        <span className="text-xs font-medium text-olive">Р ебенок {index + 1}</span>
-
-                        <select
-                          value={String(age)}
-                          onChange={(event) => updateChildAge(index, event.target.value)}
-                          className="h-8 rounded-lg border border-sand bg-white px-2 text-xs text-olive outline-none focus:border-primary"
-                        >
-                          {Array.from({ length: 18 }, (_, ageOption) => (
-                            <option
-                              key={`room-child-age-option-${index}-${ageOption}`}
-                              value={String(ageOption)}
-                            >
-                              {formatChildAgeOption(ageOption)}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => removeChild(index)}
-                          aria-label={`Удалить ребенка ${index + 1}`}
-                          className="h-8 rounded-lg border border-terra bg-white px-2 text-xs font-semibold text-terra transition hover:bg-foam"
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                closePanel();
-                onDone?.();
-              }}
-              className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-[color:var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              Готово
-            </button>
-          </div>
-        </>
-      ) : null}
-    </div>
+        onAdultsChange(Number.isFinite(normalizedAdults) ? normalizedAdults : adults);
+        onChildrenAgesChange(
+          Array.from(
+            { length: Number.isFinite(normalizedChildren) ? Math.max(0, normalizedChildren) : 0 },
+            (_, index) => childrenAges[index] ?? 0,
+          ),
+        );
+        onDone?.();
+      }}
+    />
   );
 }
-
 export function PublicPropertyDetails({
   item,
-  similarItems = [],
   initialIsFavorite,
   initialCheckIn,
   initialCheckOut,
@@ -909,12 +670,18 @@ export function PublicPropertyDetails({
   const [roomMediaIndexByRoom, setRoomMediaIndexByRoom] = useState<Record<string, number>>({});
   const [activeRoomDetailsId, setActiveRoomDetailsId] = useState<string | null>(null);
   const [isMobileBookingOpen, setIsMobileBookingOpen] = useState(false);
-  const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
+  const [isMobileCallSheetOpen, setIsMobileCallSheetOpen] = useState(false);
   const [showAllAmenities, setShowAllAmenities] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
-  const [leadModalRoom, setLeadModalRoom] = useState<PublicPropertyCard["rooms"][number] | null>(null);
+  const [leadModalRoom, setLeadModalRoom] = useState<PublicPropertyCard["rooms"][number] | null>(
+    null,
+  );
   const [leadExtra, setLeadExtra] = useState("");
   const [leadCopied, setLeadCopied] = useState(false);
+  const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
+  useBodyScrollLock(
+    Boolean(activeRoomDetailsId || isMobileBookingOpen || leadModalRoom || isMobileCallSheetOpen),
+  );
   const propertyMedia = useMemo(
     () => item.media.filter((media) => media.type === "IMAGE").slice(0, 10),
     [item.media],
@@ -926,7 +693,6 @@ export function PublicPropertyDetails({
       ? item.amenityGroups.combined
       : [...item.amenities.map((amenity) => amenity.name), ...item.customAmenities];
   const visibleAmenities = showAllAmenities ? allAmenities : allAmenities.slice(0, 10);
-  const similarCards = similarItems.filter((card) => card.id !== item.id).slice(0, 6);
   const description = item.description?.trim() ?? "";
   const shortDescription =
     description.length > 420 && !showFullDescription
@@ -941,30 +707,58 @@ export function PublicPropertyDetails({
     : null;
   const hasMapSection = item.latitude !== null && item.longitude !== null;
   const mapOverlayAddress = item.address ?? item.locationName ?? "Координаты объекта";
-  const mobilePhoneHref = normalizePhoneHref(item.contacts.phone);
   const mobilePhoneLabel = formatPhoneLabel(item.contacts.phone);
-  const phone2Href = normalizePhoneHref(item.contacts.phone2);
   const phone2Label = formatPhoneLabel(item.contacts.phone2);
-  const phone3Href = normalizePhoneHref(item.contacts.phone3);
   const phone3Label = formatPhoneLabel(item.contacts.phone3);
-  const phoneEntries = [
-    mobilePhoneHref && mobilePhoneLabel
-      ? { href: mobilePhoneHref, label: mobilePhoneLabel, name: item.contacts.phoneName?.trim() || null }
+  const extraContactPhones = [
+    item.contacts.phone2?.trim()
+      ? {
+          phone: item.contacts.phone2,
+          label: phone2Label,
+          name: item.contacts.phone2Name,
+        }
       : null,
-    phone2Href && phone2Label
-      ? { href: phone2Href, label: phone2Label, name: item.contacts.phone2Name?.trim() || null }
+    item.contacts.phone3?.trim()
+      ? {
+          phone: item.contacts.phone3,
+          label: phone3Label,
+          name: item.contacts.phone3Name,
+        }
       : null,
-    phone3Href && phone3Label
-      ? { href: phone3Href, label: phone3Label, name: item.contacts.phone3Name?.trim() || null }
-      : null,
-  ].filter((entry): entry is { href: string; label: string; name: string | null } => entry !== null);
-  const contactWhatsappUrl = item.contacts.whatsappUrl?.trim()
-    ? item.contacts.whatsappUrl.trim()
-    : null;
-  const contactTelegramUrl = normalizeTelegramProfileUrl(item.contacts.telegramUrl);
-  const contactVkUrl = item.contacts.vkUrl?.trim() ? item.contacts.vkUrl.trim() : null;
-  const contactMaxUrl = item.contacts.maxUrl?.trim() ? item.contacts.maxUrl.trim() : null;
-  const contactOkUrl = item.contacts.okUrl?.trim() ? item.contacts.okUrl.trim() : null;
+  ].filter(
+    (
+      phone,
+    ): phone is {
+      phone: string;
+      label: string | null;
+      name: string | null;
+    } => phone !== null,
+  );
+  const mobileCallPhones = [
+    buildMobilePhoneOption({
+      key: "primary",
+      phone: item.contacts.phone,
+      label: mobilePhoneLabel,
+      name: item.contacts.phoneName,
+    }),
+    ...extraContactPhones.map((phone, index) =>
+      buildMobilePhoneOption({
+        key: `extra-${index + 1}`,
+        phone: phone.phone,
+        label: phone.label,
+        name: phone.name,
+      }),
+    ),
+  ].filter((phone): phone is MobilePhoneOption => phone !== null);
+  const primaryMobileCallPhone = mobileCallPhones[0] ?? null;
+  const hasMultipleMobileCallPhones = mobileCallPhones.length > 1;
+  const mobileMessengerLinks = buildMobileMessengerLinks({
+    whatsappUrl: item.contacts.whatsappUrl,
+    telegramUrl: item.contacts.telegramUrl,
+    vkUrl: item.contacts.vkUrl,
+    maxUrl: item.contacts.maxUrl,
+    okUrl: item.contacts.okUrl,
+  });
   const seaDistanceLabel = extractSeaDistanceLabel(allAmenities);
   const mainPriceLabel =
     item.minNightPrice !== null && item.currency
@@ -973,7 +767,9 @@ export function PublicPropertyDetails({
   const locationLabel = item.locationName ?? "Крым";
   const hasReviews = item.reviewsCount > 0;
   const reviewsCountLabel = formatReviewsCountLabel(item.reviewsCount);
-  const headerRatingLine = hasReviews ? `${item.avgRating.toFixed(1)} · ${reviewsCountLabel}` : null;
+  const headerRatingLine = hasReviews
+    ? `${item.avgRating.toFixed(1)} · ${reviewsCountLabel}`
+    : null;
   const heroBadges = [
     item.avgRating >= 4.8 && item.reviewsCount >= 10 ? "Топ выбор гостей" : null,
     item.reviewsCount >= 25 ? "Проверено отзывами" : null,
@@ -981,55 +777,8 @@ export function PublicPropertyDetails({
     seaDistanceLabel,
   ].filter((badge): badge is string => Boolean(badge));
   const ownerDisplayName =
-    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "Владелец";
-  const ownerEmail = item.contacts.email?.trim() ?? "";
-  const hasOwnerEmail = ownerEmail.length > 0;
-  const hasAnyOwnerContacts = Boolean(
-    mobilePhoneHref || phone2Href || phone3Href || contactWhatsappUrl || contactTelegramUrl || contactVkUrl || contactMaxUrl || contactOkUrl || hasOwnerEmail,
-  );
+    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "Р’Р»Р°РґРµР»РµС†";
   const ownerVerificationLabel = "Владелец проверен";
-  const contactChannelLinks = [
-    contactWhatsappUrl
-      ? {
-          key: "whatsapp",
-          href: contactWhatsappUrl,
-          label: "WhatsApp",
-          brand: "whatsapp",
-        }
-      : null,
-    contactTelegramUrl
-      ? {
-          key: "telegram",
-          href: contactTelegramUrl,
-          label: "Telegram",
-          brand: "telegram",
-        }
-      : null,
-    contactVkUrl
-      ? {
-          key: "vk",
-          href: contactVkUrl,
-          label: "ВКонтакте",
-          brand: "vk",
-        }
-      : null,
-    contactOkUrl
-      ? {
-          key: "ok",
-          href: contactOkUrl,
-          label: "Одноклассники",
-          brand: "ok",
-        }
-      : null,
-    contactMaxUrl
-      ? {
-          key: "max",
-          href: contactMaxUrl,
-          label: "Max",
-          brand: "max",
-        }
-      : null,
-  ].filter((channel): channel is ContactChannelLink => channel !== null);
   const rankedRooms = useMemo(() => {
     return item.rooms
       .map((room, index) => {
@@ -1260,7 +1009,6 @@ export function PublicPropertyDetails({
     setCheckOut(range.checkOut || null);
   }, []);
 
-
   function cycleRoomMedia(roomId: string, direction: -1 | 1, total: number) {
     if (total <= 1) return;
     setRoomMediaIndexByRoom((prev) => {
@@ -1270,14 +1018,6 @@ export function PublicPropertyDetails({
     });
   }
 
-  function openContactsSection() {
-    const contactsSection = document.getElementById("owner-contacts");
-    if (contactsSection) {
-      contactsSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-    setIsMobileBookingOpen(false);
-  }
-
   function scrollToRoomFund() {
     const roomFundSection = document.getElementById("room-fund");
     if (roomFundSection) {
@@ -1285,16 +1025,40 @@ export function PublicPropertyDetails({
     }
   }
 
+  function openContactsSection() {
+    setIsMobileBookingOpen(false);
+
+    if (hasMultipleMobileCallPhones) {
+      setIsMobileCallSheetOpen(true);
+      return;
+    }
+
+    if (primaryMobileCallPhone) {
+      window.location.assign(primaryMobileCallPhone.href);
+      return;
+    }
+
+    const firstMessenger = mobileMessengerLinks[0];
+    if (firstMessenger) {
+      window.open(firstMessenger.href, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const contactsPanel = detailsRootRef.current?.querySelector<HTMLElement>(
+      "[data-property-contacts-panel]",
+    );
+    contactsPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
-    <div ref={detailsRootRef} className="property-details-page space-y-6">
+    <div
+      ref={detailsRootRef}
+      className="property-details-page space-y-6 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] lg:pb-0"
+    >
       {/* Hero: gallery + overlaid info */}
       <section className="relative overflow-hidden rounded-3xl">
         {propertyMedia.length > 0 ? (
-          <PropertyMediaGallery
-            media={propertyMedia}
-            title={item.name ?? "Объект"}
-            phoneHref={mobilePhoneHref}
-          />
+          <PropertyMediaGallery media={propertyMedia} title={item.name ?? "Объект"} />
         ) : (
           <div className="bg-cream py-12 text-center text-sm text-olive/60 ring-1 ring-olive/10">
             Фото и видео объекта пока не загружены.
@@ -1348,7 +1112,7 @@ export function PublicPropertyDetails({
               ) : null}
             </div>
             <div className="shrink-0">
-              <FavoriteToggleButton propertyId={item.id} initialIsFavorite={initialIsFavorite} />
+              <FavoriteToggleButton itemId={item.id} initialIsFavorite={initialIsFavorite} />
             </div>
           </div>
         </div>
@@ -1376,9 +1140,9 @@ export function PublicPropertyDetails({
               </span>
             ))}
         </div>
-        <h1 className="text-2xl font-bold leading-tight text-olive sm:text-3xl">
+        <div className="text-2xl font-bold leading-tight text-olive sm:text-3xl">
           {item.name ?? "Объект"}
-        </h1>
+        </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-olive/68">
           <span className="inline-flex items-center gap-1.5">
             <LocationPinIcon className="h-4 w-4 text-terra" />
@@ -1403,20 +1167,19 @@ export function PublicPropertyDetails({
           </a>
         ) : null}
         <div className="flex items-center justify-between">
-          <FavoriteToggleButton propertyId={item.id} initialIsFavorite={initialIsFavorite} />
+          <FavoriteToggleButton itemId={item.id} initialIsFavorite={initialIsFavorite} />
         </div>
       </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,368px)]">
-        {/* ── Left column ── */}
-        <div className="space-y-5">
-
-          {/* Sticky section navigation */}
+        {/* в”Ђв”Ђ Left column в”Ђв”Ђ */}
+        <div className="min-w-0 space-y-5">
+          {/* Section navigation */}
           <nav
-            className="sticky top-4 z-20 overflow-x-auto rounded-2xl border border-olive/10 bg-white/94 px-2 shadow-[0_10px_26px_rgba(58,43,35,0.06)] backdrop-blur-sm"
+            className="-mx-1 w-auto max-w-full overflow-x-auto rounded-2xl border border-olive/10 bg-white/94 px-1.5 shadow-[0_10px_26px_rgba(58,43,35,0.06)] backdrop-blur-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:px-2"
             aria-label="Навигация по разделам"
           >
-            <div className="flex min-w-max items-center gap-1">
+            <div className="flex min-w-max snap-x snap-mandatory items-center gap-1.5 pb-1">
               {[
                 { href: "#room-fund", label: "Варианты размещения" },
                 { href: "#description-panel", label: "Описание" },
@@ -1428,7 +1191,7 @@ export function PublicPropertyDetails({
                 <a
                   key={link.href}
                   href={link.href}
-                  className="whitespace-nowrap rounded-xl px-3 py-3 text-sm font-medium text-olive/62 transition hover:bg-cream hover:text-olive"
+                  className="snap-start whitespace-nowrap rounded-xl px-3 py-3 text-sm font-medium text-olive/62 transition hover:bg-cream hover:text-olive"
                 >
                   {link.label}
                 </a>
@@ -1480,7 +1243,7 @@ export function PublicPropertyDetails({
 
           <section
             id="room-fund"
-            className="relative overflow-hidden rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+            className="relative scroll-mt-[132px] overflow-hidden rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
           >
             <div className="relative flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1523,7 +1286,7 @@ export function PublicPropertyDetails({
                             featureId: "beds_base",
                             name:
                               bc.count > 1
-                                ? `${bc.count} × ${bedLabelById[bc.type] ?? bc.type}`
+                                ? `${bc.count} Г— ${bedLabelById[bc.type] ?? bc.type}`
                                 : (bedLabelById[bc.type] ?? bc.type),
                             category: "beds" as const,
                           }))
@@ -1560,18 +1323,11 @@ export function PublicPropertyDetails({
                     .slice(0, 6);
                   const roomDetailsDialogId = `room-details-${room.id}`;
                   const roomDetailsTitleId = `room-details-title-${room.id}`;
-                  const roomSummaryLine = [
-                    `До ${room.beds + room.extraBeds} гостей`,
-                    room.areaSqm !== null ? `${room.areaSqm} м²` : null,
-                    room.bathroomTypeLabel,
-                  ]
-                    .filter((value): value is string => Boolean(value))
-                    .join(" · ");
                   return (
                     <Fragment key={room.id}>
                       <article className="room-card group relative overflow-hidden rounded-[20px] border border-olive/10 bg-white p-3 shadow-[0_2px_12px_rgba(58,43,35,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(58,43,35,0.1)] md:p-4">
                         <div className="relative flex flex-col gap-3 md:flex-row md:items-stretch md:gap-4">
-                          {/* ── IMAGE ── */}
+                          {/* в”Ђв”Ђ IMAGE в”Ђв”Ђ */}
                           <div className="shrink-0 md:w-[200px]">
                             {roomMedia.length > 0 ? (
                               <div className="room-card-media-shell relative h-full overflow-hidden rounded-[14px] bg-[#ebe5d8]">
@@ -1602,11 +1358,9 @@ export function PublicPropertyDetails({
                                   <>
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        cycleRoomMedia(room.id, -1, roomMedia.length)
-                                      }
+                                      onClick={() => cycleRoomMedia(room.id, -1, roomMedia.length)}
                                       aria-label="Предыдущий файл номера"
-                                      className="absolute left-1.5 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:opacity-0 md:group-hover:opacity-100"
+                                      className="absolute left-1.5 top-1/2 z-10 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100"
                                     >
                                       <ChevronLeftIcon className="h-3.5 w-3.5" />
                                     </button>
@@ -1614,7 +1368,7 @@ export function PublicPropertyDetails({
                                       type="button"
                                       onClick={() => cycleRoomMedia(room.id, 1, roomMedia.length)}
                                       aria-label="Следующий файл номера"
-                                      className="absolute right-1.5 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:opacity-0 md:group-hover:opacity-100"
+                                      className="absolute right-1.5 top-1/2 z-10 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-olive shadow-sm transition hover:bg-white md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100"
                                     >
                                       <ChevronRightIcon className="h-3.5 w-3.5" />
                                     </button>
@@ -1628,7 +1382,7 @@ export function PublicPropertyDetails({
                             )}
                           </div>
 
-                          {/* ── DETAILS ── */}
+                          {/* в”Ђв”Ђ DETAILS в”Ђв”Ђ */}
                           <div className="flex min-w-0 flex-1 flex-col">
                             <h3 className="text-base font-bold leading-snug text-olive md:text-[1.1rem]">
                               {room.title}
@@ -1647,7 +1401,12 @@ export function PublicPropertyDetails({
                                 <div className="flex items-center gap-2 text-[13px] text-olive/75">
                                   <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
                                   <span>
-                                    {String(room.roomsCount).padStart(2, "0")} комнат{room.roomsCount === 1 ? "а" : room.roomsCount >= 2 && room.roomsCount <= 4 ? "ы" : ""}
+                                    {room.roomsCount}{" "}
+                                    {room.roomsCount === 1
+                                      ? "комната"
+                                      : room.roomsCount >= 2 && room.roomsCount <= 4
+                                        ? "комнаты"
+                                        : "комнат"}
                                   </span>
                                 </div>
                               ) : null}
@@ -1695,7 +1454,7 @@ export function PublicPropertyDetails({
                             </button>
                           </div>
 
-                          {/* ── PRICE + CTA ── */}
+                          {/* в”Ђв”Ђ PRICE + CTA в”Ђв”Ђ */}
                           <div className="flex shrink-0 flex-row items-center justify-between gap-3 border-t border-olive/8 pt-3 md:w-[180px] md:flex-col md:items-end md:justify-start md:border-l md:border-t-0 md:pl-4 md:pt-0">
                             {summary.tone === "warn" ? (
                               <div className="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-[13px] text-amber-700">
@@ -1721,14 +1480,14 @@ export function PublicPropertyDetails({
                                   }}
                                   className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-xl bg-[#e8621a] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#d45615] active:scale-[0.97]"
                                 >
-                                  Отправить заявку
+                                  Скопировать сообщение владельцу
                                 </button>
                               </>
                             )}
                           </div>
                         </div>
                       </article>
-                      {/* ── DETAILS MODAL ── */}
+                      {/* в”Ђв”Ђ DETAILS MODAL в”Ђв”Ђ */}
                       {isDetailsOpen ? (
                         <>
                           <button
@@ -1873,7 +1632,7 @@ export function PublicPropertyDetails({
 
           <section
             id="description-panel"
-            className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+            className="scroll-mt-[132px] rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
           >
             <h2 className="text-2xl text-olive md:text-[1.85rem]">Описание</h2>
             <p className="mt-2 text-sm text-olive/66">
@@ -1904,7 +1663,7 @@ export function PublicPropertyDetails({
           </section>
 
           {hasMapSection ? (
-            <section id="map-panel">
+            <section id="map-panel" className="scroll-mt-[132px] md:scroll-mt-[152px]">
               <article className="overflow-hidden rounded-[28px] border border-olive/10 bg-white shadow-[0_14px_36px_rgba(58,43,35,0.05)]">
                 <div className="px-5 pb-4 pt-5 md:px-6">
                   <h3 className="text-2xl text-olive md:text-[1.7rem]">На карте</h3>
@@ -1923,53 +1682,10 @@ export function PublicPropertyDetails({
             </section>
           ) : null}
 
-          {similarCards.length > 0 ? (
-            <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6">
-              <h2 className="text-2xl text-olive md:text-[1.75rem]">Похожие предложения рядом</h2>
-              <p className="mt-2 text-sm text-olive/66">
-                Несколько спокойных альтернатив в той же локации.
-              </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {similarCards.map((card) => (
-                  <Link
-                    key={card.id}
-                    href={card.path}
-                    className="overflow-hidden rounded-[22px] border border-olive/12 bg-[#fcfbf7] transition hover:-translate-y-0.5 hover:shadow-md"
-                  >
-                    {card.coverImageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={card.coverImageUrl}
-                        alt={card.name}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-32 w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-32 items-center justify-center text-xs text-olive/55">
-                        Без фото
-                      </div>
-                    )}
-                    <div className="space-y-1 p-3">
-                      <p className="line-clamp-2 text-sm font-semibold text-olive">{card.name}</p>
-                      <p className="text-xs text-olive/70">{card.locationName ?? "Крым"}</p>
-                      <p className="text-xs text-olive/70">
-                        {card.minNightPrice !== null && card.currency
-                          ? `от ${formatMoney(card.minNightPrice, card.currency)}`
-                          : "Цена по запросу"}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {/* Amenities removed */}
-          {false ? (
+          {allAmenities.length > 0 ? (
             <section
-              id="amenities-remove"
-              className="rounded-3xl bg-white p-5 ring-1 ring-olive/10 md:p-6"
+              id="amenities"
+              className="scroll-mt-[132px] rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
             >
               <div className="flex items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2.5 text-2xl text-olive">
@@ -2003,7 +1719,7 @@ export function PublicPropertyDetails({
           {/* House rules (moved from sidebar) */}
           <section
             id="house-rules"
-            className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:p-6"
+            className="scroll-mt-[132px] rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2021,12 +1737,17 @@ export function PublicPropertyDetails({
                 <span
                   key={chip.key}
                   className={cn(
-                    "inline-flex max-w-full items-center gap-2 rounded-2xl border px-3.5 py-2 text-sm text-olive/72",
+                    "flex w-full flex-col items-start gap-1 rounded-2xl border px-3.5 py-2 text-sm text-olive/72 sm:inline-flex sm:w-auto sm:flex-row sm:items-center sm:gap-2",
                     chip.className,
                   )}
                 >
                   <span className="shrink-0 text-olive/55">{chip.label}</span>
-                  <span className={cn("min-w-0 break-words font-semibold", chip.valueClassName)}>
+                  <span
+                    className={cn(
+                      "max-w-full whitespace-normal break-words font-semibold leading-snug sm:max-w-none",
+                      chip.valueClassName,
+                    )}
+                  >
                     {chip.value}
                   </span>
                 </span>
@@ -2035,11 +1756,8 @@ export function PublicPropertyDetails({
           </section>
         </div>
 
-        {/* ── Right sticky info panel (desktop only) ── */}
-        <aside
-          id="owner-contacts"
-          className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start lg:mt-14"
-        >
+        {/* в”Ђв”Ђ Right sticky info panel (desktop only) в”Ђв”Ђ */}
+        <aside className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start lg:mt-14">
           <div className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.06)]">
             <div className="flex items-center gap-3">
               {item.owner.avatarUrl ? (
@@ -2063,300 +1781,310 @@ export function PublicPropertyDetails({
                 </p>
               </div>
             </div>
-            <div className="mt-4 space-y-3">
-              {phoneEntries.length > 0 ? (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
-                      Телефон
-                    </p>
-                    {phoneEntries.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => setIsPhoneExpanded((value) => !value)}
-                        className="text-xs font-semibold text-olive/62 transition hover:text-olive"
-                      >
-                        {isPhoneExpanded ? "Скрыть" : `Еще ${phoneEntries.length - 1}`}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <a
-                    href={phoneEntries[0]!.href}
-                    className="block rounded-[22px] border border-olive/10 bg-white px-4 py-3 transition hover:border-olive/18 hover:shadow-sm"
-                  >
-                    {phoneEntries[0]!.name ? (
-                      <span className="block text-xs text-olive/52">{phoneEntries[0]!.name}</span>
-                    ) : null}
-                    <span className="mt-1 block text-[1.55rem] font-semibold leading-tight text-olive">
-                      {phoneEntries[0]!.label}
-                    </span>
-                  </a>
-
-                  {isPhoneExpanded && phoneEntries.length > 1 ? (
-                    <div className="space-y-2">
-                      {phoneEntries.slice(1).map((entry, idx) => (
-                        <a
-                          key={`${entry.label}-${idx}`}
-                          href={entry.href}
-                          className="flex items-center justify-between gap-3 rounded-[18px] border border-olive/10 bg-white px-4 py-3 transition hover:border-olive/18 hover:shadow-sm"
-                        >
-                          <span className="min-w-0">
-                            {entry.name ? (
-                              <span className="block truncate text-xs text-olive/52">{entry.name}</span>
-                            ) : null}
-                            <span className="block truncate text-sm font-semibold text-olive">
-                              {entry.label}
-                            </span>
-                          </span>
-                          <PhoneIcon className="h-4 w-4 shrink-0 text-terra" />
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {contactChannelLinks.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {contactChannelLinks.map((channel) => (
-                    <a
-                      key={channel.key}
-                      href={channel.href}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="flex items-center gap-2.5 rounded-[18px] border border-olive/10 bg-white px-3 py-2.5 transition hover:border-olive/18 hover:shadow-sm"
-                    >
-                      <ContactBrandMark brand={channel.brand} className="h-9 w-9 rounded-xl" />
-                      <span className="min-w-0 truncate text-sm font-medium text-olive">
-                        {channel.label}
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              ) : null}
-
-              {hasOwnerEmail ? (
-                <a
-                  href={`mailto:${ownerEmail}`}
-                  className="flex items-center gap-3 rounded-[18px] border border-olive/10 bg-white px-3.5 py-3 transition hover:border-olive/18 hover:shadow-sm"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cream ring-1 ring-olive/10 text-olive/60">
-                    <MailIcon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-olive">Электронная почта</span>
-                    <span className="block truncate text-xs text-olive/52">{ownerEmail}</span>
-                  </span>
-                </a>
-              ) : null}
-
-              {!hasAnyOwnerContacts ? (
-                <p className="rounded-[22px] border border-dashed border-olive/18 bg-cream/40 px-4 py-4 text-center text-sm text-olive/70">
-                  Контакты владельца пока не добавлены
-                </p>
-              ) : null}
+            <div className="mt-4 space-y-3" data-property-contacts-panel>
+              <PropertyContactsPanel
+                phone={item.contacts.phone}
+                phoneLabel={mobilePhoneLabel}
+                phoneName={item.contacts.phoneName}
+                extraPhones={extraContactPhones}
+                websiteUrl={item.contacts.websiteUrl}
+                whatsappUrl={item.contacts.whatsappUrl}
+                telegramUrl={item.contacts.telegramUrl}
+                vkUrl={item.contacts.vkUrl}
+                maxUrl={item.contacts.maxUrl}
+                okUrl={item.contacts.okUrl}
+                secondaryContactsCompact
+              />
             </div>
           </div>
-
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-olive/15 bg-white/97 px-4 py-3 shadow-[0_-4px_24px_rgba(15,118,110,0.12)] backdrop-blur-sm lg:hidden">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+      <div className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-olive/15 bg-white/97 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] shadow-[0_-4px_24px_rgba(15,118,110,0.12)] backdrop-blur-sm lg:hidden">
+        <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-wide text-olive/50">
-              {sidebarQuote ? "Цена по фильтрам" : "Цена за ночь"}
-            </p>
-            <p className="truncate text-base font-bold text-olive">{sidebarNightlyLabel}</p>
-            <p className="truncate text-[11px] text-olive/65">
-              {sidebarPriceRoomHint ?? sidebarPriceMeta}
-            </p>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {item.owner.avatarUrl ? (
+                <Image
+                  src={item.owner.avatarUrl}
+                  alt={ownerDisplayName}
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+                />
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
+                  <AppIcon icon={User} className="h-4.5 w-4.5" />
+                </span>
+              )}
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-olive">{ownerDisplayName}</p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-primary/85">
+                  <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{ownerVerificationLabel}</span>
+                </p>
+              </div>
+            </div>
+            {mobileMessengerLinks.length > 0 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {mobileMessengerLinks.map((channel) => (
+                  <a
+                    key={channel.key}
+                    href={channel.href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    title={channel.label}
+                    aria-label={channel.label}
+                    className={cn(
+                      "inline-flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.96]",
+                      getMobileMessengerChipClasses(channel.brand),
+                    )}
+                  >
+                    <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsMobileBookingOpen(true)}
-              className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-olive/22 bg-white px-3 text-sm font-semibold text-olive"
-            >
-              <CalendarSmIcon className="h-4 w-4 text-terra" />
-              Даты
-            </button>
-            <button
-              type="button"
-              onClick={scrollToRoomFund}
-              className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-olive/22 bg-white px-3 text-sm font-semibold text-olive"
-            >
-              <BedIcon className="h-4 w-4 text-terra" />
-              Номер
-            </button>
-            {mobilePhoneHref ? (
-              <a
-                href={mobilePhoneHref}
-                className="btn-primary inline-flex h-11 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white"
-              >
-                <PhoneIcon className="h-4 w-4" />
-                Позвонить
-              </a>
-            ) : (
+          <div className="shrink-0">
+            {hasMultipleMobileCallPhones ? (
               <button
                 type="button"
-                onClick={() => setIsMobileBookingOpen(true)}
-                className="btn-primary inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
+                onClick={() => setIsMobileCallSheetOpen(true)}
+                className="btn-primary inline-flex h-11 min-w-[112px] items-center justify-center gap-2 rounded-2xl px-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(15,118,110,0.24)] sm:h-12 sm:min-w-[122px] sm:px-4"
               >
-                Контакты
+                <AppIcon icon={Phone} className="h-4 w-4" />
+                Позвонить
               </button>
-            )}
+            ) : primaryMobileCallPhone ? (
+              <a
+                href={primaryMobileCallPhone.href}
+                className="btn-primary inline-flex h-11 min-w-[112px] items-center justify-center gap-2 rounded-2xl px-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(15,118,110,0.24)] sm:h-12 sm:min-w-[122px] sm:px-4"
+              >
+                <AppIcon icon={Phone} className="h-4 w-4" />
+                Позвонить
+              </a>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* ── LEAD MESSAGE MODAL ── */}
-      {leadModalRoom ? (() => {
-        const fmtDate = (iso: string) => {
-          const d = parseIsoDate(iso);
-          if (!d) return iso;
-          const dd = String(d.getDate()).padStart(2, "0");
-          const mm = String(d.getMonth() + 1).padStart(2, "0");
-          const yyyy = d.getFullYear();
-          return `${dd}.${mm}.${yyyy}`;
-        };
-        const leadSummary = getRoomPriceSummary(leadModalRoom, checkIn, checkOut, totalGuests);
-        const lines: string[] = [
-          "Добрый день! Нашел ваше объявление на сайте \"Крым Вокруг\".",
-          "",
-          "Хотел бы уточнить наличие свободных мест:",
-        ];
-        if (checkIn && checkOut) {
-          lines.push(`- Даты: ${fmtDate(checkIn)} - ${fmtDate(checkOut)} (${selectedNights} ${selectedNights === 1 ? "ночь" : selectedNights >= 2 && selectedNights <= 4 ? "ночи" : "ночей"})`);
-        }
-        lines.push(`- Гостей: ${totalGuests} (взрослых: ${adults}${childrenAges.length > 0 ? `, детей: ${childrenAges.length}` : ""})`);
-        lines.push(`- Номер: "${leadModalRoom.title}"`);
-        lines.push(`- Объект: "${item.name}"`);
-        if (leadSummary.tone === "ok" && leadSummary.bigPrice) {
-          lines.push(`- Стоимость: ${leadSummary.bigPrice}${leadSummary.smallLabel ? ` (${leadSummary.smallLabel})` : ""}`);
-        }
-        lines.push("");
-        lines.push("Прошу подтвердить актуальность цены и наличие свободных мест.");
-        const extraTrimmed = leadExtra.trim();
-        if (extraTrimmed) {
-          lines.push("");
-          lines.push(`(Дополнительно: ${extraTrimmed})`);
-        }
-        lines.push("");
-        lines.push("Буду благодарен за ответ!");
-        const fullMessage = lines.join("\n");
-
-        const handleCopy = async () => {
-          try {
-            await navigator.clipboard.writeText(fullMessage);
-            setLeadCopied(true);
-            setTimeout(() => setLeadCopied(false), 2500);
-          } catch {
-            // fallback
-            const ta = document.createElement("textarea");
-            ta.value = fullMessage;
-            ta.style.position = "fixed";
-            ta.style.opacity = "0";
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand("copy");
-            document.body.removeChild(ta);
-            setLeadCopied(true);
-            setTimeout(() => setLeadCopied(false), 2500);
-          }
-        };
-
-        return (
-          <>
-            <button
-              type="button"
-              aria-label="Закрыть"
-              onClick={() => setLeadModalRoom(null)}
-              className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px]"
-            />
-            <div
-              role="dialog"
-              aria-modal="true"
-              className="fixed inset-x-3 bottom-3 z-[51] flex max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-[480px] sm:rounded-2xl"
-            >
-              {/* Header */}
-              <div className="flex shrink-0 items-center justify-between border-b border-olive/10 px-5 py-3.5">
-                <h3 className="text-[15px] font-semibold text-olive">Заявка на бронирование</h3>
-                <button
-                  type="button"
-                  onClick={() => setLeadModalRoom(null)}
-                  aria-label="Закрыть"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/16 text-olive/70 transition hover:bg-cream"
-                >
-                  <CloseIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                <p className="text-[13px] leading-relaxed text-olive/70">
-                  Скопируйте готовое сообщение нажатием кнопки ниже и отправьте его владельцу объекта в любой удобный мессенджер.
+      {isMobileCallSheetOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="\u0417\u0430\u043A\u0440\u044B\u0442\u044C \u0432\u044B\u0431\u043E\u0440 \u043D\u043E\u043C\u0435\u0440\u0430"
+            onClick={() => setIsMobileCallSheetOpen(false)}
+            className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px] lg:hidden"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-call-sheet-title"
+            className="fixed inset-x-3 bottom-3 z-[51] flex flex-col rounded-2xl bg-white shadow-2xl lg:hidden"
+          >
+            <div className="flex justify-center pb-1 pt-2">
+              <div className="h-1 w-8 rounded-full bg-olive/15" />
+            </div>
+            <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-1">
+              <div>
+                <h3 id="mobile-call-sheet-title" className="text-base font-semibold text-olive">
+                  {
+                    "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u043E\u043C\u0435\u0440"
+                  }
+                </h3>
+                <p className="mt-1 text-sm text-olive/60">
+                  {
+                    "\u0415\u0441\u043B\u0438 \u0443 \u0432\u043B\u0430\u0434\u0435\u043B\u044C\u0446\u0430 \u0435\u0441\u0442\u044C \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u043E\u0432, \u043C\u043E\u0436\u043D\u043E \u0441\u0440\u0430\u0437\u0443 \u0432\u044B\u0431\u0440\u0430\u0442\u044C \u043D\u0443\u0436\u043D\u044B\u0439."
+                  }
                 </p>
-
-                {/* Message preview */}
-                <div className="mt-3 rounded-xl border border-olive/12 bg-cream/50 p-3.5">
-                  <pre className="whitespace-pre-wrap break-words font-[family-name:var(--font-body)] text-[13px] leading-relaxed text-olive/85">
-                    {fullMessage}
-                  </pre>
-                </div>
-
-                {/* Extra info textarea */}
-                <div className="mt-3">
-                  <label
-                    htmlFor="lead-extra-info"
-                    className="block text-[12px] font-medium text-olive/60"
-                  >
-                    Дополнительная информация (необязательно)
-                  </label>
-                  <textarea
-                    id="lead-extra-info"
-                    value={leadExtra}
-                    onChange={(e) => {
-                      setLeadExtra(e.target.value);
-                      setLeadCopied(false);
-                    }}
-                    placeholder="Например: нужна детская кроватка, приедем поздно вечером..."
-                    rows={2}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-olive/16 bg-white px-3.5 py-2.5 text-[13px] text-olive placeholder:text-olive/35 outline-none transition focus:border-olive/30 focus:ring-2 focus:ring-sage/25"
-                  />
-                </div>
               </div>
-
-              {/* Footer */}
-              <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className={cn(
-                    "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
-                    leadCopied
-                      ? "bg-emerald-600 text-white"
-                      : "bg-[#e8621a] text-white hover:bg-[#d45615]",
-                  )}
-                >
-                  {leadCopied ? (
-                    <>
-                      <Check className="h-4.5 w-4.5" />
-                      Скопировано!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4.5 w-4.5" />
-                      Скопировать сообщение
-                    </>
-                  )}
-                </button>
+              <button
+                type="button"
+                onClick={() => setIsMobileCallSheetOpen(false)}
+                aria-label="\u0417\u0430\u043A\u0440\u044B\u0442\u044C"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-olive/16 text-olive/70 transition hover:bg-cream"
+              >
+                <CloseIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="border-t border-olive/10 px-4 py-4">
+              <div className="space-y-2">
+                {mobileCallPhones.map((phone, index) => (
+                  <a
+                    key={phone.key}
+                    href={phone.href}
+                    onClick={() => setIsMobileCallSheetOpen(false)}
+                    className="flex items-center gap-3 rounded-[18px] border border-olive/10 bg-white px-4 py-3 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition-colors hover:border-primary/20 hover:bg-primary/[0.04]"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(145deg,rgba(15,118,110,0.98),rgba(14,116,144,0.92))] text-white shadow-[0_12px_24px_rgba(15,118,110,0.22)]">
+                      <AppIcon icon={Phone} className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-olive">
+                        {phone.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-olive/55">
+                        {phone.name ||
+                          (index === 0
+                            ? "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u043D\u043E\u043C\u0435\u0440"
+                            : `\u0414\u043E\u043F. \u043D\u043E\u043C\u0435\u0440 ${index}`)}
+                      </span>
+                    </span>
+                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-olive/35" />
+                  </a>
+                ))}
               </div>
             </div>
-          </>
-        );
-      })() : null}
+          </div>
+        </>
+      ) : null}
+
+      {/* в”Ђв”Ђ LEAD MESSAGE MODAL в”Ђв”Ђ */}
+      {leadModalRoom
+        ? (() => {
+            const leadSummary = getRoomPriceSummary(leadModalRoom, checkIn, checkOut, totalGuests);
+            const fullMessage = buildPropertyLeadMessage({
+              authorGender,
+              propertyName: item.name ?? "Объект",
+              roomTitle: leadModalRoom.title,
+              checkIn,
+              checkOut,
+              nightsLabel: checkIn && checkOut ? formatNightsLabel(selectedNights) : null,
+              totalGuests,
+              adults,
+              childrenCount: childrenAges.length,
+              priceLabel:
+                leadSummary.tone === "ok" && leadSummary.bigPrice
+                  ? `${leadSummary.bigPrice}${leadSummary.smallLabel ? ` (${leadSummary.smallLabel})` : ""}`
+                  : null,
+              extra: leadExtra,
+            });
+
+            const handleCopy = async () => {
+              try {
+                await navigator.clipboard.writeText(fullMessage);
+                setLeadCopied(true);
+                setTimeout(() => setLeadCopied(false), 2500);
+                setLeadModalRoom(null);
+              } catch {
+                // fallback
+                const ta = document.createElement("textarea");
+                ta.value = fullMessage;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+                setLeadCopied(true);
+                setTimeout(() => setLeadCopied(false), 2500);
+                setLeadModalRoom(null);
+              }
+            };
+
+            return (
+              <>
+                <button
+                  type="button"
+                  aria-label="Закрыть"
+                  onClick={() => setLeadModalRoom(null)}
+                  className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px]"
+                />
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  className="fixed inset-x-3 bottom-3 z-[51] flex max-h-[85vh] flex-col rounded-2xl bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-[480px] sm:rounded-2xl"
+                >
+                  {/* Header */}
+                  <div className="flex shrink-0 items-center justify-between border-b border-olive/10 px-5 py-3.5">
+                    <h3 className="text-[15px] font-semibold text-olive">Сообщение владельцу</h3>
+                    <button
+                      type="button"
+                      onClick={() => setLeadModalRoom(null)}
+                      aria-label="Закрыть"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/16 text-olive/70 transition hover:bg-cream"
+                    >
+                      <CloseIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Body */}
+                  <div className="flex-1 overflow-y-auto px-5 py-4">
+                    <p className="text-[13px] leading-relaxed text-olive/70">
+                      Скопируйте готовое сообщение нажатием кнопки ниже и отправьте его владельцу
+                      объекта в любой удобный мессенджер.
+                    </p>
+
+                    <LeadMessageAuthorToggle
+                      value={authorGender}
+                      onChange={(value) => {
+                        setAuthorGender(value);
+                        setLeadCopied(false);
+                      }}
+                      className="mt-3"
+                    />
+
+                    {/* Message preview */}
+                    <div className="mt-3 rounded-xl border border-olive/12 bg-cream/50 p-3.5">
+                      <pre className="whitespace-pre-wrap break-words font-[family-name:var(--font-body)] text-[13px] leading-relaxed text-olive/85">
+                        {fullMessage}
+                      </pre>
+                    </div>
+
+                    {/* Extra info textarea */}
+                    <div className="mt-3">
+                      <label
+                        htmlFor="lead-extra-info"
+                        className="block text-[12px] font-medium text-olive/60"
+                      >
+                        Дополнительная информация (необязательно)
+                      </label>
+                      <textarea
+                        id="lead-extra-info"
+                        value={leadExtra}
+                        onChange={(e) => {
+                          setLeadExtra(e.target.value);
+                          setLeadCopied(false);
+                        }}
+                        placeholder="Например: нужна детская кроватка, приедем поздно вечером..."
+                        rows={2}
+                        className="mt-1.5 w-full resize-none rounded-xl border border-olive/16 bg-white px-3.5 py-2.5 text-[13px] text-olive placeholder:text-olive/35 outline-none transition focus:border-olive/30 focus:ring-2 focus:ring-sage/25"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className={cn(
+                        "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
+                        leadCopied
+                          ? "bg-emerald-600 text-white"
+                          : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+                      )}
+                    >
+                      {leadCopied ? (
+                        <>
+                          <Check className="h-4.5 w-4.5" />
+                          Скопировано!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4.5 w-4.5" />
+                          Скопировать сообщение
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()
+        : null}
 
       {isMobileBookingOpen ? (
         <div className="fixed inset-0 z-50 bg-midnight/55 p-4 lg:hidden">

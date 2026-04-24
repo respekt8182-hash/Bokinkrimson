@@ -3,8 +3,9 @@
 // Client component for excursion timeline in the excursions module.
 import { Clock3, MapPin } from "lucide-react";
 import { AppIcon } from "@/components/ui/app-icon";
+import { InlinePhotoGallery } from "@/components/excursions/inline-photo-gallery";
 import { TimelineStepIcon } from "@/components/ui/timeline-step-icon";
-import type { TimelineStep } from "@/types/excursions";
+import { getTimelineStepPhotoUrls, type TimelineStep } from "@/types/excursions";
 
 type ExcursionTimelineProps = {
   steps: TimelineStep[];
@@ -23,6 +24,7 @@ export function ExcursionTimeline({ steps }: ExcursionTimelineProps) {
 
       {steps.map((step, index) => {
         const isLast = index === steps.length - 1;
+        const stepPhotoUrls = getTimelineStepPhotoUrls(step);
 
         return (
           <li key={index} className={`relative flex gap-5 ${isLast ? "" : "pb-7"}`}>
@@ -66,6 +68,14 @@ export function ExcursionTimeline({ steps }: ExcursionTimelineProps) {
               {step.description && (
                 <p className="mt-1.5 text-sm leading-relaxed text-olive/65">{step.description}</p>
               )}
+
+              {stepPhotoUrls.length > 0 ? (
+                <InlinePhotoGallery
+                  photoUrls={stepPhotoUrls}
+                  title={step.title || `Шаг ${step.step}`}
+                  className="mt-3"
+                />
+              ) : null}
             </div>
           </li>
         );

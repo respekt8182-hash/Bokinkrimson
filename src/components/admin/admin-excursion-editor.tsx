@@ -3,7 +3,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Save, Trash2, UserCheck } from "lucide-react";
+import { Save, UserCheck } from "lucide-react";
+import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 
 type ExcursionData = {
   id: string;
@@ -34,6 +35,7 @@ type ExcursionData = {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhone2: string | null;
   contactEmail: string | null;
   status: string;
   moderationNotes: string | null;
@@ -50,13 +52,7 @@ type Props = {
   districts: Ref[];
 };
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
       <span className="text-sm font-medium text-olive">{label}</span>
@@ -69,10 +65,15 @@ const input =
   "w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 const select = input;
 
-export function AdminExcursionEditor({ excursion, users, locations, categories, districts }: Props) {
+export function AdminExcursionEditor({
+  excursion,
+  users,
+  locations,
+  categories,
+  districts,
+}: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -87,7 +88,15 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
       const v = typeof val === "string" ? val.trim() : val;
       if (v === "") {
         body[key] = null;
-      } else if (["durationMinutes", "durationDays", "durationNights", "groupSizeMin", "groupSizeMax"].includes(key)) {
+      } else if (
+        [
+          "durationMinutes",
+          "durationDays",
+          "durationNights",
+          "groupSizeMin",
+          "groupSizeMax",
+        ].includes(key)
+      ) {
         body[key] = Number(v) || null;
       } else if (["priceFrom", "priceTo"].includes(key)) {
         body[key] = Number(v) || null;
@@ -98,7 +107,6 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
       }
     }
 
-    // Checkbox not sent when unchecked
     if (!fd.has("isKidFriendly")) body.isKidFriendly = false;
 
     try {
@@ -122,26 +130,6 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
     }
   }
 
-  async function handleDelete() {
-    if (!confirm("Удалить эту экскурсию? Это действие необратимо.")) return;
-    setDeleting(true);
-    try {
-      const res = await fetch(`/api/admin/excursions/${excursion.id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        router.push("/admin/excursions");
-        router.refresh();
-      } else {
-        setMessage({ type: "err", text: "Ошибка удаления" });
-        setDeleting(false);
-      }
-    } catch {
-      setMessage({ type: "err", text: "Ошибка сети" });
-      setDeleting(false);
-    }
-  }
-
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {message && (
@@ -156,11 +144,10 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </div>
       )}
 
-      {/* Owner assignment */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-olive">
           <UserCheck className="h-5 w-5 text-primary" />
-          Владелец
+          Р’Р»Р°РґРµР»РµС†
         </h2>
         <Field label="Назначить владельца">
           <select name="ownerId" defaultValue={excursion.ownerId} className={select}>
@@ -173,12 +160,16 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </Field>
       </section>
 
-      {/* Basic info */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Основная информация</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Название">
-            <input type="text" name="title" defaultValue={excursion.title ?? ""} className={input} />
+            <input
+              type="text"
+              name="title"
+              defaultValue={excursion.title ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Тип">
             <select name="offerType" defaultValue={excursion.offerType} className={select}>
@@ -207,15 +198,20 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </div>
       </section>
 
-      {/* Location */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Локация</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Основная локация">
-            <select name="mainLocationId" defaultValue={excursion.mainLocationId ?? ""} className={select}>
+            <select
+              name="mainLocationId"
+              defaultValue={excursion.mainLocationId ?? ""}
+              className={select}
+            >
               <option value="">Не указана</option>
               {locations.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
               ))}
             </select>
           </Field>
@@ -223,7 +219,9 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
             <select name="districtId" defaultValue={excursion.districtId ?? ""} className={select}>
               <option value="">Не указан</option>
               {districts.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
               ))}
             </select>
           </Field>
@@ -231,23 +229,39 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
             <select name="categoryId" defaultValue={excursion.categoryId ?? ""} className={select}>
               <option value="">Не указана</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Адрес">
-            <input type="text" name="address" defaultValue={excursion.address ?? ""} className={input} />
+            <input
+              type="text"
+              name="address"
+              defaultValue={excursion.address ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Точка старта">
-            <input type="text" name="startPoint" defaultValue={excursion.startPoint ?? ""} className={input} />
+            <input
+              type="text"
+              name="startPoint"
+              defaultValue={excursion.startPoint ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Точка финиша">
-            <input type="text" name="finishPoint" defaultValue={excursion.finishPoint ?? ""} className={input} />
+            <input
+              type="text"
+              name="finishPoint"
+              defaultValue={excursion.finishPoint ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>
 
-      {/* Description */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Описание</h2>
         <div className="space-y-4">
@@ -278,24 +292,48 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </div>
       </section>
 
-      {/* Duration & Group */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Длительность и группа</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Длительность (мин)">
-            <input type="number" name="durationMinutes" defaultValue={excursion.durationMinutes ?? ""} className={input} />
+            <input
+              type="number"
+              name="durationMinutes"
+              defaultValue={excursion.durationMinutes ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Дней (для туров)">
-            <input type="number" name="durationDays" defaultValue={excursion.durationDays ?? ""} className={input} />
+            <input
+              type="number"
+              name="durationDays"
+              defaultValue={excursion.durationDays ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Ночей (для туров)">
-            <input type="number" name="durationNights" defaultValue={excursion.durationNights ?? ""} className={input} />
+            <input
+              type="number"
+              name="durationNights"
+              defaultValue={excursion.durationNights ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Мин. размер группы">
-            <input type="number" name="groupSizeMin" defaultValue={excursion.groupSizeMin ?? ""} className={input} />
+            <input
+              type="number"
+              name="groupSizeMin"
+              defaultValue={excursion.groupSizeMin ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Макс. размер группы">
-            <input type="number" name="groupSizeMax" defaultValue={excursion.groupSizeMax ?? ""} className={input} />
+            <input
+              type="number"
+              name="groupSizeMax"
+              defaultValue={excursion.groupSizeMax ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Сложность">
             <select name="difficulty" defaultValue={excursion.difficulty ?? ""} className={select}>
@@ -308,15 +346,24 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </div>
       </section>
 
-      {/* Pricing */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Цены</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Цена от (₽)">
-            <input type="number" name="priceFrom" defaultValue={excursion.priceFrom ?? ""} className={input} />
+            <input
+              type="number"
+              name="priceFrom"
+              defaultValue={excursion.priceFrom ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Цена до (₽)">
-            <input type="number" name="priceTo" defaultValue={excursion.priceTo ?? ""} className={input} />
+            <input
+              type="number"
+              name="priceTo"
+              defaultValue={excursion.priceTo ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Тип цены">
             <select name="priceType" defaultValue={excursion.priceType} className={select}>
@@ -340,26 +387,52 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </div>
       </section>
 
-      {/* Contacts */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Контакты</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Имя">
-            <input type="text" name="contactFirstName" defaultValue={excursion.contactFirstName ?? ""} className={input} />
+            <input
+              type="text"
+              name="contactFirstName"
+              defaultValue={excursion.contactFirstName ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Фамилия">
-            <input type="text" name="contactLastName" defaultValue={excursion.contactLastName ?? ""} className={input} />
+            <input
+              type="text"
+              name="contactLastName"
+              defaultValue={excursion.contactLastName ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Телефон">
-            <input type="text" name="contactPhone" defaultValue={excursion.contactPhone ?? ""} className={input} />
+            <input
+              type="text"
+              name="contactPhone"
+              defaultValue={excursion.contactPhone ?? ""}
+              className={input}
+            />
+          </Field>
+          <Field label="Телефон 2">
+            <input
+              type="text"
+              name="contactPhone2"
+              defaultValue={excursion.contactPhone2 ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Email">
-            <input type="email" name="contactEmail" defaultValue={excursion.contactEmail ?? ""} className={input} />
+            <input
+              type="email"
+              name="contactEmail"
+              defaultValue={excursion.contactEmail ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>
 
-      {/* Admin notes */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Заметки модерации</h2>
         <Field label="Комментарий администратора">
@@ -372,7 +445,6 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
         </Field>
       </section>
 
-      {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
@@ -382,15 +454,15 @@ export function AdminExcursionEditor({ excursion, users, locations, categories, 
           <Save className="h-4 w-4" />
           {saving ? "Сохранение..." : "Сохранить"}
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting}
-          className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
-        >
-          <Trash2 className="h-4 w-4" />
-          {deleting ? "Удаление..." : "Удалить"}
-        </button>
+        {excursion.status === "DRAFT" ? (
+          <AdminDeleteDraftButton
+            endpoint={`/api/admin/excursions/${excursion.id}`}
+            draftLabel="Черновик экскурсии"
+            entityName={excursion.title ?? "Экскурсия без названия"}
+            redirectTo="/admin/excursions"
+            buttonClassName="border border-red-200 bg-red-50 px-6 py-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+          />
+        ) : null}
       </div>
     </form>
   );

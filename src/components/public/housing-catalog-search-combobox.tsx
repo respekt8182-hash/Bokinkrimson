@@ -283,13 +283,15 @@ export function HousingCatalogSearchCombobox({
       setIsLoading(true);
 
       try {
+        const isEmptyQuery = query.length === 0;
         const params = new URLSearchParams({
           direction: "housing",
-          include: "locations,hotels",
+          include: isEmptyQuery ? "locations" : "locations,hotels",
           query,
-          limit: "12",
+          limit: isEmptyQuery ? "5" : "12",
         });
         const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
+          credentials: "omit",
           signal: abortController.signal,
         });
         if (!response.ok) {

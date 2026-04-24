@@ -1,56 +1,109 @@
 // Client-facing support chat API.
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { getRequestIp } from "@/lib/security";
+import { isManagedPublicUrl } from "@/lib/storage";
+import {
   checkMessageCooldown,
   cleanupOldMessages,
-  getActiveManager,
-  getSocialLinks,
   getSupportChatSettings,
-  getSupportChatTemplates,
+  getSupportChatWidgetShellData,
   MAX_MESSAGE_LENGTH,
 } from "@/lib/support-chat";
 
-// ─── Simple in-memory rate limiter ──────────────────────────────
+const supportChatGetLimiter = createRateLimiter({
+  id: "support-chat-get",
+  windowMs: 60_000,
+  maxRequests: 30,
+});
 
-const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const supportChatMessageLimiter = createRateLimiter({
+  id: "support-chat-message",
+  windowMs: 60_000,
+  maxRequests: 5,
+});
 
-function rateLimit(key: string, maxReqs: number, windowMs: number): boolean {
-  const now = Date.now();
-  const bucket = rateBuckets.get(key);
-  if (!bucket || now > bucket.resetAt) {
-    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  bucket.count++;
-  return bucket.count <= maxReqs;
+const supportChatMessageSchema = z
+  .object({
+    text: z.string().max(MAX_MESSAGE_LENGTH).optional(),
+    imageUrl: z
+      .string()
+      .trim()
+      .max(500, `Ссылка на изображение не должна превышать 500 символов`)
+      .refine((value) => isManagedPublicUrl(value), "Допустимы только изображения из хранилища проекта")
+      .optional(),
+    grantConsent: z.boolean().optional(),
+  })
+  .strict();
+
+function buildSupportChatRateLimitKey(request: Request, userId?: string | null): string {
+  const ip = getRequestIp(request);
+  return userId ? `${userId}:${ip}` : ip;
 }
 
-// ─── GET ────────────────────────────────────────────────────────
+async function enforceRateLimit(
+  limiter: ReturnType<typeof createRateLimiter>,
+  key: string,
+  message: string,
+): Promise<NextResponse | null> {
+  try {
+    const limit = await limiter.limit(key);
+    if (limit.allowed) {
+      return null;
+    }
+
+    return NextResponse.json(
+      { error: message, retryAfterSec: limit.retryAfterSeconds },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(limit.retryAfterSeconds),
+        },
+      },
+    );
+  } catch (error) {
+    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+      return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
+    }
+
+    throw error;
+  }
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  const ip = req.headers.get("x-forwarded-for") ?? "anon";
-  const rateKey = `chat-get:${session?.id ?? ip}`;
+  const rateLimitResponse = await enforceRateLimit(
+    supportChatGetLimiter,
+    buildSupportChatRateLimitKey(req, session?.id ?? null),
+    "Слишком много запросов",
+  );
 
-  if (!rateLimit(rateKey, 30, 60_000)) {
-    return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   await cleanupOldMessages();
 
-  const [settings, manager, templates, social] = await Promise.all([
-    getSupportChatSettings(),
-    getActiveManager(),
-    getSupportChatTemplates(),
-    getSocialLinks(),
-  ]);
+  const shellData = await getSupportChatWidgetShellData();
 
-  let messages: { id: string; senderType: string; senderName: string | null; text: string; imageUrl: string | null; createdAt: Date }[] = [];
+  let messages: Array<{
+    id: string;
+    senderType: string;
+    senderName: string | null;
+    text: string;
+    imageUrl: string | null;
+    createdAt: Date;
+  }> = [];
   let chatConsentGiven = false;
 
-  if (session) {
+  if (session && shellData.enabled) {
     const chat = await db.supportChat.findUnique({
       where: { userId: session.id },
       include: {
@@ -70,16 +123,14 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    enabled: settings.enabled,
-    manager: manager ? { name: manager.name, photoUrl: manager.photoUrl } : null,
-    templates,
-    social,
+    enabled: shellData.enabled,
+    manager: shellData.manager,
+    templates: shellData.templates,
+    social: shellData.social,
     messages,
     chatConsentGiven,
   });
 }
-
-// ─── POST ───────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -88,9 +139,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
   }
 
-  const rateKey = `chat-post:${session.id}`;
-  if (!rateLimit(rateKey, 20, 60_000)) {
-    return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
+  const rateLimitResponse = await enforceRateLimit(
+    supportChatMessageLimiter,
+    buildSupportChatRateLimitKey(req, session.id),
+    "Слишком много сообщений. Попробуйте позже",
+  );
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   const settings = await getSupportChatSettings();
@@ -98,18 +154,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Чат поддержки отключён" }, { status: 403 });
   }
 
-  const body = await req.json().catch(() => null);
-  if (!body) {
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
     return NextResponse.json({ error: "Невалидный запрос" }, { status: 400 });
   }
 
-  const { text, imageUrl, grantConsent } = body as {
-    text?: string;
-    imageUrl?: string;
-    grantConsent?: boolean;
-  };
+  const parsed = supportChatMessageSchema.safeParse(payload);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    return NextResponse.json(
+      { error: firstIssue?.message ?? "Проверьте корректность сообщения" },
+      { status: 400 },
+    );
+  }
 
-  // Handle consent
+  const trimmedText = parsed.data.text?.trim() ?? "";
+  const imageUrl = parsed.data.imageUrl?.trim() || null;
+  const grantConsent = parsed.data.grantConsent === true;
+
   if (grantConsent) {
     await db.user.update({
       where: { id: session.id },
@@ -117,7 +181,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Check consent
   if (!grantConsent) {
     const user = await db.user.findUnique({
       where: { id: session.id },
@@ -131,19 +194,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Validate text
-  const trimmedText = (text ?? "").trim();
   if (!trimmedText && !imageUrl) {
     return NextResponse.json({ error: "Сообщение не может быть пустым" }, { status: 400 });
   }
-  if (trimmedText.length > MAX_MESSAGE_LENGTH) {
-    return NextResponse.json(
-      { error: `Текст не может быть длиннее ${MAX_MESSAGE_LENGTH} символов` },
-      { status: 400 },
-    );
-  }
 
-  // Upsert chat
   const chat = await db.supportChat.upsert({
     where: { userId: session.id },
     update: {},
@@ -156,7 +210,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Antispam check
   const cooldown = checkMessageCooldown(chat.messages);
   if (!cooldown.allowed) {
     const retryAfterSec = Math.ceil(cooldown.retryAfterMs / 1000);
@@ -175,7 +228,7 @@ export async function POST(req: NextRequest) {
       senderType: "user",
       senderName: `${session.firstName} ${session.lastName}`.trim(),
       text: trimmedText,
-      imageUrl: imageUrl ?? null,
+      imageUrl,
     },
   });
 

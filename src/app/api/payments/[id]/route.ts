@@ -3,6 +3,7 @@ import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import {
   getPlacementValidUntil,
   isPaymentAwaitingCompletion,
@@ -39,6 +40,11 @@ export async function GET(_request: Request, context: RouteContext) {
           pendingEditStatus: true,
         },
       },
+      excursion: {
+        select: {
+          title: true,
+        },
+      },
     },
   });
 
@@ -64,14 +70,15 @@ export async function GET(_request: Request, context: RouteContext) {
 
       if (shouldUpdate) {
         const currentPayment = payment;
-        const paymentId = currentPayment.id;
         const placementValidUntil =
           currentPayment.placementValidUntil ??
-          (nextStatus === PaymentStatus.SUCCEEDED ? getPlacementValidUntil(new Date()) : null);
+          (nextStatus === PaymentStatus.SUCCEEDED && currentPayment.propertyId
+            ? getPlacementValidUntil(new Date())
+            : null);
 
         payment = await db.$transaction(async (tx) => {
           const updated = await tx.payment.update({
-            where: { id: paymentId },
+            where: { id: currentPayment.id },
             data: {
               status: nextStatus,
               confirmationUrl: external.confirmation?.confirmation_url ?? null,
@@ -94,17 +101,27 @@ export async function GET(_request: Request, context: RouteContext) {
                   pendingEditStatus: true,
                 },
               },
+              excursion: {
+                select: {
+                  title: true,
+                },
+              },
             },
           });
 
           if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.propertyId) {
             await autoSubmitPropertyAfterSuccessfulPayment(tx, currentPayment.propertyId);
           }
+          if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.excursionId) {
+            await autoSubmitExcursionAfterSuccessfulPayment(tx, currentPayment.excursionId);
+          }
 
           return updated;
         });
       } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.propertyId) {
         await autoSubmitPropertyAfterSuccessfulPayment(db, payment.propertyId);
+      } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.excursionId) {
+        await autoSubmitExcursionAfterSuccessfulPayment(db, payment.excursionId);
       }
     } catch (error) {
       console.error("Failed to refresh payment status from YooKassa", error);

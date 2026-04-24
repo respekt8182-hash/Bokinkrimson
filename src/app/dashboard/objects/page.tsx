@@ -1,11 +1,6 @@
 // Next.js page for route /dashboard/objects.
 import { PaymentStatus, ReviewStatus } from "@prisma/client";
-import {
-  CalendarDays,
-  CircleCheckBig,
-  MessageCircle,
-  Star,
-} from "lucide-react";
+import { CalendarDays, CircleCheckBig, MessageCircle, Star } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CreatePropertyButton } from "@/components/objects/create-property-button";
@@ -17,7 +12,11 @@ import { cn } from "@/lib/cn";
 import { db } from "@/lib/db";
 import { loadDashboardPageData } from "@/lib/dashboard-page-db";
 import { getPlacementValidUntil } from "@/lib/payments";
-import { getPropertyWorkflowStatus, type PropertyProgress, serializeProperty } from "@/lib/properties";
+import {
+  getPropertyWorkflowStatus,
+  type PropertyProgress,
+  serializeProperty,
+} from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
 
 function getCompletedDashboardStages(progress: PropertyProgress): number {
@@ -102,14 +101,19 @@ export default async function DashboardObjectsPage() {
       });
 
       const propertyIds = properties.map((property) => property.id);
-      const reviewStats = propertyIds.length > 0
-        ? await db.review.groupBy({
-            by: ["propertyId"],
-            where: { propertyId: { in: propertyIds }, status: ReviewStatus.ACTIVE, deletedAt: null },
-            _avg: { rating: true },
-            _count: { id: true },
-          })
-        : [];
+      const reviewStats =
+        propertyIds.length > 0
+          ? await db.review.groupBy({
+              by: ["propertyId"],
+              where: {
+                propertyId: { in: propertyIds },
+                status: ReviewStatus.ACTIVE,
+                deletedAt: null,
+              },
+              _avg: { rating: true },
+              _count: { id: true },
+            })
+          : [];
 
       return { properties, reviewStats };
     },
@@ -140,16 +144,18 @@ export default async function DashboardObjectsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
         <div>
           <h1 className="text-3xl text-olive">Объекты</h1>
         </div>
         <CreatePropertyButton />
       </div>
 
-
       {items.length === 0 ? (
-        <div id="objects-list" className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75">
+        <div
+          id="objects-list"
+          className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75"
+        >
           Нет объектов. Нажмите «Добавить объект».
         </div>
       ) : (
@@ -177,12 +183,12 @@ export default async function DashboardObjectsPage() {
 
             return (
               <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <Link
                     href={`/dashboard/objects/${item.id}/about`}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl transition hover:bg-cream/45"
+                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
                   >
-                    <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10">
+                    <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 sm:h-16 sm:w-24">
                       {firstImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -196,17 +202,18 @@ export default async function DashboardObjectsPage() {
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 py-1">
+                    <div className="min-w-0 flex-1 py-1">
                       <h2 className="truncate text-xl text-olive">{item.name ?? "Новый объект"}</h2>
-                      <p className="text-xs text-olive/60">
-                        {item.locationName ?? "Локация не выбрана"} • {item.typeLabel ?? "Тип не указан"}
+                      <p className="mt-1 text-xs leading-snug text-olive/60">
+                        {item.locationName ?? "Локация не выбрана"} •{" "}
+                        {item.typeLabel ?? "Тип не указан"}
                       </p>
                       <span className="mt-2 inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
                         {item.statusLabel}
                       </span>
                     </div>
                   </Link>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map((i) => {
                         const fill = Math.min(1, Math.max(0, avgRating - (i - 1)));
@@ -268,7 +275,7 @@ export default async function DashboardObjectsPage() {
                   {publicationUntilDate ? (
                     <div
                       className={cn(
-                        "shrink-0 flex items-center gap-2 rounded-xl border px-3 py-1.5",
+                        "flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:w-auto",
                         publicationExpired
                           ? "border-red-200 bg-red-50"
                           : publicationSoon
@@ -280,14 +287,22 @@ export default async function DashboardObjectsPage() {
                         icon={CalendarDays}
                         className={cn(
                           "h-4 w-4 shrink-0",
-                          publicationExpired ? "text-red-500" : publicationSoon ? "text-amber-500" : "text-emerald-600",
+                          publicationExpired
+                            ? "text-red-500"
+                            : publicationSoon
+                              ? "text-amber-500"
+                              : "text-emerald-600",
                         )}
                       />
                       <div>
                         <p
                           className={cn(
                             "text-[10px] leading-none",
-                            publicationExpired ? "text-red-400" : publicationSoon ? "text-amber-500" : "text-emerald-500",
+                            publicationExpired
+                              ? "text-red-400"
+                              : publicationSoon
+                                ? "text-amber-500"
+                                : "text-emerald-500",
                           )}
                         >
                           Размещается до
@@ -295,7 +310,11 @@ export default async function DashboardObjectsPage() {
                         <p
                           className={cn(
                             "text-xs font-bold leading-snug",
-                            publicationExpired ? "text-red-600" : publicationSoon ? "text-amber-700" : "text-emerald-700",
+                            publicationExpired
+                              ? "text-red-600"
+                              : publicationSoon
+                                ? "text-amber-700"
+                                : "text-emerald-700",
                           )}
                         >
                           {publicationUntilDate.toLocaleDateString("ru-RU")}
@@ -336,14 +355,13 @@ export default async function DashboardObjectsPage() {
                   </div>
                 )}
 
-
                 {item.moderationNotes ? (
                   <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
                     {item.moderationNotes}
                   </p>
                 ) : null}
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs text-olive/60">
                     Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
                   </p>
@@ -368,10 +386,7 @@ export default async function DashboardObjectsPage() {
                         >
                           Публичная страница
                         </Link>
-                        <StatsButton
-                          propertyId={item.id}
-                          propertyName={item.name ?? "Объект"}
-                        />
+                        <StatsButton propertyId={item.id} propertyName={item.name ?? "Объект"} />
                       </>
                     )}
                     <DeletePropertyButton

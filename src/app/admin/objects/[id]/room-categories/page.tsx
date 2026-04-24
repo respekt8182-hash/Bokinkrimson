@@ -5,11 +5,14 @@ import { notFound } from "next/navigation";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { RoomFundManager } from "@/components/rooms/room-fund-manager";
 import { AppIcon } from "@/components/ui/app-icon";
+import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
+import {
+  getAdminPropertyBaseStatusLabel,
+  getAdminPropertyPendingEditLabel,
+} from "@/lib/admin-status";
 import { db } from "@/lib/db";
 import {
   getPropertyDisplayNumberFromOrderedIds,
-  getPropertyWorkflowStatus,
-  getPropertyWorkflowStatusLabel,
 } from "@/lib/properties";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
 
@@ -19,9 +22,7 @@ type AdminObjectRoomCategoriesPageProps = {
 };
 
 function getStatusBadgeClass(status: PropertyStatus): string {
-  const workflowStatus = getPropertyWorkflowStatus(status, null);
-
-  switch (workflowStatus) {
+  switch (status) {
     case PropertyStatus.PUBLISHED:
       return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
     case PropertyStatus.PENDING_MODERATION:
@@ -38,6 +39,7 @@ export default async function AdminObjectRoomCategoriesPage({
   searchParams,
 }: AdminObjectRoomCategoriesPageProps) {
   const { id } = await params;
+  await purgeExpiredDeletedProperties(db, new Date());
   const property = await db.property.findUnique({
     where: { id },
     select: {
@@ -51,7 +53,7 @@ export default async function AdminObjectRoomCategoriesPage({
     },
   });
 
-  if (!property || property.ownerDeletedAt) {
+  if (!property) {
     notFound();
   }
 
@@ -65,7 +67,10 @@ export default async function AdminObjectRoomCategoriesPage({
       include: roomInclude,
     }),
     db.property.findMany({
-      where: { ownerId: property.ownerId, ownerDeletedAt: null },
+      where: {
+        ownerId: property.ownerId,
+        OR: [{ ownerDeletedAt: null }, { id: property.id }],
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true },
     }),
@@ -78,6 +83,10 @@ export default async function AdminObjectRoomCategoriesPage({
     ) ?? 1;
   const filters = await searchParams;
   const isCreateRequested = filters.create === "1";
+  const isPublished = property.status === PropertyStatus.PUBLISHED;
+  const pendingEditLabel = isPublished
+    ? getAdminPropertyPendingEditLabel(property.pendingEditStatus, property.moderationNotes)
+    : null;
 
   return (
     <div className="space-y-5">
@@ -116,15 +125,16 @@ export default async function AdminObjectRoomCategoriesPage({
               <div className="flex w-full shrink-0 items-center justify-between gap-3 sm:w-auto sm:flex-col sm:items-end">
                 <span
                   className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${getStatusBadgeClass(
-                    getPropertyWorkflowStatus(property.status, property.pendingEditStatus),
+                    property.status,
                   )}`}
                 >
-                  {getPropertyWorkflowStatusLabel(
-                    property.status,
-                    property.moderationNotes,
-                    property.pendingEditStatus,
-                  )}
+                  {getAdminPropertyBaseStatusLabel(property.status)}
                 </span>
+                {pendingEditLabel ? (
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-200">
+                    {pendingEditLabel}
+                  </span>
+                ) : null}
                 {!isCreateRequested ? (
                   <Link
                     href={`/admin/objects/${property.id}/room-categories?create=1#room-category-form`}

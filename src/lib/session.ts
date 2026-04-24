@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import { getJwtSecretValue } from "@/lib/security-config";
 
 // Cookie-based stateless session shared by API routes and route protection.
 export const SESSION_COOKIE_NAME = "boking_session";
@@ -10,16 +11,12 @@ export type SessionUser = {
   firstName: string;
   lastName: string;
   role: "USER" | "ADMIN";
+  sessionVersion: number;
+  avatarUrl?: string | null;
 };
 
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-
-  if (!secret || secret.length < 16) {
-    throw new Error("JWT_SECRET is missing or too short. Use at least 16 chars.");
-  }
-
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(getJwtSecretValue());
 }
 
 export function getSessionCookieOptions() {
@@ -33,7 +30,15 @@ export function getSessionCookieOptions() {
 }
 
 export async function createSessionToken(user: SessionUser): Promise<string> {
-  return new SignJWT({ ...user })
+  return new SignJWT({
+    id: user.id,
+    phone: user.phone,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    sessionVersion: user.sessionVersion,
+    avatarUrl: user.avatarUrl ?? null,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
@@ -50,7 +55,13 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
       typeof payload.phone !== "string" ||
       typeof payload.firstName !== "string" ||
       typeof payload.lastName !== "string" ||
-      (payload.role !== "USER" && payload.role !== "ADMIN")
+      (payload.role !== "USER" && payload.role !== "ADMIN") ||
+      typeof payload.sessionVersion !== "number" ||
+      !(
+        payload.avatarUrl === undefined ||
+        payload.avatarUrl === null ||
+        typeof payload.avatarUrl === "string"
+      )
     ) {
       return null;
     }
@@ -61,6 +72,8 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
       firstName: payload.firstName,
       lastName: payload.lastName,
       role: payload.role,
+      sessionVersion: payload.sessionVersion,
+      avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : null,
     };
   } catch {
     return null;

@@ -126,7 +126,7 @@ export function YandexMapPicker({
   const onCoordinatesChangeRef = useRef(onCoordinatesChange);
   const onAddressResolvedRef = useRef(onAddressResolved);
   const keyError = !apiKey
-    ? "Добавьте NEXT_PUBLIC_YANDEX_MAPS_API_KEY в .env для интерактивной карты."
+    ? "Добавьте NEXT_PUBLIC_YANDEX_MAPS_API_KEY в .env.local или .env для интерактивной карты."
     : "";
 
   useEffect(() => {

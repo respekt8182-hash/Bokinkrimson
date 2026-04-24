@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, Heart, House } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,7 +28,6 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
   const userMenuTransitionMs = 200;
 
   const dashboardHref = user.role === "ADMIN" ? "/admin" : "/dashboard";
-  // Keep menu compact and role-specific: admin gets single entrypoint, owner gets workspace links.
   const menuItems =
     user.role === "ADMIN"
       ? [{ href: "/admin", label: "Админ-панель" }]
@@ -120,7 +120,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
         href={dashboardHref}
         aria-label="Мои объекты"
         title="Мои объекты"
-        className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px]"
+        className="icon-button-soft hidden h-11 w-11 items-center justify-center rounded-[15px] sm:inline-flex"
       >
         <AppIcon icon={House} className="h-5 w-5 text-[color:var(--icon-stay)]" />
       </Link>
@@ -142,8 +142,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
         >
           <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(242,196,77,0.36),rgba(255,245,214,0.92))] ring-1 ring-white/75 shadow-[0_6px_16px_rgba(15,118,110,0.08)]">
             {user.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatarUrl} alt="Профиль" className="h-full w-full object-cover" />
+              <Image src={user.avatarUrl} alt="Профиль" width={32} height={32} className="h-full w-full object-cover" />
             ) : (
               <span className="text-xs font-semibold text-olive/80">{user.initials || "?"}</span>
             )}
@@ -157,7 +156,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
         {isMenuMounted ? (
           <div
             className={cn(
-              "absolute right-0 z-40 mt-2 min-w-[220px] overflow-hidden rounded-xl border border-olive/15 bg-white shadow-xl origin-top-right transition-all duration-200 ease-out",
+              "absolute right-0 z-40 mt-2 min-w-[220px] origin-top-right overflow-hidden rounded-xl border border-olive/15 bg-white shadow-xl transition-all duration-200 ease-out",
               isOpen
                 ? "translate-y-0 scale-100 opacity-100 pointer-events-auto"
                 : "pointer-events-none -translate-y-2 scale-95 opacity-0",

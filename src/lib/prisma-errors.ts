@@ -5,8 +5,12 @@ import { URL } from "node:url";
 
 const DATABASE_UNREACHABLE_CODE = "P1001";
 const DATABASE_AUTHENTICATION_CODE = "P1000";
+const DATABASE_SCHEMA_MISSING_CODES = new Set(["P2021", "P2022"]);
 const DATABASE_UNREACHABLE_MESSAGE_FRAGMENT = "can't reach database server";
 const DATABASE_AUTHENTICATION_MESSAGE_FRAGMENT = "authentication failed against database server";
+const DATABASE_URL_MISSING_MESSAGE_FRAGMENT = "environment variable not found: database_url";
+const DATABASE_URL_INVALID_PROTOCOL_FRAGMENT = "the url must start with the protocol";
+const DATABASE_URL_VALIDATION_FRAGMENT = "error validating datasource";
 const DEFAULT_POSTGRES_PORT = 5432;
 const DATABASE_PROBE_TIMEOUT_MS = 300;
 const DATABASE_PROBE_CACHE_TTL_MS = 10_000;
@@ -33,6 +37,15 @@ export function isDatabaseAuthenticationMessage(message: string): boolean {
   return (
     normalized.includes(DATABASE_AUTHENTICATION_MESSAGE_FRAGMENT) ||
     normalized.includes(DATABASE_AUTHENTICATION_CODE.toLowerCase())
+  );
+}
+
+export function isDatabaseConfigurationMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes(DATABASE_URL_MISSING_MESSAGE_FRAGMENT) ||
+    (normalized.includes(DATABASE_URL_VALIDATION_FRAGMENT) &&
+      normalized.includes(DATABASE_URL_INVALID_PROTOCOL_FRAGMENT))
   );
 }
 
@@ -68,8 +81,32 @@ export function isDatabaseAuthenticationError(error: unknown): boolean {
   return isDatabaseAuthenticationMessage(error.message);
 }
 
+export function isDatabaseConfigurationError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return isDatabaseConfigurationMessage(error.message);
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return isDatabaseConfigurationMessage(error.message);
+}
+
+export function isDatabaseSchemaMissingError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return DATABASE_SCHEMA_MISSING_CODES.has(error.code);
+  }
+
+  return false;
+}
+
 export function isDatabaseFallbackEligibleError(error: unknown): boolean {
-  return isDatabaseUnavailableError(error) || isDatabaseAuthenticationError(error);
+  return (
+    isDatabaseUnavailableError(error) ||
+    isDatabaseAuthenticationError(error) ||
+    isDatabaseConfigurationError(error)
+  );
 }
 
 function parseDatabaseTarget(databaseUrl: string): { host: string; port: number } | null {
@@ -169,7 +206,7 @@ export async function isConfiguredDatabaseReachable(): Promise<boolean> {
   }
 
   const target = parseDatabaseTarget(databaseUrl);
-  const isReachable = target ? await probeTcp(target.host, target.port) : true;
+  const isReachable = target ? await probeTcp(target.host, target.port) : false;
 
   probeCache = {
     databaseUrl,

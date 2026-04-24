@@ -7,7 +7,12 @@ import {
   preparePropertyForPublishedOwnerEdit,
 } from "@/lib/properties";
 import { normalizeRoomTitle } from "@/lib/room-title";
-import { resolveBathroomTypeFromMeta, roomInclude, serializeRoom } from "@/lib/rooms";
+import {
+  resolveBathroomTypeFromMeta,
+  roomInclude,
+  serializeRoom,
+  serializeRoomForChessboard,
+} from "@/lib/rooms";
 import { createRoomSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -50,7 +55,7 @@ async function ensurePropertyAccess(
   return property;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const editor = await getEditorSession();
 
   if (!editor) {
@@ -62,6 +67,48 @@ export async function GET(_request: Request, context: RouteContext) {
 
   if (!property) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
+  }
+
+  const view = new URL(request.url).searchParams.get("view");
+
+  if (view === "chessboard") {
+    const items = await db.room.findMany({
+      where: {
+        propertyId: property.id,
+        isActive: true,
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      select: {
+        id: true,
+        propertyId: true,
+        title: true,
+        beds: true,
+        extraBeds: true,
+        roomsCount: true,
+        areaSqm: true,
+        bathroomType: true,
+        isActive: true,
+        prices: {
+          orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            roomId: true,
+            dateFrom: true,
+            dateTo: true,
+            price: true,
+            minGuests: true,
+            currency: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      items: items.map(serializeRoomForChessboard),
+      activeRoomCount: items.length,
+    });
   }
 
   const items = await db.room.findMany({

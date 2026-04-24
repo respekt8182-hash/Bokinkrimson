@@ -2,11 +2,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
+  buildSessionUser,
   comparePasswords,
   createSessionToken,
   getSessionCookieOptions,
   SESSION_COOKIE_NAME,
-  type SessionUser,
 } from "@/lib/auth";
 import {
   ensureAuthDatabaseAvailable,
@@ -15,11 +15,16 @@ import {
 } from "@/lib/auth-route-db";
 import { authRateLimit } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { createInMemoryRateLimiter } from "@/lib/rate-limit";
-import { loginSchema } from "@/lib/schemas";
+import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { loginSchema } from "@/lib/schemas/auth";
 import { getRequestIp } from "@/lib/security";
+import { buildUserPhoneLookupCandidates } from "@/lib/user-phone";
 
-const loginLimiter = createInMemoryRateLimiter({
+const loginLimiter = createRateLimiter({
   id: "auth-login",
   windowMs: authRateLimit.login.windowMinutes * 60 * 1000,
   maxRequests: authRateLimit.login.maxRequestsPerWindow,
@@ -39,8 +44,8 @@ function createLoginRateLimitResponse(retryAfterSeconds: number) {
   );
 }
 
-function consumeFailedLoginAttempt(ip: string): NextResponse | null {
-  const limit = loginLimiter.limit(ip);
+async function consumeFailedLoginAttempt(ip: string): Promise<NextResponse | null> {
+  const limit = await loginLimiter.limit(ip);
   if (limit.allowed) {
     return null;
   }
@@ -67,11 +72,16 @@ export async function POST(request: Request) {
       return unavailableResponse;
     }
 
-    const phone = parsed.data.phone.replace(/\D/g, "");
-    const user = await db.user.findUnique({ where: { phone } });
+    const user = await db.user.findFirst({
+      where: {
+        phone: {
+          in: buildUserPhoneLookupCandidates(parsed.data.phone),
+        },
+      },
+    });
 
-    if (!user) {
-      const rateLimitResponse = consumeFailedLoginAttempt(ip);
+    if (!user || user.deletedAt) {
+      const rateLimitResponse = await consumeFailedLoginAttempt(ip);
       if (rateLimitResponse) {
         return rateLimitResponse;
       }
@@ -82,7 +92,7 @@ export async function POST(request: Request) {
     const isPasswordValid = await comparePasswords(parsed.data.password, user.passwordHash);
 
     if (!isPasswordValid) {
-      const rateLimitResponse = consumeFailedLoginAttempt(ip);
+      const rateLimitResponse = await consumeFailedLoginAttempt(ip);
       if (rateLimitResponse) {
         return rateLimitResponse;
       }
@@ -90,13 +100,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Неверный телефон или пароль" }, { status: 401 });
     }
 
-    const sessionUser: SessionUser = {
-      id: user.id,
-      phone: user.phone,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-    };
+    const sessionUser = await buildSessionUser(user.id);
+    if (!sessionUser) {
+      return NextResponse.json({ error: "Неверный телефон или пароль" }, { status: 401 });
+    }
 
     const token = await createSessionToken(sessionUser);
 
@@ -105,6 +112,13 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+      return NextResponse.json(
+        { error: "Сервис временно недоступен" },
+        { status: 503 },
+      );
+    }
+
     if (isAuthDatabaseUnavailable(error)) {
       logger.warn(
         "Login is temporarily unavailable because the database is down or credentials are invalid",

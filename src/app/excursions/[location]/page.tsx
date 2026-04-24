@@ -1,15 +1,32 @@
-// Next.js page for route /excursions/[location].
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicExcursionList } from "@/components/excursions/public-excursion-list";
+import { JsonLd } from "@/components/seo/JsonLd";
 import {
+  getExcursionSeoDirectoryData,
   getPublicExcursionCatalog,
   getResolvedExcursionLocationBySlug,
 } from "@/lib/public-excursions";
+import { absoluteUrl, formatLocationInPrepositional } from "@/lib/seo/site";
+import {
+  buildBreadcrumbListStructuredData,
+  buildCollectionPageStructuredData,
+} from "@/lib/seo/structured-data";
+import { excursionsHubPath } from "@/lib/seo/routes";
 
 type ExcursionsByLocationPageProps = {
   params: Promise<{ location: string }>;
 };
+
+const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const directory = await getExcursionSeoDirectoryData();
+  return directory.cities.map((item) => ({
+    location: item.slug,
+  }));
+}
 
 export async function generateMetadata({
   params,
@@ -24,8 +41,10 @@ export async function generateMetadata({
     };
   }
 
-  const title = `Экскурсии в ${resolvedLocation.name}`;
-  const description = `Подборка экскурсий в районе ${resolvedLocation.name} и рядом по Крыму.`;
+  const locationPhrase =
+    formatLocationInPrepositional(resolvedLocation.name) ?? `в городе ${resolvedLocation.name}`;
+  const title = `Экскурсии ${locationPhrase}`;
+  const description = `Маршруты ${locationPhrase} и по соседним локациям Крыма: продолжительность, стоимость, формат участия и прямой контакт с организатором.`;
 
   return {
     title,
@@ -38,6 +57,13 @@ export async function generateMetadata({
       description,
       url: `/excursions/${resolvedLocation.slug}`,
       type: "website",
+      images: [defaultSocialImageUrl],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [defaultSocialImageUrl],
     },
   };
 }
@@ -52,17 +78,74 @@ export default async function ExcursionsByLocationPage({
     notFound();
   }
 
-  const result = await getPublicExcursionCatalog({
-    locationId: resolvedLocation.slug,
-    radiusKm: 35,
-    pageSize: 24,
-  });
+  const [result, directory] = await Promise.all([
+    getPublicExcursionCatalog({
+      locationId: resolvedLocation.slug,
+      radiusKm: 35,
+      pageSize: 24,
+    }),
+    getExcursionSeoDirectoryData(),
+  ]);
+  const locationPhrase =
+    formatLocationInPrepositional(resolvedLocation.name) ?? `в городе ${resolvedLocation.name}`;
+  const title = `Экскурсии ${locationPhrase}`;
+  const description = `Собрали экскурсии с отправлением ${locationPhrase}, а также маршруты по соседним локациям в радиусе 35 км.`;
+  const path = `/excursions/${resolvedLocation.slug}`;
+  const breadcrumbs = [
+    { name: "Главная", path: "/" },
+    { name: "Экскурсии по Крыму", path: excursionsHubPath },
+    { name: resolvedLocation.name, path },
+  ];
+  const linkGroups = [
+    {
+      title: "Другие города",
+      links: directory.cities
+        .filter((item) => item.slug !== resolvedLocation.slug)
+        .slice(0, 8)
+        .map((item) => ({
+          label: item.name,
+          href: `/excursions/${item.slug}`,
+        })),
+    },
+    {
+      title: "Категории",
+      links: directory.categories.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: `/excursions/category/${item.slug}`,
+      })),
+    },
+    {
+      title: "Районы",
+      links: directory.districts.slice(0, 8).map((item) => ({
+        label: item.name,
+        href: `/excursions/district/${item.slug}`,
+      })),
+    },
+  ];
 
   return (
-    <PublicExcursionList
-      title={`Экскурсии в ${resolvedLocation.name}`}
-      description={`Маршруты с якорем на ${resolvedLocation.name} и экскурсии в радиусе 35 км.`}
-      result={result}
-    />
+    <>
+      <JsonLd data={buildBreadcrumbListStructuredData(breadcrumbs)} />
+      <JsonLd
+        data={buildCollectionPageStructuredData({
+          path,
+          name: title,
+          description,
+          items: result.items.slice(0, 12).map((item) => ({
+            name: item.title,
+            path: item.path,
+            image: item.coverImageUrl,
+          })),
+        })}
+      />
+
+      <PublicExcursionList
+        title={title}
+        description={description}
+        result={result}
+        breadcrumbs={breadcrumbs}
+        linkGroups={linkGroups}
+      />
+    </>
   );
 }

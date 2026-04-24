@@ -4,8 +4,8 @@
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { AppIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
 
 export type MapPopupPropertyItem = {
@@ -27,8 +27,10 @@ type MapPropertyPopupCardProps = {
   onClose?: () => void;
 };
 
+const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+
 function formatMoney(value: number, currency: string | null): string {
-  const amount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+  const amount = ruNumberFormat.format(value);
   if (currency === "RUB") {
     return `${amount} ₽`;
   }
@@ -49,6 +51,7 @@ export function MapPropertyPopupCard({ item, className, onClose }: MapPropertyPo
     if (photos.length <= 1) {
       return;
     }
+
     setImageIndex((prev) =>
       direction === 1 ? (prev + 1) % photos.length : (prev - 1 + photos.length) % photos.length,
     );
@@ -78,29 +81,32 @@ export function MapPropertyPopupCard({ item, className, onClose }: MapPropertyPo
             Без фото
           </div>
         )}
-        <div className="absolute left-2 top-2">
+
+        <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between p-2">
           <FavoriteToggleButton
-            propertyId={item.id}
+            itemId={item.id}
             initialIsFavorite={item.isFavorite}
             variant="icon"
-            className="border-olive/25 bg-white/96 text-olive backdrop-blur"
           />
+
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="icon-button-soft inline-flex h-8 w-8 items-center justify-center rounded-full text-olive/90"
+              aria-label="Закрыть карточку"
+            >
+              <AppIcon icon={X} className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
-        {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="icon-button-soft absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-olive/90"
-            aria-label="Закрыть карточку"
-          >
-            <AppIcon icon={X} className="h-4 w-4" />
-          </button>
-        ) : null}
+
         {photos.length > 1 ? (
           <>
             <div className="icon-badge-soft absolute right-2 top-11 rounded-full px-2.5 py-1 text-[11px] font-semibold">
               {safeImageIndex + 1}/{photos.length}
             </div>
+
             <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
               <button
                 type="button"
@@ -110,6 +116,7 @@ export function MapPropertyPopupCard({ item, className, onClose }: MapPropertyPo
                 <span className="sr-only">Предыдущее фото</span>
                 <AppIcon icon={ChevronLeft} className="h-4 w-4" />
               </button>
+
               <button
                 type="button"
                 onClick={() => cycleImage(1)}
@@ -136,6 +143,7 @@ export function MapPropertyPopupCard({ item, className, onClose }: MapPropertyPo
               ? `${formatMoney(item.pricePerNight, item.currency)} / ночь`
               : "Цена по запросу"}
           </p>
+
           {item.reviewsCount > 0 && item.rating !== null ? (
             <p className="mt-1 text-xs text-olive/68">
               Рейтинг {item.rating.toFixed(1)} • {item.reviewsCount} отзывов

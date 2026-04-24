@@ -1,13 +1,23 @@
 // API route handler for /api/admin/properties/[id].
 // GET: full property details for admin
 // PATCH: update any property fields from admin editor
-// DELETE: hard-delete property
+// DELETE: schedule published delete or hard-delete draft
 import { Prisma, PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
-import { db } from "@/lib/db";
+import {
+  getAdminSoftDeleteExpiresAt,
+  isSoftDeleteWindowActive,
+  purgeExpiredDeletedProperties,
+} from "@/lib/admin-entity-lifecycle";
+import { PROPERTY_PUBLICATION_CONTROL_COLUMNS } from "@/lib/admin-schema-compat";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { serializePayment } from "@/lib/payments";
-import { serializeProperty } from "@/lib/properties";
+import {
+  deletePropertyStorageEntries,
+  PROPERTY_STORAGE_CLEANUP_SELECT,
+  serializeProperty,
+} from "@/lib/properties";
 import { serializeReview } from "@/lib/reviews";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
 
@@ -68,6 +78,8 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Доступ запрещен" }, { status: 403 });
   }
 
+  await purgeExpiredDeletedProperties(db, new Date());
+
   const { id } = await context.params;
 
   const property = await db.property.findUnique({
@@ -106,7 +118,7 @@ const ALLOWED_STRING_FIELDS = [
   "petsPolicy", "smokingPolicy",
 ] as const;
 
-const ALLOWED_BOOL_FIELDS = ["childrenAllowed"] as const;
+const ALLOWED_BOOL_FIELDS = ["childrenAllowed", "isPublishedVisible"] as const;
 const ALLOWED_NUMBER_FIELDS = ["latitude", "longitude"] as const;
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -122,6 +134,19 @@ export async function PATCH(request: Request, context: RouteContext) {
     payload = (await request.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+
+  if (
+    "isPublishedVisible" in payload &&
+    !(await areDatabaseColumnsAvailable("Property", PROPERTY_PUBLICATION_CONTROL_COLUMNS))
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Управление видимостью опубликованного объекта временно недоступно: база данных еще не обновлена до последней миграции.",
+      },
+      { status: 503 },
+    );
   }
 
   // Legacy action support
@@ -203,7 +228,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const item = await tx.property.update({
       where: { id },
       data: data as Prisma.PropertyUpdateInput,
-      select: { id: true, name: true, status: true, updatedAt: true },
+      select: { id: true, name: true, status: true, isPublishedVisible: true, updatedAt: true },
     });
 
     await tx.adminActionLog.create({
@@ -219,7 +244,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     return item;
   });
 
-  return NextResponse.json({ item: { id: updated.id, name: updated.name, status: updated.status, updatedAt: updated.updatedAt.toISOString() } });
+  return NextResponse.json({
+    item: {
+      id: updated.id,
+      name: updated.name,
+      status: updated.status,
+      isPublishedVisible: updated.isPublishedVisible,
+      updatedAt: updated.updatedAt.toISOString(),
+    },
+  });
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
@@ -229,11 +262,77 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
+  const now = new Date();
 
-  const existing = await db.property.findUnique({ where: { id }, select: { id: true, name: true } });
+  await purgeExpiredDeletedProperties(db, now);
+
+  const existing = await db.property.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      isPublishedVisible: true,
+      ownerDeletedAt: true,
+      ownerDeletionExpiresAt: true,
+    },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
+
+  if (existing.ownerDeletedAt && isSoftDeleteWindowActive(existing.ownerDeletionExpiresAt, now)) {
+    return NextResponse.json(
+      { error: "Объект уже ожидает удаления. Используйте отмену удаления." },
+      { status: 409 },
+    );
+  }
+
+  if (existing.status === PropertyStatus.PUBLISHED) {
+    const deletionExpiresAt = getAdminSoftDeleteExpiresAt(now);
+
+    await db.$transaction(async (tx) => {
+      await tx.property.update({
+        where: { id },
+        data: {
+          isPublishedVisible: false,
+          ownerDeletedAt: now,
+          ownerDeletionExpiresAt: deletionExpiresAt,
+        },
+      });
+
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: admin.id,
+          action: "admin_schedule_delete",
+          targetType: "property",
+          targetId: id,
+          details: {
+            name: existing.name,
+            deletionExpiresAt: deletionExpiresAt.toISOString(),
+          },
+        },
+      });
+    });
+
+    return NextResponse.json({
+      ok: true,
+      mode: "soft",
+      restoreUntil: deletionExpiresAt.toISOString(),
+      item: {
+        id: existing.id,
+        status: existing.status,
+        isPublishedVisible: false,
+        ownerDeletedAt: now.toISOString(),
+        ownerDeletionExpiresAt: deletionExpiresAt.toISOString(),
+      },
+    });
+  }
+
+  const storageEntry = await db.property.findUnique({
+    where: { id },
+    select: PROPERTY_STORAGE_CLEANUP_SELECT,
+  });
 
   await db.$transaction(async (tx) => {
     await tx.adminActionLog.create({
@@ -248,5 +347,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
     await tx.property.delete({ where: { id } });
   });
 
-  return NextResponse.json({ ok: true });
+  if (storageEntry) {
+    await deletePropertyStorageEntries([storageEntry]);
+  }
+
+  return NextResponse.json({ ok: true, mode: "hard" });
 }

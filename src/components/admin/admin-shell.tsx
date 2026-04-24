@@ -1,11 +1,9 @@
-// Admin panel shell with responsive sidebar (desktop) and drawer (mobile).
 "use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
-  ChevronRight,
   Compass,
   CreditCard,
   FileText,
@@ -16,17 +14,22 @@ import {
   LogOut,
   Menu,
   MessageSquareText,
-  Plus,
   ShieldCheck,
   Users,
   X,
 } from "lucide-react";
 import type { AdminModerationSnapshot } from "@/lib/admin-notifications";
+import { cn } from "@/lib/cn";
 
 type Props = {
-  login: string;
   moderationSnapshot: AdminModerationSnapshot;
   children: React.ReactNode;
+};
+
+type MenuItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
 };
 
 const PROPERTY_SEEN_KEY = "boking_admin_property_moderation_seen_at";
@@ -34,24 +37,25 @@ const EXCURSION_SEEN_KEY = "boking_admin_excursion_moderation_seen_at";
 const MESSAGE_SEEN_KEY = "boking_admin_messages_seen_at";
 const MANAGER_PAY_SEEN_KEY = "boking_admin_manager_payments_seen_at";
 
-const menu = [
+const menu: MenuItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
   { href: "/admin/moderation", label: "Модерация жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
-  { href: "/admin/excursions", label: "Экскурсии", icon: Compass },
-  { href: "/admin/objects", label: "Объекты", icon: House },
+  { href: "/admin/objects", label: "Жильё и размещение", icon: House },
+  { href: "/admin/excursions", label: "Каталог экскурсий", icon: Compass },
   { href: "/admin/users", label: "Пользователи", icon: Users },
-  { href: "/admin/payments", label: "Оплата (менеджер)", icon: CreditCard },
+  { href: "/admin/payments", label: "Оплата", icon: CreditCard },
   { href: "/admin/applications", label: "Заявки", icon: FileText },
   { href: "/admin/messages", label: "Сообщения", icon: MessageSquareText },
   { href: "/admin/support-chat", label: "Чат поддержки", icon: Headset },
-  { href: "/admin/password-resets", label: "Сбросы паролей", icon: KeyRound },
+  { href: "/admin/password-resets", label: "Сброс паролей", icon: KeyRound },
 ];
 
 function readSeenValue(key: string): number {
   if (typeof window === "undefined") return 0;
   const raw = window.localStorage.getItem(key);
   if (!raw) return 0;
+
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -65,9 +69,11 @@ function writeSeenValue(key: string, value: number): void {
 function subscribeNoop() {
   return () => {};
 }
+
 function getTrue() {
   return true;
 }
+
 function getFalse() {
   return false;
 }
@@ -81,11 +87,56 @@ function isActive(href: string, pathname: string): boolean {
         !pathname.startsWith("/admin/moderation/excursions"))
     );
   }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminShell({ login, moderationSnapshot, children }: Props) {
-  const pathname = usePathname();
+function getPageTitle(pathname: string): string {
+  if (pathname.startsWith("/admin/moderation/excursions")) {
+    return "Модерация экскурсий";
+  }
+
+  if (pathname.startsWith("/admin/moderation")) {
+    return "Модерация жилья";
+  }
+
+  if (pathname.startsWith("/admin/objects")) {
+    return "Жильё и размещение";
+  }
+
+  if (pathname.startsWith("/admin/excursions")) {
+    return "Каталог экскурсий";
+  }
+
+  if (pathname.startsWith("/admin/users")) {
+    return "Пользователи";
+  }
+
+  if (pathname.startsWith("/admin/payments")) {
+    return "Оплата";
+  }
+
+  if (pathname.startsWith("/admin/applications")) {
+    return "Заявки";
+  }
+
+  if (pathname.startsWith("/admin/messages")) {
+    return "Сообщения";
+  }
+
+  if (pathname.startsWith("/admin/support-chat")) {
+    return "Чат поддержки";
+  }
+
+  if (pathname.startsWith("/admin/password-resets")) {
+    return "Сброс паролей";
+  }
+
+  return "Обзор";
+}
+
+export function AdminShell({ moderationSnapshot, children }: Props) {
+  const pathname = usePathname() ?? "";
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -98,26 +149,23 @@ export function AdminShell({ login, moderationSnapshot, children }: Props) {
 
   useEffect(() => {
     if (pathname.startsWith("/admin/moderation/excursions")) {
-      const seen = Math.max(
-        Date.now(),
-        moderationSnapshot.excursions.latestPendingUpdatedAtMs ?? 0,
-      );
+      const seen = Math.max(Date.now(), moderationSnapshot.excursions.latestPendingUpdatedAtMs ?? 0);
       writeSeenValue(EXCURSION_SEEN_KEY, seen);
       return;
     }
+
     if (pathname.startsWith("/admin/moderation")) {
-      const seen = Math.max(
-        Date.now(),
-        moderationSnapshot.properties.latestPendingUpdatedAtMs ?? 0,
-      );
+      const seen = Math.max(Date.now(), moderationSnapshot.properties.latestPendingUpdatedAtMs ?? 0);
       writeSeenValue(PROPERTY_SEEN_KEY, seen);
       return;
     }
+
     if (pathname.startsWith("/admin/messages")) {
       const seen = Math.max(Date.now(), moderationSnapshot.messages.latestCreatedAtMs ?? 0);
       writeSeenValue(MESSAGE_SEEN_KEY, seen);
       return;
     }
+
     if (pathname.startsWith("/admin/payments")) {
       const seen = Math.max(Date.now(), moderationSnapshot.managerPayments?.latestCreatedAtMs ?? 0);
       writeSeenValue(MANAGER_PAY_SEEN_KEY, seen);
@@ -154,138 +202,127 @@ export function AdminShell({ login, moderationSnapshot, children }: Props) {
 
   async function handleLogout() {
     setLoggingOut(true);
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    router.push("/admin/login");
-    router.refresh();
+
+    try {
+      await fetch("/api/admin/auth", { method: "DELETE" });
+    } finally {
+      router.replace("/admin/login");
+      router.refresh();
+      setLoggingOut(false);
+    }
   }
 
   const sidebarContent = (
     <>
-      <div className="mb-6">
-        <div className="flex items-center gap-3 rounded-xl bg-primary/8 px-3 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white">
-            <ShieldCheck className="h-4.5 w-4.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-              Админ-панель
+      <div className="space-y-4">
+        <div className="rounded-[28px] border border-white/70 bg-white/88 p-3 shadow-[0_18px_55px_rgba(58,43,35,0.08)] backdrop-blur-xl">
+          <div className="mb-2 px-2 pt-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-olive/35">
+              Разделы
             </p>
-            <p className="truncate text-xs text-olive/55">{login}</p>
           </div>
+
+          <nav className="space-y-1">
+            {menu.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.href, pathname);
+              const unread = !active ? (unreadCounts[item.href] ?? 0) : 0;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition",
+                    active
+                      ? "bg-[linear-gradient(135deg,rgba(15,118,110,0.14),rgba(14,116,144,0.1))] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
+                      : "text-olive/76 hover:bg-sand/62 hover:text-olive",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                      active
+                        ? "bg-white/82 text-primary shadow-[0_10px_24px_rgba(15,118,110,0.12)]"
+                        : "bg-sand/72 text-olive/55",
+                    )}
+                  >
+                    <Icon className="h-4.5 w-4.5" />
+                  </div>
+
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {unread > 0 ? (
+                    <span className="rounded-full bg-terra px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {unread}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </div>
 
-      <nav className="space-y-0.5">
-        {menu.map((item) => {
-          const active = isActive(item.href, pathname);
-          const unread = !active ? (unreadCounts[item.href] ?? 0) : 0;
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                active
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "text-olive/75 hover:bg-sand/70 hover:text-olive"
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1 truncate">{item.label}</span>
-              {unread > 0 && (
-                <span className="rounded-full bg-terra px-2 py-0.5 text-xs font-semibold text-white">
-                  {unread}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="mt-4 border-t border-olive/10 pt-4">
-        <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-olive/35">
-          Быстрые действия
-        </p>
-        <Link
-          href="/admin/objects/new"
-          className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-olive/75 hover:bg-sand/70 hover:text-olive"
-        >
-          <Plus className="h-4 w-4 shrink-0" />
-          <span>Создать объект</span>
-        </Link>
-        <Link
-          href="/admin/excursions/new"
-          className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-olive/75 hover:bg-sand/70 hover:text-olive"
-        >
-          <Plus className="h-4 w-4 shrink-0" />
-          <span>Создать экскурсию</span>
-        </Link>
-      </div>
-
-      <div className="mt-auto pt-4">
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-red-600/80 transition-colors hover:bg-red-50 hover:text-red-700"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          <span>{loggingOut ? "Выход..." : "Выйти"}</span>
-        </button>
-      </div>
+      <button
+        onClick={handleLogout}
+        disabled={loggingOut}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200/80 bg-red-50/92 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        <LogOut className="h-4 w-4" />
+        {loggingOut ? "Выходим..." : "Выйти"}
+      </button>
     </>
   );
 
   return (
-    <div className="min-h-screen bg-[#faf8f5]">
-      {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-olive/10 bg-white/92 px-4 py-3 backdrop-blur md:hidden">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" />
-          <span className="text-sm font-bold text-olive">Админ-панель</span>
-        </div>
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-olive hover:bg-sand/70"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      </header>
-
-      {/* Mobile drawer overlay */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-          <aside className="absolute inset-y-0 right-0 flex w-72 flex-col bg-white p-4 shadow-2xl">
-            <div className="mb-2 flex justify-end">
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-olive hover:bg-sand/70"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.14),transparent_28%),radial-gradient(circle_at_100%_0%,rgba(14,116,144,0.12),transparent_24%),linear-gradient(180deg,#f7f4ef_0%,#f0ebe4_46%,#f7f6f3_100%)]">
+      <div className="mx-auto flex w-full max-w-[1480px] gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <aside className="hidden w-[310px] shrink-0 md:block">
+          <div className="sticky top-6 flex max-h-[calc(100vh-3rem)] flex-col justify-between gap-4 overflow-y-auto">
             {sidebarContent}
-          </aside>
-        </div>
-      )}
+          </div>
+        </aside>
 
-      <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6">
-        <div className="flex gap-6">
-          {/* Desktop sidebar */}
-          <aside className="hidden w-[250px] shrink-0 md:flex md:flex-col">
-            <div className="sticky top-6 flex flex-col rounded-2xl border border-olive/8 bg-white/94 p-4 shadow-sm">
-              {sidebarContent}
+        <main className="min-w-0 flex-1">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-[26px] border border-white/70 bg-white/86 px-4 py-3 shadow-[0_14px_38px_rgba(58,43,35,0.08)] backdrop-blur-xl md:hidden">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-primary/55">
+                Админ-панель
+              </p>
+              <p className="truncate text-sm font-semibold text-olive">{getPageTitle(pathname)}</p>
             </div>
-          </aside>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/80 bg-white/88 text-olive shadow-[0_12px_30px_rgba(58,43,35,0.08)]"
+              aria-label="Открыть меню админ-панели"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </div>
 
-          {/* Main content */}
-          <main className="min-w-0 flex-1">
-            <div className="rounded-2xl border border-olive/8 bg-white/94 p-4 shadow-sm md:p-6">
-              {children}
+          {drawerOpen ? (
+            <div className="fixed inset-0 z-50 md:hidden">
+              <div
+                className="absolute inset-0 bg-midnight/45 backdrop-blur-sm"
+                onClick={() => setDrawerOpen(false)}
+              />
+              <aside className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col justify-between gap-4 overflow-y-auto border-r border-white/35 bg-[#f6f2eb]/96 p-4 shadow-[0_24px_70px_rgba(43,31,25,0.28)] backdrop-blur-xl">
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-olive shadow-[0_10px_24px_rgba(58,43,35,0.08)]"
+                    aria-label="Закрыть меню"
+                  >
+                    <X className="h-4.5 w-4.5" />
+                  </button>
+                </div>
+                {sidebarContent}
+              </aside>
             </div>
-          </main>
-        </div>
+          ) : null}
+
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -2,8 +2,11 @@
 import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
+import { resolveAdminRelationUserId } from "@/lib/admin-user-reference";
 import { db } from "@/lib/db";
+import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { getPlacementValidUntil } from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
 
@@ -24,7 +27,6 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-
   const payment = await db.payment.findUnique({
     where: { id },
     include: {
@@ -35,7 +37,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   });
 
   if (!payment) {
-    return NextResponse.json({ error: "Платёж не найден" }, { status: 404 });
+    return NextResponse.json({ error: "Платеж не найден" }, { status: 404 });
   }
 
   if (payment.provider !== PaymentProvider.MANAGER) {
@@ -46,11 +48,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   if (payment.status === PaymentStatus.SUCCEEDED) {
-    return NextResponse.json({ error: "Платёж уже подтверждён" }, { status: 409 });
+    return NextResponse.json({ error: "Платеж уже подтвержден" }, { status: 409 });
   }
 
   if (payment.status === PaymentStatus.CANCELED) {
-    return NextResponse.json({ error: "Платёж уже отклонён" }, { status: 409 });
+    return NextResponse.json({ error: "Платеж уже отклонен" }, { status: 409 });
   }
 
   let payload: unknown;
@@ -66,6 +68,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { action, notes } = parsed.data;
+  const confirmedById = resolveAdminRelationUserId(admin.id);
 
   if (action === "confirm") {
     const now = new Date();
@@ -75,30 +78,35 @@ export async function PATCH(request: Request, context: RouteContext) {
         data: {
           status: PaymentStatus.SUCCEEDED,
           paidAt: now,
-          placementValidUntil: payment.placementValidUntil ?? getPlacementValidUntil(now),
+          placementValidUntil:
+            payment.propertyId && payment.placementValidUntil === null
+              ? getPlacementValidUntil(now)
+              : payment.placementValidUntil,
           managerNotes: notes || null,
-          confirmedById: admin.id,
+          confirmedById,
         },
       });
 
-      // Auto-submit property for moderation after successful payment
       if (payment.propertyId) {
         await autoSubmitPropertyAfterSuccessfulPayment(tx, payment.propertyId);
       }
-
-      // For excursions: update status to PENDING_MODERATION if still DRAFT
       if (payment.excursionId) {
-        const excursion = await tx.excursion.findUnique({
-          where: { id: payment.excursionId },
-          select: { status: true },
-        });
-        if (excursion && (excursion.status === "DRAFT" || excursion.status === "NEEDS_FIX" || excursion.status === "REJECTED")) {
-          await tx.excursion.update({
-            where: { id: payment.excursionId },
-            data: { status: "PENDING_MODERATION" },
-          });
-        }
+        await autoSubmitExcursionAfterSuccessfulPayment(tx, payment.excursionId);
       }
+
+      await writeAdminAuditLog(tx, {
+        adminUserId: admin.id,
+        action: "payment_confirm",
+        targetType: "payment",
+        targetId: payment.id,
+        details: {
+          provider: payment.provider,
+          previousStatus: payment.status,
+          nextStatus: PaymentStatus.SUCCEEDED,
+          notes,
+          outcome: "confirmed",
+        },
+      });
 
       return result;
     });
@@ -113,14 +121,27 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
   }
 
-  // action === "reject"
   await db.payment.update({
     where: { id: payment.id },
     data: {
       status: PaymentStatus.CANCELED,
       canceledAt: new Date(),
       managerNotes: notes || null,
-      confirmedById: admin.id,
+      confirmedById,
+    },
+  });
+
+  await writeAdminAuditLog(db, {
+    adminUserId: admin.id,
+    action: "payment_reject",
+    targetType: "payment",
+    targetId: payment.id,
+    details: {
+      provider: payment.provider,
+      previousStatus: payment.status,
+      nextStatus: PaymentStatus.CANCELED,
+      notes,
+      outcome: "rejected",
     },
   });
 

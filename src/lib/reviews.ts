@@ -5,6 +5,7 @@ import {
   ReviewReactionValue,
   ReviewStatus,
 } from "@prisma/client";
+import type { DbTransactionClient } from "@/lib/db";
 
 export type SerializedReview = {
   id: string;
@@ -73,7 +74,7 @@ export function serializeReview(review: {
 }
 
 export async function refreshEntityReviewStats(
-  tx: Prisma.TransactionClient,
+  tx: DbTransactionClient,
   input:
     | { entityType: "PROPERTY"; propertyId: string }
     | { entityType: "EXCURSION"; excursionId: string },

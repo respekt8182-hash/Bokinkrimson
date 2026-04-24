@@ -14,9 +14,10 @@ type User = {
 type Props = {
   users: User[];
   action: (formData: FormData) => Promise<void>;
+  errorMessage?: string | null;
 };
 
-export function AdminCreateExcursionForm({ users, action }: Props) {
+export function AdminCreateExcursionForm({ users, action, errorMessage }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -35,6 +36,11 @@ export function AdminCreateExcursionForm({ users, action }: Props) {
       onSubmit={handleSubmit}
       className="space-y-5 rounded-2xl border border-olive/10 bg-white p-5"
     >
+      {errorMessage ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
       <label className="block space-y-1.5">
         <span className="text-sm font-medium text-olive">Владелец *</span>
         <select

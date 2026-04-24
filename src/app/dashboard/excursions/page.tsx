@@ -1,4 +1,4 @@
-import { ExcursionOfferType, ExcursionStatus } from "@prisma/client";
+import { ExcursionOfferType, ExcursionSessionStatus, ExcursionStatus } from "@prisma/client";
 import { CircleCheckBig, MessageCircle, Star } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -125,6 +125,17 @@ export default async function DashboardExcursionsPage({
           district: { select: { name: true } },
           category: { select: { name: true } },
           meetingLocation: { select: { name: true } },
+          sessions: {
+            where: {
+              startAt: { gte: new Date() },
+              status: {
+                in: [ExcursionSessionStatus.AVAILABLE, ExcursionSessionStatus.SOLD_OUT],
+              },
+            },
+            select: { startAt: true },
+            orderBy: { startAt: "asc" },
+            take: 1,
+          },
           pickupLocations: { select: { locationId: true } },
           routeLocations: {
             select: { locationId: true, sortOrder: true },
@@ -166,7 +177,7 @@ export default async function DashboardExcursionsPage({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
         <div>
           <h1 className="text-3xl text-olive">Экскурсии и туры</h1>
         </div>
@@ -210,12 +221,12 @@ export default async function DashboardExcursionsPage({
 
             return (
               <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <Link
                     href={`/dashboard/excursions/${item.id}`}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl transition hover:bg-cream/45"
+                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
                   >
-                    <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10">
+                    <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 sm:h-16 sm:w-24">
                       {firstPhoto ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -229,9 +240,11 @@ export default async function DashboardExcursionsPage({
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 py-1">
-                      <h2 className="truncate text-xl text-olive">{getExcursionTitle(item)}</h2>
-                      <p className="text-xs text-olive/60">
+                    <div className="min-w-0 flex-1 py-1">
+                      <h2 className="text-lg leading-tight text-olive sm:truncate sm:text-xl">
+                        {getExcursionTitle(item)}
+                      </h2>
+                      <p className="mt-1 text-xs leading-snug text-olive/60">
                         {routeSummary} • {getOfferTypeLabel(item.offerType)}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -247,66 +260,70 @@ export default async function DashboardExcursionsPage({
                     </div>
                   </Link>
 
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((starIndex) => {
-                        const fill = Math.min(1, Math.max(0, avgRating - (starIndex - 1)));
-                        const pct = Math.round(fill * 100);
+                  <div className="flex w-full items-start justify-between gap-3 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((starIndex) => {
+                          const fill = Math.min(1, Math.max(0, avgRating - (starIndex - 1)));
+                          const pct = Math.round(fill * 100);
 
-                        return (
-                          <svg
-                            key={starIndex}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4 shrink-0"
-                            aria-hidden="true"
-                          >
-                            <defs>
-                              <clipPath id={`excursion-star-fill-${item.id}-${starIndex}`}>
-                                <rect x="0" y="0" width={`${pct}%`} height="24" />
-                              </clipPath>
-                            </defs>
-                            <path
-                              d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                              fill="none"
-                              stroke={reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"}
-                              strokeWidth="1.65"
-                              strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            {pct > 0 ? (
+                          return (
+                            <svg
+                              key={starIndex}
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4 shrink-0"
+                              aria-hidden="true"
+                            >
+                              <defs>
+                                <clipPath id={`excursion-star-fill-${item.id}-${starIndex}`}>
+                                  <rect x="0" y="0" width={`${pct}%`} height="24" />
+                                </clipPath>
+                              </defs>
                               <path
                                 d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                                fill="var(--color-sage)"
-                                stroke="none"
-                                clipPath={`url(#excursion-star-fill-${item.id}-${starIndex})`}
+                                fill="none"
+                                stroke={
+                                  reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"
+                                }
+                                strokeWidth="1.65"
+                                strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                               />
-                            ) : null}
-                          </svg>
-                        );
-                      })}
-                    </div>
-                    {reviewCount > 0 ? (
-                      <>
-                        <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
-                          <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
-                          <span className="text-sm font-bold leading-none text-olive">
-                            {avgRating.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-olive/50">
-                          <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
-                          <span className="text-xs leading-none">{reviewCount}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
-                        <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
-                        <span className="text-xs text-olive/35">Нет отзывов</span>
+                              {pct > 0 ? (
+                                <path
+                                  d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+                                  fill="var(--color-sage)"
+                                  stroke="none"
+                                  clipPath={`url(#excursion-star-fill-${item.id}-${starIndex})`}
+                                />
+                              ) : null}
+                            </svg>
+                          );
+                        })}
                       </div>
-                    )}
-                    <span className="rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
+                      {reviewCount > 0 ? (
+                        <>
+                          <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
+                            <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
+                            <span className="text-sm font-bold leading-none text-olive">
+                              {avgRating.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-olive/50">
+                            <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
+                            <span className="text-xs leading-none">{reviewCount}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
+                          <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
+                          <span className="text-xs text-olive/35">Нет отзывов</span>
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
                       #{index + 1}
                     </span>
                   </div>
@@ -341,7 +358,7 @@ export default async function DashboardExcursionsPage({
                   </div>
                 ) : null}
 
-                <dl className="mt-3 grid gap-2 text-sm md:grid-cols-4">
+                <dl className="mt-3 grid gap-2 text-sm min-[360px]:grid-cols-2 md:grid-cols-4">
                   <div className="rounded-xl bg-cream px-3 py-2">
                     <dt className="text-olive/60">Длительность</dt>
                     <dd className="font-medium text-olive">{formatProgramDuration(item)}</dd>
@@ -358,6 +375,7 @@ export default async function DashboardExcursionsPage({
                         scheduleMode: item.scheduleMode,
                         scheduleText: item.scheduleText,
                         availabilityNote: item.availabilityNote,
+                        nextSessionStartAt: item.nextSessionStartAt,
                       })}
                     </dd>
                   </div>
@@ -375,7 +393,7 @@ export default async function DashboardExcursionsPage({
                   </p>
                 ) : null}
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs text-olive/60">
                     Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
                   </p>

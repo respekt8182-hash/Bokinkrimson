@@ -1,7 +1,6 @@
 // Layout wrapper for /admin route segment.
 // Middleware already handles redirecting unauthenticated users to /admin/login.
 // This layout verifies the session and renders the admin shell.
-import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
 import { getAdminModerationSnapshot } from "@/lib/admin-notifications";
@@ -20,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const moderationSnapshot = await getAdminModerationSnapshot();
 
   return (
-    <AdminShell login={session.login} moderationSnapshot={moderationSnapshot}>
+    <AdminShell moderationSnapshot={moderationSnapshot}>
       {children}
     </AdminShell>
   );

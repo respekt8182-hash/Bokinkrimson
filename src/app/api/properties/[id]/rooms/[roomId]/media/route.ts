@@ -1,31 +1,42 @@
 // Room media endpoint: list and upload room-level photos/videos with limits and image conversion.
+import { MediaType, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import {
-  detectMediaTypeFromUpload,
+  convertImageUploadToWebp,
+  replaceFileExtension,
+} from "@/lib/image-convert";
+import {
+  accommodationVideoUploadSizeLimitBytes,
+  detectMediaType,
   getMediaLimit,
   serializeMedia,
   validateMediaFile,
 } from "@/lib/media";
-import {
-  convertImageUploadToWebp,
-  isSupportedPhotoUpload,
-  sanitizeUploadedFileName,
-} from "@/lib/image-convert";
-import {
-  getMediaLimitExceededError,
-  getUnsupportedAccommodationPhotoFormatError,
-} from "@/lib/photo-upload";
+import { getMediaLimitExceededError } from "@/lib/photo-upload";
 import {
   markPropertyNeedsRemoderationAfterOwnerEdit,
   preparePropertyForPublishedOwnerEdit,
 } from "@/lib/properties";
+import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { getRequestIp } from "@/lib/security";
 import { uploadToStorage } from "@/lib/storage";
+import { validateUploadFile } from "@/lib/upload-validation";
 
 type RouteContext = {
   params: Promise<{ id: string; roomId: string }>;
 };
+
+const roomMediaUploadLimiter = createRateLimiter({
+  id: "room-media-upload",
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 20,
+});
 
 async function getAccessibleRoom(
   propertyId: string,
@@ -59,18 +70,38 @@ async function listRoomMedia(roomId: string) {
   return items.map(serializeMedia);
 }
 
+function getUploadErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Failed to upload file";
+  }
+
+  if (error.message === "FILE_EMPTY") {
+    return "File is empty";
+  }
+
+  if (error.message === "FILE_TOO_LARGE") {
+    return "File exceeds the allowed size";
+  }
+
+  if (error.message === "UNSUPPORTED_FILE_TYPE") {
+    return "Only safe image and video files are allowed";
+  }
+
+  return "Failed to upload file";
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const editor = await getEditorSession();
 
   if (!editor) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const { id, roomId } = await context.params;
   const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room) {
-    return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
+    return NextResponse.json({ error: "Room not found" }, { status: 404 });
   }
 
   return NextResponse.json({ items: await listRoomMedia(room.id) });
@@ -80,48 +111,71 @@ export async function POST(request: Request, context: RouteContext) {
   const editor = await getEditorSession();
 
   if (!editor) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const ip = getRequestIp(request);
+
+  try {
+    const limit = await roomMediaUploadLimiter.limit(`${editor.id}:${ip}`);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: `Too many upload attempts. Retry in ${limit.retryAfterSeconds} seconds.` },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+  } catch (error) {
+    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+      return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
+    }
+
+    throw error;
   }
 
   const { id, roomId } = await context.params;
   const room = await getAccessibleRoom(id, roomId, editor);
 
   if (!room) {
-    return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
+    return NextResponse.json({ error: "Room not found" }, { status: 404 });
   }
 
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Файл не передан" }, { status: 400 });
+    return NextResponse.json({ error: "File was not provided" }, { status: 400 });
   }
 
-  const originalName = file.name || "file";
-  const mediaType = detectMediaTypeFromUpload(file.type, originalName);
+  let validated;
 
+  try {
+    validated = await validateUploadFile({
+      file,
+      allowedKinds: ["image", "video"],
+      maxSizeBytes: accommodationVideoUploadSizeLimitBytes,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: getUploadErrorMessage(error) }, { status: 400 });
+  }
+
+  const mediaType = detectMediaType(validated.detectedMimeType);
   if (!mediaType) {
     return NextResponse.json(
-      { error: "Поддерживаются только изображения и видео" },
-      { status: 400 },
-    );
-  }
-
-  if (
-    mediaType === "IMAGE" &&
-    !isSupportedPhotoUpload({ mimeType: file.type, fileName: originalName })
-  ) {
-    return NextResponse.json(
-      { error: getUnsupportedAccommodationPhotoFormatError() },
+      { error: "Only safe image and video files are allowed" },
       { status: 400 },
     );
   }
 
   const sizeError = validateMediaFile({
     mediaType,
-    size: file.size,
-    mimeType: file.type,
-    fileName: originalName,
+    size: validated.size,
+    mimeType: validated.detectedMimeType,
+    fileName: validated.sanitizedFileName,
   });
 
   if (sizeError) {
@@ -130,65 +184,31 @@ export async function POST(request: Request, context: RouteContext) {
 
   await preparePropertyForPublishedOwnerEdit(db, room.propertyId);
 
-  const existingCount = await db.media.count({
-    where: {
-      roomId: room.id,
-      type: mediaType,
-    },
-  });
-
-  const limit = getMediaLimit("room", mediaType);
-  if (existingCount >= limit) {
-    return NextResponse.json(
-      {
-        error: getMediaLimitExceededError({
-          owner: "room",
-          mediaType,
-          limit,
-        }),
-      },
-      { status: 400 },
-    );
-  }
-
   const rawBytes = Buffer.from(await file.arrayBuffer());
-  if (
-    mediaType === "IMAGE" &&
-    !isSupportedPhotoUpload({ mimeType: file.type, fileName: originalName, bytes: rawBytes })
-  ) {
-    return NextResponse.json(
-      { error: getUnsupportedAccommodationPhotoFormatError() },
-      { status: 400 },
-    );
-  }
-
-  const sanitizedName = sanitizeUploadedFileName(originalName);
   let uploadPayload: {
     bytes: Buffer;
     mimeType: string;
     fileName: string;
-    converted: boolean;
   };
 
-  if (mediaType === "IMAGE") {
+  if (mediaType === MediaType.IMAGE) {
     try {
       uploadPayload = await convertImageUploadToWebp({
         bytes: rawBytes,
-        mimeType: file.type,
-        fileName: sanitizedName,
+        mimeType: validated.detectedMimeType,
+        fileName: validated.sanitizedFileName,
       });
     } catch {
       return NextResponse.json(
-        { error: "Не удалось обработать фото. Попробуйте другое изображение." },
+        { error: "Failed to process the image. Please try a different file." },
         { status: 400 },
       );
     }
   } else {
     uploadPayload = {
       bytes: rawBytes,
-      mimeType: file.type || "application/octet-stream",
-      fileName: sanitizedName,
-      converted: false,
+      mimeType: validated.detectedMimeType,
+      fileName: replaceFileExtension(validated.sanitizedFileName, validated.detectedExtension),
     };
   }
 
@@ -197,31 +217,70 @@ export async function POST(request: Request, context: RouteContext) {
     key: storageKey,
     body: uploadPayload.bytes,
     contentType: uploadPayload.mimeType,
+    visibility: "public",
+    contentDisposition: "inline",
+    cacheControl: "public, max-age=31536000, immutable",
   });
 
-  const maxSort =
-    (
-      await db.media.aggregate({
-        where: {
-          roomId: room.id,
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const existingCount = await tx.media.count({
+          where: {
+            roomId: room.id,
+            type: mediaType,
+          },
+        });
+
+        const limit = getMediaLimit("room", mediaType);
+        if (existingCount >= limit) {
+          throw new Error("MEDIA_LIMIT_EXCEEDED");
+        }
+
+        const maxSort =
+          (
+            await tx.media.aggregate({
+              where: {
+                roomId: room.id,
+              },
+              _max: { sortOrder: true },
+            })
+          )._max.sortOrder ?? 0;
+
+        await tx.media.create({
+          data: {
+            propertyId: room.propertyId,
+            roomId: room.id,
+            type: mediaType,
+            url: uploaded.url ?? "",
+            storageKey,
+            mimeType: uploadPayload.mimeType,
+            fileSize: uploadPayload.bytes.byteLength,
+            originalName: uploadPayload.fileName,
+            sortOrder: maxSort + 1,
+          },
+        });
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "MEDIA_LIMIT_EXCEEDED") {
+      return NextResponse.json(
+        {
+          error: getMediaLimitExceededError({
+            owner: "room",
+            mediaType,
+            limit: getMediaLimit("room", mediaType),
+          }),
         },
-        _max: { sortOrder: true },
-      })
-    )._max.sortOrder ?? 0;
+        { status: 400 },
+      );
+    }
 
-  await db.media.create({
-    data: {
-      propertyId: room.propertyId,
-      roomId: room.id,
-      type: mediaType,
-      url: uploaded.url,
-      storageKey,
-      mimeType: uploadPayload.mimeType,
-      fileSize: uploadPayload.bytes.byteLength,
-      originalName,
-      sortOrder: maxSort + 1,
-    },
-  });
+    throw error;
+  }
 
   await markPropertyNeedsRemoderationAfterOwnerEdit(db, room.propertyId);
 

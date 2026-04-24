@@ -54,20 +54,20 @@ function pickPointPhotos(item: { imageUrls: string[]; coverImageUrl: string | nu
 }
 
 async function collectCatalogItems(query: PublicCatalogQuery) {
-  const firstPage = await getPublicCatalog({ ...query, page: 1, pageSize: 24 });
-  const items = [...firstPage.items];
-  const maxPage = Math.min(firstPage.totalPages, maxCollectedPages);
-
-  for (let page = 2; page <= maxPage; page += 1) {
-    const nextPage = await getPublicCatalog({ ...query, page, pageSize: 24 });
-    items.push(...nextPage.items);
-  }
+  const maxCollectedItems = maxCollectedPages * 24;
+  const result = await getPublicCatalog({
+    ...query,
+    page: 1,
+    pageSize: maxCollectedItems,
+    allowLargePageSize: true,
+    trackSearchImpressions: false,
+  });
 
   return {
-    items,
-    totalAvailable: firstPage.total,
-    truncated: firstPage.totalPages > maxCollectedPages,
-    filters: firstPage.filters,
+    items: result.items,
+    totalAvailable: result.total,
+    truncated: result.total > maxCollectedItems,
+    filters: result.filters,
   };
 }
 

@@ -1,0 +1,17 @@
+ALTER TABLE "public"."Excursion"
+ADD COLUMN "accommodationStars" TEXT,
+ADD COLUMN "arrivalInfo" TEXT,
+ADD COLUMN "departureInfo" TEXT,
+ADD COLUMN "departureMode" TEXT,
+ADD COLUMN "documentsRequired" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "equipmentProvided" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "insuranceComment" TEXT,
+ADD COLUMN "insuranceIncluded" BOOLEAN,
+ADD COLUMN "mealDetails" TEXT,
+ADD COLUMN "roomTypes" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "routeConditions" TEXT,
+ADD COLUMN "safetyInfo" TEXT,
+ADD COLUMN "singleSupplementAvailable" BOOLEAN,
+ADD COLUMN "singleSupplementPrice" DECIMAL(10,2),
+ADD COLUMN "tourKind" TEXT,
+ADD COLUMN "transportModes" TEXT[] DEFAULT ARRAY[]::TEXT[];

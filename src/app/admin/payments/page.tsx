@@ -1,6 +1,7 @@
 // Admin page for managing manager payment requests.
-import { PaymentProvider, PaymentStatus } from "@prisma/client";
+import { PaymentProvider } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { ManagerPaymentsList } from "@/components/admin/manager-payments-list";
@@ -65,12 +66,10 @@ export default async function AdminPaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-olive">Оплата через менеджера</h1>
-        <p className="mt-1 text-sm text-olive/60">
-          Заявки от пользователей на оплату размещения через менеджера
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Оплата"
+        description="Заявки на оплату через менеджера и история решений."
+      />
 
       <ManagerPaymentsList
         pendingPayments={pending}

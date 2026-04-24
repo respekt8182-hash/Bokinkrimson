@@ -3,6 +3,7 @@ import { ExcursionEditor } from "@/components/excursions/excursion-editor";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getExcursionDisplayNumberFromOrderedIds, serializeExcursion } from "@/lib/excursions";
+import { buildPublicExcursionPath } from "@/lib/public-excursions";
 
 type ExcursionPageProps = {
   params: Promise<{ id: string }>;
@@ -22,7 +23,7 @@ export default async function DashboardExcursionByIdPage({ params }: ExcursionPa
       where: { id },
       include: {
         mainLocation: { select: { name: true } },
-        anchorLocation: { select: { name: true } },
+        anchorLocation: { select: { slug: true, name: true } },
         district: { select: { name: true } },
         category: { select: { name: true } },
         meetingLocation: { select: { name: true } },
@@ -49,11 +50,18 @@ export default async function DashboardExcursionByIdPage({ params }: ExcursionPa
       excursion.id,
       ownerExcursionIds.map((item) => item.id),
     ) ?? 1;
+  const previewHref = `${buildPublicExcursionPath({
+    id: excursion.id,
+    locationId: excursion.locationId,
+    title: excursion.title,
+    anchorLocation: excursion.anchorLocation,
+  })}?preview=1`;
 
   return (
     <ExcursionEditor
       initialExcursion={serializeExcursion(excursion)}
       displayExcursionNumber={displayExcursionNumber}
+      previewHref={previewHref}
     />
   );
 }

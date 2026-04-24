@@ -1,13 +1,18 @@
-// Next.js page for route /admin/moderation.
 import Link from "next/link";
 import { PropertyStatus } from "@prisma/client";
+import {
+  AdminEmptyState,
+  AdminNotice,
+  AdminPageHeader,
+  AdminPanel,
+  AdminPillLink,
+  adminInputClass,
+} from "@/components/admin/admin-ui";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
-import {
-  buildPropertyWorkflowStatusWhere,
-  getPropertyWorkflowStatusLabel,
-} from "@/lib/properties";
+import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
 
 type ModerationQueuePageProps = {
   searchParams: Promise<{
@@ -19,13 +24,29 @@ type ModerationQueuePageProps = {
   }>;
 };
 
+const DEFAULT_STATUS = PropertyStatus.PENDING_MODERATION;
+
 const moderationStatuses = [
-  { id: "PENDING_MODERATION", label: "На модерации" },
-  { id: "REJECTED", label: "Отклонены" },
-  { id: "PUBLISHED", label: "Опубликованы" },
-  { id: "DRAFT", label: "Черновики" },
+  { id: PropertyStatus.PENDING_MODERATION, label: "На модерации" },
+  { id: PropertyStatus.REJECTED, label: "Отклонено" },
+  { id: PropertyStatus.PUBLISHED, label: "Опубликовано" },
+  { id: PropertyStatus.DRAFT, label: "Черновик" },
   { id: "ALL", label: "Все статусы" },
 ] as const;
+
+function matchesPropertyWorkflowStatus(
+  item: { status: PropertyStatus; pendingEditStatus: PropertyStatus | null },
+  status: PropertyStatus,
+) {
+  if (status === PropertyStatus.PUBLISHED) {
+    return item.status === PropertyStatus.PUBLISHED && item.pendingEditStatus === null;
+  }
+
+  return (
+    item.status === status ||
+    (item.status === PropertyStatus.PUBLISHED && item.pendingEditStatus === status)
+  );
+}
 
 function toDateStart(value: string | undefined): Date | null {
   if (!value) return null;
@@ -49,46 +70,63 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
       ? "ALL"
       : filters.status && Object.values(PropertyStatus).includes(filters.status as PropertyStatus)
         ? (filters.status as PropertyStatus)
-        : "ALL";
+        : DEFAULT_STATUS;
   const selectedLocationId = filters.locationId?.trim() ?? "";
   const dateFrom = filters.dateFrom?.trim() ?? "";
   const dateTo = filters.dateTo?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
 
-  const rows = await db.property.findMany({
-    where: {
-      ...(selectedStatus !== "ALL" ? buildPropertyWorkflowStatusWhere(selectedStatus) : {}),
-      ...(selectedLocationId ? { locationId: selectedLocationId } : {}),
-      ...(dateFrom || dateTo
-        ? {
-            updatedAt: {
-              ...(toDateStart(dateFrom) ? { gte: toDateStart(dateFrom)! } : {}),
-              ...(toDateEnd(dateTo) ? { lte: toDateEnd(dateTo)! } : {}),
-            },
-          }
-        : {}),
+  const { rows, isDatabaseFallback } = await loadDataWithDatabaseFallback(
+    {
+      contextId: "admin-moderation-queue",
+      unavailableMessage:
+        "Admin moderation queue: database is unavailable. Rendering empty moderation list.",
+      fallbackEligibleMessage:
+        "Admin moderation queue: database is unavailable or credentials are invalid. Rendering empty moderation list.",
     },
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      owner: {
-        select: {
-          firstName: true,
-          lastName: true,
-          email: true,
+    async () => ({
+      rows: await db.property.findMany({
+        where: {
+          ...(selectedLocationId ? { locationId: selectedLocationId } : {}),
+          ...(dateFrom || dateTo
+            ? {
+                updatedAt: {
+                  ...(toDateStart(dateFrom) ? { gte: toDateStart(dateFrom)! } : {}),
+                  ...(toDateEnd(dateTo) ? { lte: toDateEnd(dateTo)! } : {}),
+                },
+              }
+            : {}),
         },
-      },
-      rooms: {
-        where: { isActive: true },
-        select: { id: true },
-      },
-    },
-  });
+        orderBy: [{ updatedAt: "desc" }],
+        include: {
+          owner: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          rooms: {
+            where: { isActive: true },
+            select: { id: true },
+          },
+        },
+      }),
+      isDatabaseFallback: false,
+    }),
+    { rows: [], isDatabaseFallback: true },
+  );
+
+  const filteredRows =
+    selectedStatus === "ALL"
+      ? rows
+      : rows.filter((item) => matchesPropertyWorkflowStatus(item, selectedStatus));
 
   const items =
     query.length >= 2
       ? rankByTrigram(
           query,
-          rows,
+          filteredRows,
           (item) => [
             item.name,
             item.locationName,
@@ -98,9 +136,17 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
             `${item.owner.firstName} ${item.owner.lastName}`,
             item.owner.email,
           ],
-          { limit: rows.length, minScore: 0.08 },
+          { limit: filteredRows.length, minScore: 0.08 },
         )
-      : rows;
+      : filteredRows;
+
+  const statusCounts = Object.values(PropertyStatus).reduce(
+    (accumulator, status) => ({
+      ...accumulator,
+      [status]: rows.filter((item) => matchesPropertyWorkflowStatus(item, status)).length,
+    }),
+    {} as Record<PropertyStatus, number>,
+  );
 
   const locationBuckets = items.reduce(
     (accumulator, item) => {
@@ -128,137 +174,154 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
     return left.name.localeCompare(right.name, "ru");
   });
 
-  const buildFilterLink = (locationId: string): string => {
+  const buildFilterLink = (overrides: Record<string, string> = {}): string => {
     const params = new URLSearchParams();
-    if (selectedStatus) params.set("status", selectedStatus);
+    const status = overrides.status ?? String(selectedStatus);
+    const locationId = overrides.locationId ?? selectedLocationId;
+    const nextDateFrom = overrides.dateFrom ?? dateFrom;
+    const nextDateTo = overrides.dateTo ?? dateTo;
+    const nextQuery = overrides.q ?? query;
+    if (status) params.set("status", status);
     if (locationId) params.set("locationId", locationId);
-    if (dateFrom) params.set("dateFrom", dateFrom);
-    if (dateTo) params.set("dateTo", dateTo);
-    if (query) params.set("q", query);
+    if (nextDateFrom) params.set("dateFrom", nextDateFrom);
+    if (nextDateTo) params.set("dateTo", nextDateTo);
+    if (nextQuery) params.set("q", nextQuery);
     const search = params.toString();
     return search ? `/admin/moderation?${search}` : "/admin/moderation";
   };
 
+  const isDefaultPendingView =
+    selectedStatus === DEFAULT_STATUS && !selectedLocationId && !dateFrom && !dateTo && !query;
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl text-olive">Очередь модерации</h1>
-      <p className="text-sm text-olive/70">
-        Проверяйте карточки объектов, оставляйте комментарии и публикуйте готовые объявления.
-      </p>
-      <div className="rounded-xl bg-cream px-3 py-2 text-sm text-olive/80">
-        Для модерации экскурсий используйте отдельную очередь:{" "}
-        <Link href="/admin/moderation/excursions" className="font-semibold text-terra hover:underline">
-          /admin/moderation/excursions
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Модерация жилья"
+        description="Очередь карточек, которые требуют проверки и решения модератора."
+      />
 
-      <form className="grid gap-3 rounded-2xl border border-olive/10 bg-white p-4 md:grid-cols-5">
-        <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Статус</span>
-          <select
-            name="status"
-            defaultValue={selectedStatus}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
-          >
-            {moderationStatuses.map((status) => (
-              <option key={status.id} value={status.id}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Локация</span>
-          <select
-            name="locationId"
-            defaultValue={selectedLocationId}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
-          >
-            <option value="">Все локации</option>
-            {locationDirectory.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Дата с</span>
-          <input
-            type="date"
-            name="dateFrom"
-            defaultValue={dateFrom}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Дата по</span>
-          <input
-            type="date"
-            name="dateTo"
-            defaultValue={dateTo}
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-medium text-olive">Поиск</span>
-          <input
-            type="search"
-            name="q"
-            defaultValue={query}
-            placeholder="Название, адрес, владелец..."
-            className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive"
-          />
-        </label>
-        <button
-          type="submit"
-          className="md:col-span-5 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
-        >
-          Применить фильтры
-        </button>
-      </form>
+      {isDatabaseFallback ? (
+        <AdminNotice>
+          Очередь временно недоступна. Попробуйте обновить страницу позже.
+        </AdminNotice>
+      ) : null}
 
-      <section className="rounded-2xl border border-olive/10 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-olive/70">
-          Подкаталоги по городам
-        </h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            href={buildFilterLink("")}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              !selectedLocationId ? "bg-primary text-white" : "bg-cream text-olive hover:bg-sage/35"
-            }`}
+      <AdminPanel title="Фильтры">
+        <form className="grid gap-3 md:grid-cols-5">
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Статус</span>
+            <select name="status" defaultValue={selectedStatus} className={adminInputClass}>
+              {moderationStatuses.map((status) => (
+                <option key={status.id} value={status.id}>
+                  {status.label}
+                  {" ("}
+                  {status.id === "ALL" ? rows.length : statusCounts[status.id] ?? 0}
+                  {")"}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Локация</span>
+            <select name="locationId" defaultValue={selectedLocationId} className={adminInputClass}>
+              <option value="">Все локации</option>
+              {locationDirectory.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Дата с</span>
+            <input type="date" name="dateFrom" defaultValue={dateFrom} className={adminInputClass} />
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Дата по</span>
+            <input type="date" name="dateTo" defaultValue={dateTo} className={adminInputClass} />
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Поиск</span>
+            <input
+              type="search"
+              name="q"
+              defaultValue={query}
+              placeholder="Название, адрес, владелец"
+              className={adminInputClass}
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="md:col-span-5 inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
           >
-            Все ({items.length})
-          </Link>
-          {sortedLocationBuckets.map((bucket) => (
-            <Link
-              key={bucket.id}
-              href={buildFilterLink(bucket.id)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                selectedLocationId === bucket.id
-                  ? "bg-primary text-white"
-                  : "bg-cream text-olive hover:bg-sage/35"
-              }`}
+            Применить фильтры
+          </button>
+        </form>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {moderationStatuses.map((status) => (
+            <AdminPillLink
+              key={status.id}
+              href={buildFilterLink({ status: String(status.id) })}
+              active={selectedStatus === status.id}
             >
-              {bucket.name} ({bucket.count})
-            </Link>
+              {status.label}
+            </AdminPillLink>
           ))}
         </div>
-      </section>
+      </AdminPanel>
+
+      {sortedLocationBuckets.length > 0 ? (
+        <AdminPanel title="Локации">
+          <div className="flex flex-wrap gap-2">
+            <AdminPillLink
+              href={buildFilterLink({ locationId: "" })}
+              active={!selectedLocationId}
+            >
+              Все ({items.length})
+            </AdminPillLink>
+            {sortedLocationBuckets.map((bucket) => (
+              <AdminPillLink
+                key={bucket.id}
+                href={buildFilterLink({ locationId: bucket.id })}
+                active={selectedLocationId === bucket.id}
+              >
+                {bucket.name} ({bucket.count})
+              </AdminPillLink>
+            ))}
+          </div>
+        </AdminPanel>
+      ) : null}
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-olive/30 p-4 text-sm text-olive/70">
-          По текущим фильтрам объектов не найдено.
-        </p>
+        <AdminEmptyState
+          title={isDefaultPendingView ? "Новых карточек на проверке нет" : "Карточек не найдено"}
+          description={
+            isDatabaseFallback
+              ? "Попробуйте открыть очередь позже."
+              : isDefaultPendingView
+                ? "Очередь чистая. Новые материалы появятся здесь автоматически."
+                : "Измените фильтры или очистите поиск."
+          }
+        />
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+            <article
+              key={item.id}
+              className="rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_16px_45px_rgba(58,43,35,0.07)]"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg text-olive">{item.name ?? "Объект без названия"}</h2>
-                  <p className="text-xs text-olive/60">ID: {item.id}</p>
+                  <h2 className="text-lg font-semibold text-olive">
+                    {item.name ?? "Жильё без названия"}
+                  </h2>
+                  <p className="mt-1 text-xs text-olive/50">ID: {item.id}</p>
                 </div>
                 <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold text-olive">
                   {getPropertyWorkflowStatusLabel(
@@ -269,46 +332,42 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                 </span>
               </div>
 
-              <dl className="mt-3 grid gap-2 text-sm md:grid-cols-4">
-                <div className="rounded-xl bg-cream px-3 py-2">
+              <dl className="mt-4 grid gap-2 text-sm md:grid-cols-4">
+                <div className="rounded-2xl bg-cream px-3 py-3">
                   <dt className="text-olive/60">Владелец</dt>
                   <dd className="font-medium text-olive">
                     {item.owner.firstName} {item.owner.lastName}
                   </dd>
                 </div>
-                <div className="rounded-xl bg-cream px-3 py-2">
-                  <dt className="text-olive/60">Email владельца</dt>
+                <div className="rounded-2xl bg-cream px-3 py-3">
+                  <dt className="text-olive/60">Email</dt>
                   <dd className="font-medium text-olive">{item.owner.email}</dd>
                 </div>
-                <div className="rounded-xl bg-cream px-3 py-2">
+                <div className="rounded-2xl bg-cream px-3 py-3">
                   <dt className="text-olive/60">Локация</dt>
                   <dd className="font-medium text-olive">{item.locationName ?? "Не указана"}</dd>
                 </div>
-                <div className="rounded-xl bg-cream px-3 py-2">
-                  <dt className="text-olive/60">Активных номеров</dt>
+                <div className="rounded-2xl bg-cream px-3 py-3">
+                  <dt className="text-olive/60">Номеров</dt>
                   <dd className="font-medium text-olive">{item.rooms.length}</dd>
                 </div>
               </dl>
 
-              <p className="mt-3 text-sm text-olive/75">
-                Рейтинг: {Number(item.avgRating).toFixed(1)} ({item.reviewsCount} отзывов)
-              </p>
-
               {item.moderationNotes ? (
-                <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
+                <p className="mt-4 rounded-2xl bg-terra/10 px-4 py-3 text-sm text-olive/85">
                   Последний комментарий модератора: {item.moderationNotes}
                 </p>
               ) : null}
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-olive/60">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-olive/50">
                   Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
                 </p>
                 <Link
                   href={`/admin/moderation/${item.id}`}
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover"
                 >
-                  Открыть карточку модерации
+                  Открыть карточку
                 </Link>
               </div>
             </article>

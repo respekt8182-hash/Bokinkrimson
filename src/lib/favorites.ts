@@ -1,8 +1,9 @@
 // Domain/service module for favorites.
-import { Prisma, PropertyStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { crimeaLocationById, propertyTypeById } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
+import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 export type FavoriteCatalogItem = {
   id: string;
@@ -74,8 +75,7 @@ export async function getUserFavoriteProperties(userId: string): Promise<Favorit
     where: {
       userId,
       property: {
-        status: PropertyStatus.PUBLISHED,
-        ownerDeletedAt: null,
+        ...buildPublishedPropertyVisibilityWhere(),
       },
     },
     orderBy: [{ createdAt: "desc" }],

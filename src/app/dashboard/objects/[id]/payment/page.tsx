@@ -11,6 +11,7 @@ import {
   serializePayment,
 } from "@/lib/payments";
 import { getPropertyPaymentReadinessIssues, getPropertyProgress } from "@/lib/properties";
+import { buildPublicPropertyPath } from "@/lib/public-properties";
 
 type PaymentPageProps = {
   params: Promise<{ id: string }>;
@@ -90,6 +91,11 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
     payments,
     quote,
   });
+  const previewHref = `${buildPublicPropertyPath({
+    id: property.id,
+    locationId: property.locationId,
+    name: property.name,
+  })}?preview=1`;
 
   return (
     <div className="space-y-5">
@@ -111,6 +117,7 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
           }}
           initialPlacement={initialPlacement}
           initialPayments={payments.map(serializePayment)}
+          previewHref={previewHref}
         />
       </div>
     </div>

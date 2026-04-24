@@ -3,6 +3,7 @@
 // Reusable UI helper/component for single date popover field.
 import { CalendarDays } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FieldAdornmentIcon } from "@/components/ui/field-adornment-icon";
 import { cn } from "@/lib/cn";
 
@@ -15,8 +16,14 @@ type SingleDatePopoverFieldProps = {
   maxDate?: string;
   disabled?: boolean;
   buttonClassName?: string;
+  rootClassName?: string;
+  buttonLabel?: string;
+  showAdornment?: boolean;
+  allowClear?: boolean;
   monthCount?: number;
   mobilePanelStyle?: "sheet" | "dialog";
+  desktopPanelStyle?: "dialog" | "popover";
+  desktopPopoverAlign?: "left" | "right";
 };
 
 type CalendarCell = {
@@ -183,8 +190,14 @@ export function SingleDatePopoverField({
   maxDate,
   disabled = false,
   buttonClassName,
+  rootClassName,
+  buttonLabel,
+  showAdornment = true,
+  allowClear = true,
   monthCount = defaultCalendarMonthCount,
   mobilePanelStyle = "sheet",
+  desktopPanelStyle = "dialog",
+  desktopPopoverAlign = "left",
 }: SingleDatePopoverFieldProps) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const monthStart = useMemo(() => {
@@ -204,12 +217,18 @@ export function SingleDatePopoverField({
     getMonthKeyFromIso(value) ?? getMonthKeyFromIso(todayIso) ?? calendarMonths[0]?.key ?? "",
   );
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const monthListRef = useRef<HTMLDivElement | null>(null);
   const monthSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const closePanelTimerRef = useRef<number | null>(null);
 
   const fieldValue = useMemo(() => formatDateFieldValue(value, placeholder), [placeholder, value]);
   const isCompactMobilePanel = mobilePanelStyle === "dialog";
+  const isSheetPanel = mobilePanelStyle === "sheet";
+  const isDesktopPopover = desktopPanelStyle === "popover";
+  const isCenteredCalendarDialog = isSheetPanel && !isDesktopPopover;
+  const responsiveDesktopPrefix = isDesktopPopover ? "xl" : "md";
+  const resolvedButtonText = buttonLabel ?? fieldValue;
 
   const clearClosePanelTimer = useCallback(() => {
     if (closePanelTimerRef.current === null) {
@@ -381,7 +400,7 @@ export function SingleDatePopoverField({
         return;
       }
 
-      if (rootRef.current?.contains(target)) {
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) {
         return;
       }
 
@@ -406,12 +425,30 @@ export function SingleDatePopoverField({
     };
   }, [closePanel, isOpen]);
 
+  useEffect(() => {
+    if (!isPanelMounted) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isPanelMounted]);
+
   return (
     <div
       ref={rootRef}
       className={cn(
         "relative",
         isOpen ? "z-[11000] [@media(min-width:768px)_and_(min-height:561px)]:z-[4000]" : "",
+        rootClassName,
       )}
     >
       <button
@@ -429,37 +466,87 @@ export function SingleDatePopoverField({
         aria-expanded={isOpen}
         className={cn(
           "relative w-full rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-left text-sm text-olive outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/22 disabled:cursor-not-allowed disabled:bg-cream disabled:text-olive/45",
+          !showAdornment ? "px-3" : "",
+          buttonLabel ? "text-center" : "",
           buttonClassName,
         )}
       >
-        <span className={cn("block truncate pr-12", value ? "text-olive" : "text-olive/48")}>
-          {fieldValue}
+        <span
+          className={cn(
+            "block truncate",
+            showAdornment ? "pr-12" : "",
+            buttonLabel ? "text-center" : "",
+            buttonLabel || value ? "text-olive" : "text-olive/48",
+          )}
+        >
+          {resolvedButtonText}
         </span>
-        <FieldAdornmentIcon icon={CalendarDays} />
+        {showAdornment ? <FieldAdornmentIcon icon={CalendarDays} /> : null}
       </button>
 
-      {isPanelMounted ? (
-        <>
+      {isPanelMounted && typeof document !== "undefined"
+        ? createPortal(
+            <>
           <button
             type="button"
             className={cn(
-              "fixed inset-0 z-[10990] bg-primary/30",
+              isSheetPanel && isDesktopPopover
+                ? "fixed inset-0 z-20 bg-primary/30 xl:hidden"
+                : isCenteredCalendarDialog
+                  ? "fixed inset-0 z-[10990] bg-primary/30"
+                : "fixed inset-0 z-[10990] bg-primary/30",
               isOpen ? "popover-overlay-enter" : "popover-overlay-exit pointer-events-none",
             )}
             onClick={closePanel}
             aria-label="Закрыть календарь"
           />
           <div
+            ref={panelRef}
             className={cn(
-              "animated-popover fixed z-[11000] rounded-2xl border ring-olive/12 bg-white shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)] [@media(min-width:768px)_and_(min-height:561px)]:inset-x-auto [@media(min-width:768px)_and_(min-height:561px)]:left-1/2 [@media(min-width:768px)_and_(min-height:561px)]:top-1/2 [@media(min-width:768px)_and_(min-height:561px)]:bottom-auto [@media(min-width:768px)_and_(min-height:561px)]:w-[min(92vw,860px)] [@media(min-width:768px)_and_(min-height:561px)]:max-h-none [@media(min-width:768px)_and_(min-height:561px)]:max-w-[92vw] [@media(min-width:768px)_and_(min-height:561px)]:-translate-x-1/2 [@media(min-width:768px)_and_(min-height:561px)]:-translate-y-1/2 [@media(min-width:768px)_and_(min-height:561px)]:overflow-visible [@media(min-width:768px)_and_(min-height:561px)]:p-4",
-              isCompactMobilePanel
-                ? "left-1/2 top-1/2 w-[min(calc(100vw-5rem),13.5rem)] max-w-[calc(100vw-5rem)] max-h-[min(52dvh,17.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden p-1.5 min-[390px]:w-[min(calc(100vw-5.5rem),14.5rem)] min-[390px]:p-2"
-                : "inset-x-2 top-2 bottom-2 w-auto max-w-none p-3",
+              "animated-popover fixed bg-white",
+              isSheetPanel
+                ? isDesktopPopover
+                  ? cn(
+                      "date-picker-sheet inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh]",
+                      "xl:absolute xl:bottom-auto xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
+                      desktopPopoverAlign === "right"
+                        ? "xl:left-auto xl:right-0"
+                        : "xl:right-auto xl:left-0",
+                    )
+                  : "date-picker-dialog z-[11000] left-1/2 top-1/2 w-[min(calc(100vw-1rem),920px)] max-w-[calc(100vw-1rem)] max-h-[min(90dvh,760px)] overflow-hidden rounded-2xl border border-sand p-3 shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)] min-[480px]:w-[min(calc(100vw-2rem),920px)] min-[480px]:p-4 md:w-[min(calc(100vw-4rem),920px)] md:max-h-[84dvh]"
+                : "date-picker-dialog z-[11000] left-1/2 top-1/2 w-[min(calc(100vw-5rem),13.5rem)] max-w-[calc(100vw-5rem)] max-h-[min(52dvh,17.5rem)] overflow-hidden rounded-2xl border ring-olive/12 p-1.5 shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)] min-[390px]:w-[min(calc(100vw-5.5rem),14.5rem)] min-[390px]:p-2",
               isOpen ? "popover-enter" : "popover-exit pointer-events-none",
             )}
           >
-            <div className="grid gap-3 [@media(min-width:768px)_and_(min-height:561px)]:grid-cols-[180px_minmax(0,1fr)]">
-              <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 [@media(min-width:768px)_and_(min-height:561px)]:block">
+            {isSheetPanel && !isCenteredCalendarDialog ? (
+              <div
+                aria-hidden="true"
+                className={cn(
+                  "mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20",
+                  isDesktopPopover ? "xl:hidden" : "md:hidden",
+                )}
+              />
+            ) : null}
+            <div
+              className={cn(
+                "grid gap-3",
+                isSheetPanel
+                  ? responsiveDesktopPrefix === "xl"
+                    ? "xl:grid-cols-[180px_minmax(0,1fr)]"
+                    : "md:grid-cols-[180px_minmax(0,1fr)]"
+                  : "",
+              )}
+            >
+              <aside
+                className={cn(
+                  "hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2",
+                  isSheetPanel
+                    ? responsiveDesktopPrefix === "xl"
+                      ? "xl:block"
+                      : "md:block"
+                    : "",
+                )}
+              >
                 {calendarMonths.map((month) => (
                   <button
                     key={month.key}
@@ -469,7 +556,7 @@ export function SingleDatePopoverField({
                       scrollToMonth(month.key);
                     }}
                     className={cn(
-                      "mb-1 block w-full rounded-lg px-2.5 py-2 text-left text-sm transition",
+                      "mb-1 block w-full touch-manipulation rounded-lg px-2.5 py-2 text-left text-sm transition",
                       month.key === activeMonthKey
                         ? "bg-primary text-white"
                         : "text-olive/75 hover:bg-foam",
@@ -484,13 +571,13 @@ export function SingleDatePopoverField({
                 <div
                   className={cn(
                     "flex items-center justify-between rounded-xl bg-cream/75 text-olive/80",
-                    isCompactMobilePanel
-                      ? "mb-1.5 gap-1.5 px-1.5 py-1 text-[9px] leading-tight"
-                      : "mb-3 px-3 py-2 text-xs",
+                    isSheetPanel
+                      ? "mb-3 px-3 py-2 text-xs"
+                      : "mb-1.5 gap-1.5 px-1.5 py-1 text-[9px] leading-tight",
                   )}
                 >
                   <span>{helperText}</span>
-                  {value ? (
+                  {allowClear && value ? (
                     <button
                       type="button"
                       onClick={() => onChange("")}
@@ -507,10 +594,12 @@ export function SingleDatePopoverField({
                 <div
                   ref={monthListRef}
                   className={cn(
-                    "overflow-y-auto pr-1 [@media(min-width:768px)_and_(min-height:561px)]:max-h-[410px]",
-                    isCompactMobilePanel
-                      ? "max-h-[min(150px,calc(100dvh-180px))] min-[390px]:max-h-[min(165px,calc(100dvh-180px))]"
-                      : "max-h-[min(410px,calc(100dvh-170px))]",
+                    "overflow-y-auto pr-1",
+                    isSheetPanel
+                      ? responsiveDesktopPrefix === "xl"
+                        ? "max-h-[68dvh] touch-pan-y overscroll-y-contain [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
+                        : "max-h-[68dvh] touch-pan-y overscroll-y-contain [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[410px]"
+                      : "max-h-[min(150px,calc(100dvh-180px))] min-[390px]:max-h-[min(165px,calc(100dvh-180px))] [@media(min-width:768px)_and_(min-height:561px)]:max-h-[410px]",
                   )}
                 >
                   {calendarMonths.map((month) => (
@@ -519,12 +608,12 @@ export function SingleDatePopoverField({
                       ref={(node) => {
                         monthSectionRefs.current[month.key] = node;
                       }}
-                      className={cn(isCompactMobilePanel ? "mb-2.5 last:mb-0" : "mb-5 last:mb-0")}
+                      className={cn(isSheetPanel ? "mb-5 last:mb-0" : "mb-2.5 last:mb-0")}
                     >
                       <h3
                         className={cn(
                           "font-semibold text-olive",
-                          isCompactMobilePanel ? "text-[11px]" : "text-sm",
+                          isSheetPanel ? "text-sm" : "text-[11px]",
                         )}
                       >
                         {month.label}
@@ -532,9 +621,7 @@ export function SingleDatePopoverField({
                       <div
                         className={cn(
                           "grid grid-cols-7 text-center uppercase tracking-wide text-olive/55",
-                          isCompactMobilePanel
-                            ? "mt-1 gap-0.5 text-[8px]"
-                            : "mt-2 gap-1 text-[11px]",
+                          isSheetPanel ? "mt-2 gap-1 text-[11px]" : "mt-1 gap-0.5 text-[8px]",
                         )}
                       >
                         {weekdayLabels.map((weekday) => (
@@ -544,7 +631,7 @@ export function SingleDatePopoverField({
                       <div
                         className={cn(
                           "grid grid-cols-7",
-                          isCompactMobilePanel ? "mt-0.5 gap-0.5" : "mt-1 gap-1",
+                          isSheetPanel ? "mt-1 gap-1" : "mt-0.5 gap-0.5",
                         )}
                       >
                         {month.cells.map((cell, cellIndex) => {
@@ -555,7 +642,11 @@ export function SingleDatePopoverField({
                               <span
                                 key={`${month.key}-blank-${cellIndex}`}
                                 className={cn(
-                                  isCompactMobilePanel ? "h-6 rounded-md" : "h-9 rounded-lg",
+                                  isSheetPanel
+                                    ? responsiveDesktopPrefix === "xl"
+                                      ? "h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
+                                      : "h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 md:h-9"
+                                    : "h-6 rounded-md",
                                 )}
                                 aria-hidden="true"
                               />
@@ -575,25 +666,29 @@ export function SingleDatePopoverField({
                               onClick={() => pickDate(iso)}
                               className={cn(
                                 "transition-all duration-200 ease-out",
-                                isCompactMobilePanel ? "h-6 text-[10px]" : "h-9 text-sm",
+                                isSheetPanel
+                                  ? responsiveDesktopPrefix === "xl"
+                                    ? "h-10 touch-manipulation text-sm min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
+                                    : "h-10 touch-manipulation text-sm min-[390px]:h-11 min-[480px]:h-12 md:h-9"
+                                  : "h-6 text-[10px]",
                                 isSelected
                                   ? cn(
-                                      isCompactMobilePanel ? "rounded-md" : "rounded-lg",
+                                      isSheetPanel ? "rounded-lg" : "rounded-md",
                                       "bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]",
                                     )
                                   : isDisabled
                                     ? cn(
-                                        "cursor-not-allowed text-olive/28",
-                                        isCompactMobilePanel ? "rounded-md" : "rounded-lg",
+                                      "cursor-not-allowed text-olive/28",
+                                        isSheetPanel ? "rounded-lg" : "rounded-md",
                                       )
                                     : cell.isWeekend
                                       ? cn(
                                           "text-terra hover:bg-cream",
-                                          isCompactMobilePanel ? "rounded-md" : "rounded-lg",
+                                          isSheetPanel ? "rounded-lg" : "rounded-md",
                                         )
                                       : cn(
                                           "text-olive hover:bg-cream",
-                                          isCompactMobilePanel ? "rounded-md" : "rounded-lg",
+                                          isSheetPanel ? "rounded-lg" : "rounded-md",
                                         ),
                                 iso === todayIso && !isSelected ? "ring-1 ring-sage/45" : "",
                               )}
@@ -609,8 +704,10 @@ export function SingleDatePopoverField({
               </div>
             </div>
           </div>
-        </>
-      ) : null}
+            </>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

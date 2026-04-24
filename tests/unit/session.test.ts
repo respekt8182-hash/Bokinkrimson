@@ -10,6 +10,7 @@ describe("session token", () => {
       firstName: "Owner",
       lastName: "User",
       role: "USER",
+      sessionVersion: 0,
     });
 
     const session = await verifySessionToken(token);
@@ -18,6 +19,7 @@ describe("session token", () => {
     expect(session?.id).toBe("user_1");
     expect(session?.phone).toBe("79781234567");
     expect(session?.role).toBe("USER");
+    expect(session?.sessionVersion).toBe(0);
   });
 
   it("returns null for invalid token", async () => {

@@ -1,12 +1,13 @@
-import { PropertyStatus } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
+import { normalizeLegacyFotoImageUrl } from "@/lib/media";
 import {
   isConfiguredDatabaseReachable,
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
+import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 export type PopularPropertyItem = {
   id: string;
@@ -62,7 +63,7 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
   // We pick more than 12 to allow filtering, then slice
   const properties = await db.property.findMany({
     where: {
-      status: PropertyStatus.PUBLISHED,
+      ...buildPublishedPropertyVisibilityWhere(),
       media: { some: { type: "IMAGE" } },
     },
     select: {
@@ -112,7 +113,7 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
   const selected = shuffled.slice(0, 12);
 
   return selected.map((p) => {
-    const imageUrls = p.media.map((m) => m.url);
+    const imageUrls = p.media.map((m) => normalizeLegacyFotoImageUrl(m.url));
 
     // Find the minimum price and determine which month it applies to
     let minPrice: number | null = null;

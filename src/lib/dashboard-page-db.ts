@@ -1,9 +1,5 @@
 // Shared owner-dashboard database fallback helper for local dev without PostgreSQL.
-import {
-  isConfiguredDatabaseReachable,
-  isDatabaseFallbackEligibleError,
-  logDatabaseFallbackOnce,
-} from "@/lib/prisma-errors";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 
 type DashboardPageDataContext = {
   contextId: string;
@@ -16,27 +12,13 @@ export async function loadDashboardPageData<T>(
   load: () => Promise<T>,
   fallbackValue: T,
 ): Promise<T> {
-  const canUseFallback = process.env.NODE_ENV !== "production";
-
-  if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
-    logDatabaseFallbackOnce(
-      context.contextId,
-      `${context.pageLabel}: database is unavailable. ${context.fallbackDescription}`,
-    );
-    return fallbackValue;
-  }
-
-  try {
-    return await load();
-  } catch (error) {
-    if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
-      throw error;
-    }
-
-    logDatabaseFallbackOnce(
-      context.contextId,
-      `${context.pageLabel}: database is unavailable or credentials are invalid. ${context.fallbackDescription}`,
-    );
-    return fallbackValue;
-  }
+  return loadDataWithDatabaseFallback(
+    {
+      contextId: context.contextId,
+      unavailableMessage: `${context.pageLabel}: database is unavailable. ${context.fallbackDescription}`,
+      fallbackEligibleMessage: `${context.pageLabel}: database is unavailable or credentials are invalid. ${context.fallbackDescription}`,
+    },
+    load,
+    fallbackValue,
+  );
 }

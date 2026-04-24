@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PhoneInput, type PhoneInputValue } from "@/components/ui/phone-input";
-import { loginSchema } from "@/lib/schemas";
+import { loginSchema } from "@/lib/schemas/auth";
 
 type LoginFormProps = {
   nextPath?: string;
@@ -135,7 +135,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           <button
             type="button"
             onClick={() => setIsPasswordVisible((prev) => !prev)}
-            className="absolute inset-y-0 right-2 my-auto h-8 rounded-md px-2 text-xs font-semibold text-olive/70 transition hover:bg-cream"
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-10 items-center rounded-md px-2.5 text-sm font-semibold text-olive/78 transition hover:bg-cream"
           >
             {isPasswordVisible ? "Скрыть" : "Показать"}
           </button>

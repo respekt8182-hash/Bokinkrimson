@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PropertyStatus } from "@prisma/client";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { RoomAmenitiesManager } from "@/components/rooms/room-amenities-manager";
-import { db } from "@/lib/db";
+import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
 import {
-  getPropertyDisplayNumberFromOrderedIds,
-  getPropertyWorkflowStatusLabel,
-} from "@/lib/properties";
+  getAdminPropertyBaseStatusLabel,
+  getAdminPropertyPendingEditLabel,
+} from "@/lib/admin-status";
+import { db } from "@/lib/db";
+import { getPropertyDisplayNumberFromOrderedIds } from "@/lib/properties";
 
 type AdminObjectAmenitiesPageProps = {
   params: Promise<{ id: string }>;
@@ -16,6 +19,7 @@ export default async function AdminObjectAmenitiesPage({
   params,
 }: AdminObjectAmenitiesPageProps) {
   const { id } = await params;
+  await purgeExpiredDeletedProperties(db, new Date());
   const property = await db.property.findUnique({
     where: { id },
     select: {
@@ -29,12 +33,15 @@ export default async function AdminObjectAmenitiesPage({
     },
   });
 
-  if (!property || property.ownerDeletedAt) {
+  if (!property) {
     notFound();
   }
 
   const ownerPropertyIds = await db.property.findMany({
-    where: { ownerId: property.ownerId, ownerDeletedAt: null },
+    where: {
+      ownerId: property.ownerId,
+      OR: [{ ownerDeletedAt: null }, { id: property.id }],
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true },
   });
@@ -44,6 +51,10 @@ export default async function AdminObjectAmenitiesPage({
       property.id,
       ownerPropertyIds.map((item) => item.id),
     ) ?? 1;
+  const isPublished = property.status === PropertyStatus.PUBLISHED;
+  const pendingEditLabel = isPublished
+    ? getAdminPropertyPendingEditLabel(property.pendingEditStatus, property.moderationNotes)
+    : null;
 
   return (
     <div className="space-y-5">
@@ -69,13 +80,16 @@ export default async function AdminObjectAmenitiesPage({
                 Что есть в номерах карточки пользователя
               </p>
             </div>
-            <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold uppercase text-olive">
-              {getPropertyWorkflowStatusLabel(
-                property.status,
-                property.moderationNotes,
-                property.pendingEditStatus,
-              )}
-            </span>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold uppercase text-olive">
+                {getAdminPropertyBaseStatusLabel(property.status)}
+              </span>
+              {pendingEditLabel ? (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase text-amber-700">
+                  {pendingEditLabel}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
 

@@ -2,9 +2,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PropertyStatus } from "@prisma/client";
+import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
+import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
+import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
+import { isPropertyPublicationControlAvailable } from "@/lib/admin-schema-compat";
 import { db } from "@/lib/db";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
-import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
+import {
+  getAdminPropertyBaseStatusLabel,
+  getAdminPropertyPendingEditLabel,
+} from "@/lib/admin-status";
 import { AdminPropertyEditor } from "@/components/admin/admin-property-editor";
 
 type Props = {
@@ -13,6 +20,11 @@ type Props = {
 
 export default async function AdminPropertyEditPage({ params }: Props) {
   const { id } = await params;
+  await purgeExpiredDeletedProperties(db, new Date());
+  const isPropertyVisibilityControlAvailable = await isPropertyPublicationControlAvailable();
+  const propertyVisibilityUnavailableReason = isPropertyVisibilityControlAvailable
+    ? null
+    : "Переключение видимости недоступно, пока база данных не обновлена до миграции публикации.";
 
   const property = await db.property.findUnique({
     where: { id },
@@ -29,7 +41,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
 
   const [users, locations] = await Promise.all([
     db.user.findMany({
-      where: { role: "USER" },
+      where: { role: "USER", deletedAt: null },
       orderBy: [{ firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, phone: true },
     }),
@@ -62,6 +74,11 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       description: "Занятость, цены и ручная работа с календарем",
     },
   ];
+  const isPublished = property.status === PropertyStatus.PUBLISHED;
+  const isPendingDeletion = Boolean(property.ownerDeletedAt);
+  const pendingEditLabel = isPublished
+    ? getAdminPropertyPendingEditLabel(property.pendingEditStatus, property.moderationNotes)
+    : null;
 
   return (
     <div className="space-y-4">
@@ -87,18 +104,51 @@ export default async function AdminPropertyEditPage({ params }: Props) {
           {property.name || "Объект без названия"}
         </h1>
         <span className="rounded-full bg-cream px-3 py-1 text-xs font-semibold text-olive/70">
-          {getPropertyWorkflowStatusLabel(
-            property.status,
-            property.moderationNotes,
-            property.pendingEditStatus,
-          )}
+          {getAdminPropertyBaseStatusLabel(property.status)}
         </span>
+        {pendingEditLabel ? (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+            {pendingEditLabel}
+          </span>
+        ) : null}
+        {isPublished && !property.isPublishedVisible && !isPendingDeletion ? (
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            Скрыт из публикации
+          </span>
+        ) : null}
+        {isPendingDeletion ? (
+          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+            Удаляется
+          </span>
+        ) : null}
         {property.type && (
           <span className="rounded-full bg-cream px-3 py-1 text-xs text-olive/50">
             {property.type}
           </span>
         )}
       </div>
+
+      {isPublished ? (
+        <div className="flex flex-wrap gap-2">
+          {!isPendingDeletion ? (
+            <AdminListingVisibilityToggle
+              endpoint={`/api/admin/properties/${property.id}`}
+              entityLabel="объект"
+              isVisible={property.isPublishedVisible}
+              disabled={!isPropertyVisibilityControlAvailable}
+              disabledReason={propertyVisibilityUnavailableReason}
+            />
+          ) : null}
+          <AdminSoftDeleteAction
+            deleteEndpoint={`/api/admin/properties/${property.id}`}
+            restoreEndpoint={`/api/admin/properties/${property.id}/restore`}
+            entityLabel="объект"
+            entityName={property.name ?? "Объект без названия"}
+            isPendingDeletion={isPendingDeletion}
+            restoreUntil={property.ownerDeletionExpiresAt?.toISOString() ?? null}
+          />
+        </div>
+      ) : null}
 
       <div className="text-xs text-olive/50">
         ID: {property.id} | Номеров: {property.rooms.length} |

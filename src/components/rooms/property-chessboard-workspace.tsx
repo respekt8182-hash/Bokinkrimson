@@ -21,7 +21,7 @@ import { SingleDatePopoverField } from "@/components/ui/single-date-popover-fiel
 import { cn } from "@/lib/cn";
 import type { SerializedRoomOccupancy } from "@/lib/occupancy";
 import { addDays, parseIsoDate, toIsoDate, type SerializedRoomPrice } from "@/lib/pricing";
-import type { SerializedRoom } from "@/lib/rooms";
+import type { SerializedChessboardRoom } from "@/lib/rooms";
 
 type ChessboardPropertyItem = {
   id: string;
@@ -43,11 +43,19 @@ type ChessboardDay = {
   weekDayLabel: string;
   isWeekend: boolean;
   isWeekStart: boolean;
+  isMonthStart: boolean;
+};
+
+type ChessboardMonthSegment = {
+  key: string;
+  label: string;
+  compactLabel: string;
+  daysCount: number;
 };
 
 type GroupedRoomBucket = {
   groupLabel: string;
-  items: SerializedRoom[];
+  items: SerializedChessboardRoom[];
 };
 
 type GroupedRoomBucketWithOffset = GroupedRoomBucket & {
@@ -56,7 +64,7 @@ type GroupedRoomBucketWithOffset = GroupedRoomBucket & {
 
 type RoomPagerEntry = {
   groupLabel: string;
-  room: SerializedRoom;
+  room: SerializedChessboardRoom;
 };
 
 type BookingFormState = {
@@ -113,24 +121,14 @@ const monthLabels = [
   "Ноябрь",
   "Декабрь",
 ] as const;
-const visibleDaysCount = 28;
+const minVisibleDaysCount = 28;
 const mobileRoomsPerPage = 3;
-const dayCellWidthDesktopPx = 64;
-const dayCellWidthTabletPx = 56;
-const dayCellWidthPortraitPx = 44;
-const dayCellWidthMobilePx = 48;
+const dayCellWidthDesktopPx = 44;
+const dayCellWidthTabletPx = 42;
+const dayCellWidthPortraitPx = 40;
+const dayCellWidthMobilePx = 40;
 const dayCellWidthLandscapePx = 36;
 const LS = "[@media(orientation:landscape)_and_(max-height:560px)]";
-const bookingSources = [
-  "Сайт",
-  "Телефон",
-  "WhatsApp",
-  "Telegram",
-  "Booking.com",
-  "Ostrovok",
-  "Другое",
-] as const;
-
 function resolveDayCellWidthPx(): number {
   if (typeof window === "undefined") {
     return dayCellWidthDesktopPx;
@@ -162,17 +160,17 @@ function isMobilePortraitViewport(): boolean {
 const bookingColorOptions = [
   { id: "RED", label: "Красный" },
   { id: "ORANGE", label: "Оранжевый" },
-  { id: "GREEN", label: "Зеленый" },
+  { id: "GREEN", label: "Зелёный" },
   { id: "VIOLET", label: "Фиолетовый" },
 ] as const;
 
 // Chessboard-specific palette aligned with site olive/terra/sage tones.
 const chessboardToneClasses = {
-  checkedInBar: "border-[#0e7490] bg-[#22b6c8]/85",
-  confirmedGreenBar: "border-[#047857] bg-[#10b981]/85",
-  priceBar: "border-[#8f543b] bg-[#d08b63]/85",
-  selectedCell: "bg-sage/35",
-  selectionRange: "border-terra/55 bg-sage/35 shadow-[0_0_0_1px_rgba(15,118,110,0.3)]",
+  checkedInBar: "border-[#0f7490]/70 bg-[#22b6c8]/78",
+  confirmedGreenBar: "border-[#047857]/72 bg-[#10b981]/78",
+  priceBar: "border-[#9a6245]/60 bg-[#d08b63]/76",
+  selectedCell: "bg-sage/24",
+  selectionRange: "border-terra/45 bg-sage/18 shadow-[inset_0_0_0_1px_rgba(15,118,110,0.16)]",
 } as const;
 const modalSectionClass =
   "wizard-section-enter rounded-[24px] border border-olive/12 bg-[linear-gradient(180deg,rgba(248,242,232,0.86),rgba(255,255,255,0.98))] p-3 shadow-sm sm:p-4";
@@ -180,11 +178,15 @@ const modalTextInputClass =
   "min-h-11 rounded-2xl border-olive/15 bg-white shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]";
 const modalSelectClass =
   "w-full rounded-2xl border border-olive/15 bg-white px-3.5 py-3 text-sm text-olive shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/22";
-const modalTextareaClass =
-  "min-h-[108px] w-full rounded-2xl border border-olive/15 bg-white px-3.5 py-3 text-sm text-olive shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)] outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20";
 const modalMetaLabelClass = "text-[11px] uppercase tracking-[0.14em] text-olive/50";
 const modalPickerCardClass =
   "h-full rounded-2xl border border-olive/14 bg-white px-3.5 py-3 shadow-[0_14px_28px_-24px_rgba(60,42,20,0.7)] transition group-hover:border-primary/30 group-focus-within:border-primary/40 group-focus-within:ring-2 group-focus-within:ring-primary/12";
+const compactToolbarButtonClass =
+  "inline-flex h-9 items-center justify-center rounded-lg border border-olive/14 bg-white px-3 py-0 text-[11px] font-semibold text-olive/72 transition hover:bg-cream hover:text-olive sm:h-8 sm:text-xs";
+const compactToolbarPrimaryButtonClass =
+  "h-9 rounded-lg px-3 py-0 text-[11px] shadow-none sm:h-8 sm:text-xs";
+const compactToolbarNavShellClass =
+  "inline-grid h-9 min-w-[196px] grid-cols-[32px_minmax(108px,1fr)_32px] items-center gap-1 rounded-lg border border-olive/12 bg-cream/55 p-0.5 sm:h-8 sm:min-w-[220px] sm:grid-cols-[30px_minmax(132px,1fr)_30px]";
 
 function normalizeBookingColor(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
@@ -199,14 +201,14 @@ function getOccupancyBarClasses(status: "CONFIRMED" | "CHECKED_IN", color: strin
   const normalized = normalizeBookingColor(color);
   switch (normalized) {
     case "ORANGE":
-      return "border-amber-500 bg-amber-600";
+      return "border-amber-500/65 bg-amber-600/78";
     case "GREEN":
       return chessboardToneClasses.confirmedGreenBar;
     case "VIOLET":
-      return "border-violet-500 bg-violet-600";
+      return "border-violet-500/68 bg-violet-600/78";
     case "RED":
     default:
-      return "border-terra/70 bg-terra/85";
+      return "border-terra/58 bg-terra/78";
   }
 }
 
@@ -228,13 +230,13 @@ function periodContainsDate(dateFrom: string, dateTo: string, dayIso: string): b
   return compareIsoDates(dateFrom, dayIso) <= 0 && compareIsoDates(dayIso, dateTo) <= 0;
 }
 
-function buildVisibleDays(startIso: string): ChessboardDay[] {
+function buildVisibleDays(startIso: string, daysCount: number): ChessboardDay[] {
   const parsed = parseIsoDate(startIso);
-  if (!parsed) {
+  if (!parsed || daysCount <= 0) {
     return [];
   }
 
-  return Array.from({ length: visibleDaysCount }).map((_, index) => {
+  return Array.from({ length: daysCount }).map((_, index) => {
     const date = addDays(parsed, index);
     const weekDayIndex = (date.getUTCDay() + 6) % 7;
     return {
@@ -243,6 +245,7 @@ function buildVisibleDays(startIso: string): ChessboardDay[] {
       weekDayLabel: dayLabels[weekDayIndex],
       isWeekend: weekDayIndex >= 5,
       isWeekStart: weekDayIndex === 0 && index !== 0,
+      isMonthStart: date.getUTCDate() === 1,
     };
   });
 }
@@ -273,6 +276,42 @@ function formatPeriodHeader(days: ChessboardDay[]): string {
   }
 
   return `${monthLabels[firstMonth]} ${firstYear} - ${monthLabels[lastMonth]} ${lastYear}`;
+}
+
+function formatCompactMonthLabel(year: number, monthIndex: number): string {
+  return new Date(Date.UTC(year, monthIndex, 1))
+    .toLocaleDateString("ru-RU", { month: "short" })
+    .replace(".", "");
+}
+
+function buildMonthSegments(days: ChessboardDay[]): ChessboardMonthSegment[] {
+  const segments: ChessboardMonthSegment[] = [];
+
+  for (const day of days) {
+    const parsed = parseIsoDate(day.iso);
+    if (!parsed) {
+      continue;
+    }
+
+    const year = parsed.getUTCFullYear();
+    const monthIndex = parsed.getUTCMonth();
+    const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    const existingSegment = segments[segments.length - 1];
+
+    if (existingSegment?.key === key) {
+      existingSegment.daysCount += 1;
+      continue;
+    }
+
+    segments.push({
+      key,
+      label: `${monthLabels[monthIndex]} ${year}`,
+      compactLabel: formatCompactMonthLabel(year, monthIndex),
+      daysCount: 1,
+    });
+  }
+
+  return segments;
 }
 
 function formatDateLabel(iso: string): string {
@@ -327,7 +366,7 @@ function formatNightsLabel(nights: number): string {
 
 function formatTimeValueLabel(value: string): string {
   const normalized = value.trim();
-  return normalized.length > 0 ? normalized : "РќРµ СѓРєР°Р·Р°РЅРѕ";
+  return normalized.length > 0 ? normalized : "Не указано";
 }
 
 function formatTimeRangeLabel(timeFrom: string, timeTo: string): string {
@@ -338,12 +377,46 @@ function formatTimeRangeLabel(timeFrom: string, timeTo: string): string {
     return `${normalizedFrom} - ${normalizedTo}`;
   }
   if (normalizedFrom) {
-    return `Р—Р°РµР·Рґ СЃ ${normalizedFrom}`;
+    return `Заезд с ${normalizedFrom}`;
   }
   if (normalizedTo) {
-    return `Р’С‹РµР·Рґ РґРѕ ${normalizedTo}`;
+    return `Выезд до ${normalizedTo}`;
   }
-  return "Р’РµСЃСЊ РґРµРЅСЊ";
+  return "Весь день";
+}
+
+function formatCountLabel(value: number, forms: [string, string, string]): string {
+  const abs = Math.abs(value) % 100;
+  const last = abs % 10;
+
+  if (abs >= 11 && abs <= 14) {
+    return `${value} ${forms[2]}`;
+  }
+  if (last === 1) {
+    return `${value} ${forms[0]}`;
+  }
+  if (last >= 2 && last <= 4) {
+    return `${value} ${forms[1]}`;
+  }
+  return `${value} ${forms[2]}`;
+}
+
+function formatGuestPartyLabel(adults: number, children: number): string {
+  const adultsLabel = formatCountLabel(adults, ["взрослый", "взрослых", "взрослых"]);
+
+  if (children <= 0) {
+    return adultsLabel;
+  }
+
+  const childrenLabel = formatCountLabel(children, ["ребенок", "ребенка", "детей"]);
+  return `${adultsLabel} • ${childrenLabel}`;
+}
+
+function getBookingColorLabel(color: string | null | undefined): string {
+  const normalized = normalizeBookingColor(color);
+  return (
+    bookingColorOptions.find((option) => option.id === normalized)?.label ?? bookingColorOptions[0].label
+  );
 }
 
 function buildInitialBookingForm(input: {
@@ -367,7 +440,7 @@ function buildInitialBookingForm(input: {
     phone: "",
     email: "",
     website: "",
-    source: bookingSources[0],
+    source: "",
     description: "",
     createdAt: null,
   };
@@ -432,8 +505,10 @@ function readResponseError(body: unknown, fallback: string): string {
   return fallback;
 }
 
+const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+
 function formatPriceLabel(price: SerializedRoomPrice): string {
-  const amount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(price.price);
+  const amount = ruNumberFormat.format(price.price);
   return `${amount} ${price.currency}`;
 }
 
@@ -444,7 +519,7 @@ function truncateToLength(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength - 3)}...`;
 }
 
-function formatRoomMeta(room: SerializedRoom): string {
+function formatRoomMeta(room: SerializedChessboardRoom): string {
   const parts = [`${room.roomsCount} ком.`, `${room.beds + room.extraBeds} гост.`];
 
   if (room.areaSqm !== null) {
@@ -564,15 +639,12 @@ export function PropertyChessboardWorkspace({
     initialPropertyId ?? properties[0]?.id ?? null,
   );
   const [periodStartIso, setPeriodStartIso] = useState(initialTodayIso);
-  const [jumpDateValue, setJumpDateValue] = useState(initialTodayIso);
   const [boardMode, setBoardMode] = useState<BoardMode>("occupancy");
-  const [isJumpDateOpen, setIsJumpDateOpen] = useState(false);
   const [isObjectMenuOpen, setIsObjectMenuOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isOccupancyActionsOpen, setIsOccupancyActionsOpen] = useState(false);
-  const [isBookingDetailsOpen, setIsBookingDetailsOpen] = useState(false);
-  const [rooms, setRooms] = useState<SerializedRoom[]>([]);
+  const [rooms, setRooms] = useState<SerializedChessboardRoom[]>([]);
   const [occupanciesByRoom, setOccupanciesByRoom] = useState<
     Record<string, SerializedRoomOccupancy[]>
   >({});
@@ -597,6 +669,7 @@ export function PropertyChessboardWorkspace({
   const [bookingRoomPage, setBookingRoomPage] = useState(0);
   const [expandedMobileRailKey, setExpandedMobileRailKey] = useState<string | null>(null);
   const [dayCellWidthPx, setDayCellWidthPx] = useState(dayCellWidthDesktopPx);
+  const [visibleDaysCount, setVisibleDaysCount] = useState(minVisibleDaysCount);
   const objectMenuRef = useRef<HTMLDivElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -650,6 +723,64 @@ export function PropertyChessboardWorkspace({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const boardScroller = boardScrollRef.current;
+    if (!(boardScroller instanceof HTMLDivElement) || rooms.length === 0) {
+      setVisibleDaysCount((current) =>
+        current === minVisibleDaysCount ? current : minVisibleDaysCount,
+      );
+      return;
+    }
+    const scrollerElement = boardScroller;
+
+    function syncVisibleDaysCount() {
+      const styles = window.getComputedStyle(scrollerElement);
+      const sidebarWidthPx =
+        Number.parseFloat(styles.getPropertyValue("--cb-sidebar-w")) || 0;
+      const resolvedCellWidthPx =
+        Number.parseFloat(styles.getPropertyValue("--cb-cell-w")) || dayCellWidthPx;
+
+      if (resolvedCellWidthPx <= 0) {
+        setVisibleDaysCount(minVisibleDaysCount);
+        return;
+      }
+
+      const availableDaysWidthPx = Math.max(0, scrollerElement.clientWidth - sidebarWidthPx);
+      const nextVisibleDaysCount = Math.max(
+        minVisibleDaysCount,
+        Math.ceil(availableDaysWidthPx / resolvedCellWidthPx),
+      );
+
+      setVisibleDaysCount((current) =>
+        current === nextVisibleDaysCount ? current : nextVisibleDaysCount,
+      );
+    }
+
+    syncVisibleDaysCount();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", syncVisibleDaysCount);
+      window.addEventListener("orientationchange", syncVisibleDaysCount);
+      return () => {
+        window.removeEventListener("resize", syncVisibleDaysCount);
+        window.removeEventListener("orientationchange", syncVisibleDaysCount);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(syncVisibleDaysCount);
+    resizeObserver.observe(scrollerElement);
+    window.addEventListener("orientationchange", syncVisibleDaysCount);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("orientationchange", syncVisibleDaysCount);
+    };
+  }, [dayCellWidthPx, rooms.length, selectedPropertyId]);
+
+  useEffect(() => {
     setDragSelection(null);
   }, [boardMode, selectedPropertyId, periodStartIso]);
 
@@ -666,7 +797,6 @@ export function PropertyChessboardWorkspace({
             dateTo,
           }),
         );
-        setIsBookingDetailsOpen(false);
         setBookingModalError("");
         setIsBookingModalOpen(true);
         setDragSelection(null);
@@ -717,8 +847,12 @@ export function PropertyChessboardWorkspace({
     };
   }, [dragSelection, isCoarsePointer, openModalFromSelection]);
 
-  const visibleDays = useMemo(() => buildVisibleDays(periodStartIso), [periodStartIso]);
+  const visibleDays = useMemo(
+    () => buildVisibleDays(periodStartIso, visibleDaysCount),
+    [periodStartIso, visibleDaysCount],
+  );
   const periodHeaderLabel = useMemo(() => formatPeriodHeader(visibleDays), [visibleDays]);
+  const visibleMonthSegments = useMemo(() => buildMonthSegments(visibleDays), [visibleDays]);
   const periodFromIso = visibleDays[0]?.iso ?? initialTodayIso;
   const periodToIso = visibleDays[visibleDays.length - 1]?.iso ?? initialTodayIso;
   const normalizedDragSelection = useMemo(() => {
@@ -738,7 +872,7 @@ export function PropertyChessboardWorkspace({
     const normalizedRooms = [...rooms].sort((left, right) =>
       left.title.localeCompare(right.title, "ru"),
     );
-    const grouped = new Map<string, SerializedRoom[]>();
+    const grouped = new Map<string, SerializedChessboardRoom[]>();
 
     for (const room of normalizedRooms) {
       const key = `Категория: ${room.bathroomTypeLabel}`;
@@ -776,7 +910,7 @@ export function PropertyChessboardWorkspace({
 
     const start = mobileRoomPage * mobileRoomsPerPage;
     const slice = roomPagerEntries.slice(start, start + mobileRoomsPerPage);
-    const regrouped = new Map<string, SerializedRoom[]>();
+    const regrouped = new Map<string, SerializedChessboardRoom[]>();
 
     for (const entry of slice) {
       const list = regrouped.get(entry.groupLabel) ?? [];
@@ -906,8 +1040,11 @@ export function PropertyChessboardWorkspace({
     setMessageError("");
 
     try {
-      const response = await fetch(`/api/properties/${selectedPropertyId}/rooms`);
-      const body = (await response.json()) as { items?: SerializedRoom[]; error?: string };
+      const response = await fetch(`/api/properties/${selectedPropertyId}/rooms?view=chessboard`);
+      const body = (await response.json()) as {
+        items?: SerializedChessboardRoom[];
+        error?: string;
+      };
 
       if (!response.ok) {
         setMessageError(readResponseError(body, "Не удалось загрузить номера объекта"));
@@ -931,9 +1068,9 @@ export function PropertyChessboardWorkspace({
     void refreshRooms();
   }, [refreshRooms]);
 
-  // Occupancy API is room-scoped, so load all rooms in parallel for the current visible range.
+  // Occupancy API is property-scoped, so the visible window refreshes in a single request.
   const refreshOccupancies = useCallback(async () => {
-    if (!selectedPropertyId || rooms.length === 0) {
+    if (!selectedPropertyId) {
       setOccupanciesByRoom({});
       return;
     }
@@ -941,41 +1078,25 @@ export function PropertyChessboardWorkspace({
     setIsLoadingOccupancies(true);
 
     try {
-      const items = await Promise.all(
-        rooms.map(async (room) => {
-          const url = `/api/properties/${selectedPropertyId}/rooms/${room.id}/occupancy?from=${encodeURIComponent(periodFromIso)}&to=${encodeURIComponent(periodToIso)}`;
-          const response = await fetch(url);
-          const body = (await response.json()) as {
-            items?: SerializedRoomOccupancy[];
-            error?: string;
-          };
+      const url = `/api/properties/${selectedPropertyId}/occupancy?from=${encodeURIComponent(periodFromIso)}&to=${encodeURIComponent(periodToIso)}`;
+      const response = await fetch(url);
+      const body = (await response.json()) as {
+        itemsByRoom?: Record<string, SerializedRoomOccupancy[]>;
+        error?: string;
+      };
 
-          if (!response.ok) {
-            throw new Error(
-              readResponseError(body, `Не удалось загрузить занятость номера ${room.title}`),
-            );
-          }
-
-          return {
-            roomId: room.id,
-            items: body.items ?? [],
-          };
-        }),
-      );
-
-      const next: Record<string, SerializedRoomOccupancy[]> = {};
-      for (const item of items) {
-        next[item.roomId] = item.items;
+      if (!response.ok) {
+        throw new Error(readResponseError(body, "Не удалось загрузить занятость"));
       }
 
-      setOccupanciesByRoom(next);
+      setOccupanciesByRoom(body.itemsByRoom ?? {});
       setMessageError("");
     } catch (error) {
       setMessageError(error instanceof Error ? error.message : "Не удалось загрузить занятость");
     } finally {
       setIsLoadingOccupancies(false);
     }
-  }, [periodFromIso, periodToIso, rooms, selectedPropertyId]);
+  }, [periodFromIso, periodToIso, selectedPropertyId]);
 
   useEffect(() => {
     void refreshOccupancies();
@@ -1025,18 +1146,10 @@ export function PropertyChessboardWorkspace({
         phone: sourceOccupancy.guestPhone ?? "",
         email: parsedContacts.email,
         website: parsedContacts.website,
-        source: sourceOccupancy.source ?? bookingSources[0],
+        source: sourceOccupancy.source ?? "",
         description: sourceOccupancy.description ?? "",
         createdAt: sourceOccupancy.createdAt,
       });
-      setIsBookingDetailsOpen(
-        Boolean(
-          parsedContacts.email ||
-          parsedContacts.website ||
-          sourceOccupancy.guestPhone ||
-          sourceOccupancy.source,
-        ),
-      );
     } else {
       setBookingForm(
         buildInitialBookingForm({
@@ -1045,7 +1158,6 @@ export function PropertyChessboardWorkspace({
           dateTo,
         }),
       );
-      setIsBookingDetailsOpen(false);
     }
 
     setBookingModalError("");
@@ -1057,7 +1169,6 @@ export function PropertyChessboardWorkspace({
     setIsBookingModalOpen(false);
     setBookingForm(null);
     setBookingModalError("");
-    setIsBookingDetailsOpen(false);
   }
 
   function updateBookingForm(patch: Partial<BookingFormState>) {
@@ -1135,9 +1246,7 @@ export function PropertyChessboardWorkspace({
 
   function jumpToDate(dateIso: string) {
     setPeriodStartIso(dateIso);
-    setJumpDateValue(dateIso);
     setDragSelection(null);
-    setIsJumpDateOpen(false);
     scrollBoardToPeriodStart();
   }
 
@@ -1533,17 +1642,31 @@ export function PropertyChessboardWorkspace({
   const activeOccupancyRoom = activeOccupancy
     ? (roomLookupById.get(activeOccupancy.roomId) ?? null)
     : null;
+  const activeOccupancyCreatedAtLabel = activeOccupancy
+    ? new Date(activeOccupancy.createdAt).toLocaleString("ru-RU")
+    : null;
+  const activeOccupancyPeriodLabel = activeOccupancy
+    ? formatDateRangeLabel(activeOccupancy.dateFrom, activeOccupancy.dateTo)
+    : "—";
+  const activeOccupancyTimeLabel = activeOccupancy
+    ? formatTimeRangeLabel(activeOccupancy.timeFrom ?? "", activeOccupancy.timeTo ?? "")
+    : "—";
+  const activeOccupancyPhoneLabel = activeOccupancy?.guestPhone?.trim() || "—";
+  const activeOccupancyGuestsLabel = activeOccupancy
+    ? formatGuestPartyLabel(activeOccupancy.adultsCount, activeOccupancy.childrenCount)
+    : "—";
+  const activeOccupancyColorLabel = activeOccupancy ? getBookingColorLabel(activeOccupancy.color) : "—";
 
   return (
-    <div className="space-y-3">
-      <section className="space-y-3">
-        <div className="rounded-2xl border border-olive/8 bg-white p-3 shadow-sm md:p-4 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-xl [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
+    <div className="chessboard-workspace space-y-2.5">
+      <section className="space-y-2.5">
+        <div className="rounded-xl border border-olive/10 bg-white/95 p-2.5 shadow-[0_10px_26px_-24px_rgba(58,43,35,0.4)] md:p-3 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
           {/* Row 1: Object selector + mode toggle */}
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center [@media(orientation:landscape)_and_(max-height:560px)]:grid-cols-[minmax(0,1fr)_auto] [@media(orientation:landscape)_and_(max-height:560px)]:gap-1.5">
+          <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center [@media(orientation:landscape)_and_(max-height:560px)]:grid-cols-[minmax(0,1fr)_auto] [@media(orientation:landscape)_and_(max-height:560px)]:gap-1">
             <div className="relative min-w-0" ref={objectMenuRef}>
               <button
                 type="button"
-                className="inline-flex w-full items-center justify-between gap-2 rounded-xl border border-olive/15 bg-cream/60 px-3 py-2.5 text-left text-sm font-semibold text-olive transition hover:bg-cream sm:min-w-[260px] [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:text-xs"
+                className="inline-flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-olive/14 bg-cream/55 px-3 text-left text-[13px] font-semibold text-olive transition hover:bg-cream sm:min-w-[220px] sm:text-sm [@media(orientation:landscape)_and_(max-height:560px)]:h-8 [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]"
                 onClick={() => setIsObjectMenuOpen((prev) => !prev)}
               >
                 <span className="truncate">{selectedProperty?.name ?? "Выберите объект"}</span>
@@ -1554,7 +1677,7 @@ export function PropertyChessboardWorkspace({
               </button>
 
               {isObjectMenuOpen ? (
-                <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[280px] rounded-xl border border-olive/12 bg-white p-1 shadow-xl">
+                <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[220px] rounded-lg border border-olive/12 bg-white p-1 shadow-[0_16px_36px_-24px_rgba(58,43,35,0.28)]">
                   {properties.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-olive/70">Нет доступных объектов</p>
                   ) : (
@@ -1590,13 +1713,13 @@ export function PropertyChessboardWorkspace({
               ) : null}
             </div>
 
-            <div className="inline-flex w-full rounded-xl border border-olive/15 bg-cream/40 p-0.5 sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg">
+            <div className="inline-flex h-9 w-full rounded-lg border border-olive/15 bg-cream/45 p-0.5 sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:h-8">
               <button
                 type="button"
                 className={cn(
-                  "flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:flex-none [@media(orientation:landscape)_and_(max-height:560px)]:rounded-md [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]",
+                  "flex-1 rounded-md px-3 text-[11px] font-semibold transition-all duration-200 sm:flex-none sm:text-xs [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]",
                   boardMode === "occupancy"
-                    ? "bg-primary text-white shadow-sm"
+                    ? "bg-primary text-white shadow-[0_8px_18px_-14px_rgba(15,118,110,0.9)]"
                     : "text-olive/70 hover:text-olive",
                 )}
                 onClick={() => {
@@ -1609,9 +1732,9 @@ export function PropertyChessboardWorkspace({
               <button
                 type="button"
                 className={cn(
-                  "flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:flex-none [@media(orientation:landscape)_and_(max-height:560px)]:rounded-md [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]",
+                  "flex-1 rounded-md px-3 text-[11px] font-semibold transition-all duration-200 sm:flex-none sm:text-xs [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]",
                   boardMode === "prices"
-                    ? "bg-primary text-white shadow-sm"
+                    ? "bg-primary text-white shadow-[0_8px_18px_-14px_rgba(15,118,110,0.9)]"
                     : "text-olive/70 hover:text-olive",
                 )}
                 onClick={() => {
@@ -1624,116 +1747,91 @@ export function PropertyChessboardWorkspace({
             </div>
           </div>
 
-          {/* Row 2: quick actions */}
-          <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:mt-1 [@media(orientation:landscape)_and_(max-height:560px)]:flex [@media(orientation:landscape)_and_(max-height:560px)]:flex-wrap [@media(orientation:landscape)_and_(max-height:560px)]:gap-1">
-            {boardMode === "occupancy" ? (
-              <Button
-                className="w-full sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]"
-                onClick={() => openBookingModal()}
-                disabled={!canManageCalendar}
-              >
-                + Бронь
-              </Button>
-            ) : (
-              <Button
-                className="w-full sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]"
-                onClick={() => openPriceModal()}
-                disabled={!canManageCalendar}
-              >
-                + Цена
-              </Button>
-            )}
-            <button
-              type="button"
-              className="w-full shrink-0 rounded-xl border border-olive/15 px-3 py-2 text-xs font-medium text-olive/70 transition hover:bg-cream hover:text-olive sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]"
-              onClick={() => jumpToDate(getLocalTodayIso())}
-            >
-              Сегодня
-            </button>
-            <div className="relative w-full shrink-0 sm:w-auto">
+          {/* Row 2: quick actions + period navigation */}
+          <div className="mt-2 overflow-x-auto custom-scrollbar">
+            <div className="flex min-w-max items-center gap-1.5 pb-0.5 sm:min-w-0 sm:flex-wrap">
+              {boardMode === "occupancy" ? (
+                <Button
+                  className={cn(compactToolbarPrimaryButtonClass, "shrink-0")}
+                  onClick={() => openBookingModal()}
+                  disabled={!canManageCalendar}
+                >
+                  + Бронь
+                </Button>
+              ) : (
+                <Button
+                  className={cn(compactToolbarPrimaryButtonClass, "shrink-0")}
+                  onClick={() => openPriceModal()}
+                  disabled={!canManageCalendar}
+                >
+                  + Цена
+                </Button>
+              )}
               <button
                 type="button"
-                className="w-full rounded-xl border border-olive/15 px-3 py-2 text-xs font-medium text-olive/70 transition hover:bg-cream hover:text-olive sm:w-auto [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]"
-                onClick={() => {
-                  setJumpDateValue(periodStartIso);
-                  setIsJumpDateOpen((prev) => !prev);
-                }}
+                className={cn(compactToolbarButtonClass, "shrink-0")}
+                onClick={() => jumpToDate(getLocalTodayIso())}
               >
-                К дате
+                Сегодня
               </button>
-              {isJumpDateOpen ? (
-                <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-xl border border-olive/12 bg-white p-3 shadow-xl sm:left-auto sm:right-0 sm:w-[220px]">
-                  <Input
-                    type="date"
-                    value={jumpDateValue}
-                    onChange={(event) => setJumpDateValue(event.target.value)}
-                  />
-                  <div className="mt-2 flex gap-1.5">
-                    <Button
-                      className="flex-1"
-                      onClick={() => {
-                        if (parseIsoDate(jumpDateValue)) {
-                          jumpToDate(jumpDateValue);
-                        }
-                      }}
-                    >
-                      Перейти
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="flex-1"
-                      onClick={() => setIsJumpDateOpen(false)}
-                    >
-                      Отмена
-                    </Button>
-                  </div>
+              <SingleDatePopoverField
+                value={periodStartIso}
+                onChange={(nextValue) => {
+                  if (!parseIsoDate(nextValue)) {
+                    return;
+                  }
+                  jumpToDate(nextValue);
+                }}
+                placeholder="К дате"
+                helperText="Выберите дату перехода"
+                buttonLabel="К дате"
+                showAdornment={false}
+                allowClear={false}
+                desktopPanelStyle="dialog"
+                desktopPopoverAlign="left"
+                rootClassName="shrink-0"
+                buttonClassName={cn(compactToolbarButtonClass, "w-auto min-w-[92px]")}
+              />
+              {selectedPropertyId && properties.length > 0 ? (
+                <div className={cn(compactToolbarNavShellClass, "shrink-0 sm:ml-auto")}>
+                  <button
+                    type="button"
+                    className="inline-flex h-full w-8 items-center justify-center rounded-md border border-olive/14 bg-white text-olive/60 transition hover:bg-cream hover:text-olive"
+                    onClick={() => shiftVisiblePeriod(-visibleDaysCount)}
+                    aria-label="Назад"
+                  >
+                    <AppIcon
+                      icon={ChevronLeft}
+                      className="h-3.5 w-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:h-3 [@media(orientation:landscape)_and_(max-height:560px)]:w-3"
+                    />
+                  </button>
+                  <span className="truncate rounded-md bg-white px-2 py-1 text-center text-[11px] font-semibold text-olive/72 sm:text-xs">
+                    {periodHeaderLabel}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex h-full w-8 items-center justify-center rounded-md border border-olive/14 bg-white text-olive/60 transition hover:bg-cream hover:text-olive"
+                    onClick={() => shiftVisiblePeriod(visibleDaysCount)}
+                    aria-label="Вперед"
+                  >
+                    <AppIcon
+                      icon={ChevronRight}
+                      className="h-3.5 w-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:h-3 [@media(orientation:landscape)_and_(max-height:560px)]:w-3"
+                    />
+                  </button>
                 </div>
               ) : null}
-            </div>
-          </div>
-
-          <div className="hidden">
-            {selectedProperty ? (
-              <div className="flex flex-wrap items-center gap-2 sm:justify-between">
-                <p className="text-sm text-olive/75">
-                  Объект:{" "}
-                  <span className="font-semibold text-olive">
-                    {selectedProperty.name ?? "Без названия"}
-                  </span>
-                </p>
-                <span className="inline-flex items-center rounded-full border border-olive/15 bg-white px-2.5 py-1 text-[11px] font-semibold text-olive/70">
-                  {selectedProperty.statusLabel}
-                </span>
-              </div>
-            ) : null}
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-2 sm:justify-between",
-                selectedProperty ? "mt-2" : "",
-              )}
-            >
-              <p className="text-sm text-olive/75">
-                Период:{" "}
-                <span className="font-semibold text-olive">
-                  {formatDateLabel(periodFromIso)} - {formatDateLabel(periodToIso)}
-                </span>
-              </p>
               <span
                 className={cn(
-                  "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                  "hidden shrink-0 items-center rounded-full px-2 py-1 text-[10px] font-semibold sm:inline-flex",
                   isLoadingRooms || isLoadingOccupancies
                     ? "bg-amber-100 text-amber-700"
                     : "bg-emerald-100 text-emerald-700",
                 )}
               >
-                {isLoadingRooms || isLoadingOccupancies
-                  ? "Обновляем данные..."
-                  : "Данные актуальны"}
+                {isLoadingRooms || isLoadingOccupancies ? "Обновляем..." : "Актуально"}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-olive/60 sm:text-xs">
-              Красные вертикальные линии показывают границы недель.
-            </p>
           </div>
         </div>
 
@@ -1749,59 +1847,33 @@ export function PropertyChessboardWorkspace({
         ) : null}
 
         {properties.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-olive/25 bg-cream p-4 text-sm text-olive/75">
+          <div className="rounded-xl border border-dashed border-olive/25 bg-cream/70 p-4 text-sm text-olive/75">
             У вас пока нет объектов. Добавьте объект в разделе «Объекты», после этого шахматка
             станет доступна.
           </div>
         ) : null}
 
         {selectedPropertyId && properties.length > 0 ? (
-          <div className="rounded-2xl border border-olive/10 bg-white p-3 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-xl [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
-            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-olive/15 bg-cream/30 p-1 [@media(orientation:landscape)_and_(max-height:560px)]:gap-1 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-0.5">
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-olive/15 bg-white text-olive/60 transition hover:bg-cream hover:text-olive [@media(orientation:landscape)_and_(max-height:560px)]:h-7 [@media(orientation:landscape)_and_(max-height:560px)]:w-7 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-md"
-                onClick={() => shiftVisiblePeriod(-visibleDaysCount)}
-                aria-label="Назад"
-              >
-                <AppIcon
-                  icon={ChevronLeft}
-                  className="h-4 w-4 [@media(orientation:landscape)_and_(max-height:560px)]:h-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:w-3.5"
-                />
-              </button>
-              <span className="truncate rounded-lg bg-white px-2 py-1 text-center text-xs font-semibold text-olive/70 sm:text-sm [@media(orientation:landscape)_and_(max-height:560px)]:rounded-md [@media(orientation:landscape)_and_(max-height:560px)]:px-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-0.5 [@media(orientation:landscape)_and_(max-height:560px)]:text-[11px]">
-                {periodHeaderLabel}
-              </span>
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-olive/15 bg-white text-olive/60 transition hover:bg-cream hover:text-olive [@media(orientation:landscape)_and_(max-height:560px)]:h-7 [@media(orientation:landscape)_and_(max-height:560px)]:w-7 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-md"
-                onClick={() => shiftVisiblePeriod(visibleDaysCount)}
-                aria-label="Вперед"
-              >
-                <AppIcon
-                  icon={ChevronRight}
-                  className="h-4 w-4 [@media(orientation:landscape)_and_(max-height:560px)]:h-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:w-3.5"
-                />
-              </button>
-            </div>
-
+          <div className="rounded-xl border border-olive/10 bg-white/96 p-2 md:p-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
             {rooms.length === 0 && !isLoadingRooms ? (
-              <p className="mt-3 rounded-xl border border-dashed border-olive/30 p-4 text-sm text-olive/65">
+              <p className="rounded-lg border border-dashed border-olive/30 px-3 py-3 text-sm text-olive/65">
                 В объекте пока нет активных номеров. Добавьте номер в разделе «Номерной фонд».
               </p>
             ) : null}
 
             {isMobilePortrait && roomPagerEntries.length > 0 ? (
-              <div className="mt-3 rounded-[22px] border border-primary/10 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(240,253,250,0.95)_55%,rgba(255,255,255,0.98))] px-3 py-2.5 shadow-[0_18px_35px_-28px_rgba(15,118,110,0.5)]">
-                <div className="flex items-start justify-between gap-3">
+              <div className="mt-2 rounded-lg border border-primary/10 bg-[linear-gradient(135deg,rgba(15,118,110,0.05),rgba(250,248,245,0.94)_60%,rgba(255,255,255,0.98))] px-3 py-2 shadow-[0_16px_32px_-30px_rgba(15,118,110,0.4)]">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-olive">Вертикальный режим шахматки</p>
-                    <p className="mt-1 text-xs text-olive/65">
-                      Подписи слева свернуты. Тапните по ярлыку, чтобы раскрыть название номера.
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-olive/55">
+                      Номера
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold text-olive">
+                      {visibleRoomRange.from}-{visibleRoomRange.to} из {roomPagerEntries.length}
                     </p>
                   </div>
                   <span className="glass-badge inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">
-                    {visibleRoomRange.from}-{visibleRoomRange.to}
+                    {mobileRoomPage + 1}/{mobileRoomPageCount}
                   </span>
                 </div>
               </div>
@@ -1810,48 +1882,62 @@ export function PropertyChessboardWorkspace({
             {rooms.length > 0 ? (
               <div
                 ref={boardScrollRef}
-                className="chessboard-board-scroll custom-scrollbar mt-2 max-h-[68dvh] overflow-auto overscroll-contain rounded-xl border border-olive/8 md:max-h-[76vh] [@media(orientation:landscape)_and_(max-height:560px)]:mt-1 [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[72dvh] [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg"
+                className="chessboard-board-scroll custom-scrollbar mt-1.5 max-h-[70dvh] overflow-auto overscroll-contain rounded-lg border border-olive/10 bg-[linear-gradient(180deg,rgba(247,243,235,0.78),rgba(255,255,255,0.98)_18%,rgba(255,255,255,0.98))] md:max-h-[78vh] [@media(orientation:landscape)_and_(max-height:560px)]:mt-1 [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[72dvh]"
               >
                 <table className="min-w-max border-separate border-spacing-0">
                   <thead>
                     <tr>
                       <th
                         className={cn(
-                          `sticky left-0 top-0 z-40 h-10 border-b border-r border-olive/10 bg-cream text-left text-xs font-semibold text-olive md:text-sm ${LS}:h-7 ${LS}:text-[10px]`,
-                          isMobilePortrait
-                            ? "min-w-[56px] px-1.5"
-                            : `min-w-[120px] px-2 sm:min-w-[180px] md:min-w-[280px] md:px-3 ${LS}:min-w-[90px] ${LS}:px-1.5`,
+                          `sticky left-0 top-0 z-50 border-b border-r border-olive/10 bg-[#f7f3eb] px-2 text-left text-[11px] font-semibold text-olive md:px-2.5 md:text-xs ${LS}:px-1.5 ${LS}:text-[10px]`,
                         )}
+                        style={{
+                          width: "var(--cb-sidebar-w)",
+                          minWidth: "var(--cb-sidebar-w)",
+                          height: "var(--cb-header-h1)",
+                        }}
                       >
-                        {isMobilePortrait ? (
-                          <div className="flex justify-center">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-white/90 text-[10px] font-black tracking-[0.18em] text-primary shadow-sm">
-                              {boardMode === "occupancy" ? "ЗН" : "ЦН"}
+                        {boardMode === "occupancy" ? "Занятость" : "Цены"}
+                      </th>
+                      {visibleMonthSegments.map((segment, segmentIndex) => (
+                        <th
+                          key={segment.key}
+                          colSpan={segment.daysCount}
+                          className={cn(
+                            `sticky top-0 z-30 border-b px-0 text-center text-[11px] font-semibold text-olive/82 md:text-xs ${LS}:text-[10px]`,
+                            segmentIndex === 0
+                              ? "border-l border-olive/10"
+                              : "border-l-2 border-l-terra/32",
+                            segmentIndex % 2 === 0 ? "bg-[#f7f3eb]" : "bg-[#f2ecdf]",
+                          )}
+                          style={{ height: "var(--cb-header-h1)" }}
+                        >
+                          <div className="flex h-full items-center justify-center px-2 md:px-3">
+                            <span
+                              className={cn(
+                                "block truncate",
+                                segment.daysCount <= 2 ? "text-[10px] lowercase" : "",
+                              )}
+                            >
+                              {segment.daysCount <= 2 ? segment.compactLabel : segment.label}
                             </span>
                           </div>
-                        ) : boardMode === "occupancy" ? (
-                          "Занятость"
-                        ) : (
-                          "Цены"
-                        )}
-                      </th>
-                      <th
-                        colSpan={visibleDays.length}
-                        className={`sticky top-0 z-30 h-10 border-b border-olive/10 bg-cream px-2 text-left text-xs font-semibold text-olive md:px-3 md:text-sm ${LS}:h-7 ${LS}:px-1.5 ${LS}:text-[10px]`}
-                      >
-                        {periodHeaderLabel}
-                      </th>
+                        </th>
+                      ))}
                     </tr>
                     <tr>
                       <th
                         className={cn(
-                          `sticky left-0 top-10 z-40 border-b border-r border-olive/10 bg-white text-left text-[10px] uppercase tracking-wide text-olive/55 after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[2px] after:h-[2px] after:bg-inherit md:text-xs ${LS}:top-7 ${LS}:text-[8px]`,
-                          isMobilePortrait
-                            ? "min-w-[56px] px-1.5 py-1"
-                            : `min-w-[120px] px-2 py-1.5 sm:min-w-[180px] md:min-w-[280px] md:px-3 md:py-2 ${LS}:min-w-[90px] ${LS}:px-1.5 ${LS}:py-0.5`,
+                          `sticky left-0 z-50 border-b border-r border-olive/10 bg-white px-2 text-left text-[9px] uppercase tracking-[0.12em] text-olive/48 md:px-2.5 md:text-[10px] ${LS}:px-1.5 ${LS}:text-[8px]`,
                         )}
+                        style={{
+                          top: "var(--cb-header-h1)",
+                          width: "var(--cb-sidebar-w)",
+                          minWidth: "var(--cb-sidebar-w)",
+                          height: "var(--cb-header-h2)",
+                        }}
                       >
-                        {isMobilePortrait ? "№" : "Номер"}
+                        Номер
                       </th>
                       {visibleDays.map((day) => {
                         const isDayToday = day.iso === initialTodayIso;
@@ -1859,19 +1945,32 @@ export function PropertyChessboardWorkspace({
                           <th
                             key={day.iso}
                             className={cn(
-                              `sticky top-10 z-20 border-b border-l border-olive/10 text-center after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[2px] after:h-[2px] after:bg-inherit ${LS}:top-7 ${LS}:w-9 ${LS}:min-w-9 ${LS}:px-0 ${LS}:py-0.5`,
-                              isMobilePortrait
-                                ? "w-11 min-w-11 px-0 py-1"
-                                : "w-12 min-w-12 px-0.5 py-1 sm:w-14 sm:min-w-14 md:w-16 md:min-w-16 md:px-1",
-                              isDayToday ? "bg-primary/10" : day.isWeekend ? "bg-sand" : "bg-white",
-                              day.isWeekStart ? "border-l-2 border-l-red-300/70" : "",
-                              isDayToday ? "border-l border-l-primary/40" : "",
+                              `sticky z-20 border-b border-l border-olive/10 px-0 text-center ${LS}:px-0`,
+                              isDayToday
+                                ? "bg-primary/7"
+                                : day.isMonthStart
+                                  ? "bg-[linear-gradient(180deg,rgba(244,235,225,0.96),rgba(255,255,255,0.98))]"
+                                : day.isWeekend
+                                  ? "bg-sand/55"
+                                  : "bg-white/96",
+                              day.isMonthStart
+                                ? "border-l-2 border-l-terra/40 shadow-[inset_1px_0_0_rgba(154,98,69,0.14)]"
+                                : day.isWeekStart
+                                  ? "border-l-terra/35"
+                                  : "",
+                              isDayToday ? "shadow-[inset_0_0_0_1px_rgba(15,118,110,0.1)]" : "",
                             )}
+                            style={{
+                              top: "var(--cb-header-h1)",
+                              width: "var(--cb-cell-w)",
+                              minWidth: "var(--cb-cell-w)",
+                              height: "var(--cb-header-h2)",
+                            }}
                           >
                             <span
                               className={cn(
-                                `block font-semibold ${LS}:text-[9px]`,
-                                isMobilePortrait ? "text-[11px]" : "text-xs md:text-sm",
+                                `block font-semibold leading-none ${LS}:text-[9px]`,
+                                isMobilePortrait ? "text-[11px]" : "text-[11px] md:text-xs",
                                 isDayToday ? "text-primary" : "text-olive",
                               )}
                             >
@@ -1879,12 +1978,12 @@ export function PropertyChessboardWorkspace({
                             </span>
                             <span
                               className={cn(
-                                `block uppercase ${LS}:text-[7px]`,
-                                isMobilePortrait ? "text-[8px]" : "text-[9px] md:text-[11px]",
+                                `mt-1 block uppercase leading-none ${LS}:text-[7px]`,
+                                isMobilePortrait ? "text-[8px]" : "text-[8px] md:text-[10px]",
                                 isDayToday
-                                  ? "font-bold text-primary/70"
+                                  ? "font-semibold text-primary/72"
                                   : day.isWeekend
-                                    ? "font-semibold text-terra"
+                                    ? "font-medium text-terra/80"
                                     : "text-olive/55",
                               )}
                             >
@@ -1946,18 +2045,18 @@ export function PropertyChessboardWorkspace({
               </div>
             ) : null}
             {isMobilePortrait && mobileRoomPageCount > 1 ? (
-              <div className="glass-booking sticky-bottom-enter mt-3 rounded-[24px] p-3">
+              <div className="sticky-bottom-enter mt-2 rounded-lg border border-olive/10 bg-white/94 p-2.5 shadow-[0_18px_36px_-30px_rgba(58,43,35,0.32)]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-olive">
                       Номера {visibleRoomRange.from}-{visibleRoomRange.to} из{" "}
                       {roomPagerEntries.length}
                     </p>
-                    <p className="mt-1 text-xs text-olive/60">
+                    <p className="mt-0.5 text-xs text-olive/60">
                       Переключайте блоки по 3 номера, чтобы оставить больше места самой шахматке.
                     </p>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
                     {mobileRoomPage + 1}/{mobileRoomPageCount}
                   </span>
                 </div>
@@ -1965,7 +2064,7 @@ export function PropertyChessboardWorkspace({
                   pageCount={mobileRoomPageCount}
                   currentPage={mobileRoomPage}
                   onChange={setMobileRoomPage}
-                  className="mt-3"
+                  className="mt-2.5"
                 />
               </div>
             ) : null}
@@ -1992,8 +2091,7 @@ export function PropertyChessboardWorkspace({
               <section className="rounded-xl border border-olive/12 bg-cream/45 p-3">
                 <p className="text-xs uppercase tracking-wide text-olive/60">Период проживания</p>
                 <p className="mt-1 text-sm font-semibold text-olive">
-                  {formatDateLabel(activeOccupancy.dateFrom)} -{" "}
-                  {formatDateLabel(activeOccupancy.dateTo)}
+                  {activeOccupancyPeriodLabel}
                 </p>
                 <p className="mt-1 text-xs text-olive/70">
                   {formatNightsLabel(activeOccupancyNights)}
@@ -2025,21 +2123,45 @@ export function PropertyChessboardWorkspace({
               </div>
 
               <section className="rounded-xl border border-olive/12 bg-cream/45 p-3">
-                <div className="grid gap-2 text-sm text-olive/85">
-                  <p>
-                    <span className="text-olive/60">Статус:</span> {activeOccupancyStatusLabel}
-                  </p>
-                  <p>
-                    <span className="text-olive/60">Метка:</span>{" "}
-                    {activeOccupancy.tag ? truncateToLength(activeOccupancy.tag, 20) : "—"}
-                  </p>
-                  <p>
-                    <span className="text-olive/60">Номер:</span>{" "}
-                    {activeOccupancyRoom?.title ?? "—"}
-                  </p>
-                  <p>
-                    <span className="text-olive/60">Гость:</span> {activeOccupancy.guestLabel}
-                  </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className={modalMetaLabelClass}>Статус</p>
+                    <p className="mt-1 text-sm font-semibold text-olive">
+                      {activeOccupancyStatusLabel}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Создано</p>
+                    <p className="mt-1 text-sm text-olive/80">
+                      {activeOccupancyCreatedAtLabel ?? "Только что"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Номер</p>
+                    <p className="mt-1 text-sm font-semibold text-olive">
+                      {activeOccupancyRoom?.title ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Цвет брони</p>
+                    <p className="mt-1 text-sm text-olive/80">{activeOccupancyColorLabel}</p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Гость</p>
+                    <p className="mt-1 text-sm text-olive/80">{activeOccupancy.guestLabel}</p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Номер телефона</p>
+                    <p className="mt-1 text-sm text-olive/80">{activeOccupancyPhoneLabel}</p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Время</p>
+                    <p className="mt-1 text-sm text-olive/80">{activeOccupancyTimeLabel}</p>
+                  </div>
+                  <div>
+                    <p className={modalMetaLabelClass}>Гости</p>
+                    <p className="mt-1 text-sm text-olive/80">{activeOccupancyGuestsLabel}</p>
+                  </div>
                 </div>
               </section>
 
@@ -2209,74 +2331,16 @@ export function PropertyChessboardWorkspace({
               </section>
 
               <section className={modalSectionClass}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-olive sm:text-[15px]">
-                    Контактные данные
-                  </p>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-olive/80 hover:text-olive"
-                    onClick={() => setIsBookingDetailsOpen((prev) => !prev)}
-                  >
-                    {isBookingDetailsOpen
-                      ? "Скрыть дополнительные поля"
-                      : "Показать дополнительные поля"}
-                    <span
-                      className={cn(
-                        "transition-transform",
-                        isBookingDetailsOpen ? "rotate-180" : "",
-                      )}
-                    >
-                      ▼
-                    </span>
-                  </button>
-                </div>
+                <p className="text-sm font-semibold text-olive sm:text-[15px]">
+                  Номер телефона
+                </p>
                 <div className="mt-3">
-                  <Input
-                    className={modalTextInputClass}
-                    value={bookingForm.contactName}
-                    onChange={(event) => updateBookingForm({ contactName: event.target.value })}
-                    placeholder="Контактное лицо"
-                  />
-                </div>
-                <div
-                  className={cn(
-                    "grid overflow-hidden transition-all duration-300",
-                    isBookingDetailsOpen
-                      ? "mt-3 max-h-[420px] gap-2 opacity-100 sm:grid-cols-2"
-                      : "pointer-events-none mt-0 max-h-0 opacity-0",
-                  )}
-                >
                   <Input
                     className={modalTextInputClass}
                     value={bookingForm.phone}
                     onChange={(event) => updateBookingForm({ phone: event.target.value })}
                     placeholder="+7 (___) ___-__-__"
                   />
-                  <Input
-                    className={modalTextInputClass}
-                    type="email"
-                    value={bookingForm.email}
-                    onChange={(event) => updateBookingForm({ email: event.target.value })}
-                    placeholder="Email"
-                  />
-                  <Input
-                    className={modalTextInputClass}
-                    value={bookingForm.website}
-                    onChange={(event) => updateBookingForm({ website: event.target.value })}
-                    placeholder="Сайт"
-                  />
-                  <select
-                    className={modalSelectClass}
-                    value={bookingForm.source}
-                    onChange={(event) => updateBookingForm({ source: event.target.value })}
-                  >
-                    {bookingSources.map((source) => (
-                      <option key={source} value={source}>
-                        {source}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </section>
               <section className={modalSectionClass}>
@@ -2408,41 +2472,6 @@ export function PropertyChessboardWorkspace({
                     </div>
                   </div>
                 </div>
-              </section>
-
-              <section className={modalSectionClass}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-olive sm:text-[15px]">Метка брони</p>
-                </div>
-                <div className="mt-3">
-                  <Input
-                    className={modalTextInputClass}
-                    value={bookingForm.tag}
-                    onChange={(event) =>
-                      updateBookingForm({ tag: event.target.value.slice(0, 20) })
-                    }
-                    maxLength={20}
-                    placeholder="Например: Раннее бронирование"
-                  />
-                  <p className="mt-1 text-xs text-olive/60">{bookingForm.tag.length}/20</p>
-                </div>
-              </section>
-
-              <section className={modalSectionClass}>
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-olive sm:text-[15px]">
-                    Описание (до 250 символов)
-                  </span>
-                  <textarea
-                    value={bookingForm.description}
-                    onChange={(event) => updateBookingForm({ description: event.target.value })}
-                    maxLength={250}
-                    rows={4}
-                    className={modalTextareaClass}
-                    placeholder="Описание брони (необязательно)"
-                  />
-                  <p className="text-xs text-olive/60">{bookingForm.description.length}/250</p>
-                </label>
               </section>
 
               {bookingModalError ? (
@@ -2695,7 +2724,7 @@ export function PropertyChessboardWorkspace({
 
 type FragmentByGroupProps = {
   groupLabel: string;
-  rooms: SerializedRoom[];
+  rooms: SerializedChessboardRoom[];
   visibleDays: ChessboardDay[];
   boardMode: BoardMode;
   dayCellWidthPx: number;
@@ -2735,12 +2764,12 @@ function CompactPageDots({ pageCount, currentPage, onChange, className }: Compac
     <div className={cn("flex items-center gap-2", className)}>
       <button
         type="button"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-olive/12 bg-white text-olive/65 transition hover:border-primary/20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/12 bg-white text-olive/65 transition hover:border-primary/20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
         onClick={() => onChange(Math.max(0, currentPage - 1))}
         disabled={currentPage === 0}
         aria-label="Предыдущая страница номеров"
       >
-        <AppIcon icon={ChevronLeft} className="h-4 w-4" />
+        <AppIcon icon={ChevronLeft} className="h-3.5 w-3.5" />
       </button>
       <div className="custom-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto py-1">
         {Array.from({ length: pageCount }, (_, pageIndex) => (
@@ -2748,9 +2777,9 @@ function CompactPageDots({ pageCount, currentPage, onChange, className }: Compac
             key={pageIndex}
             type="button"
             className={cn(
-              "h-9 min-w-9 rounded-full px-3 text-sm font-semibold transition",
+              "h-8 min-w-8 rounded-full px-2.5 text-xs font-semibold transition",
               currentPage === pageIndex
-                ? "bg-primary text-white shadow-[0_16px_28px_-18px_rgba(15,118,110,0.9)]"
+                ? "bg-primary text-white shadow-[0_12px_22px_-18px_rgba(15,118,110,0.85)]"
                 : "bg-white text-olive/70 hover:bg-cream hover:text-olive",
             )}
             onClick={() => onChange(pageIndex)}
@@ -2763,12 +2792,12 @@ function CompactPageDots({ pageCount, currentPage, onChange, className }: Compac
       </div>
       <button
         type="button"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-olive/12 bg-white text-olive/65 transition hover:border-primary/20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/12 bg-white text-olive/65 transition hover:border-primary/20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
         onClick={() => onChange(Math.min(pageCount - 1, currentPage + 1))}
         disabled={currentPage >= pageCount - 1}
         aria-label="Следующая страница номеров"
       >
-        <AppIcon icon={ChevronRight} className="h-4 w-4" />
+        <AppIcon icon={ChevronRight} className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -2792,46 +2821,35 @@ function MobileRailPreview({
   onToggle,
 }: MobileRailPreviewProps) {
   return (
-    <div className="relative flex justify-center">
+    <div className="relative">
       <button
         type="button"
         className={cn(
-          "group relative inline-flex w-full flex-col items-center justify-center border text-center transition-all duration-300 active:scale-[0.98]",
-          variant === "group" ? "min-h-8 rounded-[14px]" : "min-h-10 rounded-[16px]",
-          variant === "group"
-            ? "border-primary/10 bg-[linear-gradient(180deg,rgba(240,253,250,0.96),rgba(255,255,255,0.96))]"
-            : "border-olive/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96))]",
+          "group relative inline-flex min-h-[calc(var(--cb-cell-h)-4px)] w-full items-center rounded-md border border-olive/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96))] px-2 py-1 text-left transition-all duration-200 active:scale-[0.98]",
           expanded
-            ? "shadow-[0_18px_34px_-24px_rgba(15,118,110,0.7)] ring-2 ring-primary/10"
-            : "shadow-[0_12px_24px_-26px_rgba(58,43,35,0.45)]",
+            ? "border-primary/20 shadow-[0_16px_30px_-26px_rgba(15,118,110,0.55)] ring-2 ring-primary/10"
+            : "shadow-[0_12px_24px_-28px_rgba(58,43,35,0.35)]",
         )}
         onClick={onToggle}
         aria-expanded={expanded}
-        aria-label={`${expanded ? "Свернуть" : "Показать"} ${title}`}
+        aria-label={`${expanded ? "Свернуть" : "Показать"} ${
+          variant === "group" ? "категорию" : "номер"
+        } ${title}`}
       >
-        <span
-          className={cn(
-            "text-[11px] font-black tracking-[0.2em]",
-            variant === "group" ? "text-primary/85" : "text-olive",
-          )}
-        >
-          {preview}
-        </span>
-        <span className="mt-1 text-[9px] uppercase tracking-[0.16em] text-olive/40">
-          {variant === "group" ? "кат." : "номер"}
-        </span>
+        <span className="sr-only">{preview}</span>
+        <span className="truncate text-[11px] font-semibold leading-4 text-olive">{title}</span>
       </button>
 
       <div
         className={cn(
-          "pointer-events-none absolute left-full top-1/2 z-30 w-[min(68vw,240px)] -translate-y-1/2 pl-2 transition-all duration-300",
-          expanded ? "translate-x-0 opacity-100" : "-translate-x-3 opacity-0",
+          "pointer-events-none absolute left-full top-1/2 z-30 w-[min(62vw,220px)] -translate-y-1/2 pl-2 transition-all duration-200",
+          expanded ? "translate-x-0 opacity-100" : "-translate-x-2 opacity-0",
         )}
       >
-        <div className="glass-booking rounded-[22px] p-3">
-          <p className="text-sm font-semibold text-olive">{title}</p>
-          {subtitle ? <p className="mt-1 text-[11px] leading-4 text-olive/65">{subtitle}</p> : null}
-          <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-primary/75">
+        <div className="rounded-lg border border-olive/10 bg-white/96 p-2.5 shadow-[0_18px_36px_-28px_rgba(58,43,35,0.38)] backdrop-blur-sm">
+          <p className="text-xs font-semibold text-olive">{title}</p>
+          {subtitle ? <p className="mt-1 text-[10px] leading-4 text-olive/62">{subtitle}</p> : null}
+          <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-primary/72">
             Нажмите по ярлыку еще раз, чтобы свернуть
           </p>
         </div>
@@ -2874,12 +2892,13 @@ function FragmentByGroup({
           <tr key={room.id} className="align-top">
             <th
               className={cn(
-                `sticky left-0 z-30 border-b border-r border-olive/10 text-left ${LS}:min-w-[90px] ${LS}:px-1 ${LS}:py-0.5`,
-                isMobilePortrait
-                  ? "min-w-[56px] px-1 py-0"
-                  : "min-w-[120px] px-2 py-1.5 sm:min-w-[180px] md:min-w-[280px] md:px-3 md:py-2",
-                isEvenRow ? "bg-white" : "bg-cream",
+                `sticky left-0 z-30 border-b border-r border-olive/10 px-2 py-1.5 text-left align-middle ${LS}:px-1.5 ${LS}:py-0.5`,
+                isEvenRow ? "bg-white/96" : "bg-cream/62",
               )}
+              style={{
+                width: "var(--cb-sidebar-w)",
+                minWidth: "var(--cb-sidebar-w)",
+              }}
             >
               {isMobilePortrait ? (
                 <MobileRailPreview
@@ -2893,13 +2912,11 @@ function FragmentByGroup({
               ) : (
                 <>
                   <p
-                    className={`truncate text-xs font-semibold text-olive md:text-sm ${LS}:text-[9px]`}
+                    className={`truncate text-[11px] font-semibold leading-4 text-olive md:text-xs ${LS}:text-[9px]`}
                   >
                     {room.title}
                   </p>
-                  <p
-                    className={`hidden text-[10px] text-olive/55 sm:block md:text-xs ${LS}:!hidden`}
-                  >
+                  <p className={`hidden text-[10px] text-olive/52 sm:block ${LS}:!hidden`}>
                     {formatRoomMeta(room)}
                   </p>
                 </>
@@ -3046,36 +3063,48 @@ function FragmentByGroup({
                 <td
                   key={`${room.id}-${day.iso}`}
                   className={cn(
-                    `relative border-b border-l border-olive/10 align-top overflow-visible ${LS}:h-8 ${LS}:w-9 ${LS}:min-w-9`,
-                    isMobilePortrait
-                      ? "h-10 w-11 min-w-11"
-                      : "h-12 w-12 min-w-12 sm:h-14 sm:w-14 sm:min-w-14 md:h-16 md:w-16 md:min-w-16",
+                    `relative overflow-visible border-b border-l border-olive/10 align-top`,
                     isSelected
                       ? chessboardToneClasses.selectedCell
                       : isToday
-                        ? "bg-primary/8"
+                        ? "bg-primary/6"
+                        : day.isMonthStart
+                          ? isEvenRow
+                            ? "bg-[linear-gradient(180deg,rgba(249,244,236,0.95),rgba(255,255,255,0.96))]"
+                            : "bg-[linear-gradient(180deg,rgba(245,239,230,0.92),rgba(255,255,255,0.94))]"
                         : day.isWeekend
                           ? isEvenRow
-                            ? "bg-sand/50"
-                            : "bg-sand/25"
+                            ? "bg-sand/32"
+                            : "bg-sand/18"
                           : isEvenRow
-                            ? "bg-cream/30"
-                            : "bg-white",
-                    day.isWeekStart ? "border-l-2 border-l-red-300/70" : "",
-                    isToday ? "border-l border-l-primary/30" : "",
+                            ? "bg-cream/28"
+                            : "bg-white/96",
+                    day.isMonthStart
+                      ? "border-l-2 border-l-terra/40 shadow-[inset_1px_0_0_rgba(154,98,69,0.12)]"
+                      : day.isWeekStart
+                        ? "border-l-terra/35"
+                        : "",
+                    isToday ? "shadow-[inset_0_0_0_1px_rgba(15,118,110,0.08)]" : "",
                   )}
+                  style={{
+                    width: "var(--cb-cell-w)",
+                    minWidth: "var(--cb-cell-w)",
+                    height: "var(--cb-cell-h)",
+                  }}
                 >
                   {occupancyBar && occupancyBar.rangeStartIso === day.iso ? (
                     <button
                       type="button"
                       className={cn(
-                        `absolute left-0 z-10 border shadow-sm transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${LS}:top-0.5 ${LS}:h-7 ${LS}:rounded-md`,
-                        isMobilePortrait ? "top-0.5 h-9 rounded-[14px]" : "top-2 h-12 rounded-lg",
+                        "absolute left-0 z-10 border shadow-[0_10px_18px_-16px_rgba(58,43,35,0.45)] transition hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                         occupancyBar.classes,
                       )}
                       style={{
                         left: `${occupancyBar.startOffsetPx}px`,
                         width: `${occupancyBar.widthPx}px`,
+                        top: "var(--cb-booking-top)",
+                        height: "var(--cb-booking-h)",
+                        borderRadius: isMobilePortrait ? "10px" : "12px",
                       }}
                       onMouseDown={(event) => {
                         event.preventDefault();
@@ -3097,7 +3126,7 @@ function FragmentByGroup({
                       >
                         <p
                           className={cn(
-                            `truncate font-semibold ${LS}:text-[8px]`,
+                            `truncate font-semibold leading-none ${LS}:text-[8px]`,
                             isMobilePortrait ? "text-[9px]" : "text-[10px]",
                           )}
                         >
@@ -3105,7 +3134,7 @@ function FragmentByGroup({
                         </p>
                         <p
                           className={cn(
-                            `truncate text-white/90 ${LS}:text-[7px]`,
+                            `mt-1 truncate text-white/88 leading-none ${LS}:text-[7px]`,
                             isMobilePortrait ? "text-[8px]" : "text-[9px]",
                           )}
                         >
@@ -3117,13 +3146,15 @@ function FragmentByGroup({
                   {priceBar && priceBar.rangeStartIso === day.iso ? (
                     <div
                       className={cn(
-                        `pointer-events-none absolute left-0 z-10 border shadow-sm ${LS}:top-0.5 ${LS}:h-7 ${LS}:rounded-md`,
-                        isMobilePortrait ? "top-0.5 h-9 rounded-[14px]" : "top-2 h-12 rounded-lg",
+                        "pointer-events-none absolute left-0 z-10 border shadow-[0_10px_18px_-16px_rgba(58,43,35,0.42)]",
                         chessboardToneClasses.priceBar,
                       )}
                       style={{
                         left: `${priceBar.startOffsetPx}px`,
                         width: `${priceBar.widthPx}px`,
+                        top: "var(--cb-booking-top)",
+                        height: "var(--cb-booking-h)",
+                        borderRadius: isMobilePortrait ? "10px" : "12px",
                       }}
                     >
                       <div
@@ -3134,7 +3165,7 @@ function FragmentByGroup({
                       >
                         <p
                           className={cn(
-                            `truncate font-semibold ${LS}:text-[8px]`,
+                            `truncate font-semibold leading-none ${LS}:text-[8px]`,
                             isMobilePortrait ? "text-[9px]" : "text-[10px]",
                           )}
                         >
@@ -3142,7 +3173,7 @@ function FragmentByGroup({
                         </p>
                         <p
                           className={cn(
-                            `truncate text-white/90 ${LS}:text-[7px]`,
+                            `mt-1 truncate text-white/88 leading-none ${LS}:text-[7px]`,
                             isMobilePortrait ? "text-[8px]" : "text-[9px]",
                           )}
                         >
@@ -3154,19 +3185,21 @@ function FragmentByGroup({
                   {selectionBar && selectionBar.rangeStartIso === day.iso ? (
                     <div
                       className={cn(
-                        `pointer-events-none absolute left-0 z-20 border ${LS}:top-0 ${LS}:h-8 ${LS}:rounded-lg`,
-                        isMobilePortrait ? "top-0.5 h-10 rounded-[16px]" : "top-1 h-14 rounded-xl",
+                        "pointer-events-none absolute left-0 z-20 border",
                         chessboardToneClasses.selectionRange,
                       )}
                       style={{
                         width: `${selectionBar.widthPx}px`,
+                        top: "calc(var(--cb-booking-top) - 2px)",
+                        height: "calc(var(--cb-booking-h) + 4px)",
+                        borderRadius: isMobilePortrait ? "12px" : "14px",
                       }}
                     />
                   ) : null}
                   <button
                     type="button"
                     className={cn(
-                      "h-full w-full rounded-md px-1 py-1 text-left transition-colors",
+                      "h-full w-full rounded-[10px] px-1 py-0.5 text-left transition-colors",
                       isInteractive
                         ? isCoarsePointer
                           ? boardMode === "prices" && price
@@ -3211,8 +3244,8 @@ function FragmentByGroup({
                     {boardMode === "occupancy" ? null : price ? null : (
                       <span
                         className={cn(
-                          `inline-flex rounded-md bg-terra/10 font-medium text-terra ${LS}:px-0.5 ${LS}:py-0 ${LS}:text-[7px]`,
-                          isMobilePortrait ? "px-1 py-0.5 text-[9px]" : "px-1.5 py-0.5 text-[10px]",
+                          `inline-flex rounded-md bg-terra/8 font-medium text-terra ${LS}:px-0.5 ${LS}:py-0 ${LS}:text-[7px]`,
+                          isMobilePortrait ? "px-1 py-0.5 text-[8px]" : "px-1.5 py-0.5 text-[9px]",
                         )}
                       >
                         Без цены

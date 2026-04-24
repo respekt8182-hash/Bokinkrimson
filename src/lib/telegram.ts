@@ -33,11 +33,15 @@ export function normalizeTelegramProfileUrl(value: string | null | undefined): s
     if (normalizedHandle) {
       return `${TELEGRAM_URL_PREFIX}${normalizedHandle}`;
     }
-    return trimmed;
+    return null;
   }
 
   if (/^(?:www\.)?t\.me\//i.test(trimmed)) {
-    return `https://${trimmed.replace(/^www\./i, "")}`;
+    const normalizedHandle = normalizeTelegramHandle(trimmed);
+    if (normalizedHandle) {
+      return `${TELEGRAM_URL_PREFIX}${normalizedHandle}`;
+    }
+    return null;
   }
 
   const normalizedHandle = normalizeTelegramHandle(trimmed);
@@ -45,5 +49,5 @@ export function normalizeTelegramProfileUrl(value: string | null | undefined): s
     return `${TELEGRAM_URL_PREFIX}${normalizedHandle}`;
   }
 
-  return trimmed;
+  return null;
 }

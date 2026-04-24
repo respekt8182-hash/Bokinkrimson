@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   getPlacementCoverageState,
   getTariffQuote,
@@ -74,6 +75,9 @@ async function listPropertyPayments(propertyId: string, ownerId: string) {
     where: {
       propertyId,
       ownerId,
+      provider: {
+        in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+      },
     },
     orderBy: [{ createdAt: "desc" }],
     include: {
@@ -136,7 +140,13 @@ export async function POST(request: Request, context: RouteContext) {
       body = parsed.data;
     }
   } catch {
-    // empty body is fine, defaults to YOOKASSA
+    // Empty body is fine.
+  }
+
+  try {
+    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
+  } catch {
+    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
   }
 
   await purgeExpiredPropertyDraftsForOwner(db, session.id);
@@ -161,9 +171,9 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const payments = await listPropertyPayments(property.id, session.id);
-  const latestOpenPayment = payments.find(
-    (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
-  );
+  const latestOpenPayment =
+    payments.find((item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING) ??
+    null;
 
   if (latestOpenPayment) {
     return NextResponse.json(
@@ -197,7 +207,6 @@ export async function POST(request: Request, context: RouteContext) {
 
   const idempotenceKey = crypto.randomUUID();
 
-  // --- MANAGER flow ---
   if (body.provider === "MANAGER") {
     const created = await db.payment.create({
       data: {
@@ -224,65 +233,13 @@ export async function POST(request: Request, context: RouteContext) {
     });
   }
 
-  // --- YOOKASSA flow ---
-  if (isYookassaConfigured()) {
-    const created = await db.payment.create({
-      data: {
-        propertyId: property.id,
-        ownerId: session.id,
-        amount,
-        tariffCode: readiness.quote.tariff.code,
-        roomCount: readiness.quote.roomCount,
-        status: PaymentStatus.CREATED,
-        provider: PaymentProvider.YOOKASSA,
-        idempotenceKey,
-        placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
-      },
-      include: {
-        property: { select: { name: true } },
-      },
-    });
-
-    try {
-      const yooPayment = await createYookassaPayment({
-        idempotenceKey,
-        amountRub: Number(amount),
-        description: `Размещение объекта «${property.name ?? "Без названия"}» на 365 дней`,
-        metadata: { paymentId: created.id, propertyId: property.id },
-      });
-
-      const updated = await db.payment.update({
-        where: { id: created.id },
-        data: {
-          providerPaymentId: yooPayment.id,
-          confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-          providerPayload: yooPayment,
-          status: PaymentStatus.PENDING,
-        },
-        include: {
-          property: { select: { name: true } },
-        },
-      });
-
-      return NextResponse.json({
-        item: serializePayment(updated),
-        redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
-      });
-    } catch (error) {
-      // If YooKassa creation fails, clean up
-      await db.payment.update({
-        where: { id: created.id },
-        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
-      });
-      console.error("YooKassa payment creation failed", error);
-      return NextResponse.json(
-        { error: "Не удалось создать платёж. Попробуйте позже или выберите оплату через менеджера." },
-        { status: 502 },
-      );
-    }
+  if (!isYookassaConfigured()) {
+    return NextResponse.json(
+      { error: "YooKassa временно недоступна. Используйте оплату через менеджера." },
+      { status: 503 },
+    );
   }
 
-  // --- Fallback: MOCK (dev mode) ---
   const created = await db.payment.create({
     data: {
       propertyId: property.id,
@@ -291,9 +248,8 @@ export async function POST(request: Request, context: RouteContext) {
       tariffCode: readiness.quote.tariff.code,
       roomCount: readiness.quote.roomCount,
       status: PaymentStatus.CREATED,
-      provider: PaymentProvider.MOCK,
+      provider: PaymentProvider.YOOKASSA,
       idempotenceKey,
-      confirmationUrl: null,
       placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
     },
     include: {
@@ -301,8 +257,41 @@ export async function POST(request: Request, context: RouteContext) {
     },
   });
 
-  return NextResponse.json({
-    item: serializePayment(created),
-    redirectUrl: null,
-  });
+  try {
+    const yooPayment = await createYookassaPayment({
+      idempotenceKey,
+      amountRub: Number(amount),
+      description: `Размещение объекта «${property.name ?? "Без названия"}» на 365 дней`,
+      metadata: { paymentId: created.id, propertyId: property.id },
+    });
+
+    const updated = await db.payment.update({
+      where: { id: created.id },
+      data: {
+        providerPaymentId: yooPayment.id,
+        confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+        providerPayload: yooPayment,
+        status: PaymentStatus.PENDING,
+      },
+      include: {
+        property: { select: { name: true } },
+      },
+    });
+
+    return NextResponse.json({
+      item: serializePayment(updated),
+      redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
+    });
+  } catch (error) {
+    await db.payment.update({
+      where: { id: created.id },
+      data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+    });
+
+    console.error("YooKassa payment creation failed", error);
+    return NextResponse.json(
+      { error: "Не удалось создать платеж. Попробуйте позже или выберите оплату через менеджера." },
+      { status: 502 },
+    );
+  }
 }

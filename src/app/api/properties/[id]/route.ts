@@ -2,6 +2,7 @@ import { PetsPolicy, Prisma, PropertyStatus, SmokingPolicy } from "@prisma/clien
 import { NextResponse } from "next/server";
 import { crimeaLocationById, isClassificationApplicableByType } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
+import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import { resolveOrCreatePropertyLocation } from "@/lib/location-directory";
@@ -10,7 +11,9 @@ import {
   getOwnerPropertyDeletionExpiresAt,
 } from "@/lib/property-owner-delete";
 import {
+  deletePropertyStorageEntries,
   getPropertyProgress,
+  PROPERTY_STORAGE_CLEANUP_SELECT,
   preparePropertyForPublishedOwnerEdit,
   purgeExpiredPropertyDraftsForOwner,
   getRecommendedWizardStep,
@@ -563,12 +566,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const now = new Date();
 
-  await db.property.deleteMany({
-    where: {
-      ownerDeletedAt: { not: null },
-      ownerDeletionExpiresAt: { not: null, lte: now },
-    },
-  });
+  await purgeExpiredDeletedProperties(db, now);
 
   const existing = await db.property.findUnique({
     where: { id },
@@ -614,9 +612,18 @@ export async function DELETE(request: Request, context: RouteContext) {
     });
   }
 
+  const storageEntry = await db.property.findUnique({
+    where: { id: existing.id },
+    select: PROPERTY_STORAGE_CLEANUP_SELECT,
+  });
+
   await db.property.delete({
     where: { id: existing.id },
   });
+
+  if (storageEntry) {
+    await deletePropertyStorageEntries([storageEntry]);
+  }
 
   // Draft/non-published objects are removed permanently.
   return NextResponse.json({

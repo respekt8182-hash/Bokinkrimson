@@ -14,7 +14,14 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { crimeaLocationIds, propertyAboutLimits, propertyTypeIds } from "@/lib/constants";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+} from "@/lib/contact-links";
+import { isManagedPublicUrl } from "@/lib/storage";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import { ITINERARY_ITEM_LABEL_VALUES } from "@/types/excursions";
 import {
   additionalPlaceTypeOptions,
   bathroomLocationOptions,
@@ -70,7 +77,10 @@ const optionalPhoneSchema = z
   .max(24, "Телефон слишком длинный")
   .optional()
   .or(z.literal(""))
-  .refine((value) => !value || /^[+0-9()\s-]+$/.test(value), "Телефон содержит недопустимые символы")
+  .refine(
+    (value) => !value || /^[+0-9()\s-]+$/.test(value),
+    "Телефон содержит недопустимые символы",
+  )
   .refine((value) => !value || isLikelyPhoneNumber(value), "Введите корректный номер телефона");
 
 export const updateProfileSchema = z.object({
@@ -136,6 +146,23 @@ function optionalTelegramUrlSchema(fieldLabel: string) {
   }, optionalHttpUrlSchema(fieldLabel));
 }
 
+function optionalNormalizedProfileUrlSchema(
+  fieldLabel: string,
+  normalizer: (value: string | null | undefined) => string | null,
+  example: string,
+) {
+  return z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const normalized = normalizer(value);
+    return normalized ?? value.trim();
+  }, optionalHttpUrlSchema(fieldLabel).refine((value) => !value || Boolean(normalizer(value)), {
+    message: `${fieldLabel}: укажите корректную ссылку вида ${example}`,
+  }));
+}
+
 const photoUrlSchema = z
   .string()
   .trim()
@@ -143,7 +170,13 @@ const photoUrlSchema = z
   .refine(
     (value) => /^https?:\/\/\S+$/i.test(value) || /^\/[^\s]+$/.test(value),
     "Ссылка на фото должна быть абсолютным URL (http/https) или относительным путем вида /uploads/...",
+  )
+  .refine(
+    (value) => isManagedPublicUrl(value),
+    "Ссылка на фото должна указывать на файл из хранилища проекта",
   );
+
+const managedMediaUrlSchema = photoUrlSchema;
 
 // Wizard step 1: property type + name.
 export const propertyStep1Schema = z.object({
@@ -168,11 +201,7 @@ export const propertyStep3Schema = z.object({
   locationId: z.string().trim().min(1).nullable().optional(),
   locationName: z.string().trim().min(2, "Выберите или введите населенный пункт").max(120),
   address: z.string().trim().min(5, "Адрес должен содержать минимум 5 символов").max(240),
-  seaDistance: z
-    .string()
-    .trim()
-    .max(80, "Расстояние до моря слишком длинное")
-    .optional(),
+  seaDistance: z.string().trim().max(80, "Расстояние до моря слишком длинное").optional(),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
 });
@@ -198,7 +227,10 @@ export const propertyStep4Schema = z.object({
     .max(254, "Email слишком длинный")
     .optional()
     .or(z.literal(""))
-    .refine((value) => !value || z.string().email().safeParse(value).success, "Введите корректный email"),
+    .refine(
+      (value) => !value || z.string().email().safeParse(value).success,
+      "Введите корректный email",
+    ),
   contactPersonName: z
     .string()
     .trim()
@@ -219,9 +251,13 @@ export const propertyStep4Schema = z.object({
     .or(z.literal("")),
   whatsappUrl: optionalHttpUrlSchema("WhatsApp"),
   telegramUrl: optionalTelegramUrlSchema("Telegram"),
-  vkUrl: optionalHttpUrlSchema("VK"),
-  maxUrl: optionalHttpUrlSchema("Max"),
-  okUrl: optionalHttpUrlSchema("Одноклассники"),
+  vkUrl: optionalNormalizedProfileUrlSchema("VK", normalizeVkProfileUrl, "https://vk.com/username"),
+  maxUrl: optionalNormalizedProfileUrlSchema("Max", normalizeMaxProfileUrl, "https://max.ru/username"),
+  okUrl: optionalNormalizedProfileUrlSchema(
+    "Одноклассники",
+    normalizeOkProfileUrl,
+    "https://ok.ru/profile/123456789",
+  ),
   receiveRequests: z.boolean(),
 });
 
@@ -436,7 +472,8 @@ const roomMetaSchema = z
     privateBathroomCount: z.number().int().min(1).max(10).nullable(),
   })
   .superRefine((data, ctx) => {
-    const bedSets = data.bedSets && data.bedSets.length > 0 ? data.bedSets : [data.bedConfiguration];
+    const bedSets =
+      data.bedSets && data.bedSets.length > 0 ? data.bedSets : [data.bedConfiguration];
     const usesExplicitBedSets = Boolean(data.bedSets && data.bedSets.length > 0);
     const roomType: RoomTypeId | null = roomTypeIdSet.has(data.roomType)
       ? (data.roomType as RoomTypeId)
@@ -475,7 +512,8 @@ const roomMetaSchema = z
       if (hasNoBedType && set.length > 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "В наборе «Кровать не предусмотрена» нельзя комбинировать с другими типами кроватей",
+          message:
+            "В наборе «Кровать не предусмотрена» нельзя комбинировать с другими типами кроватей",
           path: usesExplicitBedSets ? ["bedSets", setIndex] : ["bedConfiguration"],
         });
       }
@@ -487,7 +525,8 @@ const roomMetaSchema = z
             return;
           }
 
-          const bedTypeLabel = bedTypeOptions.find((option) => option.id === bedType)?.label ?? item.type;
+          const bedTypeLabel =
+            bedTypeOptions.find((option) => option.id === bedType)?.label ?? item.type;
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Для типа номера «${roomTypeLabelById[roomType]}» нельзя использовать «${bedTypeLabel}»`,
@@ -590,7 +629,11 @@ const roomBaseSchema = z
       });
     }
 
-    if (data.meta.hasAdditionalPlaces && data.extraBeds > 0 && data.meta.additionalPlaceTypes.length === 0) {
+    if (
+      data.meta.hasAdditionalPlaces &&
+      data.extraBeds > 0 &&
+      data.meta.additionalPlaceTypes.length === 0
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Для доп. мест выберите хотя бы один тип",
@@ -658,7 +701,13 @@ const roomPriceBaseSchema = z
       .trim()
       .regex(isoDateRegex, "Дата окончания должна быть в формате YYYY-MM-DD"),
     price: z.number().positive("Цена должна быть больше 0").max(1_000_000, "Цена слишком большая"),
-    minGuests: z.number().int().min(1, "Минимум гостей должен быть не меньше 1").max(40).nullable().optional(),
+    minGuests: z
+      .number()
+      .int()
+      .min(1, "Минимум гостей должен быть не меньше 1")
+      .max(40)
+      .nullable()
+      .optional(),
     currency: z
       .string()
       .trim()
@@ -703,12 +752,29 @@ const roomOccupancyBaseSchema = z
     tag: z.string().trim().max(20, "Метка не должна превышать 20 символов").nullable().optional(),
     source: z.string().trim().max(80, "Источник слишком длинный").nullable().optional(),
     color: z.string().trim().max(16, "Цвет слишком длинный").nullable().optional(),
-    adultsCount: z.number().int().min(1, "Взрослых должно быть не меньше 1").max(20).nullable().optional(),
-    childrenCount: z.number().int().min(0, "Детей не может быть меньше 0").max(20).nullable().optional(),
+    adultsCount: z
+      .number()
+      .int()
+      .min(1, "Взрослых должно быть не меньше 1")
+      .max(20)
+      .nullable()
+      .optional(),
+    childrenCount: z
+      .number()
+      .int()
+      .min(0, "Детей не может быть меньше 0")
+      .max(20)
+      .nullable()
+      .optional(),
     guestName: z.string().trim().max(120, "ФИО слишком длинное").nullable().optional(),
     guestPhone: z.string().trim().max(24, "Телефон слишком длинный").nullable().optional(),
     guestContacts: z.string().trim().max(255, "Контакты слишком длинные").nullable().optional(),
-    description: z.string().trim().max(250, "Описание не должно превышать 250 символов").nullable().optional(),
+    description: z
+      .string()
+      .trim()
+      .max(250, "Описание не должно превышать 250 символов")
+      .nullable()
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (data.dateTo < data.dateFrom) {
@@ -726,14 +792,8 @@ export const updateRoomOccupancySchema = roomOccupancyBaseSchema;
 export const createApplicationSchema = z
   .object({
     roomId: z.string().trim().min(1).nullable().optional(),
-    dateFrom: z
-      .string()
-      .trim()
-      .regex(isoDateRegex, "Дата заезда должна быть в формате YYYY-MM-DD"),
-    dateTo: z
-      .string()
-      .trim()
-      .regex(isoDateRegex, "Дата выезда должна быть в формате YYYY-MM-DD"),
+    dateFrom: z.string().trim().regex(isoDateRegex, "Дата заезда должна быть в формате YYYY-MM-DD"),
+    dateTo: z.string().trim().regex(isoDateRegex, "Дата выезда должна быть в формате YYYY-MM-DD"),
     guestsCount: z.number().int().min(1, "Количество гостей не может быть меньше 1").max(20),
     message: z.string().trim().max(2000).nullable().optional(),
     contactName: z
@@ -862,8 +922,19 @@ const excursionRouteLocationSchema = z.object({
 });
 
 const excursionHighlightSchema = z.string().trim().min(2).max(120);
+const excursionSectionPhotoGroupsSchema = z
+  .object({
+    dates: z.array(managedMediaUrlSchema).max(8).optional(),
+    program: z.array(managedMediaUrlSchema).max(8).optional(),
+    logistics: z.array(managedMediaUrlSchema).max(8).optional(),
+    accommodation: z.array(managedMediaUrlSchema).max(8).optional(),
+    included: z.array(managedMediaUrlSchema).max(8).optional(),
+    requirements: z.array(managedMediaUrlSchema).max(8).optional(),
+  })
+  .partial();
 const itineraryDaySchema = z.object({
   day: z.number().int().min(1).max(100),
+  itemLabel: z.enum(ITINERARY_ITEM_LABEL_VALUES).optional(),
   title: z.string().trim().min(2).max(120),
   teaser: z.string().trim().max(240).optional(),
   description: z.string().trim().min(10).max(4000),
@@ -874,6 +945,14 @@ const itineraryDaySchema = z.object({
   meals: z.string().trim().max(120).optional(),
   accommodation: z.string().trim().max(160).optional(),
   activities: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+  // V2 extensions
+  mealsIncluded: z.array(z.string().trim().min(1).max(60)).max(5).optional(),
+  transportModes: z.array(z.string().trim().min(1).max(30)).max(5).optional(),
+  overnightLocation: z.string().trim().max(160).optional(),
+  accommodationName: z.string().trim().max(160).optional(),
+  optionalExtras: z.array(z.string().trim().min(1).max(120)).max(10).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  photoUrls: z.array(managedMediaUrlSchema).max(4).optional(),
 });
 const excursionExtraOptionSchema = z.object({
   title: z.string().trim().min(2).max(120),
@@ -954,6 +1033,7 @@ export const updateExcursionSchema = z
           description: z.string().trim().max(300).optional(),
           location: z.string().trim().max(100).optional(),
           icon: z.string().trim().max(40).optional(),
+          photoUrls: z.array(managedMediaUrlSchema).max(4).optional(),
         }),
       )
       .max(20)
@@ -964,6 +1044,14 @@ export const updateExcursionSchema = z
         z.object({
           label: z.string().trim().min(1).max(60),
           price: z.number().int().min(0).max(1_000_000),
+          code: z.string().trim().max(30).optional(),
+          currency: z.string().trim().max(3).optional(),
+          ageFrom: z.number().int().min(0).max(120).nullable().optional(),
+          ageTo: z.number().int().min(0).max(120).nullable().optional(),
+          minPeople: z.number().int().min(1).max(1000).nullable().optional(),
+          maxPeople: z.number().int().min(1).max(1000).nullable().optional(),
+          isDefault: z.boolean().optional(),
+          comment: z.string().trim().max(200).optional(),
         }),
       )
       .max(10)
@@ -983,17 +1071,83 @@ export const updateExcursionSchema = z
     meetingPointLng: z.number().min(-180).max(180).nullable().optional(),
     minBookingNoticeHours: z.number().int().min(0).max(720).nullable().optional(),
     priceUnitLabel: z.string().trim().min(2).max(80).nullable().optional(),
+    // ── Tour logistics ──
+    tourKind: z
+      .enum([
+        "ONE_DAY",
+        "WEEKEND",
+        "MULTI_DAY",
+        "JEEP",
+        "BOAT",
+        "HIKING",
+        "BUS",
+        "COMBINED",
+        "EXPEDITION",
+        "CRUISE",
+        "OTHER",
+      ])
+      .nullable()
+      .optional(),
+    transportModes: z
+      .array(
+        z.enum([
+          "WALKING",
+          "BUS",
+          "MINIVAN",
+          "CAR",
+          "JEEP",
+          "ATV",
+          "BOAT",
+          "TRAIN",
+          "FLIGHT",
+          "MIXED",
+        ]),
+      )
+      .max(5)
+      .optional(),
+    departureMode: z
+      .enum(["FIXED_DATES", "ON_REQUEST", "DAILY", "SEASONAL", "PRIVATE_ONLY"])
+      .nullable()
+      .optional(),
+    arrivalInfo: z.string().trim().min(2).max(500).nullable().optional(),
+    departureInfo: z.string().trim().min(2).max(500).nullable().optional(),
+    // ── Accommodation ──
     accommodationProvided: z.boolean().nullable().optional(),
     accommodationType: z.string().trim().min(2).max(120).nullable().optional(),
     accommodationNights: z.number().int().min(0).max(364).nullable().optional(),
     accommodationFormat: z.string().trim().min(2).max(120).nullable().optional(),
-    mealPlan: z.string().trim().min(2).max(120).nullable().optional(),
+    accommodationStars: z.string().trim().max(20).nullable().optional(),
+    roomTypes: z
+      .array(z.enum(["SINGLE", "DOUBLE", "TWIN", "TRIPLE", "SHARED", "CAMPING"]))
+      .max(6)
+      .optional(),
+    singleSupplementAvailable: z.boolean().nullable().optional(),
+    singleSupplementPrice: z.number().min(0).max(1_000_000).nullable().optional(),
     accommodationComment: z.string().trim().min(2).max(1000).nullable().optional(),
+    // ── Meals ──
+    mealPlan: z.string().trim().min(2).max(120).nullable().optional(),
+    mealDetails: z.string().trim().min(2).max(1000).nullable().optional(),
+    // ── Safety & documents ──
+    documentsRequired: z.array(z.string().trim().min(1).max(120)).max(10).optional(),
+    insuranceIncluded: z.boolean().nullable().optional(),
+    insuranceComment: z.string().trim().min(2).max(500).nullable().optional(),
+    equipmentProvided: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+    safetyInfo: z.string().trim().min(2).max(2000).nullable().optional(),
+    routeConditions: z.string().trim().min(2).max(2000).nullable().optional(),
     hasGuideLicense: z.boolean().optional(),
     instantConfirmation: z.boolean().optional(),
     contactFirstName: z.string().trim().min(2).max(80).nullable().optional(),
     contactLastName: z.string().trim().min(2).max(80).nullable().optional(),
     contactPhone: z
+      .string()
+      .trim()
+      .min(10, "Введите корректный номер телефона")
+      .max(24, "Телефон слишком длинный")
+      .regex(/^[+0-9()\s-]+$/, "Телефон содержит недопустимые символы")
+      .refine((value) => isLikelyPhoneNumber(value), "Введите корректный номер телефона")
+      .nullable()
+      .optional(),
+    contactPhone2: z
       .string()
       .trim()
       .min(10, "Введите корректный номер телефона")
@@ -1012,11 +1166,30 @@ export const updateExcursionSchema = z
     websiteUrl: optionalHttpUrlSchema("Сайт").nullable().optional(),
     whatsappUrl: optionalHttpUrlSchema("WhatsApp").nullable().optional(),
     telegramUrl: optionalTelegramUrlSchema("Telegram").nullable().optional(),
-    vkUrl: optionalHttpUrlSchema("VK").nullable().optional(),
-    maxUrl: optionalHttpUrlSchema("Max").nullable().optional(),
-    okUrl: optionalHttpUrlSchema("Одноклассники").nullable().optional(),
-    photoUrls: z.array(photoUrlSchema).max(12).optional(),
-    videoUrls: z.array(z.string().trim().url()).max(2).optional(),
+    vkUrl: optionalNormalizedProfileUrlSchema(
+      "VK",
+      normalizeVkProfileUrl,
+      "https://vk.com/username",
+    )
+      .nullable()
+      .optional(),
+    maxUrl: optionalNormalizedProfileUrlSchema(
+      "Max",
+      normalizeMaxProfileUrl,
+      "https://max.ru/username",
+    )
+      .nullable()
+      .optional(),
+    okUrl: optionalNormalizedProfileUrlSchema(
+      "Одноклассники",
+      normalizeOkProfileUrl,
+      "https://ok.ru/profile/123456789",
+    )
+      .nullable()
+      .optional(),
+    photoUrls: z.array(managedMediaUrlSchema).max(12).optional(),
+    sectionPhotoGroups: excursionSectionPhotoGroupsSchema.optional(),
+    videoUrls: z.array(managedMediaUrlSchema).max(2).optional(),
     status: z.nativeEnum(ExcursionStatus).optional(),
   })
   .superRefine((data, ctx) => {
@@ -1054,7 +1227,7 @@ export const updateExcursionSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Цена \"до\" не может быть меньше цены \"от\"",
+        message: 'Цена "до" не может быть меньше цены "от"',
         path: ["priceTo"],
       });
     }
@@ -1113,7 +1286,13 @@ const excursionSessionInputSchema = z
     capacity: z.number().int().min(1).max(10000).nullable().optional(),
     priceOverride: z.number().positive().max(1_000_000).nullable().optional(),
     status: z.nativeEnum(ExcursionSessionStatus).optional(),
-    bookingDeadlineMinutes: z.number().int().min(0).max(30 * 24 * 60).nullable().optional(),
+    bookingDeadlineMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(30 * 24 * 60)
+      .nullable()
+      .optional(),
   })
   .superRefine((data, ctx) => {
     const start = new Date(data.startAt);
@@ -1153,10 +1332,23 @@ export const upsertExcursionSessionsSchema = z.object({
 
 const excursionScheduleRuleInputSchema = z
   .object({
-    dateFrom: z.string().trim().regex(isoDateRegex, "dateFrom должен быть YYYY-MM-DD").nullable().optional(),
-    dateTo: z.string().trim().regex(isoDateRegex, "dateTo должен быть YYYY-MM-DD").nullable().optional(),
+    dateFrom: z
+      .string()
+      .trim()
+      .regex(isoDateRegex, "dateFrom должен быть YYYY-MM-DD")
+      .nullable()
+      .optional(),
+    dateTo: z
+      .string()
+      .trim()
+      .regex(isoDateRegex, "dateTo должен быть YYYY-MM-DD")
+      .nullable()
+      .optional(),
     weekdays: z.array(z.number().int().min(0).max(6)).max(7),
-    timeStarts: z.array(z.string().trim().regex(timeRegex, "Время должно быть в формате чч:мм")).min(1).max(16),
+    timeStarts: z
+      .array(z.string().trim().regex(timeRegex, "Время должно быть в формате чч:мм"))
+      .min(1)
+      .max(16),
     durationMinutes: z.number().int().min(15).max(10080).nullable().optional(),
     capacityDefault: z.number().int().min(1).max(10000).nullable().optional(),
     priceOverride: z.number().positive().max(1_000_000).nullable().optional(),

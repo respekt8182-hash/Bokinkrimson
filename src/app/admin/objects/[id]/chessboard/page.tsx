@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { PropertyChessboardWorkspace } from "@/components/rooms/property-chessboard-workspace";
-import { db } from "@/lib/db";
+import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
 import {
-  getPropertyDisplayNumberFromOrderedIds,
-  getPropertyWorkflowStatusLabel,
-} from "@/lib/properties";
+  getAdminPropertyBaseStatusLabel,
+  getAdminPropertyPendingEditLabel,
+} from "@/lib/admin-status";
+import { db } from "@/lib/db";
+import { getPropertyDisplayNumberFromOrderedIds } from "@/lib/properties";
 
 type AdminObjectChessboardPageProps = {
   params: Promise<{ id: string }>;
@@ -16,6 +18,7 @@ export default async function AdminObjectChessboardPage({
   params,
 }: AdminObjectChessboardPageProps) {
   const { id } = await params;
+  await purgeExpiredDeletedProperties(db, new Date());
   const property = await db.property.findUnique({
     where: { id },
     include: {
@@ -26,12 +29,15 @@ export default async function AdminObjectChessboardPage({
     },
   });
 
-  if (!property || property.ownerDeletedAt) {
+  if (!property) {
     notFound();
   }
 
   const ownerPropertyIds = await db.property.findMany({
-    where: { ownerId: property.ownerId, ownerDeletedAt: null },
+    where: {
+      ownerId: property.ownerId,
+      OR: [{ ownerDeletedAt: null }, { id: property.id }],
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true },
   });
@@ -42,14 +48,15 @@ export default async function AdminObjectChessboardPage({
       ownerPropertyIds.map((item) => item.id),
     ) ?? 1;
 
+  const pendingEditLabel = getAdminPropertyPendingEditLabel(
+    property.pendingEditStatus,
+    property.moderationNotes,
+  );
+
   const item = {
     id: property.id,
     name: property.name,
-    statusLabel: getPropertyWorkflowStatusLabel(
-      property.status,
-      property.moderationNotes,
-      property.pendingEditStatus,
-    ),
+    statusLabel: getAdminPropertyBaseStatusLabel(property.status),
     activeRoomsCount: property.rooms.length,
   };
 
@@ -76,6 +83,16 @@ export default async function AdminObjectChessboardPage({
               <p className="mt-1 text-sm text-olive/70">
                 Календарь занятости и цен для объекта пользователя.
               </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-cream px-3 py-1 text-xs font-semibold text-olive/70">
+                  {getAdminPropertyBaseStatusLabel(property.status)}
+                </span>
+                {pendingEditLabel ? (
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {pendingEditLabel}
+                  </span>
+                ) : null}
+              </div>
             </div>
             <Link
               href={`/admin/objects/${property.id}/amenities`}

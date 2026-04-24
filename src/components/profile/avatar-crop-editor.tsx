@@ -128,7 +128,11 @@ export function AvatarCropEditor({
     if (prev.w !== stageSize.w || prev.h !== stageSize.h) {
       prevStageSizeRef.current = stageSize;
       const newLayout = makeLayout(naturalWidth, naturalHeight, rotation, stageSize.w, stageSize.h);
-      setCrop(initCrop(newLayout));
+      const frameId = window.requestAnimationFrame(() => {
+        setCrop(initCrop(newLayout));
+      });
+
+      return () => window.cancelAnimationFrame(frameId);
     }
   }, [stageSize, naturalWidth, naturalHeight, rotation]);
 

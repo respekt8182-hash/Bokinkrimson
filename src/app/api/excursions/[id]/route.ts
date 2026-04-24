@@ -5,6 +5,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import {
@@ -12,8 +13,27 @@ import {
   getExcursionLocationByIdOrSlug,
 } from "@/lib/excursion-directory";
 import { getResolvedAvailabilityMode } from "@/lib/excursion-offers";
-import { serializeExcursion } from "@/lib/excursions";
+import {
+  collectExcursionProgramPhotoUrls,
+  deleteExcursionStorageEntries,
+  EXCURSION_STORAGE_CLEANUP_SELECT,
+  getExcursionStatusLabel,
+  markExcursionNeedsRemoderationAfterOwnerEdit,
+  prepareExcursionForPublishedOwnerEdit,
+  serializeExcursion,
+} from "@/lib/excursions";
+import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { getRequestIp } from "@/lib/security";
+import { deleteManagedUrlFromStorage } from "@/lib/storage";
 import { updateExcursionSchema } from "@/lib/schemas";
+import {
+  collectExcursionSectionPhotoUrls,
+  normalizeExcursionSectionPhotoGroups,
+} from "@/types/excursions";
 
 // Owner excursion details endpoint:
 // GET    -> read own excursion
@@ -22,6 +42,14 @@ import { updateExcursionSchema } from "@/lib/schemas";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+type UpdateExcursionInput = z.infer<typeof updateExcursionSchema>;
+
+const excursionPatchLimiter = createRateLimiter({
+  id: "excursion-patch",
+  windowMs: 5 * 60 * 1000,
+  maxRequests: 20,
+});
 
 const excursionSerializationInclude = {
   mainLocation: {
@@ -51,6 +79,10 @@ const excursionSerializationInclude = {
 type ExcursionWithRelations = Prisma.ExcursionGetPayload<{
   include: typeof excursionSerializationInclude;
 }>;
+
+type ExcursionWithOptionalPendingEditStatus = ExcursionWithRelations & {
+  pendingEditStatus?: ExcursionStatus | null;
+};
 
 function dedupeUrls(items: string[]): string[] {
   return Array.from(
@@ -97,6 +129,7 @@ type PublishReadinessPayload = {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhone2: string | null;
   accommodationProvided: boolean | null;
   accommodationType: string | null;
   photoUrls: string[];
@@ -135,7 +168,10 @@ function getMissingPublishFields(payload: PublishReadinessPayload): string[] {
     missing.push("длительность");
   }
 
-  if (payload.availabilityMode === ExcursionAvailabilityMode.REGULAR && !payload.hasRegularSchedule) {
+  if (
+    payload.availabilityMode === ExcursionAvailabilityMode.REGULAR &&
+    !payload.hasRegularSchedule
+  ) {
     missing.push("валидное расписание");
   }
   if (payload.availabilityMode === ExcursionAvailabilityMode.DATED && !payload.hasSessions) {
@@ -195,6 +231,117 @@ function isOwnerAllowedStatusTransition(nextStatus: ExcursionStatus): boolean {
   return nextStatus === ExcursionStatus.DRAFT || nextStatus === ExcursionStatus.PENDING_MODERATION;
 }
 
+function canSubmitPublishedEdit(status: ExcursionStatus | null): boolean {
+  return (
+    status === ExcursionStatus.DRAFT ||
+    status === ExcursionStatus.NEEDS_FIX ||
+    status === ExcursionStatus.REJECTED
+  );
+}
+
+function shouldMarkPublishedExcursionAsEdited(data: UpdateExcursionInput): boolean {
+  return (
+    data.offerType !== undefined ||
+    data.subtypeLabel !== undefined ||
+    data.title !== undefined ||
+    data.locationId !== undefined ||
+    data.locationName !== undefined ||
+    data.mainLocationId !== undefined ||
+    data.anchorLocationId !== undefined ||
+    data.districtId !== undefined ||
+    data.categoryId !== undefined ||
+    data.tags !== undefined ||
+    data.address !== undefined ||
+    data.latitude !== undefined ||
+    data.longitude !== undefined ||
+    data.startPoint !== undefined ||
+    data.meetingPointText !== undefined ||
+    data.meetingLocationId !== undefined ||
+    data.pickupAvailable !== undefined ||
+    data.pickupLocationIds !== undefined ||
+    data.routeLocations !== undefined ||
+    data.description !== undefined ||
+    data.shortDescription !== undefined ||
+    data.fullDescription !== undefined ||
+    data.routeDescription !== undefined ||
+    data.highlights !== undefined ||
+    data.durationMinutes !== undefined ||
+    data.durationDays !== undefined ||
+    data.durationNights !== undefined ||
+    data.itineraryDays !== undefined ||
+    data.finishPoint !== undefined ||
+    data.scheduleText !== undefined ||
+    data.scheduleMode !== undefined ||
+    data.availabilityMode !== undefined ||
+    data.availabilityNote !== undefined ||
+    data.format !== undefined ||
+    data.groupSizeMin !== undefined ||
+    data.groupSizeMax !== undefined ||
+    data.languageCodes !== undefined ||
+    data.ageLimit !== undefined ||
+    data.isKidFriendly !== undefined ||
+    data.difficulty !== undefined ||
+    data.priceType !== undefined ||
+    data.priceFrom !== undefined ||
+    data.priceTo !== undefined ||
+    data.currency !== undefined ||
+    data.includedText !== undefined ||
+    data.notIncludedText !== undefined ||
+    data.includedItems !== undefined ||
+    data.excludedItems !== undefined ||
+    data.cancellationPolicy !== undefined ||
+    data.cancellationPolicyType !== undefined ||
+    data.transferDetails !== undefined ||
+    data.physicalRequirements !== undefined ||
+    data.whatToBring !== undefined ||
+    data.meetingPointLat !== undefined ||
+    data.meetingPointLng !== undefined ||
+    data.minBookingNoticeHours !== undefined ||
+    data.priceUnitLabel !== undefined ||
+    data.accommodationProvided !== undefined ||
+    data.accommodationType !== undefined ||
+    data.accommodationNights !== undefined ||
+    data.accommodationFormat !== undefined ||
+    data.mealPlan !== undefined ||
+    data.mealDetails !== undefined ||
+    data.accommodationComment !== undefined ||
+    data.accommodationStars !== undefined ||
+    data.roomTypes !== undefined ||
+    data.singleSupplementAvailable !== undefined ||
+    data.singleSupplementPrice !== undefined ||
+    data.tourKind !== undefined ||
+    data.transportModes !== undefined ||
+    data.departureMode !== undefined ||
+    data.arrivalInfo !== undefined ||
+    data.departureInfo !== undefined ||
+    data.documentsRequired !== undefined ||
+    data.insuranceIncluded !== undefined ||
+    data.insuranceComment !== undefined ||
+    data.equipmentProvided !== undefined ||
+    data.safetyInfo !== undefined ||
+    data.routeConditions !== undefined ||
+    data.hasGuideLicense !== undefined ||
+    data.timeline !== undefined ||
+    data.extraOptions !== undefined ||
+    data.pricingTiers !== undefined ||
+    data.faqItems !== undefined ||
+    data.contactFirstName !== undefined ||
+    data.contactLastName !== undefined ||
+    data.contactPhone !== undefined ||
+    data.contactPhone2 !== undefined ||
+    data.contactEmail !== undefined ||
+    data.websiteUrl !== undefined ||
+    data.whatsappUrl !== undefined ||
+    data.telegramUrl !== undefined ||
+    data.vkUrl !== undefined ||
+    data.maxUrl !== undefined ||
+    data.okUrl !== undefined ||
+    data.photoUrls !== undefined ||
+    data.sectionPhotoGroups !== undefined ||
+    data.videoUrls !== undefined
+  );
+}
+
 async function getAccessibleExcursion(
   excursionId: string,
   editor: NonNullable<Awaited<ReturnType<typeof getEditorSession>>>,
@@ -204,11 +351,15 @@ async function getAccessibleExcursion(
     include: excursionSerializationInclude,
   });
 
-  if (!item || (!editor.isAdmin && item.ownerId !== editor.id)) {
+  if (!item || item.deletedAt || (!editor.isAdmin && item.ownerId !== editor.id)) {
     return null;
   }
 
   return item;
+}
+
+function getExcursionPendingEditStatus(excursion: ExcursionWithRelations): ExcursionStatus | null {
+  return (excursion as ExcursionWithOptionalPendingEditStatus).pendingEditStatus ?? null;
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -233,6 +384,34 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (!editor) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  const ip = getRequestIp(request);
+
+  try {
+    const limit = await excursionPatchLimiter.limit(`${editor.id}:${ip}`);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Слишком много попыток сохранения. Повторите через ${limit.retryAfterSeconds} сек.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+  } catch (error) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
+      return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
+    }
+
+    throw error;
   }
 
   const { id } = await context.params;
@@ -266,8 +445,23 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const data = parsed.data;
   const nextPhotoUrls = data.photoUrls ? dedupeUrls(data.photoUrls) : existing.photoUrls;
+  const nextSectionPhotoGroups =
+    data.sectionPhotoGroups !== undefined
+      ? normalizeExcursionSectionPhotoGroups(data.sectionPhotoGroups)
+      : normalizeExcursionSectionPhotoGroups(
+          existing.sectionPhotoGroups as
+            | Partial<Record<string, string[] | null | undefined>>
+            | null
+            | undefined,
+        );
   const nextVideoUrls = data.videoUrls ? dedupeUrls(data.videoUrls) : existing.videoUrls;
   const nextStatus = data.status ?? existing.status;
+  const isPublishedOwnerEdit = existing.status === ExcursionStatus.PUBLISHED && !editor.isAdmin;
+  const hasPublishedContentEdit = shouldMarkPublishedExcursionAsEdited(data);
+  const existingPendingEditStatus = getExcursionPendingEditStatus(existing);
+  const effectivePendingEditStatus =
+    existingPendingEditStatus ??
+    (isPublishedOwnerEdit && hasPublishedContentEdit ? ExcursionStatus.DRAFT : null);
 
   if (data.status !== undefined && !editor.isAdmin && !isOwnerAllowedStatusTransition(nextStatus)) {
     return NextResponse.json(
@@ -277,6 +471,37 @@ export async function PATCH(request: Request, context: RouteContext) {
       },
       { status: 400 },
     );
+  }
+
+  if (isPublishedOwnerEdit && data.status === ExcursionStatus.PENDING_MODERATION) {
+    if (!effectivePendingEditStatus) {
+      return NextResponse.json(
+        { error: "Сначала внесите изменения в опубликованную экскурсию" },
+        { status: 400 },
+      );
+    }
+
+    if (!canSubmitPublishedEdit(effectivePendingEditStatus)) {
+      return NextResponse.json(
+        {
+          error: `Нельзя отправить изменения на модерацию в текущем статусе: ${getExcursionStatusLabel(
+            existing.status,
+            effectivePendingEditStatus,
+            existing.moderationNotes,
+          )}`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (
+    isPublishedOwnerEdit &&
+    (hasPublishedContentEdit ||
+      data.status === ExcursionStatus.PENDING_MODERATION ||
+      data.status === ExcursionStatus.DRAFT)
+  ) {
+    await prepareExcursionForPublishedOwnerEdit(db, existing.id);
   }
 
   const nextLatitude = data.latitude === undefined ? existing.latitude : data.latitude;
@@ -303,7 +528,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const [resolvedMainLocation, resolvedAnchorFromPayload, resolvedMeetingLocation] =
     await Promise.all([
-      explicitMainLocation ? getExcursionLocationByIdOrSlug(explicitMainLocation) : Promise.resolve(null),
+      explicitMainLocation
+        ? getExcursionLocationByIdOrSlug(explicitMainLocation)
+        : Promise.resolve(null),
       explicitAnchorLocation
         ? getExcursionLocationByIdOrSlug(explicitAnchorLocation)
         : Promise.resolve(null),
@@ -313,11 +540,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     ]);
 
   if (explicitMainLocation && !resolvedMainLocation) {
-    return NextResponse.json({ error: "Не удалось найти основную локацию экскурсии" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Не удалось найти основную локацию экскурсии" },
+      { status: 400 },
+    );
   }
 
   if (explicitAnchorLocation && !resolvedAnchorFromPayload) {
-    return NextResponse.json({ error: "Не удалось найти якорный город экскурсии" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Не удалось найти якорный город экскурсии" },
+      { status: 400 },
+    );
   }
 
   if (explicitMeetingLocation && !resolvedMeetingLocation) {
@@ -327,7 +560,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   const nextMainLocationId =
     explicitMainLocation === null ? null : resolvedMainLocation ? resolvedMainLocation.id : null;
   const nextMeetingLocationId =
-    explicitMeetingLocation === null ? null : resolvedMeetingLocation ? resolvedMeetingLocation.id : null;
+    explicitMeetingLocation === null
+      ? null
+      : resolvedMeetingLocation
+        ? resolvedMeetingLocation.id
+        : null;
 
   const isAnchorExplicitlyCleared = data.anchorLocationId === null;
   const resolvedAnchorLocation =
@@ -337,7 +574,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       : null);
 
   let inferredAnchor = resolvedAnchorLocation;
-  if (!inferredAnchor && !isAnchorExplicitlyCleared && nextLatitude !== null && nextLongitude !== null) {
+  if (
+    !inferredAnchor &&
+    !isAnchorExplicitlyCleared &&
+    nextLatitude !== null &&
+    nextLongitude !== null
+  ) {
     inferredAnchor = await findNearestMajorExcursionLocation({
       latitude: Number(nextLatitude),
       longitude: Number(nextLongitude),
@@ -392,21 +634,42 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const nextLocationId =
     data.locationId ??
-    (nextAnchorLocation ? nextAnchorLocation.slug : existing.locationId ?? null);
+    (nextAnchorLocation ? nextAnchorLocation.slug : (existing.locationId ?? null));
 
   const nextLocationName =
     data.locationName ??
     resolvedLegacyLocation?.name ??
-    (nextAnchorLocation ? nextAnchorLocation.name : existing.locationName ?? null);
+    (nextAnchorLocation ? nextAnchorLocation.name : (existing.locationName ?? null));
 
   const nextOfferType = data.offerType ?? existing.offerType;
   const nextAvailabilityMode = getResolvedAvailabilityMode(
     data.availabilityMode ?? existing.availabilityMode,
     data.scheduleMode ?? existing.scheduleMode,
   );
-  const nextTimeline = data.timeline ?? ((existing.timeline as Prisma.JsonValue) as Prisma.JsonArray);
+  const nextTimeline = data.timeline ?? (existing.timeline as Prisma.JsonValue as Prisma.JsonArray);
   const nextItineraryDays =
-    data.itineraryDays ?? ((existing.itineraryDays as Prisma.JsonValue) as Prisma.JsonArray);
+    data.itineraryDays ?? (existing.itineraryDays as Prisma.JsonValue as Prisma.JsonArray);
+  const existingManagedUrls = new Set([
+    ...existing.photoUrls,
+    ...collectExcursionSectionPhotoUrls(
+      existing.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
+    ),
+    ...existing.videoUrls,
+    ...collectExcursionProgramPhotoUrls({
+      itineraryDays: existing.itineraryDays,
+      timeline: existing.timeline,
+    }),
+  ]);
+  const nextManagedUrls = new Set([
+    ...nextPhotoUrls,
+    ...collectExcursionSectionPhotoUrls(nextSectionPhotoGroups),
+    ...nextVideoUrls,
+    ...collectExcursionProgramPhotoUrls({
+      itineraryDays: nextItineraryDays,
+      timeline: nextTimeline,
+    }),
+  ]);
+  const removedManagedUrls = [...existingManagedUrls].filter((url) => !nextManagedUrls.has(url));
   const nextRouteLocationsLength = data.routeLocations
     ? data.routeLocations.length
     : existing.routeLocations.length;
@@ -418,8 +681,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const hasSessions = existingSessionsCount > 0;
   const hasRegularSchedule =
-    Boolean((data.scheduleText === undefined ? existing.scheduleText : data.scheduleText)?.trim()) ||
-    existingScheduleRulesCount > 0;
+    Boolean(
+      (data.scheduleText === undefined ? existing.scheduleText : data.scheduleText)?.trim(),
+    ) || existingScheduleRulesCount > 0;
 
   const nextState = {
     offerType: nextOfferType,
@@ -427,7 +691,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     locationId: nextLocationId,
     categoryId: nextCategoryId ?? null,
     description: data.description === undefined ? existing.description : data.description,
-    routeDescription: data.routeDescription === undefined ? existing.routeDescription : data.routeDescription,
+    routeDescription:
+      data.routeDescription === undefined ? existing.routeDescription : data.routeDescription,
     durationMinutes:
       data.durationMinutes === undefined ? existing.durationMinutes : data.durationMinutes,
     durationDays: data.durationDays === undefined ? existing.durationDays : data.durationDays,
@@ -451,6 +716,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     contactLastName:
       data.contactLastName === undefined ? existing.contactLastName : data.contactLastName,
     contactPhone: data.contactPhone === undefined ? existing.contactPhone : data.contactPhone,
+    contactPhone2: data.contactPhone2 === undefined ? existing.contactPhone2 : data.contactPhone2,
     accommodationProvided:
       data.accommodationProvided === undefined
         ? existing.accommodationProvided
@@ -461,13 +727,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   };
 
   const missingPublishFields =
-    data.status === ExcursionStatus.PENDING_MODERATION ? getMissingPublishFields(nextState) : [];
+    data.status === ExcursionStatus.PENDING_MODERATION
+      ? getMissingPublishFields(nextState)
+      : [];
 
   if (data.status === ExcursionStatus.PENDING_MODERATION && missingPublishFields.length > 0) {
     return NextResponse.json(
       {
-        error:
-          `Для отправки на модерацию заполните обязательные поля. Не заполнено: ${missingPublishFields.join(", ")}.`,
+        error: `Для отправки на модерацию заполните обязательные поля. Не заполнено: ${missingPublishFields.join(", ")}.`,
       },
       { status: 400 },
     );
@@ -508,6 +775,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
 
+  const submitPublishedEdit =
+    isPublishedOwnerEdit && data.status === ExcursionStatus.PENDING_MODERATION;
+  const resetPublishedEditToDraft =
+    isPublishedOwnerEdit &&
+    data.status === ExcursionStatus.DRAFT &&
+    existingPendingEditStatus !== null;
+
   const updateData: Prisma.ExcursionUpdateInput = {
     ...(data.offerType !== undefined ? { offerType: data.offerType } : {}),
     ...(data.subtypeLabel !== undefined ? { subtypeLabel: data.subtypeLabel } : {}),
@@ -542,7 +816,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.format !== undefined ? { format: data.format } : {}),
     ...(data.groupSizeMin !== undefined ? { groupSizeMin: data.groupSizeMin } : {}),
     ...(data.groupSizeMax !== undefined ? { groupSizeMax: data.groupSizeMax } : {}),
-    ...(data.languageCodes !== undefined ? { languageCodes: dedupeStrings(data.languageCodes) } : {}),
+    ...(data.languageCodes !== undefined
+      ? { languageCodes: dedupeStrings(data.languageCodes) }
+      : {}),
     ...(data.ageLimit !== undefined ? { ageLimit: data.ageLimit } : {}),
     ...(data.isKidFriendly !== undefined ? { isKidFriendly: data.isKidFriendly } : {}),
     ...(data.difficulty !== undefined ? { difficulty: data.difficulty } : {}),
@@ -582,9 +858,31 @@ export async function PATCH(request: Request, context: RouteContext) {
       ? { accommodationFormat: data.accommodationFormat }
       : {}),
     ...(data.mealPlan !== undefined ? { mealPlan: data.mealPlan } : {}),
+    ...(data.mealDetails !== undefined ? { mealDetails: data.mealDetails } : {}),
     ...(data.accommodationComment !== undefined
       ? { accommodationComment: data.accommodationComment }
       : {}),
+    ...(data.accommodationStars !== undefined
+      ? { accommodationStars: data.accommodationStars }
+      : {}),
+    ...(data.roomTypes !== undefined ? { roomTypes: data.roomTypes } : {}),
+    ...(data.singleSupplementAvailable !== undefined
+      ? { singleSupplementAvailable: data.singleSupplementAvailable }
+      : {}),
+    ...(data.singleSupplementPrice !== undefined
+      ? { singleSupplementPrice: data.singleSupplementPrice }
+      : {}),
+    ...(data.tourKind !== undefined ? { tourKind: data.tourKind } : {}),
+    ...(data.transportModes !== undefined ? { transportModes: data.transportModes } : {}),
+    ...(data.departureMode !== undefined ? { departureMode: data.departureMode } : {}),
+    ...(data.arrivalInfo !== undefined ? { arrivalInfo: data.arrivalInfo } : {}),
+    ...(data.departureInfo !== undefined ? { departureInfo: data.departureInfo } : {}),
+    ...(data.documentsRequired !== undefined ? { documentsRequired: data.documentsRequired } : {}),
+    ...(data.insuranceIncluded !== undefined ? { insuranceIncluded: data.insuranceIncluded } : {}),
+    ...(data.insuranceComment !== undefined ? { insuranceComment: data.insuranceComment } : {}),
+    ...(data.equipmentProvided !== undefined ? { equipmentProvided: data.equipmentProvided } : {}),
+    ...(data.safetyInfo !== undefined ? { safetyInfo: data.safetyInfo } : {}),
+    ...(data.routeConditions !== undefined ? { routeConditions: data.routeConditions } : {}),
     ...(data.hasGuideLicense !== undefined ? { hasGuideLicense: data.hasGuideLicense } : {}),
     ...(data.timeline !== undefined ? { timeline: data.timeline } : {}),
     ...(data.extraOptions !== undefined ? { extraOptions: data.extraOptions } : {}),
@@ -598,6 +896,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.contactFirstName !== undefined ? { contactFirstName: data.contactFirstName } : {}),
     ...(data.contactLastName !== undefined ? { contactLastName: data.contactLastName } : {}),
     ...(data.contactPhone !== undefined ? { contactPhone: data.contactPhone } : {}),
+    ...(data.contactPhone2 !== undefined ? { contactPhone2: data.contactPhone2 } : {}),
     ...(data.contactEmail !== undefined ? { contactEmail: data.contactEmail } : {}),
     ...(data.websiteUrl !== undefined ? { websiteUrl: data.websiteUrl } : {}),
     ...(data.whatsappUrl !== undefined ? { whatsappUrl: data.whatsappUrl } : {}),
@@ -606,9 +905,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.maxUrl !== undefined ? { maxUrl: data.maxUrl } : {}),
     ...(data.okUrl !== undefined ? { okUrl: data.okUrl } : {}),
     ...(data.photoUrls !== undefined ? { photoUrls: nextPhotoUrls } : {}),
+    ...(data.sectionPhotoGroups !== undefined
+      ? { sectionPhotoGroups: nextSectionPhotoGroups as Prisma.InputJsonValue }
+      : {}),
     ...(data.videoUrls !== undefined ? { videoUrls: nextVideoUrls } : {}),
-    ...(data.status !== undefined ? { status: nextStatus } : {}),
-    ...(data.status === ExcursionStatus.PENDING_MODERATION
+    ...(!isPublishedOwnerEdit && data.status !== undefined ? { status: nextStatus } : {}),
+    ...(submitPublishedEdit ? { pendingEditStatus: ExcursionStatus.PENDING_MODERATION } : {}),
+    ...(resetPublishedEditToDraft ? { pendingEditStatus: ExcursionStatus.DRAFT } : {}),
+    ...(data.status === ExcursionStatus.PENDING_MODERATION || resetPublishedEditToDraft
       ? {
           moderationNotes: null,
           moderatedById: null,
@@ -680,7 +984,28 @@ export async function PATCH(request: Request, context: RouteContext) {
     throw error;
   }
 
-  return NextResponse.json({ item: serializeExcursion(updated) });
+  const shouldMarkOwnerUpdated =
+    isPublishedOwnerEdit && hasPublishedContentEdit && !submitPublishedEdit;
+
+  if (shouldMarkOwnerUpdated) {
+    await markExcursionNeedsRemoderationAfterOwnerEdit(db, existing.id);
+  }
+
+  if (removedManagedUrls.length > 0) {
+    await Promise.all(
+      removedManagedUrls.map((url) => deleteManagedUrlFromStorage(url).catch(() => null)),
+    );
+  }
+
+  const normalizedUpdated = shouldMarkOwnerUpdated
+    ? await getAccessibleExcursion(existing.id, editor)
+    : updated;
+
+  if (!normalizedUpdated) {
+    return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
+  }
+
+  return NextResponse.json({ item: serializeExcursion(normalizedUpdated) });
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
@@ -697,9 +1022,18 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
 
+  const storageEntry = await db.excursion.findUnique({
+    where: { id: existing.id },
+    select: EXCURSION_STORAGE_CLEANUP_SELECT,
+  });
+
   await db.excursion.delete({
     where: { id: existing.id },
   });
+
+  if (storageEntry) {
+    await deleteExcursionStorageEntries([storageEntry]);
+  }
 
   return NextResponse.json({ ok: true });
 }

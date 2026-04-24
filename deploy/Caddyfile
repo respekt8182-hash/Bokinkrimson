@@ -1,0 +1,13 @@
+{
+  email {$ACME_EMAIL}
+}
+
+www.krymvokrug.ru {
+  redir https://krymvokrug.ru{uri} permanent
+}
+
+krymvokrug.ru {
+  encode gzip zstd
+
+  reverse_proxy app:3000
+}

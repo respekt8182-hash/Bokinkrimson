@@ -1,5 +1,5 @@
 // Home showcase aggregator: computes "prices from" for popular Crimea cities from published housing and excursions.
-import { ExcursionStatus, PropertyStatus } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { addDays, toIsoDate } from "@/lib/pricing";
 import { db } from "@/lib/db";
 import {
@@ -7,6 +7,10 @@ import {
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
+import {
+  buildPublishedExcursionVisibilityWhere,
+  buildPublishedPropertyVisibilityWhere,
+} from "@/lib/public-visibility";
 
 export const HOME_CITY_FALLBACK_PRICE_RUB = 500;
 
@@ -228,8 +232,7 @@ async function readHomeCitySourceRows(locationIds: string[], today: Date) {
           room: {
             isActive: true,
             property: {
-              status: PropertyStatus.PUBLISHED,
-              ownerDeletedAt: null,
+              ...buildPublishedPropertyVisibilityWhere(),
               locationId: { in: locationIds },
             },
           },
@@ -251,7 +254,7 @@ async function readHomeCitySourceRows(locationIds: string[], today: Date) {
       }),
       db.excursion.findMany({
         where: {
-          status: ExcursionStatus.PUBLISHED,
+          ...buildPublishedExcursionVisibilityWhere(),
           locationId: { in: locationIds },
           priceFrom: { not: null },
         },
@@ -275,6 +278,11 @@ async function readHomeCitySourceRows(locationIds: string[], today: Date) {
 }
 
 export async function getHomeCityShowcaseItems(): Promise<HomeCityShowcaseItem[]> {
+  return getCachedHomeCityShowcaseItems();
+}
+
+const getCachedHomeCityShowcaseItems = unstable_cache(
+  async (): Promise<HomeCityShowcaseItem[]> => {
   const fallbackPrice = HOME_CITY_FALLBACK_PRICE_RUB;
   const locationIds = homeCityDefinitions.map((item) => item.locationId);
   const today = getUtcDateOnly(new Date());
@@ -318,4 +326,7 @@ export async function getHomeCityShowcaseItems(): Promise<HomeCityShowcaseItem[]
     housingPriceFrom: housingPriceByLocation.get(city.locationId) ?? fallbackPrice,
     excursionPriceFrom: excursionPriceByLocation.get(city.locationId) ?? fallbackPrice,
   }));
-}
+  },
+  ["home-city-showcase-v1"],
+  { revalidate: 900 },
+);

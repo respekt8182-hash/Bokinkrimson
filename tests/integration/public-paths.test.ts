@@ -21,6 +21,27 @@ describe("public seo paths", () => {
     expect(extractPropertyId(id)).toBe(id);
   });
 
+  it("extracts seeded demo ids from slug and raw id", () => {
+    expect(extractPropertyId("sanatoriy-lazurnyy-bereg-demo_property_11")).toBe(
+      "demo_property_11",
+    );
+    expect(extractPropertyId("demo_property_11")).toBe("demo_property_11");
+    expect(extractPropertyId("vecherniy-tur-demo_excursion_03")).toBe("demo_excursion_03");
+    expect(extractPropertyId("azovskiy-semeynyy-otdyh-v-schelkino-demo_tour_11")).toBe(
+      "demo_tour_11",
+    );
+  });
+
+  it("extracts prefixed live ids from slug and raw id", () => {
+    const propertyId = "property_c9b47c9f85ae456f911e58d371048c1c";
+    const excursionId = "excursion_a9b47c9f85ae456f911e58d371048c1c";
+
+    expect(extractPropertyId(`123-${propertyId}`)).toBe(propertyId);
+    expect(extractPropertyId(propertyId)).toBe(propertyId);
+    expect(extractPropertyId(`morskaya-progulka-${excursionId}`)).toBe(excursionId);
+    expect(extractPropertyId(excursionId)).toBe(excursionId);
+  });
+
   it("builds public property and excursion path", () => {
     const propertyPath = buildPublicPropertyPath({
       id: "cabc123xyz9",

@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
+import { trackPublicEntityView } from "@/lib/client-view-tracking";
 
 type ViewTrackerProps = {
   propertyId: string;
 };
 
-// Fires a single POST to the view-tracking endpoint on first mount.
-// Renders nothing — purely a side-effect component.
 export function ViewTracker({ propertyId }: ViewTrackerProps) {
   useEffect(() => {
-    fetch(`/api/properties/${propertyId}/view`, { method: "POST" }).catch(() => {});
+    trackPublicEntityView({
+      storageKey: `property-view:${propertyId}`,
+      url: `/api/properties/${propertyId}/view`,
+      idleTimeoutMs: 3000,
+    });
   }, [propertyId]);
 
   return null;

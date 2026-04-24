@@ -1,9 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Images, Phone, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Images, X } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppIcon } from "@/components/ui/app-icon";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import type { PublicPropertyCard } from "@/lib/public-properties";
 
 type Media = PublicPropertyCard["media"][number];
@@ -11,7 +13,6 @@ type Media = PublicPropertyCard["media"][number];
 interface PropertyMediaGalleryProps {
   media: Media[];
   title?: string;
-  phoneHref?: string | null;
 }
 
 function MediaItem({
@@ -19,20 +20,29 @@ function MediaItem({
   alt,
   className,
   loading = "lazy",
+  sizes,
 }: {
   media: Media;
   alt: string;
   className: string;
   loading?: "lazy" | "eager";
+  sizes?: string;
 }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={media.url} alt={alt} loading={loading} decoding="async" className={className} />;
+  return (
+    <Image
+      src={media.url}
+      alt={alt}
+      fill
+      loading={loading}
+      sizes={sizes ?? "(max-width: 768px) 100vw, 50vw"}
+      className={className}
+    />
+  );
 }
 
 export function PropertyMediaGallery({
   media,
   title = "Фото объекта",
-  phoneHref,
 }: PropertyMediaGalleryProps) {
   const photos = media.filter((item) => item.type === "IMAGE").slice(0, 10);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -59,6 +69,7 @@ export function PropertyMediaGallery({
   const count = photos.length;
   const safeActiveIndex = count > 0 ? Math.min(activeIndex, count - 1) : 0;
   const isLightboxVisible = lightboxOpen && count > 0;
+  useBodyScrollLock(isLightboxVisible);
 
   useEffect(() => {
     if (!isLightboxVisible) return;
@@ -72,13 +83,6 @@ export function PropertyMediaGallery({
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [isLightboxVisible, closeLightbox, prev, next]);
-
-  useEffect(() => {
-    document.body.style.overflow = isLightboxVisible ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isLightboxVisible]);
 
   useEffect(() => {
     if (!isLightboxVisible || !thumbsRef.current) return;
@@ -301,48 +305,120 @@ export function PropertyMediaGallery({
     );
   };
 
-  return (
-    <>
-      <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
-        {renderDesktopGallery()}
+  const renderMobileGallery = () => {
+    if (count === 1) {
+      return (
+        <div className="md:hidden">
+          <div
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-3xl"
+            onClick={() => openLightbox(0)}
+          >
+            <MediaItem
+              media={photos[0]}
+              alt={title}
+              loading="eager"
+              className="gallery-img h-64 w-full object-cover"
+            />
+          </div>
+        </div>
+      );
+    }
 
-        <div className="grid grid-cols-2 gap-2 md:hidden">
-          {photos.slice(0, Math.min(count, 3)).map((photo, i) => (
+    if (count === 2) {
+      return (
+        <div
+          className="grid gap-2 md:hidden"
+          style={{ gridTemplateColumns: "1.45fr 1fr", height: "240px" }}
+        >
+          <div
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
+            onClick={() => openLightbox(0)}
+          >
+            <MediaItem
+              media={photos[0]}
+              alt={title}
+              loading="eager"
+              className="gallery-img h-full w-full object-cover"
+            />
+          </div>
+          <div
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-r-3xl"
+            onClick={() => openLightbox(1)}
+          >
+            <MediaItem
+              media={photos[1]}
+              alt="Фото 2"
+              className="gallery-img h-full w-full object-cover"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const mobileSidePhotos = photos.slice(1, Math.min(count, 4));
+    const mobileRowCount = mobileSidePhotos.length >= 3 ? 3 : 2;
+    const hiddenPhotosCount = count - (mobileSidePhotos.length + 1);
+
+    return (
+      <div
+        className="grid gap-2 md:hidden"
+        style={{
+          gridTemplateColumns: "1.45fr 1fr",
+          gridTemplateRows: `repeat(${mobileRowCount}, minmax(0, 1fr))`,
+          height: mobileRowCount === 3 ? "276px" : "240px",
+        }}
+      >
+        <div
+          className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
+          style={{ gridRow: `span ${mobileRowCount}` }}
+          onClick={() => openLightbox(0)}
+        >
+          <MediaItem
+            media={photos[0]}
+            alt={title}
+            loading="eager"
+            className="gallery-img h-full w-full object-cover"
+          />
+        </div>
+
+        {mobileSidePhotos.map((photo, i) => {
+          const isTop = i === 0;
+          const isBottom = i === mobileSidePhotos.length - 1;
+          const shouldShowOverlay = isBottom && hiddenPhotosCount > 0;
+
+          return (
             <div
               key={photo.id}
-              className={`gallery-img-wrap relative cursor-pointer overflow-hidden rounded-2xl ${
-                i === 0 || (count === 2 && i === 1) ? "col-span-2" : ""
+              className={`gallery-img-wrap relative cursor-pointer overflow-hidden ${
+                isTop ? "rounded-tr-3xl" : isBottom ? "rounded-br-3xl" : ""
               }`}
-              onClick={() => openLightbox(i)}
+              onClick={() => openLightbox(i + 1)}
             >
               <MediaItem
                 media={photo}
-                alt={`Фото ${i + 1}`}
-                loading={i === 0 ? "eager" : "lazy"}
-                className={`gallery-img w-full object-cover ${
-                  i === 0 ? "h-60" : count === 2 && i === 1 ? "h-44" : "h-40"
-                }`}
+                alt={`Фото ${i + 2}`}
+                className="gallery-img h-full w-full object-cover"
               />
-              {i === 2 && count > 3 ? (
-                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-midnight/55">
+
+              {shouldShowOverlay ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-midnight/50">
                   <span className="gallery-more-badge flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold text-white">
-                    +{count - 3} фото
+                    +{hiddenPhotosCount} фото
                   </span>
                 </div>
               ) : null}
             </div>
-          ))}
+          );
+        })}
+      </div>
+    );
+  };
 
-          {phoneHref ? (
-            <a
-              href={phoneHref}
-              className="col-span-2 mt-0.5 flex items-center justify-center gap-2.5 rounded-2xl bg-primary px-4 py-4 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(15,118,110,0.35)] transition active:scale-[0.98]"
-            >
-              <AppIcon icon={Phone} className="h-5 w-5" />
-              Позвонить
-            </a>
-          ) : null}
-        </div>
+  return (
+    <>
+      <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
+        {renderDesktopGallery()}
+        {renderMobileGallery()}
       </div>
 
       {isLightboxVisible && portalRoot

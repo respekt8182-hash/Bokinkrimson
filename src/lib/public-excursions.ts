@@ -1,11 +1,13 @@
 // Domain/service module for public excursions.
+import { existsSync } from "fs";
+import path from "path";
 import {
   ExcursionAvailabilityMode,
   ExcursionDifficulty,
   ExcursionFormat,
   ExcursionOfferType,
+  ExcursionScheduleMode,
   ExcursionSessionStatus,
-  ExcursionStatus,
   ReviewEntityType,
   ReviewStatus,
   type Prisma,
@@ -24,12 +26,19 @@ import {
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { serializeReview } from "@/lib/reviews";
 import { extractPropertyId, slugify } from "@/lib/public-properties";
+import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 import type {
   ExcursionExtraOption,
+  ExcursionSectionPhotoGroups,
   FaqItem,
   ItineraryDay,
   PricingTier,
   TimelineStep,
+} from "@/types/excursions";
+import {
+  getItineraryDayPhotoUrls,
+  getTimelineStepPhotoUrls,
+  normalizeExcursionSectionPhotoGroups,
 } from "@/types/excursions";
 
 type ResolvedDistrict = {
@@ -189,11 +198,16 @@ export type PublicExcursionCard = {
   durationNights: number | null;
   itineraryDays: ItineraryDay[];
   scheduleText: string | null;
+  scheduleMode: ExcursionScheduleMode;
   availabilityMode: ExcursionAvailabilityMode;
   availabilityNote: string | null;
   format: ExcursionFormat | null;
+  groupSizeMin: number | null;
+  groupSizeMax: number | null;
   languageCodes: string[];
+  ageLimit: number | null;
   isKidFriendly: boolean | null;
+  difficulty: ExcursionDifficulty | null;
   pickupAvailable: boolean;
   tags: string[];
   priceFrom: number | null;
@@ -205,20 +219,45 @@ export type PublicExcursionCard = {
   excludedItems: string[];
   cancellationPolicy: string | null;
   cancellationPolicyType: string | null;
+  physicalRequirements: string[];
+  whatToBring: string[];
+  meetingPointLat: number | null;
+  meetingPointLng: number | null;
+  minBookingNoticeHours: number | null;
+  hasGuideLicense: boolean;
   transferDetails: string | null;
   timeline: TimelineStep[];
   extraOptions: ExcursionExtraOption[];
   pricingTiers: PricingTier[];
   faqItems: FaqItem[];
   photoUrls: string[];
+  sectionPhotoGroups: ExcursionSectionPhotoGroups;
   videoUrls: string[];
   priceUnitLabel: string | null;
+  receiveRequests: boolean;
+  instantConfirmation: boolean;
   accommodationProvided: boolean | null;
   accommodationType: string | null;
   accommodationNights: number | null;
   accommodationFormat: string | null;
+  accommodationStars: string | null;
+  roomTypes: string[];
+  singleSupplementAvailable: boolean | null;
+  singleSupplementPrice: number | null;
   mealPlan: string | null;
+  mealDetails: string | null;
   accommodationComment: string | null;
+  tourKind: string | null;
+  transportModes: string[];
+  departureMode: string | null;
+  arrivalInfo: string | null;
+  departureInfo: string | null;
+  documentsRequired: string[];
+  insuranceIncluded: boolean | null;
+  insuranceComment: string | null;
+  equipmentProvided: string[];
+  safetyInfo: string | null;
+  routeConditions: string | null;
   availabilitySummary: string;
   avgRating: number;
   reviewsCount: number;
@@ -226,6 +265,7 @@ export type PublicExcursionCard = {
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
+    phone2: string | null;
     email: string | null;
     websiteUrl: string | null;
     whatsappUrl: string | null;
@@ -239,13 +279,93 @@ export type PublicExcursionCard = {
     firstName: string;
     lastName: string;
   };
+  sessions: Array<{
+    id: string;
+    startAt: string;
+    endAt: string | null;
+    capacity: number | null;
+    priceOverride: number | null;
+    status: ExcursionSessionStatus;
+    bookingDeadlineMinutes: number | null;
+  }>;
+  scheduleRules: Array<{
+    id: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+    weekdays: number[];
+    timeStarts: string[];
+    durationMinutes: number | null;
+    capacityDefault: number | null;
+    priceOverride: number | null;
+  }>;
+  scheduleExceptions: Array<{
+    id: string;
+    date: string;
+    isClosed: boolean;
+    overrideTimeStarts: string[];
+    overrideCapacity: number | null;
+    overridePrice: number | null;
+    notes: string | null;
+  }>;
   pickupLocations: Array<{ id: string; name: string; slug: string }>;
   routeLocations: Array<{ id: string; name: string; slug: string; sortOrder: number }>;
   reviews: ReturnType<typeof serializeReview>[];
 };
 
+function sanitizePublicTimelineSteps(value: Prisma.JsonValue): TimelineStep[] {
+  return Array.isArray(value)
+    ? (value as TimelineStep[]).map((step) => ({
+        ...step,
+        photoUrls: filterExistingPublicAssetUrls(getTimelineStepPhotoUrls(step)),
+      }))
+    : [];
+}
+
+function sanitizePublicItineraryDays(value: Prisma.JsonValue): ItineraryDay[] {
+  return Array.isArray(value)
+    ? (value as ItineraryDay[]).map((day) => ({
+        ...day,
+        photoUrls: filterExistingPublicAssetUrls(getItineraryDayPhotoUrls(day)),
+      }))
+    : [];
+}
+
 function toNumberOrNull(value: Prisma.Decimal | null): number | null {
   return value === null ? null : Number(value);
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function filterExistingPublicAssetUrls(urls: string[]): string[] {
+  return urls.filter((url) => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("/uploads/")) {
+      return true;
+    }
+
+    const relativePath = decodeURIComponent(trimmed.slice(1));
+    const absolutePath = path.join(process.cwd(), "public", ...relativePath.split("/"));
+    return existsSync(absolutePath);
+  });
+}
+
+function filterPublicSectionPhotoGroups(
+  value: Partial<Record<string, string[] | null | undefined>> | null | undefined,
+): ExcursionSectionPhotoGroups {
+  const normalized = normalizeExcursionSectionPhotoGroups(value);
+
+  return {
+    dates: filterExistingPublicAssetUrls(normalized.dates),
+    program: filterExistingPublicAssetUrls(normalized.program),
+    logistics: filterExistingPublicAssetUrls(normalized.logistics),
+    accommodation: filterExistingPublicAssetUrls(normalized.accommodation),
+    included: filterExistingPublicAssetUrls(normalized.included),
+    requirements: filterExistingPublicAssetUrls(normalized.requirements),
+  };
 }
 
 export function buildExcursionSlug(title: string | null, id: string): string {
@@ -261,7 +381,10 @@ export function buildPublicExcursionPath(excursion: {
   anchorLocation?: { slug: string } | null;
 }): string {
   const location =
-    excursion.anchorLocationSlug ?? excursion.anchorLocation?.slug ?? excursion.locationId ?? "crimea";
+    excursion.anchorLocationSlug ??
+    excursion.anchorLocation?.slug ??
+    excursion.locationId ??
+    "crimea";
   return `/crimea/excursions/${location}/${buildExcursionSlug(excursion.title, excursion.id)}`;
 }
 
@@ -366,10 +489,7 @@ function stableHash(input: string): number {
   return hash >>> 0;
 }
 
-function parseDateRange(input: {
-  dateFrom?: string;
-  dateTo?: string;
-}): DateRangeFilter | null {
+function parseDateRange(input: { dateFrom?: string; dateTo?: string }): DateRangeFilter | null {
   // Accept partial input (only from/to) and normalize to inclusive UTC bounds.
   const dateFromRaw = input.dateFrom?.trim();
   const dateToRaw = input.dateTo?.trim();
@@ -378,9 +498,13 @@ function parseDateRange(input: {
   }
 
   const today = new Date();
-  const fallbackFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const fallbackFrom = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
   const from = dateFromRaw ? new Date(`${dateFromRaw}T00:00:00.000Z`) : fallbackFrom;
-  const to = dateToRaw ? new Date(`${dateToRaw}T23:59:59.999Z`) : new Date(from.getTime() + 86_399_999);
+  const to = dateToRaw
+    ? new Date(`${dateToRaw}T23:59:59.999Z`)
+    : new Date(from.getTime() + 86_399_999);
 
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return null;
@@ -395,6 +519,73 @@ function parseDateRange(input: {
   }
 
   return { dateFrom: from, dateTo: to };
+}
+
+export function normalizeExcursionSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ё/g, "е")
+    .replace(/[^a-z0-9а-я\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function getPrimaryExcursionSearchScore(
+  query: string,
+  candidates: Array<string | null | undefined>,
+): number {
+  const normalizedQuery = normalizeExcursionSearchText(query);
+  if (normalizedQuery.length < 2) {
+    return 0;
+  }
+
+  const normalizedCandidates = candidates
+    .map((candidate) => (candidate ? normalizeExcursionSearchText(candidate) : ""))
+    .filter(Boolean);
+  if (normalizedCandidates.length === 0) {
+    return 0;
+  }
+
+  const queryTokens = normalizedQuery.split(" ");
+  let bestScore = 0;
+
+  for (const candidate of normalizedCandidates) {
+    if (candidate === normalizedQuery) {
+      bestScore = Math.max(bestScore, 1.35);
+      continue;
+    }
+
+    if (candidate.startsWith(normalizedQuery)) {
+      bestScore = Math.max(bestScore, 1.18);
+      continue;
+    }
+
+    if (candidate.includes(normalizedQuery)) {
+      bestScore = Math.max(bestScore, 1);
+      continue;
+    }
+
+    if (queryTokens.every((token) => candidate.includes(token))) {
+      bestScore = Math.max(bestScore, 0.88);
+    }
+  }
+
+  if (bestScore > 0) {
+    return bestScore;
+  }
+
+  const combined = normalizedCandidates.join(" ");
+  if (combined.includes(normalizedQuery)) {
+    return 0.96;
+  }
+
+  if (queryTokens.every((token) => combined.includes(token))) {
+    return 0.8;
+  }
+
+  return 0;
 }
 
 function getSearchScoreMap<T extends { id: string }>(
@@ -449,9 +640,7 @@ function parseDurationBucket(
   return null;
 }
 
-function parseDifficulty(
-  value: string | undefined,
-): "easy" | "medium" | "hard" | null {
+function parseDifficulty(value: string | undefined): "easy" | "medium" | "hard" | null {
   if (value === "easy" || value === "medium" || value === "hard") {
     return value;
   }
@@ -466,6 +655,8 @@ export async function getPublicExcursionCatalog(
   const pageSize = Math.min(30, Math.max(1, query.pageSize ?? 30));
   const rawLocationQuery = query.location?.trim() ?? "";
   const searchQuery = query.query?.trim() ?? "";
+  const normalizedSearchQuery = normalizeExcursionSearchText(searchQuery);
+  const hasTextSearch = normalizedSearchQuery.length >= 2;
   const sort = parseExcursionSort(query.sort);
   const minPrice =
     typeof query.minPrice === "number" && Number.isFinite(query.minPrice) && query.minPrice > 0
@@ -480,7 +671,9 @@ export async function getPublicExcursionCatalog(
   const difficulty = parseDifficulty(query.difficulty);
   const dateRange = parseDateRange({ dateFrom: query.dateFrom, dateTo: query.dateTo });
   const people = query.people && Number.isFinite(query.people) ? Math.max(1, query.people) : null;
-  const radiusKm = Number.isFinite(query.radiusKm) ? Math.max(5, Math.min(100, query.radiusKm ?? 30)) : 30;
+  const radiusKm = Number.isFinite(query.radiusKm)
+    ? Math.max(5, Math.min(100, query.radiusKm ?? 30))
+    : 30;
   // Road distance ≈ haversine × 1.3 for Crimea terrain.
   // To find excursions within radiusKm by road, we filter by haversine ≤ radiusKm / 1.3.
   const haversineRadiusKm = radiusKm / 1.3;
@@ -525,7 +718,7 @@ export async function getPublicExcursionCatalog(
   // that are easier to combine in application code than in SQL.
   const rows = await db.excursion.findMany({
     where: {
-      status: ExcursionStatus.PUBLISHED,
+      ...buildPublishedExcursionVisibilityWhere(),
       ...(offerTypeFilter ? { offerType: offerTypeFilter } : {}),
       ...(resolvedDistrict ? { districtId: resolvedDistrict.id } : {}),
       ...(resolvedCategory ? { categoryId: resolvedCategory.id } : {}),
@@ -610,13 +803,15 @@ export async function getPublicExcursionCatalog(
   };
 
   // Similar to housing catalog: broad DB fetch + in-memory relevance, because scoring mixes geo/date/text factors.
-  const searchScoreMap = getSearchScoreMap(searchQuery, rows, (item) => [
+  const searchScoreMap = getSearchScoreMap(normalizedSearchQuery, rows, (item) => [
     item.title,
     item.locationName,
     item.mainLocation?.name,
     item.anchorLocation?.name,
     item.district?.name,
     item.category?.name,
+    item.finishPoint,
+    ...item.routeLocations.map((route) => route.location.name),
     item.shortDescription,
     item.description,
     item.fullDescription,
@@ -629,188 +824,199 @@ export async function getPublicExcursionCatalog(
   const filtered: RankedCatalogRow[] = [];
 
   for (const item of rows) {
-      if (searchQuery.length >= 2 && !searchScoreMap.has(item.id)) {
+    const primarySearchScore = getPrimaryExcursionSearchScore(searchQuery, [
+      item.title,
+      item.locationName,
+      item.mainLocation?.name,
+      item.anchorLocation?.name,
+      item.district?.name,
+      item.category?.name,
+      item.startPoint,
+      item.finishPoint,
+      ...item.routeLocations.map((route) => route.location.name),
+    ]);
+    if (hasTextSearch && primarySearchScore <= 0 && !searchScoreMap.has(item.id)) {
+      continue;
+    }
+
+    // Pins and distance are based strictly on the excursion map point, not on location center.
+    const excursionLatitude = item.latitude === null ? null : Number(item.latitude);
+    const excursionLongitude = item.longitude === null ? null : Number(item.longitude);
+
+    // Excursions with no sessions at all are treated as "always available"
+    // (they operate on a request basis). Only filter by date/capacity when
+    // the excursion has explicit sessions configured.
+    const hasNoSessionsConfigured = item._count.sessions === 0;
+    const hasAvailableSession = hasNoSessionsConfigured
+      ? true
+      : dateRange
+        ? item.sessions.some(
+            (session) => session.capacity === null || people === null || session.capacity >= people,
+          )
+        : item.sessions.length > 0;
+
+    let anchorMatch = false;
+    let pickupMatch = false;
+    let distanceKm: number | null = null;
+    let locationMatched = false;
+
+    if (resolvedLocation) {
+      // Location relevance is intentionally broad: anchor city, pickup city,
+      // map radius, and legacy locationId all count as a location match.
+      const locationPoint = {
+        latitude: resolvedLocation.latitude,
+        longitude: resolvedLocation.longitude,
+      };
+      anchorMatch =
+        item.anchorLocationId === resolvedLocation.id || item.locationId === resolvedLocation.slug;
+      pickupMatch = item.pickupLocations.some(
+        (pickup) => pickup.locationId === resolvedLocation.id,
+      );
+
+      if (
+        locationPoint.latitude !== null &&
+        locationPoint.longitude !== null &&
+        excursionLatitude !== null &&
+        excursionLongitude !== null
+      ) {
+        distanceKm = haversineDistanceKm(
+          { latitude: locationPoint.latitude, longitude: locationPoint.longitude },
+          { latitude: excursionLatitude, longitude: excursionLongitude },
+        );
+      }
+
+      locationMatched =
+        anchorMatch ||
+        pickupMatch ||
+        (distanceKm !== null && distanceKm <= haversineRadiusKm) ||
+        // Match by slug (legacy string field) or by ID (CUID stored in locationId)
+        Boolean(
+          item.locationId &&
+          (item.locationId === resolvedLocation.slug || item.locationId === resolvedLocation.id),
+        );
+    } else {
+      locationMatched = true;
+    }
+
+    if (!locationMatched) {
+      continue;
+    }
+
+    if (dateRange && !hasAvailableSession) {
+      continue;
+    }
+
+    if (people && item.groupSizeMax !== null && item.groupSizeMax !== undefined) {
+      if (people > item.groupSizeMax) {
         continue;
       }
+    }
 
-      // Pins and distance are based strictly on the excursion map point, not on location center.
-      const excursionLatitude = item.latitude === null ? null : Number(item.latitude);
-      const excursionLongitude = item.longitude === null ? null : Number(item.longitude);
+    if (language && !item.languageCodes.some((code) => code.toLowerCase() === language)) {
+      continue;
+    }
 
-      // Excursions with no sessions at all are treated as "always available"
-      // (they operate on a request basis). Only filter by date/capacity when
-      // the excursion has explicit sessions configured.
-      const hasNoSessionsConfigured = item._count.sessions === 0;
-      const hasAvailableSession = hasNoSessionsConfigured
-        ? true
-        : dateRange
-          ? item.sessions.some(
-              (session) =>
-                session.capacity === null || people === null || session.capacity >= people,
-            )
-          : item.sessions.length > 0;
+    const fromPrice = toNumberOrNull(item.priceFrom);
+    if (minPrice !== null && (fromPrice === null || fromPrice < minPrice)) {
+      continue;
+    }
+    if (maxPrice !== null && (fromPrice === null || fromPrice > maxPrice)) {
+      continue;
+    }
 
-      let anchorMatch = false;
-      let pickupMatch = false;
-      let distanceKm: number | null = null;
-      let locationMatched = false;
-
-      if (resolvedLocation) {
-        // Location relevance is intentionally broad: anchor city, pickup city,
-        // map radius, and legacy locationId all count as a location match.
-        const locationPoint = {
-          latitude: resolvedLocation.latitude,
-          longitude: resolvedLocation.longitude,
-        };
-        anchorMatch =
-          item.anchorLocationId === resolvedLocation.id || item.locationId === resolvedLocation.slug;
-        pickupMatch = item.pickupLocations.some((pickup) => pickup.locationId === resolvedLocation.id);
-
-        if (
-          locationPoint.latitude !== null &&
-          locationPoint.longitude !== null &&
-          excursionLatitude !== null &&
-          excursionLongitude !== null
-        ) {
-          distanceKm = haversineDistanceKm(
-            { latitude: locationPoint.latitude, longitude: locationPoint.longitude },
-            { latitude: excursionLatitude, longitude: excursionLongitude },
-          );
-        }
-
-        locationMatched =
-          anchorMatch ||
-          pickupMatch ||
-          (distanceKm !== null && distanceKm <= haversineRadiusKm) ||
-          // Match by slug (legacy string field) or by ID (CUID stored in locationId)
-          Boolean(
-            item.locationId &&
-              (item.locationId === resolvedLocation.slug ||
-                item.locationId === resolvedLocation.id),
-          );
-      } else {
-        locationMatched = true;
-      }
-
-      if (!locationMatched) {
+    if (durationBucket) {
+      const duration = item.durationMinutes ?? 0;
+      if (durationBucket === "up_to_3h" && duration > 180) {
         continue;
       }
-
-      if (dateRange && !hasAvailableSession) {
+      if (durationBucket === "between_3h_6h" && (duration <= 180 || duration > 360)) {
         continue;
       }
-
-      if (people && item.groupSizeMax !== null && item.groupSizeMax !== undefined) {
-        if (people > item.groupSizeMax) {
-          continue;
-        }
-      }
-
-      if (language && !item.languageCodes.some((code) => code.toLowerCase() === language)) {
+      if (durationBucket === "more_6h" && duration <= 360) {
         continue;
       }
+    }
 
-      const fromPrice = toNumberOrNull(item.priceFrom);
-      if (minPrice !== null && (fromPrice === null || fromPrice < minPrice)) {
-        continue;
-      }
-      if (maxPrice !== null && (fromPrice === null || fromPrice > maxPrice)) {
-        continue;
-      }
+    // ── Bayesian smoothed rating ──────────────────────────────────────────────
+    // Gives new excursions a fair starting point instead of 0.
+    // C = confidence weight (phantom reviews at the prior); PRIOR = assumed global avg.
+    // New (0 reviews) → 4.0; 5★×100 reviews → ~4.95; 3★×50 → ~3.23.
+    const BAYESIAN_C = 5;
+    const BAYESIAN_PRIOR = 4.0;
+    const bayesianRating =
+      (Number(item.avgRating) * item.reviewsCount + BAYESIAN_C * BAYESIAN_PRIOR) /
+      (item.reviewsCount + BAYESIAN_C);
+    // 0–68 pts: quality baseline that is fair to new creators
+    const ratingScore = bayesianRating * 10 + Math.log1p(item.reviewsCount) * 4;
 
-      if (durationBucket) {
-        const duration = item.durationMinutes ?? 0;
-        if (durationBucket === "up_to_3h" && duration > 180) {
-          continue;
-        }
-        if (durationBucket === "between_3h_6h" && (duration <= 180 || duration > 360)) {
-          continue;
-        }
-        if (durationBucket === "more_6h" && duration <= 360) {
-          continue;
-        }
-      }
+    // ── Distance — soft, not dominant ────────────────────────────────────────
+    // Linear decay over 2× the haversine radius so excursions just outside
+    // the radius aren't penalised too harshly.
+    const distanceScore =
+      distanceKm === null
+        ? 0
+        : Math.max(0, (1 - distanceKm / Math.max(haversineRadiusKm * 2, 30)) * 20);
 
-      // ── Bayesian smoothed rating ──────────────────────────────────────────────
-      // Gives new excursions a fair starting point instead of 0.
-      // C = confidence weight (phantom reviews at the prior); PRIOR = assumed global avg.
-      // New (0 reviews) → 4.0; 5★×100 reviews → ~4.95; 3★×50 → ~3.23.
-      const BAYESIAN_C = 5;
-      const BAYESIAN_PRIOR = 4.0;
-      const bayesianRating =
-        (Number(item.avgRating) * item.reviewsCount + BAYESIAN_C * BAYESIAN_PRIOR) /
-        (item.reviewsCount + BAYESIAN_C);
-      // 0–68 pts: quality baseline that is fair to new creators
-      const ratingScore = bayesianRating * 10 + Math.log1p(item.reviewsCount) * 4;
+    // ── Location affinity ─────────────────────────────────────────────────────
+    const anchorScore = anchorMatch ? 50 : 0;
+    const pickupScore = pickupMatch ? 15 : 0;
 
-      // ── Distance — soft, not dominant ────────────────────────────────────────
-      // Linear decay over 2× the haversine radius so excursions just outside
-      // the radius aren't penalised too harshly.
-      const distanceScore =
-        distanceKm === null
-          ? 0
-          : Math.max(0, (1 - distanceKm / Math.max(haversineRadiusKm * 2, 30)) * 20);
+    // ── Availability ──────────────────────────────────────────────────────────
+    const dateScore = hasAvailableSession ? 20 : 0;
 
-      // ── Location affinity ─────────────────────────────────────────────────────
-      const anchorScore = anchorMatch ? 50 : 0;
-      const pickupScore = pickupMatch ? 15 : 0;
+    // ── Text search relevance ─────────────────────────────────────────────────
+    const searchScore = Math.max(searchScoreMap.get(item.id) ?? 0, primarySearchScore) * 45;
 
-      // ── Availability ──────────────────────────────────────────────────────────
-      const dateScore = hasAvailableSession ? 20 : 0;
+    // ── Profile completeness — rewards creator effort, accessible to newcomers ─
+    // Having a well-filled profile is achievable from day one, unlike reviews.
+    const photoCount = item.photoUrls.length;
+    const hasTimeline = Array.isArray(item.timeline) && (item.timeline as unknown[]).length > 0;
+    const hasFaqItems = Array.isArray(item.faqItems) && (item.faqItems as unknown[]).length > 0;
+    const hasPricingTiers =
+      Array.isArray(item.pricingTiers) && (item.pricingTiers as unknown[]).length > 0;
+    const completenessScore =
+      Math.min(photoCount, 5) * 2 + // up to 10 pts (5+ photos)
+      (item.shortDescription || item.description ? 3 : 0) + // has description
+      (item.mainLocationId ? 2 : 0) + // linked to location
+      (item.anchorLocationId ? 1.5 : 0) + // linked to anchor city
+      (item.startPoint ? 1 : 0) + // meeting point filled
+      (hasTimeline ? 3 : 0) + // has itinerary/timeline
+      (hasFaqItems ? 2 : 0) + // has FAQ
+      (hasPricingTiers ? 1.5 : 0) + // has pricing tiers
+      (item.priceFrom !== null ? 1 : 0); // has price
 
-      // ── Text search relevance ─────────────────────────────────────────────────
-      const searchScore = (searchScoreMap.get(item.id) ?? 0) * 45;
+    // ── Freshness — temporary discovery boost for new listings ────────────────
+    // Fades linearly over 30 days → levels the field for new creators.
+    const daysSinceCreated = (Date.now() - item.createdAt.getTime()) / 86_400_000;
+    const freshnessScore =
+      daysSinceCreated < 30 ? Math.max(0, (30 - daysSinceCreated) / 30) * 10 : 0;
 
-      // ── Profile completeness — rewards creator effort, accessible to newcomers ─
-      // Having a well-filled profile is achievable from day one, unlike reviews.
-      const photoCount = item.photoUrls.length;
-      const hasTimeline = Array.isArray(item.timeline) && (item.timeline as unknown[]).length > 0;
-      const hasFaqItems = Array.isArray(item.faqItems) && (item.faqItems as unknown[]).length > 0;
-      const hasPricingTiers =
-        Array.isArray(item.pricingTiers) && (item.pricingTiers as unknown[]).length > 0;
-      const completenessScore =
-        Math.min(photoCount, 5) * 2 +                              // up to 10 pts (5+ photos)
-        (item.shortDescription || item.description ? 3 : 0) +     // has description
-        (item.mainLocationId ? 2 : 0) +                           // linked to location
-        (item.anchorLocationId ? 1.5 : 0) +                       // linked to anchor city
-        (item.startPoint ? 1 : 0) +                               // meeting point filled
-        (hasTimeline ? 3 : 0) +                                    // has itinerary/timeline
-        (hasFaqItems ? 2 : 0) +                                    // has FAQ
-        (hasPricingTiers ? 1.5 : 0) +                             // has pricing tiers
-        (item.priceFrom !== null ? 1 : 0);                        // has price
+    // ── Daily rotation ────────────────────────────────────────────────────────
+    // Reshuffles similarly-scored excursions every ~4 hours so every listing
+    // gets exposure windows, not just the perpetual top slots.
+    const rotation = (stableHash(`${getDailyRotationKey()}:${item.id}`) % 1000) / 1000;
+    const rotationScore = rotation * 15;
 
-      // ── Freshness — temporary discovery boost for new listings ────────────────
-      // Fades linearly over 30 days → levels the field for new creators.
-      const daysSinceCreated = (Date.now() - item.createdAt.getTime()) / 86_400_000;
-      const freshnessScore =
-        daysSinceCreated < 30 ? Math.max(0, (30 - daysSinceCreated) / 30) * 10 : 0;
+    const relevance =
+      ratingScore + // 40–68  quality baseline (Bayesian-fair to newcomers)
+      distanceScore + //  0–20  location proximity (soft)
+      anchorScore + //  0–50  anchor city / exact location match
+      pickupScore + //  0–15  pickup from searched city
+      dateScore + //  0–20  has upcoming available sessions
+      searchScore + //  0–45  text relevance (when search query present)
+      completenessScore + //  0–25  profile quality (achievable from day one)
+      freshnessScore + //  0–10  new listing discovery boost (first 30 days)
+      rotationScore; //  0–15  daily shuffle for equal-scored listings
 
-      // ── Daily rotation ────────────────────────────────────────────────────────
-      // Reshuffles similarly-scored excursions every ~4 hours so every listing
-      // gets exposure windows, not just the perpetual top slots.
-      const rotation = (stableHash(`${getDailyRotationKey()}:${item.id}`) % 1000) / 1000;
-      const rotationScore = rotation * 15;
-
-      const relevance =
-        ratingScore +       // 40–68  quality baseline (Bayesian-fair to newcomers)
-        distanceScore +     //  0–20  location proximity (soft)
-        anchorScore +       //  0–50  anchor city / exact location match
-        pickupScore +       //  0–15  pickup from searched city
-        dateScore +         //  0–20  has upcoming available sessions
-        searchScore +       //  0–45  text relevance (when search query present)
-        completenessScore + //  0–25  profile quality (achievable from day one)
-        freshnessScore +    //  0–10  new listing discovery boost (first 30 days)
-        rotationScore;      //  0–15  daily shuffle for equal-scored listings
-
-      filtered.push({
-        item,
-        latitude: excursionLatitude,
-        longitude: excursionLongitude,
-        distanceKm,
-        hasAvailableSession,
-        nextSessionStartAt: item.sessions[0]?.startAt ?? null,
-        relevance,
-        fromPrice,
+    filtered.push({
+      item,
+      latitude: excursionLatitude,
+      longitude: excursionLongitude,
+      distanceKm,
+      hasAvailableSession,
+      nextSessionStartAt: item.sessions[0]?.startAt ?? null,
+      relevance,
+      fromPrice,
     });
   }
 
@@ -862,60 +1068,63 @@ export async function getPublicExcursionCatalog(
   const pagedRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return {
-    items: pagedRows.map(({ item, latitude, longitude, distanceKm, hasAvailableSession, nextSessionStartAt }) => ({
-      id: item.id,
-      slug: buildExcursionSlug(item.title, item.id),
-      path: buildPublicExcursionPath({
+    items: pagedRows.map(
+      ({ item, latitude, longitude, distanceKm, hasAvailableSession, nextSessionStartAt }) => ({
         id: item.id,
-        title: item.title,
+        slug: buildExcursionSlug(item.title, item.id),
+        path: buildPublicExcursionPath({
+          id: item.id,
+          title: item.title,
+          locationId: item.locationId,
+          anchorLocation: item.anchorLocation,
+        }),
+        title: item.title ?? "Экскурсия без названия",
+        offerType: item.offerType,
+        subtypeLabel: item.subtypeLabel,
         locationId: item.locationId,
-        anchorLocation: item.anchorLocation,
-      }),
-      title: item.title ?? "Экскурсия без названия",
-      offerType: item.offerType,
-      subtypeLabel: item.subtypeLabel,
-      locationId: item.locationId,
-      locationName: item.locationName,
-      latitude,
-      longitude,
-      mainLocationName: item.mainLocation?.name ?? null,
-      anchorCityName: item.anchorLocation?.name ?? item.locationName,
-      districtName: item.district?.name ?? null,
-      categoryName: item.category?.name ?? null,
-      startPoint: item.startPoint,
-      finishPoint: item.finishPoint,
-      routeSummary: buildProgramRouteSummary({
-        routePoints: item.routeLocations.map((route) => route.location.name),
+        locationName: item.locationName,
+        latitude,
+        longitude,
+        mainLocationName: item.mainLocation?.name ?? null,
+        anchorCityName: item.anchorLocation?.name ?? item.locationName,
+        districtName: item.district?.name ?? null,
+        categoryName: item.category?.name ?? null,
         startPoint: item.startPoint,
         finishPoint: item.finishPoint,
-        mainLocationName: item.mainLocation?.name ?? null,
-        anchorLocationName: item.anchorLocation?.name ?? item.locationName,
-        locationName: item.locationName,
+        routeSummary: buildProgramRouteSummary({
+          routePoints: item.routeLocations.map((route) => route.location.name),
+          startPoint: item.startPoint,
+          finishPoint: item.finishPoint,
+          mainLocationName: item.mainLocation?.name ?? null,
+          anchorLocationName: item.anchorLocation?.name ?? item.locationName,
+          locationName: item.locationName,
+        }),
+        durationMinutes: item.durationMinutes,
+        durationDays: item.durationDays,
+        durationNights: item.durationNights,
+        priceFrom: toNumberOrNull(item.priceFrom),
+        priceTo: toNumberOrNull(item.priceTo),
+        currency: item.currency,
+        priceUnitLabel: item.priceUnitLabel,
+        coverImageUrl: filterExistingPublicAssetUrls(toStringArray(item.photoUrls))[0] ?? null,
+        avgRating: Number(item.avgRating),
+        reviewsCount: item.reviewsCount,
+        distanceKm: distanceKm === null ? null : Number((distanceKm * 1.3).toFixed(1)),
+        hasAvailableSession,
+        pickupAvailable: item.pickupAvailable,
+        availabilityMode: getResolvedAvailabilityMode(item.availabilityMode, item.scheduleMode),
+        availabilitySummary: formatAvailabilitySummary({
+          availabilityMode: item.availabilityMode,
+          scheduleMode: item.scheduleMode,
+          scheduleText: item.scheduleText,
+          availabilityNote: item.availabilityNote,
+          nextSessionStartAt,
+        }),
+        hasAccommodation:
+          item.accommodationProvided === true ||
+          Boolean(item.accommodationNights && item.accommodationNights > 0),
       }),
-      durationMinutes: item.durationMinutes,
-      durationDays: item.durationDays,
-      durationNights: item.durationNights,
-      priceFrom: toNumberOrNull(item.priceFrom),
-      priceTo: toNumberOrNull(item.priceTo),
-      currency: item.currency,
-      priceUnitLabel: item.priceUnitLabel,
-      coverImageUrl: item.photoUrls[0] ?? null,
-      avgRating: Number(item.avgRating),
-      reviewsCount: item.reviewsCount,
-      distanceKm: distanceKm === null ? null : Number((distanceKm * 1.3).toFixed(1)),
-      hasAvailableSession,
-      pickupAvailable: item.pickupAvailable,
-      availabilityMode: getResolvedAvailabilityMode(item.availabilityMode, item.scheduleMode),
-      availabilitySummary: formatAvailabilitySummary({
-        availabilityMode: item.availabilityMode,
-        scheduleMode: item.scheduleMode,
-        scheduleText: item.scheduleText,
-        availabilityNote: item.availabilityNote,
-        nextSessionStartAt,
-      }),
-      hasAccommodation:
-        item.accommodationProvided === true || Boolean(item.accommodationNights && item.accommodationNights > 0),
-    })),
+    ),
     page: safePage,
     pageSize,
     total,
@@ -959,18 +1168,24 @@ export async function getPublicExcursionCatalog(
   };
 }
 
-export async function getPublicExcursionByIdentifier(
-  identifier: string,
-  expectedLocationId?: string | null,
-  viewerUserId?: string | null,
-): Promise<PublicExcursionCard | null> {
-  const id = extractPropertyId(identifier);
+async function getExcursionCardByIdentifier(input: {
+  identifier: string;
+  viewerUserId?: string | null;
+  ownerId?: string | null;
+}): Promise<PublicExcursionCard | null> {
+  const id = extractPropertyId(input.identifier);
 
   const excursion = await db.excursion.findFirst({
-    where: {
-      id,
-      status: ExcursionStatus.PUBLISHED,
-    },
+    where: input.ownerId
+      ? {
+          id,
+          ownerId: input.ownerId,
+          deletedAt: null,
+        }
+      : {
+          id,
+          ...buildPublishedExcursionVisibilityWhere(),
+        },
     include: {
       mainLocation: {
         select: { id: true, slug: true, name: true },
@@ -1001,13 +1216,27 @@ export async function getPublicExcursionByIdentifier(
       },
       sessions: {
         where: {
-          status: ExcursionSessionStatus.AVAILABLE,
           startAt: {
             gte: new Date(),
           },
+          status: {
+            in: [ExcursionSessionStatus.AVAILABLE, ExcursionSessionStatus.SOLD_OUT],
+          },
         },
         orderBy: [{ startAt: "asc" }],
-        take: 5,
+        take: 8,
+      },
+      scheduleRules: {
+        orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+      },
+      scheduleExceptions: {
+        where: {
+          date: {
+            gte: new Date(),
+          },
+        },
+        orderBy: [{ date: "asc" }],
+        take: 8,
       },
       owner: {
         select: {
@@ -1029,10 +1258,10 @@ export async function getPublicExcursionByIdentifier(
           user: {
             select: { firstName: true, lastName: true, avatarUrl: true },
           },
-          ...(viewerUserId
+          ...(input.viewerUserId
             ? {
                 reactions: {
-                  where: { userId: viewerUserId },
+                  where: { userId: input.viewerUserId },
                   select: { value: true },
                   take: 1,
                 },
@@ -1047,10 +1276,9 @@ export async function getPublicExcursionByIdentifier(
     return null;
   }
 
-  const canonicalLocationSlug = excursion.anchorLocation?.slug ?? excursion.locationId;
-  if (expectedLocationId && canonicalLocationSlug && expectedLocationId !== canonicalLocationSlug) {
-    return null;
-  }
+  const nextAvailableSessionStartAt =
+    excursion.sessions.find((session) => session.status === ExcursionSessionStatus.AVAILABLE)
+      ?.startAt ?? null;
 
   return {
     id: excursion.id,
@@ -1061,80 +1289,117 @@ export async function getPublicExcursionByIdentifier(
       title: excursion.title,
       anchorLocation: excursion.anchorLocation,
     }),
-      title: excursion.title,
-      locationId: excursion.locationId,
-      locationName: excursion.locationName,
-      offerType: excursion.offerType,
-      subtypeLabel: excursion.subtypeLabel,
-      mainLocationName: excursion.mainLocation?.name ?? null,
-      anchorCityName: excursion.anchorLocation?.name ?? excursion.locationName,
-      districtName: excursion.district?.name ?? null,
-      categoryName: excursion.category?.name ?? null,
-      address: excursion.address,
-      latitude: excursion.latitude === null ? null : Number(excursion.latitude),
-      longitude: excursion.longitude === null ? null : Number(excursion.longitude),
-      startPoint: excursion.startPoint,
-      finishPoint: excursion.finishPoint,
-      meetingPointText: excursion.meetingPointText,
-      description: excursion.description,
-      shortDescription: excursion.shortDescription,
-      fullDescription: excursion.fullDescription,
-      routeDescription: excursion.routeDescription,
-      highlights: Array.isArray(excursion.highlights)
-        ? excursion.highlights.filter((item): item is string => typeof item === "string")
-        : [],
-      durationMinutes: excursion.durationMinutes,
-      durationDays: excursion.durationDays,
-      durationNights: excursion.durationNights,
-      itineraryDays: Array.isArray(excursion.itineraryDays)
-        ? (excursion.itineraryDays as ItineraryDay[])
-        : [],
-      scheduleText: excursion.scheduleText,
-      availabilityMode: getResolvedAvailabilityMode(excursion.availabilityMode, excursion.scheduleMode),
-      availabilityNote: excursion.availabilityNote,
-      format: excursion.format,
-      languageCodes: excursion.languageCodes,
-      isKidFriendly: excursion.isKidFriendly,
+    title: excursion.title,
+    locationId: excursion.locationId,
+    locationName: excursion.locationName,
+    offerType: excursion.offerType,
+    subtypeLabel: excursion.subtypeLabel,
+    mainLocationName: excursion.mainLocation?.name ?? null,
+    anchorCityName: excursion.anchorLocation?.name ?? excursion.locationName,
+    districtName: excursion.district?.name ?? null,
+    categoryName: excursion.category?.name ?? null,
+    address: excursion.address,
+    latitude: excursion.latitude === null ? null : Number(excursion.latitude),
+    longitude: excursion.longitude === null ? null : Number(excursion.longitude),
+    startPoint: excursion.startPoint,
+    finishPoint: excursion.finishPoint,
+    meetingPointText: excursion.meetingPointText,
+    description: excursion.description,
+    shortDescription: excursion.shortDescription,
+    fullDescription: excursion.fullDescription,
+    routeDescription: excursion.routeDescription,
+    highlights: Array.isArray(excursion.highlights)
+      ? excursion.highlights.filter((item): item is string => typeof item === "string")
+      : [],
+    durationMinutes: excursion.durationMinutes,
+    durationDays: excursion.durationDays,
+    durationNights: excursion.durationNights,
+    itineraryDays: sanitizePublicItineraryDays(excursion.itineraryDays),
+    scheduleText: excursion.scheduleText,
+    scheduleMode: excursion.scheduleMode,
+    availabilityMode: getResolvedAvailabilityMode(
+      excursion.availabilityMode,
+      excursion.scheduleMode,
+    ),
+    availabilityNote: excursion.availabilityNote,
+    format: excursion.format,
+    groupSizeMin: excursion.groupSizeMin,
+    groupSizeMax: excursion.groupSizeMax,
+    languageCodes: toStringArray(excursion.languageCodes),
+    ageLimit: excursion.ageLimit,
+    isKidFriendly: excursion.isKidFriendly,
+    difficulty: excursion.difficulty,
     pickupAvailable: excursion.pickupAvailable,
-    tags: excursion.tags,
+    tags: toStringArray(excursion.tags),
     priceFrom: excursion.priceFrom === null ? null : Number(excursion.priceFrom),
     priceTo: excursion.priceTo === null ? null : Number(excursion.priceTo),
     currency: excursion.currency,
     includedText: excursion.includedText,
     notIncludedText: excursion.notIncludedText,
-    includedItems: excursion.includedItems,
-    excludedItems: excursion.excludedItems,
-      cancellationPolicy: excursion.cancellationPolicy,
-      cancellationPolicyType: excursion.cancellationPolicyType,
-      transferDetails: excursion.transferDetails,
-      timeline: Array.isArray(excursion.timeline) ? (excursion.timeline as TimelineStep[]) : [],
-      extraOptions: Array.isArray(excursion.extraOptions)
-        ? (excursion.extraOptions as ExcursionExtraOption[])
-        : [],
-      pricingTiers: Array.isArray(excursion.pricingTiers) ? (excursion.pricingTiers as PricingTier[]) : [],
-      faqItems: Array.isArray(excursion.faqItems) ? (excursion.faqItems as FaqItem[]) : [],
-      photoUrls: excursion.photoUrls,
-      videoUrls: excursion.videoUrls,
-      priceUnitLabel: excursion.priceUnitLabel,
-      accommodationProvided: excursion.accommodationProvided,
-      accommodationType: excursion.accommodationType,
-      accommodationNights: excursion.accommodationNights,
-      accommodationFormat: excursion.accommodationFormat,
-      mealPlan: excursion.mealPlan,
-      accommodationComment: excursion.accommodationComment,
-      availabilitySummary: formatAvailabilitySummary({
-        availabilityMode: excursion.availabilityMode,
-        scheduleMode: excursion.scheduleMode,
-        scheduleText: excursion.scheduleText,
-        availabilityNote: excursion.availabilityNote,
-        nextSessionStartAt: excursion.sessions[0]?.startAt ?? null,
-      }),
-      avgRating: Number(excursion.avgRating),
+    includedItems: toStringArray(excursion.includedItems),
+    excludedItems: toStringArray(excursion.excludedItems),
+    cancellationPolicy: excursion.cancellationPolicy,
+    cancellationPolicyType: excursion.cancellationPolicyType,
+    physicalRequirements: toStringArray(excursion.physicalRequirements),
+    whatToBring: toStringArray(excursion.whatToBring),
+    meetingPointLat: excursion.meetingPointLat === null ? null : Number(excursion.meetingPointLat),
+    meetingPointLng: excursion.meetingPointLng === null ? null : Number(excursion.meetingPointLng),
+    minBookingNoticeHours: excursion.minBookingNoticeHours,
+    hasGuideLicense: excursion.hasGuideLicense,
+    transferDetails: excursion.transferDetails,
+    timeline: sanitizePublicTimelineSteps(excursion.timeline),
+    extraOptions: Array.isArray(excursion.extraOptions)
+      ? (excursion.extraOptions as ExcursionExtraOption[])
+      : [],
+    pricingTiers: Array.isArray(excursion.pricingTiers)
+      ? (excursion.pricingTiers as PricingTier[])
+      : [],
+    faqItems: Array.isArray(excursion.faqItems) ? (excursion.faqItems as FaqItem[]) : [],
+    photoUrls: filterExistingPublicAssetUrls(toStringArray(excursion.photoUrls)),
+    sectionPhotoGroups: filterPublicSectionPhotoGroups(
+      excursion.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
+    ),
+    videoUrls: filterExistingPublicAssetUrls(toStringArray(excursion.videoUrls)),
+    priceUnitLabel: excursion.priceUnitLabel,
+    receiveRequests: excursion.receiveRequests,
+    instantConfirmation: excursion.instantConfirmation,
+    accommodationProvided: excursion.accommodationProvided,
+    accommodationType: excursion.accommodationType,
+    accommodationNights: excursion.accommodationNights,
+    accommodationFormat: excursion.accommodationFormat,
+    accommodationStars: excursion.accommodationStars ?? null,
+    roomTypes: toStringArray(excursion.roomTypes),
+    singleSupplementAvailable: excursion.singleSupplementAvailable ?? null,
+    singleSupplementPrice:
+      excursion.singleSupplementPrice === null ? null : Number(excursion.singleSupplementPrice),
+    mealPlan: excursion.mealPlan,
+    mealDetails: excursion.mealDetails ?? null,
+    accommodationComment: excursion.accommodationComment,
+    tourKind: excursion.tourKind ?? null,
+    transportModes: toStringArray(excursion.transportModes),
+    departureMode: excursion.departureMode ?? null,
+    arrivalInfo: excursion.arrivalInfo ?? null,
+    departureInfo: excursion.departureInfo ?? null,
+    documentsRequired: toStringArray(excursion.documentsRequired),
+    insuranceIncluded: excursion.insuranceIncluded ?? null,
+    insuranceComment: excursion.insuranceComment ?? null,
+    equipmentProvided: toStringArray(excursion.equipmentProvided),
+    safetyInfo: excursion.safetyInfo ?? null,
+    routeConditions: excursion.routeConditions ?? null,
+    availabilitySummary: formatAvailabilitySummary({
+      availabilityMode: excursion.availabilityMode,
+      scheduleMode: excursion.scheduleMode,
+      scheduleText: excursion.scheduleText,
+      availabilityNote: excursion.availabilityNote,
+      nextSessionStartAt: nextAvailableSessionStartAt,
+    }),
+    avgRating: Number(excursion.avgRating),
     reviewsCount: excursion.reviewsCount,
     contacts: {
       firstName: excursion.contactFirstName ?? excursion.owner.firstName,
       lastName: excursion.contactLastName ?? excursion.owner.lastName,
       phone: excursion.contactPhone ?? excursion.owner.phone,
+      phone2: excursion.contactPhone2,
       email: excursion.contactEmail ?? excursion.owner.email,
       websiteUrl: excursion.websiteUrl,
       whatsappUrl: excursion.whatsappUrl,
@@ -1148,6 +1413,34 @@ export async function getPublicExcursionByIdentifier(
       firstName: excursion.owner.firstName,
       lastName: excursion.owner.lastName,
     },
+    sessions: excursion.sessions.map((session) => ({
+      id: session.id,
+      startAt: session.startAt.toISOString(),
+      endAt: session.endAt ? session.endAt.toISOString() : null,
+      capacity: session.capacity,
+      priceOverride: session.priceOverride === null ? null : Number(session.priceOverride),
+      status: session.status,
+      bookingDeadlineMinutes: session.bookingDeadlineMinutes,
+    })),
+    scheduleRules: excursion.scheduleRules.map((rule) => ({
+      id: rule.id,
+      dateFrom: rule.dateFrom ? rule.dateFrom.toISOString().slice(0, 10) : null,
+      dateTo: rule.dateTo ? rule.dateTo.toISOString().slice(0, 10) : null,
+      weekdays: rule.weekdays,
+      timeStarts: rule.timeStarts,
+      durationMinutes: rule.durationMinutes,
+      capacityDefault: rule.capacityDefault,
+      priceOverride: rule.priceOverride === null ? null : Number(rule.priceOverride),
+    })),
+    scheduleExceptions: excursion.scheduleExceptions.map((exception) => ({
+      id: exception.id,
+      date: exception.date.toISOString().slice(0, 10),
+      isClosed: exception.isClosed,
+      overrideTimeStarts: exception.overrideTimeStarts,
+      overrideCapacity: exception.overrideCapacity,
+      overridePrice: exception.overridePrice === null ? null : Number(exception.overridePrice),
+      notes: exception.notes ?? null,
+    })),
     pickupLocations: excursion.pickupLocations.map((item) => ({
       id: item.location.id,
       name: item.location.name,
@@ -1161,6 +1454,30 @@ export async function getPublicExcursionByIdentifier(
     })),
     reviews: excursion.reviews.map(serializeReview),
   };
+}
+
+export async function getPublicExcursionByIdentifier(
+  identifier: string,
+  _expectedLocationId?: string | null,
+  viewerUserId?: string | null,
+): Promise<PublicExcursionCard | null> {
+  return getExcursionCardByIdentifier({
+    identifier,
+    viewerUserId,
+  });
+}
+
+export async function getOwnerPreviewExcursionByIdentifier(
+  identifier: string,
+  ownerId: string,
+  _expectedLocationId?: string | null,
+  viewerUserId?: string | null,
+): Promise<PublicExcursionCard | null> {
+  return getExcursionCardByIdentifier({
+    identifier,
+    ownerId,
+    viewerUserId,
+  });
 }
 
 export async function getExcursionSeoDirectoryData(): Promise<{

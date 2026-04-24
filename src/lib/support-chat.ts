@@ -1,4 +1,6 @@
 // Support chat server utilities.
+import type { ChatManager } from "@prisma/client";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -22,11 +24,41 @@ export const DEFAULT_TEMPLATES = [
 
 let lastCleanup = 0;
 
+const supportChatDataFallbackContext = {
+  contextId: "support-chat-data",
+  unavailableMessage: "Support chat data is unavailable. Returning disabled chat defaults.",
+  fallbackEligibleMessage:
+    "Support chat data is unavailable or credentials are invalid. Returning disabled chat defaults.",
+} as const;
+
+const supportChatCleanupFallbackContext = {
+  contextId: "support-chat-cleanup",
+  unavailableMessage: "Support chat database is unavailable. Skipping stale message cleanup.",
+  fallbackEligibleMessage:
+    "Support chat database is unavailable or credentials are invalid. Skipping stale message cleanup.",
+} as const;
+
+export type SupportChatWidgetShellData = {
+  enabled: boolean;
+  manager: Pick<ChatManager, "name" | "photoUrl"> | null;
+  templates: string[];
+  social: {
+    telegram: string;
+    max: string;
+  };
+};
+
 // ─── Settings helpers ───────────────────────────────────────────
 
 export async function getSupportChatSettings(): Promise<{ enabled: boolean }> {
-  const row = await db.siteSetting.findUnique({ where: { key: "supportChatEnabled" } });
-  return { enabled: row?.value === "true" };
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    async () => {
+      const row = await db.siteSetting.findUnique({ where: { key: "supportChatEnabled" } });
+      return { enabled: row?.value === "true" };
+    },
+    { enabled: false },
+  );
 }
 
 export async function setSupportChatEnabled(enabled: boolean): Promise<void> {
@@ -38,24 +70,93 @@ export async function setSupportChatEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function getSocialLinks(): Promise<{ telegram: string; max: string }> {
-  const rows = await db.siteSetting.findMany({
-    where: { key: { in: ["telegram", "max"] } },
-  });
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return { telegram: map.telegram ?? "", max: map.max ?? "" };
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    async () => {
+      const rows = await db.siteSetting.findMany({
+        where: { key: { in: ["telegram", "max"] } },
+      });
+      const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+      return { telegram: map.telegram ?? "", max: map.max ?? "" };
+    },
+    { telegram: "", max: "" },
+  );
+}
+
+export async function getSupportChatWidgetShellData(): Promise<SupportChatWidgetShellData> {
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    async () => {
+      const [settingsRows, manager] = await Promise.all([
+        db.siteSetting.findMany({
+          where: {
+            key: {
+              in: ["supportChatEnabled", "supportChatTemplates", "telegram", "max"],
+            },
+          },
+        }),
+        db.chatManager.findFirst({
+          where: { isActive: true },
+          select: {
+            name: true,
+            photoUrl: true,
+          },
+        }),
+      ]);
+
+      const settingsMap = Object.fromEntries(settingsRows.map((row) => [row.key, row.value]));
+      let templates = [...DEFAULT_TEMPLATES];
+
+      if (settingsMap.supportChatTemplates) {
+        try {
+          const parsed = JSON.parse(settingsMap.supportChatTemplates);
+          if (Array.isArray(parsed)) {
+            templates = parsed.filter((item): item is string => typeof item === "string");
+          }
+        } catch {
+          templates = [...DEFAULT_TEMPLATES];
+        }
+      }
+
+      return {
+        enabled: settingsMap.supportChatEnabled === "true",
+        manager,
+        templates,
+        social: {
+          telegram: settingsMap.telegram ?? "",
+          max: settingsMap.max ?? "",
+        },
+      };
+    },
+    () => ({
+      enabled: false,
+      manager: null,
+      templates: [...DEFAULT_TEMPLATES],
+      social: {
+        telegram: "",
+        max: "",
+      },
+    }),
+  );
 }
 
 // ─── Templates ──────────────────────────────────────────────────
 
 export async function getSupportChatTemplates(): Promise<string[]> {
-  const row = await db.siteSetting.findUnique({ where: { key: "supportChatTemplates" } });
-  if (!row) return DEFAULT_TEMPLATES;
-  try {
-    const parsed = JSON.parse(row.value);
-    return Array.isArray(parsed) ? parsed : DEFAULT_TEMPLATES;
-  } catch {
-    return DEFAULT_TEMPLATES;
-  }
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    async () => {
+      const row = await db.siteSetting.findUnique({ where: { key: "supportChatTemplates" } });
+      if (!row) return [...DEFAULT_TEMPLATES];
+      try {
+        const parsed = JSON.parse(row.value);
+        return Array.isArray(parsed) ? parsed : [...DEFAULT_TEMPLATES];
+      } catch {
+        return [...DEFAULT_TEMPLATES];
+      }
+    },
+    () => [...DEFAULT_TEMPLATES],
+  );
 }
 
 export async function saveSupportChatTemplates(templates: string[]): Promise<void> {
@@ -69,14 +170,23 @@ export async function saveSupportChatTemplates(templates: string[]): Promise<voi
 
 // ─── Manager helpers ────────────────────────────────────────────
 
-export async function getActiveManager() {
-  return db.chatManager.findFirst({ where: { isActive: true } });
+export async function getActiveManager(): Promise<ChatManager | null> {
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    () => db.chatManager.findFirst({ where: { isActive: true } }),
+    null,
+  );
 }
 
-export async function getAllManagers() {
-  return db.chatManager.findMany({
-    orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
-  });
+export async function getAllManagers(): Promise<ChatManager[]> {
+  return loadDataWithDatabaseFallback(
+    supportChatDataFallbackContext,
+    () =>
+      db.chatManager.findMany({
+        orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
+      }),
+    () => [],
+  );
 }
 
 export async function setActiveManager(managerId: string): Promise<void> {
@@ -98,7 +208,13 @@ export async function cleanupOldMessages(): Promise<void> {
   lastCleanup = now;
 
   const cutoff = new Date(now - MESSAGE_TTL_MS);
-  await db.supportMessage.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  await loadDataWithDatabaseFallback(
+    supportChatCleanupFallbackContext,
+    async () => {
+      await db.supportMessage.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    },
+    undefined,
+  );
 }
 
 // ─── Antispam ───────────────────────────────────────────────────

@@ -3,11 +3,17 @@ import { ExcursionAvailabilityMode, ExcursionScheduleMode, Prisma } from "@prism
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
+import {
+  markExcursionNeedsRemoderationAfterOwnerEdit,
+  prepareExcursionForPublishedOwnerEdit,
+} from "@/lib/excursions";
 import { upsertExcursionSessionsSchema } from "@/lib/schemas";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+const MAX_EXCURSION_SESSIONS = 500;
 
 async function ensureAccess(
   excursionId: string,
@@ -81,6 +87,13 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Проверьте корректность сеансов" }, { status: 400 });
   }
 
+  if (parsed.data.sessions.length > MAX_EXCURSION_SESSIONS) {
+    return NextResponse.json(
+      { error: `Максимум ${MAX_EXCURSION_SESSIONS} сеансов на экскурсию` },
+      { status: 409 },
+    );
+  }
+
   const sessions = parsed.data.sessions.map((item) => ({
     excursionId: id,
     startAt: new Date(item.startAt),
@@ -93,6 +106,10 @@ export async function POST(request: Request, context: RouteContext) {
     status: item.status ?? undefined,
     bookingDeadlineMinutes: item.bookingDeadlineMinutes ?? null,
   }));
+
+  if (!editor.isAdmin) {
+    await prepareExcursionForPublishedOwnerEdit(db, existing.id);
+  }
 
   await db.$transaction(async (tx) => {
     await tx.excursionSession.deleteMany({
@@ -121,6 +138,10 @@ export async function POST(request: Request, context: RouteContext) {
       },
     });
   });
+
+  if (!editor.isAdmin) {
+    await markExcursionNeedsRemoderationAfterOwnerEdit(db, existing.id);
+  }
 
   return NextResponse.json({ ok: true });
 }

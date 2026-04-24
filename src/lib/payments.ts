@@ -21,6 +21,7 @@ export type TariffQuote = {
 export type SerializedPayment = {
   id: string;
   propertyId: string | null;
+  excursionId: string | null;
   ownerId: string;
   amount: number;
   tariffCode: string;
@@ -36,6 +37,7 @@ export type SerializedPayment = {
   canceledAt: string | null;
   placementValidUntil: string | null;
   propertyName: string | null;
+  excursionName: string | null;
 };
 
 export type PlacementCoverageState = {
@@ -166,6 +168,7 @@ export function getTariffQuote(input: { roomCount: number; propertyType: string 
 export function serializePayment(payment: {
   id: string;
   propertyId: string | null;
+  excursionId?: string | null;
   ownerId: string;
   amount: Prisma.Decimal;
   tariffCode: string;
@@ -180,10 +183,12 @@ export function serializePayment(payment: {
   canceledAt: Date | null;
   placementValidUntil?: Date | null;
   property?: { name: string | null } | null;
+  excursion?: { title: string | null } | null;
 }): SerializedPayment {
   return {
     id: payment.id,
     propertyId: payment.propertyId,
+    excursionId: payment.excursionId ?? null,
     ownerId: payment.ownerId,
     amount: Number(payment.amount),
     tariffCode: payment.tariffCode,
@@ -199,6 +204,7 @@ export function serializePayment(payment: {
     canceledAt: payment.canceledAt ? payment.canceledAt.toISOString() : null,
     placementValidUntil: payment.placementValidUntil ? payment.placementValidUntil.toISOString() : null,
     propertyName: payment.property?.name ?? null,
+    excursionName: payment.excursion?.title ?? null,
   };
 }
 
@@ -225,6 +231,7 @@ export function getPlacementCoverageState(input: {
     amount: Prisma.Decimal | number;
     roomCount: number;
     status: PaymentStatus;
+    provider?: PaymentProvider;
     paidAt: Date | null;
     createdAt: Date;
     placementValidUntil?: Date | null;
@@ -234,7 +241,10 @@ export function getPlacementCoverageState(input: {
 }): PlacementCoverageState {
   const now = input.now ?? new Date();
   const succeededPayments = input.payments
-    .filter((item) => item.status === PaymentStatus.SUCCEEDED)
+    .filter(
+      (item) =>
+        item.status === PaymentStatus.SUCCEEDED && item.provider !== PaymentProvider.MOCK,
+    )
     .map((item) => ({
       amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
       roomCount: item.roomCount,

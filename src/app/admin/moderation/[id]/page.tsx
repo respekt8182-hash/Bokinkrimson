@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
+import { AdminMediaPreview } from "@/components/admin/admin-media-preview";
 import { RegistryModerationActions } from "@/components/admin/registry-moderation-actions";
 import { ModerationActions } from "@/components/admin/moderation-actions";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
+import { AdminUnavailableState } from "@/components/admin/admin-ui";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { serializePayment } from "@/lib/payments";
 import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
@@ -109,10 +112,33 @@ export default async function AdminModerationObjectPage({
 }: AdminModerationObjectPageProps) {
   const { id } = await params;
 
-  const property = await db.property.findUnique({
-    where: { id },
-    include: propertyInclude,
-  });
+  const { property, isDatabaseFallback } = await loadDataWithDatabaseFallback(
+    {
+      contextId: "admin-moderation-detail",
+      unavailableMessage:
+        "Admin moderation detail: database is unavailable. Rendering unavailable state.",
+      fallbackEligibleMessage:
+        "Admin moderation detail: database is unavailable or credentials are invalid. Rendering unavailable state.",
+    },
+    async () => ({
+      property: await db.property.findUnique({
+        where: { id },
+        include: propertyInclude,
+      }),
+      isDatabaseFallback: false,
+    }),
+    { property: null, isDatabaseFallback: true },
+  );
+
+  if (isDatabaseFallback) {
+    return (
+      <AdminUnavailableState
+        backHref="/admin/moderation"
+        backLabel="К модерации жилья"
+        title="Карточка модерации временно недоступна"
+      />
+    );
+  }
 
   if (!property) {
     notFound();
@@ -260,11 +286,11 @@ export default async function AdminModerationObjectPage({
             {property.media.map((media) => (
               <div key={media.id} className="overflow-hidden rounded-xl bg-cream">
                 {media.type === "IMAGE" ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <AdminMediaPreview
                     src={media.url}
                     alt={property.name ?? "Фото объекта"}
                     className="h-44 w-full object-cover"
+                    fallbackLabel="Фото недоступно"
                   />
                 ) : (
                   <video src={media.url} controls className="h-44 w-full object-cover bg-black/80" />
@@ -405,11 +431,11 @@ export default async function AdminModerationObjectPage({
                           className="overflow-hidden rounded-xl border border-olive/10 bg-white"
                         >
                           {media.type === "IMAGE" ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <AdminMediaPreview
                               src={media.url}
                               alt={room.title}
                               className="h-36 w-full object-cover"
+                              fallbackLabel="Фото номера недоступно"
                             />
                           ) : (
                             <video src={media.url} controls className="h-36 w-full object-cover bg-black/80" />

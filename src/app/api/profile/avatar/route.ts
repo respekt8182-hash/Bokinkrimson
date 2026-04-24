@@ -2,31 +2,94 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { imageSizeLimitBytes } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { convertImageUploadToWebp, sanitizeUploadedFileName } from "@/lib/image-convert";
+import { convertImageUploadToWebp } from "@/lib/image-convert";
+import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { getRequestIp } from "@/lib/security";
 import { deleteFromStorage, uploadToStorage } from "@/lib/storage";
+import { validateUploadFile } from "@/lib/upload-validation";
 
 function buildAvatarStorageKey(userId: string): string {
   return `users/${userId}/avatar/${Date.now()}-${randomUUID()}.webp`;
+}
+
+const avatarUploadLimiter = createRateLimiter({
+  id: "profile-avatar-upload",
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 10,
+});
+
+function getUploadErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Failed to upload image";
+  }
+
+  if (error.message === "FILE_EMPTY") {
+    return "File is empty";
+  }
+
+  if (error.message === "FILE_TOO_LARGE") {
+    return "Photo exceeds the allowed size";
+  }
+
+  if (error.message === "UNSUPPORTED_FILE_TYPE") {
+    return "Only PNG, JPEG, WEBP, HEIC, and HEIF images are allowed";
+  }
+
+  return "Failed to upload image";
 }
 
 export async function POST(request: Request) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const ip = getRequestIp(request);
+
+  try {
+    const limit = await avatarUploadLimiter.limit(`${session.id}:${ip}`);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: `Too many upload attempts. Retry in ${limit.retryAfterSeconds} seconds.` },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+  } catch (error) {
+    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+      return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
+    }
+
+    throw error;
   }
 
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Файл не передан" }, { status: 400 });
+    return NextResponse.json({ error: "File was not provided" }, { status: 400 });
   }
 
-  if (file.size > imageSizeLimitBytes) {
-    return NextResponse.json({ error: "Фотография превышает допустимый размер. Зайдите на сайт для сжатия фотографий, сожмите файл и загрузите его сюда повторно" }, { status: 400 });
+  let validated;
+
+  try {
+    validated = await validateUploadFile({
+      file,
+      allowedKinds: ["image"],
+      maxSizeBytes: 20 * 1024 * 1024,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: getUploadErrorMessage(error) }, { status: 400 });
   }
 
   const user = await db.user.findUnique({
@@ -38,41 +101,36 @@ export async function POST(request: Request) {
   });
 
   if (!user) {
-    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const originalName = file.name || "avatar";
-  const sanitizedName = sanitizeUploadedFileName(originalName, "avatar");
   let uploadPayload: {
     bytes: Buffer;
     mimeType: string;
-    fileName: string;
-    converted: boolean;
   };
+
   try {
     uploadPayload = await convertImageUploadToWebp({
       bytes: Buffer.from(await file.arrayBuffer()),
-      mimeType: file.type,
-      fileName: sanitizedName,
+      mimeType: validated.detectedMimeType,
+      fileName: validated.sanitizedFileName,
     });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNSUPPORTED_IMAGE_FORMAT") {
-      return NextResponse.json(
-        { error: "Поддерживаются PNG, JPEG, WEBP и HEIC" },
-        { status: 400 },
-      );
-    }
-    return NextResponse.json({ error: "Не удалось обработать изображение" }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "Failed to process image" }, { status: 400 });
   }
+
   const key = buildAvatarStorageKey(user.id);
   const upload = await uploadToStorage({
     key,
     body: uploadPayload.bytes,
     contentType: uploadPayload.mimeType,
+    visibility: "public",
+    contentDisposition: "inline",
+    cacheControl: "public, max-age=31536000, immutable",
   }).catch(() => null);
 
   if (!upload) {
-    return NextResponse.json({ error: "Не удалось загрузить изображение" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
   }
 
   const updated = await db.user.update({
@@ -105,7 +163,7 @@ export async function DELETE() {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const user = await db.user.findUnique({
@@ -117,7 +175,7 @@ export async function DELETE() {
   });
 
   if (!user) {
-    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
   await db.user.update({

@@ -28,6 +28,11 @@ import {
   propertyAboutLimits,
   propertyTypes,
 } from "@/lib/constants";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+} from "@/lib/contact-links";
 import { accommodationPhotoUploadLimitsLabel } from "@/lib/photo-upload";
 import type { SerializedProperty } from "@/lib/properties";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -680,9 +685,9 @@ export function ObjectAboutPage({
         listingChannels: listingChannels.trim(),
         whatsappUrl: whatsappUrl.trim(),
         telegramUrl: normalizeTelegramProfileUrl(telegramUrl) ?? "",
-        vkUrl: vkUrl.trim(),
-        maxUrl: maxUrl.trim(),
-        okUrl: okUrl.trim(),
+        vkUrl: normalizeVkProfileUrl(vkUrl) ?? "",
+        maxUrl: normalizeMaxProfileUrl(maxUrl) ?? "",
+        okUrl: normalizeOkProfileUrl(okUrl) ?? "",
         receiveRequests: false,
       });
       return Boolean(updated);
@@ -1326,7 +1331,19 @@ export function ObjectAboutPage({
               Все гостиницы, отели и гостевые дома в России должны быть внесены в реестр КСР.
               Укажите номер записи из реестра — он нужен для прохождения модерации.
             </p>
-            <p className="mt-2 font-semibold text-olive">Как найти номер?</p>
+            <p className="mt-3 font-semibold text-olive">Можно ли пропустить этот шаг?</p>
+            <p className="mt-1">
+              Если ваш объект <span className="font-medium text-olive">не оказывает гостиничных услуг</span> и
+              сдается только во временное владение и пользование (например, аренда квартиры или дома
+              без услуг питания, уборки и прочего гостиничного сервиса) — вы можете нажать
+              &laquo;Далее&raquo; без указания номера и пропустить этот раздел.
+            </p>
+            <p className="mt-2">
+              Если же вы <span className="font-medium text-olive">предоставляете услуги размещения</span> (гостиница,
+              отель, хостел, гостевой дом и т.д.) — номер записи в реестре <span className="font-medium text-olive">обязателен</span>.
+              Без него объект не пройдет модерацию.
+            </p>
+            <p className="mt-3 font-semibold text-olive">Как найти номер?</p>
             <p className="mt-1">
               Перейдите на сайт реестра, найдите свой объект и скопируйте номер записи.
             </p>

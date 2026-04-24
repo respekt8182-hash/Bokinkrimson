@@ -2,8 +2,8 @@
 // Maintenance script that scans repository text files for mojibake and obvious encoding corruption.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { extname } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { extname, join } from "node:path";
 
 const ROOTS = ["src"];
 const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".css"]);
@@ -23,14 +23,26 @@ const PATTERNS = [
 function listTrackedFiles() {
   const result = spawnSync("git", ["ls-files", ...ROOTS], { encoding: "utf8" });
   if (result.status !== 0) {
-    const details = result.stderr?.trim() || result.stdout?.trim() || "unknown git error";
-    throw new Error(`Failed to list files with git ls-files: ${details}`);
+    return ROOTS.flatMap((root) => listFilesRecursively(root));
   }
   return result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((file) => EXTENSIONS.has(extname(file).toLowerCase()));
+}
+
+function listFilesRecursively(directoryPath) {
+  const entries = readdirSync(directoryPath, { withFileTypes: true });
+
+  return entries.flatMap((entry) => {
+    const fullPath = join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      return listFilesRecursively(fullPath);
+    }
+
+    return EXTENSIONS.has(extname(fullPath).toLowerCase()) ? [fullPath] : [];
+  });
 }
 
 function scanFile(filePath) {

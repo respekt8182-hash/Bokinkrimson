@@ -60,6 +60,8 @@ import {
   IconFlag,
   IconFlame,
   IconFridge,
+  IconGenderFemale,
+  IconGenderMale,
   IconGlassCocktail,
   IconGlassFull,
   IconGlobe,
@@ -96,6 +98,7 @@ import {
   IconPhotoVideo,
   IconPlugConnected,
   IconPlus,
+  IconPhotoOff,
   IconPropeller,
   IconRefresh,
   IconRosetteDiscountCheck,
@@ -108,6 +111,7 @@ import {
   IconShoe,
   IconShirt,
   IconShoppingBag,
+  IconSearch,
   IconSmokingNo,
   IconSpeakerphone,
   IconSparkles,
@@ -216,6 +220,7 @@ export const House = asLucideIcon(IconHome2);
 export const HouseHeart = asLucideIcon(IconHomeHeart);
 export const Image = asLucideIcon(IconPhoto);
 export const Images = asLucideIcon(IconPhoto);
+export const ImageOff = asLucideIcon(IconPhotoOff);
 export const Info = asLucideIcon(IconInfoCircle);
 export const KeyRound = asLucideIcon(IconCircleKey);
 export const LampDesk = asLucideIcon(IconLamp);
@@ -234,6 +239,7 @@ export const MapPin = asLucideIcon(IconMapPin);
 export const Menu = asLucideIcon(IconMenu);
 export const MessageCircle = asLucideIcon(IconMessageCircle);
 export const MessageCircleMore = asLucideIcon(IconMessageDots);
+export const MessageSquare = asLucideIcon(IconMessage2);
 export const MessageSquareText = asLucideIcon(IconMessage2);
 export const MessagesSquare = asLucideIcon(IconMessages);
 export const Monitor = asLucideIcon(IconDeviceDesktop);
@@ -252,6 +258,7 @@ export const Route = asLucideIcon(IconRoute);
 export const Rows3 = asLucideIcon(IconLayoutRows);
 export const RulerDimensionLine = asLucideIcon(IconRulerMeasure);
 export const Save = asLucideIcon(IconDeviceFloppy);
+export const Search = asLucideIcon(IconSearch);
 export const SendHorizontal = asLucideIcon(IconSend2);
 export const ShieldCheck = asLucideIcon(IconShieldCheck);
 export const Ship = asLucideIcon(IconShip);
@@ -274,6 +281,8 @@ export const TriangleAlert = asLucideIcon(IconAlertTriangle);
 export const Tv = asLucideIcon(IconDeviceTv);
 export const TvMinimalPlay = asLucideIcon(IconPhotoVideo);
 export const Usb = asLucideIcon(IconUsb);
+export const GenderFemale = asLucideIcon(IconGenderFemale);
+export const GenderMale = asLucideIcon(IconGenderMale);
 export const User = asLucideIcon(IconUser);
 export const UserCheck = asLucideIcon(IconUserCheck);
 export const UserRound = asLucideIcon(IconUserCircle);

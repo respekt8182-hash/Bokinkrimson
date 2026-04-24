@@ -1,8 +1,8 @@
 // POST /api/excursions/[id]/view — public endpoint to track excursion page views.
 // Called client-side on excursion detail page mount; no auth required.
 import { NextResponse } from "next/server";
-import { ExcursionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -18,7 +18,7 @@ export async function POST(_: Request, context: RouteContext) {
   const excursionId = id.trim();
 
   const updated = await db.excursion.updateMany({
-    where: { id: excursionId, status: ExcursionStatus.PUBLISHED },
+    where: { id: excursionId, ...buildPublishedExcursionVisibilityWhere() },
     data: { profileViews: { increment: 1 } },
   });
 

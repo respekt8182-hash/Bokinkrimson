@@ -73,8 +73,8 @@ enum ExcursionScheduleMode {
 }
 
 enum ExcursionAvailabilityMode {
-  REGULAR   @map("regular")
-  DATED     @map("dated")
+  REGULAR    @map("regular")
+  DATED      @map("dated")
   ON_REQUEST @map("on_request")
 }
 
@@ -85,15 +85,15 @@ enum ExcursionSessionStatus {
 }
 
 enum PetsPolicy {
-  FORBIDDEN   @map("forbidden")
-  ON_REQUEST  @map("on_request")
-  ALLOWED     @map("allowed")
+  FORBIDDEN  @map("forbidden")
+  ON_REQUEST @map("on_request")
+  ALLOWED    @map("allowed")
 }
 
 enum SmokingPolicy {
-  FORBIDDEN   @map("forbidden")
-  ON_REQUEST  @map("on_request")
-  ALLOWED     @map("allowed")
+  FORBIDDEN  @map("forbidden")
+  ON_REQUEST @map("on_request")
+  ALLOWED    @map("allowed")
 }
 
 enum MediaType {
@@ -108,9 +108,9 @@ enum BathroomType {
 }
 
 enum ApplicationStatus {
-  NEW       @map("new")
+  NEW         @map("new")
   IN_PROGRESS @map("in_progress")
-  CLOSED    @map("closed")
+  CLOSED      @map("closed")
 }
 
 enum PaymentStatus {
@@ -170,30 +170,43 @@ enum CustomLocationStatus {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  phone        String   @unique
-  firstName    String
-  lastName     String
-  passwordHash String
-  email        String?
-  avatarUrl    String?
-  avatarStorageKey String?
-  role         UserRole @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  properties   Property[]
-  excursions   Excursion[]
-  applications Application[] @relation("GuestApplications")
-  payments     Payment[] @relation("OwnerPayments")
-  confirmedPayments Payment[] @relation("ConfirmedPayments")
-  favoriteProperties FavoriteProperty[]
-  adminMessages AdminMessage[] @relation("AdminMessageSender")
-  reviews      Review[]
-  reviewReactions ReviewReaction[]
-  reviewReports ReviewReport[] @relation("ReviewReporter")
-  passwordResetRequests         PasswordResetRequest[] @relation("PasswordResetRequestedByUser")
-  chatConsentGiven Boolean @default(false) @map("chat_consent_given")
-  supportChat      SupportChat?
+  id                        String                 @id @default(cuid())
+  phone                     String                 @unique
+  firstName                 String
+  lastName                  String
+  passwordHash              String
+  email                     String?
+  pendingEmail              String?
+  avatarUrl                 String?
+  avatarStorageKey          String?
+  emailChangeTokenHash      String?
+  emailChangeTokenExpiresAt DateTime?
+  emailChangeRequestedAt    DateTime?
+  emailVerifiedAt           DateTime?
+  passwordChangedAt         DateTime?
+  sessionVersion            Int                    @default(0)
+  role                      UserRole               @default(USER)
+  deletedAt                 DateTime?
+  deletionExpiresAt         DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  properties                Property[]
+  excursions                Excursion[]
+  applications              Application[]          @relation("GuestApplications")
+  payments                  Payment[]              @relation("OwnerPayments")
+  confirmedPayments         Payment[]              @relation("ConfirmedPayments")
+  favoriteProperties        FavoriteProperty[]
+  adminMessages             AdminMessage[]         @relation("AdminMessageSender")
+  reviews                   Review[]
+  reviewReactions           ReviewReaction[]
+  reviewReports             ReviewReport[]         @relation("ReviewReporter")
+  passwordResetRequests     PasswordResetRequest[] @relation("PasswordResetRequestedByUser")
+  passwordResetTokens       PasswordResetToken[]
+  chatConsentGiven          Boolean                @default(false) @map("chat_consent_given")
+  supportChat               SupportChat?
+
+  @@index([deletedAt, deletionExpiresAt, createdAt])
+  @@index([pendingEmail])
 }
 
 model PasswordResetRequest {
@@ -213,89 +226,130 @@ model PasswordResetRequest {
   @@index([phone, createdAt])
 }
 
+model PasswordResetToken {
+  id              String    @id @default(cuid())
+  userId          String
+  tokenHash       String    @unique
+  issuedByAdminId String?
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, usedAt])
+}
+
+model AdminSessionState {
+  login          String   @id
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model WebhookReceipt {
+  id                String   @id @default(cuid())
+  provider          String
+  fingerprint       String
+  providerEventId   String?
+  providerPaymentId String?
+  localPaymentId    String?
+  outcome           String
+  metadata          Json?
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime @default(now())
+
+  @@unique([provider, fingerprint])
+  @@index([provider, providerPaymentId, processedAt])
+  @@index([localPaymentId, processedAt])
+}
+
 model Property {
-  id                       String                 @id @default(cuid())
-  ownerId                  String
-  type                     String?
-  locationId               String?
-  locationName             String?
-  name                     String?
-  address                  String?
-  seaDistance              String?
-  latitude                 Decimal?               @db.Decimal(9, 6)
-  longitude                Decimal?               @db.Decimal(9, 6)
-  phone                    String?
-  phoneName                String?
-  phone2                   String?
-  phone2Name               String?
-  phone3                   String?
-  phone3Name               String?
-  websiteUrl               String?
-  contactEmail             String?
-  contactPersonName        String?
-  contactPersonRole        String?
-  listingChannels          String?
-  whatsappUrl              String?
-  telegramUrl              String?
-  vkUrl                    String?
-  maxUrl                   String?
-  okUrl                    String?
-  receiveRequests          Boolean                @default(true)
-  showEmail                Boolean                @default(false)
-  description              String?
-  faqItems                 Json                   @default("[]")
-  checkInFrom              String?
-  checkOutUntil            String?
-  childrenAllowed          Boolean?
-  childrenMinAge           Int?
-  petsPolicy               PetsPolicy?
-  smokingPolicy            SmokingPolicy?
-  quietHoursEnabled        Boolean?
-  quietHoursFrom           String?
-  quietHoursTo             String?
-  parkingInfo              String?
-  mealOptions              String?
-  prepaymentPolicy         String?
-  classificationApplicable Boolean                @default(false)
-  starRating               Int?
-  registryNumber           String?
-  registryNumberPending    String?
+  id                            String                     @id @default(cuid())
+  ownerId                       String
+  type                          String?
+  locationId                    String?
+  locationName                  String?
+  name                          String?
+  address                       String?
+  seaDistance                   String?
+  latitude                      Decimal?                   @db.Decimal(9, 6)
+  longitude                     Decimal?                   @db.Decimal(9, 6)
+  phone                         String?
+  phoneName                     String?
+  phone2                        String?
+  phone2Name                    String?
+  phone3                        String?
+  phone3Name                    String?
+  websiteUrl                    String?
+  contactEmail                  String?
+  contactPersonName             String?
+  contactPersonRole             String?
+  listingChannels               String?
+  whatsappUrl                   String?
+  telegramUrl                   String?
+  vkUrl                         String?
+  maxUrl                        String?
+  okUrl                         String?
+  receiveRequests               Boolean                    @default(true)
+  showEmail                     Boolean                    @default(false)
+  description                   String?
+  faqItems                      Json                       @default("[]")
+  checkInFrom                   String?
+  checkOutUntil                 String?
+  childrenAllowed               Boolean?
+  childrenMinAge                Int?
+  petsPolicy                    PetsPolicy?
+  smokingPolicy                 SmokingPolicy?
+  quietHoursEnabled             Boolean?
+  quietHoursFrom                String?
+  quietHoursTo                  String?
+  parkingInfo                   String?
+  mealOptions                   String?
+  prepaymentPolicy              String?
+  classificationApplicable      Boolean                    @default(false)
+  starRating                    Int?
+  registryNumber                String?
+  registryNumberPending         String?
   registryModerationSubmittedAt DateTime?
-  registryDetails          String?
-  selfAssessmentPassed     Boolean?
-  moderationNotes          String?
-  moderatedById            String?
-  moderatedAt              DateTime?
-  pendingEditStatus        PropertyStatus?
-  publishedSnapshot        Json?
-  avgRating                Decimal                @default(0) @db.Decimal(3, 2)
-  reviewsCount             Int                    @default(0)
-  searchImpressions        Int                    @default(0)
-  profileViews             Int                    @default(0)
-  favoritesCount           Int                    @default(0)
-  status                   PropertyStatus         @default(DRAFT)
-  ownerDeletedAt           DateTime?
-  ownerDeletionExpiresAt   DateTime?
-  createdAt                DateTime               @default(now())
-  updatedAt                DateTime               @updatedAt
-  owner                    User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  registryDetails               String?
+  selfAssessmentPassed          Boolean?
+  moderationNotes               String?
+  moderatedById                 String?
+  moderatedAt                   DateTime?
+  pendingEditStatus             PropertyStatus?
+  publishedSnapshot             Json?
+  avgRating                     Decimal                    @default(0) @db.Decimal(3, 2)
+  reviewsCount                  Int                        @default(0)
+  searchImpressions             Int                        @default(0)
+  profileViews                  Int                        @default(0)
+  favoritesCount                Int                        @default(0)
+  status                        PropertyStatus             @default(DRAFT)
+  isPublishedVisible            Boolean                    @default(true)
+  ownerDeletedAt                DateTime?
+  ownerDeletionExpiresAt        DateTime?
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
+  owner                         User                       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // Catalog amenities selected by checkbox.
-  amenities                PropertyAmenity[]
+  amenities                     PropertyAmenity[]
   // Free-text amenities entered by owner manually.
-  customAmenities          PropertyCustomAmenity[]
-  roomAmenitySettings      ObjectRoomAmenitySetting[]
-  documents                PropertyDocument[]
-  media                    Media[]
-  rooms                    Room[]
-  applications             Application[]
-  adminMessages            AdminMessage[]
-  payments                 Payment[]
-  favoritedBy              FavoriteProperty[]
-  reviews                  Review[]
-  sourceCustomLocations    CustomLocation[]         @relation("CustomLocationSourceProperty")
+  customAmenities               PropertyCustomAmenity[]
+  roomAmenitySettings           ObjectRoomAmenitySetting[]
+  documents                     PropertyDocument[]
+  media                         Media[]
+  rooms                         Room[]
+  applications                  Application[]
+  adminMessages                 AdminMessage[]
+  payments                      Payment[]
+  favoritedBy                   FavoriteProperty[]
+  reviews                       Review[]
+  sourceCustomLocations         CustomLocation[]           @relation("CustomLocationSourceProperty")
 
   @@index([ownerId, updatedAt])
   @@index([status, updatedAt])
+  @@index([isPublishedVisible, status, updatedAt])
   @@index([pendingEditStatus, updatedAt])
   @@index([ownerDeletedAt, ownerDeletionExpiresAt])
 }
@@ -329,13 +383,13 @@ model CustomLocation {
 }
 
 model ExcursionDistrict {
-  id        String             @id @default(cuid())
-  slug      String             @unique
-  name      String
-  isActive  Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  locations ExcursionLocation[]
+  id         String              @id @default(cuid())
+  slug       String              @unique
+  name       String
+  isActive   Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  locations  ExcursionLocation[]
   excursions Excursion[]
 
   @@index([isActive, name])
@@ -356,24 +410,24 @@ model ExcursionCategory {
 }
 
 model ExcursionLocation {
-  id                  String                 @id @default(cuid())
-  slug                String                 @unique
-  name                String
-  normalizedName      String                 @unique
-  kind                ExcursionLocationKind  @default(OTHER)
-  districtId          String?
-  latitude            Decimal?               @db.Decimal(9, 6)
-  longitude           Decimal?               @db.Decimal(9, 6)
-  aliases             String[]               @default([])
-  isMajor             Boolean                @default(false)
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  district            ExcursionDistrict?     @relation(fields: [districtId], references: [id], onDelete: SetNull)
-  mainExcursions      Excursion[]            @relation("ExcursionMainLocation")
-  anchorExcursions    Excursion[]            @relation("ExcursionAnchorLocation")
-  meetingExcursions   Excursion[]            @relation("ExcursionMeetingLocation")
-  pickupExcursions    ExcursionPickupLocation[]
-  routeExcursions     ExcursionRouteLocation[]
+  id                String                    @id @default(cuid())
+  slug              String                    @unique
+  name              String
+  normalizedName    String                    @unique
+  kind              ExcursionLocationKind     @default(OTHER)
+  districtId        String?
+  latitude          Decimal?                  @db.Decimal(9, 6)
+  longitude         Decimal?                  @db.Decimal(9, 6)
+  aliases           String[]                  @default([])
+  isMajor           Boolean                   @default(false)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  district          ExcursionDistrict?        @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  mainExcursions    Excursion[]               @relation("ExcursionMainLocation")
+  anchorExcursions  Excursion[]               @relation("ExcursionAnchorLocation")
+  meetingExcursions Excursion[]               @relation("ExcursionMeetingLocation")
+  pickupExcursions  ExcursionPickupLocation[]
+  routeExcursions   ExcursionRouteLocation[]
 
   @@index([districtId, isMajor])
   @@index([name])
@@ -382,8 +436,8 @@ model ExcursionLocation {
 model ExcursionPickupLocation {
   excursionId String
   locationId  String
-  createdAt   DateTime         @default(now())
-  excursion   Excursion        @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  excursion   Excursion         @relation(fields: [excursionId], references: [id], onDelete: Cascade)
   location    ExcursionLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@id([excursionId, locationId])
@@ -404,166 +458,196 @@ model ExcursionRouteLocation {
 }
 
 model ExcursionSession {
-  id                     String                @id @default(cuid())
+  id                     String                 @id @default(cuid())
   excursionId            String
   startAt                DateTime
   endAt                  DateTime?
   capacity               Int?
-  priceOverride          Decimal?              @db.Decimal(10, 2)
+  priceOverride          Decimal?               @db.Decimal(10, 2)
   status                 ExcursionSessionStatus @default(AVAILABLE)
   bookingDeadlineMinutes Int?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
-  excursion              Excursion             @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  excursion              Excursion              @relation(fields: [excursionId], references: [id], onDelete: Cascade)
 
   @@index([excursionId, startAt])
   @@index([status, startAt])
 }
 
 model ExcursionScheduleRule {
-  id              String      @id @default(cuid())
+  id              String    @id @default(cuid())
   excursionId     String
-  dateFrom        DateTime?   @db.Date
-  dateTo          DateTime?   @db.Date
-  weekdays        Int[]       @default([])
-  timeStarts      String[]    @default([])
+  dateFrom        DateTime? @db.Date
+  dateTo          DateTime? @db.Date
+  weekdays        Int[]     @default([])
+  timeStarts      String[]  @default([])
   durationMinutes Int?
   capacityDefault Int?
-  priceOverride   Decimal?    @db.Decimal(10, 2)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  excursion       Excursion   @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  priceOverride   Decimal?  @db.Decimal(10, 2)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  excursion       Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
 
   @@index([excursionId, dateFrom, dateTo])
 }
 
 model ExcursionScheduleException {
-  id               String    @id @default(cuid())
-  excursionId      String
-  date             DateTime  @db.Date
-  isClosed         Boolean   @default(false)
-  overrideTimeStarts String[] @default([])
-  overrideCapacity Int?
-  overridePrice    Decimal?  @db.Decimal(10, 2)
-  notes            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  excursion        Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(cuid())
+  excursionId        String
+  date               DateTime  @db.Date
+  isClosed           Boolean   @default(false)
+  overrideTimeStarts String[]  @default([])
+  overrideCapacity   Int?
+  overridePrice      Decimal?  @db.Decimal(10, 2)
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  excursion          Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
 
   @@unique([excursionId, date])
   @@index([date])
 }
 
 model Excursion {
-  id                    String                 @id @default(cuid())
-  ownerId               String
-  offerType             ExcursionOfferType     @default(EXCURSION)
-  subtypeLabel          String?
-  title                 String?
-  locationId            String?
-  locationName          String?
-  mainLocationId        String?
-  anchorLocationId      String?
-  districtId            String?
-  categoryId            String?
-  address               String?
-  latitude              Decimal?               @db.Decimal(9, 6)
-  longitude             Decimal?               @db.Decimal(9, 6)
-  startPoint            String?
-  meetingPointText      String?
-  meetingLocationId     String?
-  description           String?
-  shortDescription      String?
-  fullDescription       String?
-  routeDescription      String?
-  highlights            Json                   @default("[]")
-  durationMinutes       Int?
-  durationDays          Int?
-  durationNights        Int?
-  itineraryDays         Json                   @default("[]")
-  finishPoint           String?
-  scheduleText          String?
-  scheduleMode          ExcursionScheduleMode  @default(TEXT)
-  availabilityMode      ExcursionAvailabilityMode @default(REGULAR)
-  availabilityNote      String?
-  format                ExcursionFormat?
-  groupSizeMin          Int?
-  groupSizeMax          Int?
-  languageCodes         String[]               @default([])
-  ageLimit              Int?
-  isKidFriendly         Boolean?
-  difficulty            ExcursionDifficulty?
-  priceType             ExcursionPriceType     @default(PER_PERSON)
-  priceFrom             Decimal?               @db.Decimal(10, 2)
-  priceTo               Decimal?               @db.Decimal(10, 2)
-  currency              String                 @default("RUB") @db.VarChar(3)
-  includedText          String?
-  notIncludedText       String?
-  cancellationPolicy    String?
-  physicalRequirements  String[]               @default([])
-  whatToBring           String[]               @default([])
-  meetingPointLat       Decimal?               @db.Decimal(9, 6)
-  meetingPointLng       Decimal?               @db.Decimal(9, 6)
-  minBookingNoticeHours Int?
-  hasGuideLicense       Boolean                @default(false)
-  pickupAvailable       Boolean                @default(false)
-  receiveRequests       Boolean                @default(true)
-  tags                  String[]               @default([])
-  instantConfirmation   Boolean                @default(false)
-  contactFirstName      String?
-  contactLastName       String?
-  contactPhone          String?
-  contactEmail          String?
-  websiteUrl            String?
-  whatsappUrl           String?
-  telegramUrl           String?
-  vkUrl                 String?
-  maxUrl                String?
-  okUrl                 String?
-  photoUrls             String[]               @default([])
-  videoUrls             String[]               @default([])
-  timeline              Json                   @default("[]")
-  pricingTiers          Json                   @default("[]")
-  faqItems              Json                   @default("[]")
-  extraOptions          Json                   @default("[]")
-  includedItems         String[]               @default([])
-  excludedItems         String[]               @default([])
-  transferDetails       String?
-  cancellationPolicyType String?
-  priceUnitLabel        String?
-  accommodationProvided Boolean?
-  accommodationType     String?
-  accommodationNights   Int?
-  accommodationFormat   String?
-  mealPlan              String?
-  accommodationComment  String?
-  avgRating             Decimal                @default(0) @db.Decimal(3, 2)
-  reviewsCount          Int                    @default(0)
-  profileViews          Int                    @default(0)
-  moderationNotes       String?
-  moderatedById         String?
-  moderatedAt           DateTime?
-  status                ExcursionStatus        @default(DRAFT)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  owner                 User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  mainLocation          ExcursionLocation?     @relation("ExcursionMainLocation", fields: [mainLocationId], references: [id], onDelete: SetNull)
-  anchorLocation        ExcursionLocation?     @relation("ExcursionAnchorLocation", fields: [anchorLocationId], references: [id], onDelete: SetNull)
-  meetingLocation       ExcursionLocation?     @relation("ExcursionMeetingLocation", fields: [meetingLocationId], references: [id], onDelete: SetNull)
-  district              ExcursionDistrict?     @relation(fields: [districtId], references: [id], onDelete: SetNull)
-  category              ExcursionCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  pickupLocations       ExcursionPickupLocation[]
-  routeLocations        ExcursionRouteLocation[]
-  sessions              ExcursionSession[]
-  scheduleRules         ExcursionScheduleRule[]
-  scheduleExceptions    ExcursionScheduleException[]
-  applications          Application[]
-  adminMessages         AdminMessage[]
-  reviews               Review[]
-  payments              Payment[]
+  id                        String                       @id @default(cuid())
+  ownerId                   String
+  offerType                 ExcursionOfferType           @default(EXCURSION)
+  subtypeLabel              String?
+  title                     String?
+  locationId                String?
+  locationName              String?
+  mainLocationId            String?
+  anchorLocationId          String?
+  districtId                String?
+  categoryId                String?
+  address                   String?
+  latitude                  Decimal?                     @db.Decimal(9, 6)
+  longitude                 Decimal?                     @db.Decimal(9, 6)
+  startPoint                String?
+  meetingPointText          String?
+  meetingLocationId         String?
+  description               String?
+  shortDescription          String?
+  fullDescription           String?
+  routeDescription          String?
+  highlights                Json                         @default("[]")
+  durationMinutes           Int?
+  durationDays              Int?
+  durationNights            Int?
+  itineraryDays             Json                         @default("[]")
+  finishPoint               String?
+  scheduleText              String?
+  scheduleMode              ExcursionScheduleMode        @default(TEXT)
+  availabilityMode          ExcursionAvailabilityMode    @default(REGULAR)
+  availabilityNote          String?
+  format                    ExcursionFormat?
+  groupSizeMin              Int?
+  groupSizeMax              Int?
+  languageCodes             String[]                     @default([])
+  ageLimit                  Int?
+  isKidFriendly             Boolean?
+  difficulty                ExcursionDifficulty?
+  priceType                 ExcursionPriceType           @default(PER_PERSON)
+  priceFrom                 Decimal?                     @db.Decimal(10, 2)
+  priceTo                   Decimal?                     @db.Decimal(10, 2)
+  currency                  String                       @default("RUB") @db.VarChar(3)
+  includedText              String?
+  notIncludedText           String?
+  cancellationPolicy        String?
+  physicalRequirements      String[]                     @default([])
+  whatToBring               String[]                     @default([])
+  meetingPointLat           Decimal?                     @db.Decimal(9, 6)
+  meetingPointLng           Decimal?                     @db.Decimal(9, 6)
+  minBookingNoticeHours     Int?
+  hasGuideLicense           Boolean                      @default(false)
+  pickupAvailable           Boolean                      @default(false)
+  receiveRequests           Boolean                      @default(true)
+  tags                      String[]                     @default([])
+  instantConfirmation       Boolean                      @default(false)
+  contactFirstName          String?
+  contactLastName           String?
+  contactPhone              String?
+  contactPhone2             String?
+  contactEmail              String?
+  websiteUrl                String?
+  whatsappUrl               String?
+  telegramUrl               String?
+  vkUrl                     String?
+  maxUrl                    String?
+  okUrl                     String?
+  photoUrls                 String[]                     @default([])
+  sectionPhotoGroups        Json                         @default("{}")
+  videoUrls                 String[]                     @default([])
+  timeline                  Json                         @default("[]")
+  pricingTiers              Json                         @default("[]")
+  faqItems                  Json                         @default("[]")
+  extraOptions              Json                         @default("[]")
+  includedItems             String[]                     @default([])
+  excludedItems             String[]                     @default([])
+  transferDetails           String?
+  cancellationPolicyType    String?
+  priceUnitLabel            String?
+  // ── Tour logistics ──
+  tourKind                  String? // ONE_DAY | WEEKEND | MULTI_DAY | JEEP | BOAT | HIKING | BUS | COMBINED | EXPEDITION | CRUISE | OTHER
+  transportModes            String[]                     @default([]) // WALKING | BUS | MINIVAN | CAR | JEEP | ATV | BOAT | TRAIN | FLIGHT | MIXED
+  departureMode             String? // FIXED_DATES | ON_REQUEST | DAILY | SEASONAL | PRIVATE_ONLY
+  arrivalInfo               String?
+  departureInfo             String?
+  // ── Accommodation ──
+  accommodationProvided     Boolean?
+  accommodationType         String? // HOTEL | GUESTHOUSE | HOSTEL | CAMPING | APARTMENT | VILLA | MIXED
+  accommodationNights       Int?
+  accommodationFormat       String?
+  accommodationStars        String? // e.g. "3*", "4*", "без звёзд"
+  roomTypes                 String[]                     @default([]) // SINGLE | DOUBLE | TWIN | TRIPLE | SHARED | CAMPING
+  singleSupplementAvailable Boolean?
+  singleSupplementPrice     Decimal?                     @db.Decimal(10, 2)
+  accommodationComment      String?
+  // ── Meals ──
+  mealPlan                  String? // NONE | BREAKFAST | HALF_BOARD | FULL_BOARD | ALL_INCLUSIVE | CUSTOM
+  mealDetails               String?
+  // ── Safety & documents ──
+  documentsRequired         String[]                     @default([])
+  insuranceIncluded         Boolean?
+  insuranceComment          String?
+  equipmentProvided         String[]                     @default([])
+  safetyInfo                String?
+  routeConditions           String?
+  avgRating                 Decimal                      @default(0) @db.Decimal(3, 2)
+  reviewsCount              Int                          @default(0)
+  profileViews              Int                          @default(0)
+  moderationNotes           String?
+  moderatedById             String?
+  moderatedAt               DateTime?
+  pendingEditStatus         ExcursionStatus?
+  publishedSnapshot         Json?
+  status                    ExcursionStatus              @default(DRAFT)
+  isPublishedVisible        Boolean                      @default(true)
+  deletedAt                 DateTime?
+  deletionExpiresAt         DateTime?
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+  owner                     User                         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  mainLocation              ExcursionLocation?           @relation("ExcursionMainLocation", fields: [mainLocationId], references: [id], onDelete: SetNull)
+  anchorLocation            ExcursionLocation?           @relation("ExcursionAnchorLocation", fields: [anchorLocationId], references: [id], onDelete: SetNull)
+  meetingLocation           ExcursionLocation?           @relation("ExcursionMeetingLocation", fields: [meetingLocationId], references: [id], onDelete: SetNull)
+  district                  ExcursionDistrict?           @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  category                  ExcursionCategory?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  pickupLocations           ExcursionPickupLocation[]
+  routeLocations            ExcursionRouteLocation[]
+  sessions                  ExcursionSession[]
+  scheduleRules             ExcursionScheduleRule[]
+  scheduleExceptions        ExcursionScheduleException[]
+  applications              Application[]
+  adminMessages             AdminMessage[]
+  reviews                   Review[]
+  payments                  Payment[]
 
   @@index([ownerId, updatedAt])
   @@index([status, updatedAt])
+  @@index([isPublishedVisible, status, updatedAt])
+  @@index([pendingEditStatus, updatedAt])
+  @@index([deletedAt, deletionExpiresAt])
   @@index([anchorLocationId, status, updatedAt])
   @@index([mainLocationId, status, updatedAt])
   @@index([districtId, status, updatedAt])
@@ -574,27 +658,29 @@ model Excursion {
 }
 
 model Review {
-  id         String       @id @default(cuid())
-  entityType ReviewEntityType @default(PROPERTY)
-  propertyId String?
-  excursionId String?
-  userId     String
-  rating     Decimal      @db.Decimal(2, 1)
-  text       String
-  likesCount Int          @default(0)
-  dislikesCount Int       @default(0)
-  status     ReviewStatus @default(PENDING)
-  ownerReply String?
+  id             String           @id @default(cuid())
+  entityType     ReviewEntityType @default(PROPERTY)
+  propertyId     String?
+  excursionId    String?
+  userId         String
+  rating         Decimal          @db.Decimal(2, 1)
+  text           String
+  likesCount     Int              @default(0)
+  dislikesCount  Int              @default(0)
+  status         ReviewStatus     @default(PENDING)
+  ownerReply     String?
   ownerRepliedAt DateTime?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  deletedAt  DateTime?
-  property   Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion  Excursion?   @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reactions  ReviewReaction[]
-  reports    ReviewReport[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+  property       Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion      Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions      ReviewReaction[]
+  reports        ReviewReport[]
 
+  @@unique([userId, propertyId])
+  @@unique([userId, excursionId])
   @@index([entityType, createdAt])
   @@index([propertyId, status, createdAt])
   @@index([excursionId, status, createdAt])
@@ -602,13 +688,13 @@ model Review {
 }
 
 model ReviewReaction {
-  reviewId   String
-  userId     String
-  value      ReviewReactionValue
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  review     Review              @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewId  String
+  userId    String
+  value     ReviewReactionValue
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  review    Review              @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([reviewId, userId])
   @@index([userId, createdAt])
@@ -646,16 +732,16 @@ model AdminActionLog {
 }
 
 model AdminMessage {
-  id          String                 @id @default(cuid())
+  id           String                 @id @default(cuid())
   senderUserId String
-  sourceType  AdminMessageSourceType
-  propertyId  String?
-  excursionId String?
-  message     String
-  createdAt   DateTime               @default(now())
-  senderUser  User                   @relation("AdminMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
-  property    Property?              @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  excursion   Excursion?             @relation(fields: [excursionId], references: [id], onDelete: SetNull)
+  sourceType   AdminMessageSourceType
+  propertyId   String?
+  excursionId  String?
+  message      String
+  createdAt    DateTime               @default(now())
+  senderUser   User                   @relation("AdminMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  property     Property?              @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  excursion    Excursion?             @relation(fields: [excursionId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([sourceType, createdAt])
@@ -665,12 +751,12 @@ model AdminMessage {
 }
 
 model Amenity {
-  id         String           @id
+  id         String            @id
   name       String
   category   String
-  isActive   Boolean          @default(true)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  isActive   Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
   // Back-reference to properties that selected this amenity.
   properties PropertyAmenity[]
 
@@ -724,26 +810,26 @@ model Room {
 }
 
 model Application {
-  id           String            @id @default(cuid())
+  id           String                @id @default(cuid())
   entityType   ApplicationEntityType @default(PROPERTY)
   propertyId   String?
   excursionId  String?
   roomId       String?
   guestUserId  String
-  dateFrom     DateTime          @db.Date
-  dateTo       DateTime          @db.Date
+  dateFrom     DateTime              @db.Date
+  dateTo       DateTime              @db.Date
   guestsCount  Int
   message      String?
   contactName  String
   contactPhone String
   contactEmail String
-  status       ApplicationStatus @default(NEW)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  property     Property?         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion    Excursion?        @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  room         Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  guestUser    User              @relation("GuestApplications", fields: [guestUserId], references: [id], onDelete: Cascade)
+  status       ApplicationStatus     @default(NEW)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  property     Property?             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion    Excursion?            @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  room         Room?                 @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  guestUser    User                  @relation("GuestApplications", fields: [guestUserId], references: [id], onDelete: Cascade)
 
   @@index([entityType, status, createdAt])
   @@index([propertyId, status, createdAt])
@@ -753,30 +839,30 @@ model Application {
 }
 
 model Payment {
-  id              String          @id @default(cuid())
-  propertyId      String?
-  excursionId     String?
-  ownerId         String
-  amount          Decimal         @db.Decimal(10, 2)
-  tariffCode      String
-  roomCount       Int
-  status          PaymentStatus   @default(CREATED)
-  provider        PaymentProvider @default(MOCK)
-  providerPaymentId String?
-  idempotenceKey  String          @unique
-  confirmationUrl String?
-  providerPayload Json?
+  id                  String          @id @default(cuid())
+  propertyId          String?
+  excursionId         String?
+  ownerId             String
+  amount              Decimal         @db.Decimal(10, 2)
+  tariffCode          String
+  roomCount           Int
+  status              PaymentStatus   @default(CREATED)
+  provider            PaymentProvider @default(MOCK)
+  providerPaymentId   String?
+  idempotenceKey      String          @unique
+  confirmationUrl     String?
+  providerPayload     Json?
   placementValidUntil DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  paidAt          DateTime?
-  canceledAt      DateTime?
-  managerNotes    String?
-  confirmedById   String?
-  confirmedBy     User?           @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
-  property        Property?       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion       Excursion?      @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  owner           User            @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  paidAt              DateTime?
+  canceledAt          DateTime?
+  managerNotes        String?
+  confirmedById       String?
+  confirmedBy         User?           @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
+  property            Property?       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion           Excursion?      @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  owner               User            @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
@@ -803,49 +889,49 @@ model RoomPrice {
 }
 
 model RoomOccupancy {
-  id            String   @id @default(cuid())
-  roomId         String
-  dateFrom       DateTime @db.Date
-  dateTo         DateTime @db.Date
-  timeFrom       String?
-  timeTo         String?
-  status         OccupancyStatus @default(CONFIRMED)
-  tag            String?  @db.VarChar(80)
-  source         String?  @db.VarChar(80)
-  color          String?  @db.VarChar(16)
-  adultsCount    Int      @default(1)
-  childrenCount  Int      @default(0)
-  guestName      String?
-  guestPhone     String?
-  guestContacts  String?
-  description    String?  @db.VarChar(250)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  id            String          @id @default(cuid())
+  roomId        String
+  dateFrom      DateTime        @db.Date
+  dateTo        DateTime        @db.Date
+  timeFrom      String?
+  timeTo        String?
+  status        OccupancyStatus @default(CONFIRMED)
+  tag           String?         @db.VarChar(80)
+  source        String?         @db.VarChar(80)
+  color         String?         @db.VarChar(16)
+  adultsCount   Int             @default(1)
+  childrenCount Int             @default(0)
+  guestName     String?
+  guestPhone    String?
+  guestContacts String?
+  description   String?         @db.VarChar(250)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, dateFrom, dateTo])
   @@index([roomId, createdAt])
 }
 
 model RoomFeature {
-  id        String             @id
-  name      String
-  category  String
-  isActive  Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  rooms     RoomFeatureOnRoom[]
+  id             String                     @id
+  name           String
+  category       String
+  isActive       Boolean                    @default(true)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  rooms          RoomFeatureOnRoom[]
   objectSettings ObjectRoomAmenitySetting[]
 
   @@index([category, name])
 }
 
 model RoomFeatureOnRoom {
-  roomId     String
-  featureId  String
-  createdAt  DateTime    @default(now())
-  room       Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  feature    RoomFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  roomId    String
+  featureId String
+  createdAt DateTime    @default(now())
+  room      Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  feature   RoomFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
 
   @@id([roomId, featureId])
   @@index([featureId])

@@ -1,34 +1,68 @@
-// API route: admin excursion CRUD — PATCH update, DELETE remove.
 import { ExcursionStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
-import { db } from "@/lib/db";
+import {
+  getAdminSoftDeleteExpiresAt,
+  isSoftDeleteWindowActive,
+  purgeExpiredDeletedExcursions,
+} from "@/lib/admin-entity-lifecycle";
+import {
+  EXCURSION_SOFT_DELETE_COLUMNS,
+  EXCURSION_VISIBILITY_CONTROL_COLUMNS,
+} from "@/lib/admin-schema-compat";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import {
+  deleteExcursionStorageEntries,
+  EXCURSION_STORAGE_CLEANUP_SELECT,
+} from "@/lib/excursions";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 const ALLOWED_STRING_FIELDS = [
-  "title", "description", "shortDescription", "fullDescription",
-  "address", "startPoint", "finishPoint", "locationName",
-  "mainLocationId", "categoryId", "districtId",
-  "format", "difficulty", "priceType",
-  "contactFirstName", "contactLastName", "contactPhone", "contactEmail",
-  "moderationNotes", "offerType",
+  "title",
+  "description",
+  "shortDescription",
+  "fullDescription",
+  "address",
+  "startPoint",
+  "finishPoint",
+  "locationName",
+  "mainLocationId",
+  "categoryId",
+  "districtId",
+  "format",
+  "difficulty",
+  "priceType",
+  "contactFirstName",
+  "contactLastName",
+  "contactPhone",
+  "contactPhone2",
+  "contactEmail",
+  "moderationNotes",
+  "offerType",
 ] as const;
 
 const ALLOWED_NUMBER_FIELDS = [
-  "durationMinutes", "durationDays", "durationNights",
-  "groupSizeMin", "groupSizeMax", "priceFrom", "priceTo",
+  "durationMinutes",
+  "durationDays",
+  "durationNights",
+  "groupSizeMin",
+  "groupSizeMax",
+  "priceFrom",
+  "priceTo",
 ] as const;
 
-const ALLOWED_BOOL_FIELDS = ["isKidFriendly"] as const;
+const ALLOWED_BOOL_FIELDS = ["isKidFriendly", "isPublishedVisible"] as const;
 
 export async function PATCH(request: Request, context: RouteContext) {
   const admin = await getAdminSession();
   if (!admin) {
     return NextResponse.json({ error: "Доступ запрещен" }, { status: 403 });
   }
+
+  await purgeExpiredDeletedExcursions(db, new Date());
 
   const { id } = await context.params;
 
@@ -39,11 +73,25 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
+  if (
+    "isPublishedVisible" in payload &&
+    !(await areDatabaseColumnsAvailable("Excursion", EXCURSION_VISIBILITY_CONTROL_COLUMNS))
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Управление видимостью опубликованной программы временно недоступно: база данных еще не обновлена до последней миграции.",
+      },
+      { status: 503 },
+    );
+  }
+
   const data: Record<string, unknown> = {};
 
   for (const field of ALLOWED_STRING_FIELDS) {
     if (field in payload) {
-      data[field] = payload[field] === null || payload[field] === "" ? null : String(payload[field]);
+      data[field] =
+        payload[field] === null || payload[field] === "" ? null : String(payload[field]);
     }
   }
 
@@ -72,7 +120,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   if ("ownerId" in payload && typeof payload.ownerId === "string") {
-    const user = await db.user.findUnique({ where: { id: payload.ownerId }, select: { id: true } });
+    const user = await db.user.findUnique({
+      where: { id: payload.ownerId },
+      select: { id: true },
+    });
     if (user) {
       data.ownerId = payload.ownerId;
     }
@@ -91,7 +142,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     const item = await tx.excursion.update({
       where: { id },
       data: data as Prisma.ExcursionUpdateInput,
-      select: { id: true, title: true, status: true, updatedAt: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        isPublishedVisible: true,
+        deletedAt: true,
+        deletionExpiresAt: true,
+        updatedAt: true,
+      },
     });
 
     await tx.adminActionLog.create({
@@ -112,6 +171,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       id: updated.id,
       title: updated.title,
       status: updated.status,
+      isPublishedVisible: updated.isPublishedVisible,
+      deletedAt: updated.deletedAt?.toISOString() ?? null,
+      deletionExpiresAt: updated.deletionExpiresAt?.toISOString() ?? null,
       updatedAt: updated.updatedAt.toISOString(),
     },
   });
@@ -124,11 +186,87 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
+  if (!(await areDatabaseColumnsAvailable("Excursion", EXCURSION_SOFT_DELETE_COLUMNS))) {
+    return NextResponse.json(
+      {
+        error:
+          "Удаление опубликованных экскурсий временно недоступно: база данных еще не обновлена до последней миграции.",
+      },
+      { status: 503 },
+    );
+  }
 
-  const existing = await db.excursion.findUnique({ where: { id }, select: { id: true, title: true } });
+  const now = new Date();
+
+  await purgeExpiredDeletedExcursions(db, now);
+
+  const existing = await db.excursion.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      isPublishedVisible: true,
+      deletedAt: true,
+      deletionExpiresAt: true,
+    },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
+
+  if (existing.deletedAt && isSoftDeleteWindowActive(existing.deletionExpiresAt, now)) {
+    return NextResponse.json(
+      { error: "Программа уже ожидает удаления. Используйте отмену удаления." },
+      { status: 409 },
+    );
+  }
+
+  if (existing.status === ExcursionStatus.PUBLISHED) {
+    const deletionExpiresAt = getAdminSoftDeleteExpiresAt(now);
+
+    await db.$transaction(async (tx) => {
+      await tx.excursion.update({
+        where: { id },
+        data: {
+          isPublishedVisible: false,
+          deletedAt: now,
+          deletionExpiresAt,
+        },
+      });
+
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: admin.id,
+          action: "admin_schedule_delete",
+          targetType: "excursion",
+          targetId: id,
+          details: {
+            title: existing.title,
+            deletionExpiresAt: deletionExpiresAt.toISOString(),
+          },
+        },
+      });
+    });
+
+    return NextResponse.json({
+      ok: true,
+      mode: "soft",
+      restoreUntil: deletionExpiresAt.toISOString(),
+      item: {
+        id: existing.id,
+        status: existing.status,
+        isPublishedVisible: false,
+        deletedAt: now.toISOString(),
+        deletionExpiresAt: deletionExpiresAt.toISOString(),
+      },
+    });
+  }
+
+  const storageEntry = await db.excursion.findUnique({
+    where: { id },
+    select: EXCURSION_STORAGE_CLEANUP_SELECT,
+  });
 
   await db.$transaction(async (tx) => {
     await tx.adminActionLog.create({
@@ -143,5 +281,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
     await tx.excursion.delete({ where: { id } });
   });
 
-  return NextResponse.json({ ok: true });
+  if (storageEntry) {
+    await deleteExcursionStorageEntries([storageEntry]);
+  }
+
+  return NextResponse.json({ ok: true, mode: "hard" });
 }

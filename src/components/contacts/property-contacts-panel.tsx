@@ -1,39 +1,77 @@
 "use client";
 
-import { Globe, Mail, Phone } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, ChevronUp, Globe, Phone } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { cn } from "@/lib/cn";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
+} from "@/lib/contact-links";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
-import { buildWebsiteFaviconUrl } from "@/lib/website-favicon";
+import {
+  buildWebsiteFaviconUrl,
+  normalizeWebsiteUrl,
+  readWebsiteHostname,
+} from "@/lib/website-favicon";
 
 type PropertyContactsPanelProps = {
   phone: string | null;
+  phoneLabel?: string | null;
+  phoneName?: string | null;
+  extraPhones?: Array<{
+    phone: string;
+    label?: string | null;
+    name?: string | null;
+  }>;
   websiteUrl: string | null;
-  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
   maxUrl: string | null;
   okUrl: string | null;
+  text?: PropertyContactsPanelText;
+  variant?: "default" | "compact";
+  secondaryContactsCompact?: boolean;
+};
+
+export type PropertyContactsPanelText = {
+  emptyState?: string;
+  primaryPhoneEyebrow?: string;
+  primaryPhoneFallbackName?: string;
+  secondaryContactsEyebrow?: string;
+  websiteLabel?: string;
+  websiteCaptionFallback?: string;
+  whatsappCaption?: string;
+  telegramCaption?: string;
+  vkCaption?: string;
+  maxCaption?: string;
+  okCaption?: string;
 };
 
 type ContactAction = {
   id: string;
   label: string;
   href: string;
-  short: string;
   brand: ContactBrand;
+  caption: string;
   className: string;
+  compactLabel?: string;
+  compactDescription?: string | null;
+};
+
+type PhoneItem = {
+  key: string;
+  href: string | null;
+  label: string;
+  name: string | null;
 };
 
 function PhoneIcon() {
   return <AppIcon icon={Phone} className="h-[18px] w-[18px]" />;
-}
-
-function MailIcon() {
-  return <AppIcon icon={Mail} className="h-[18px] w-[18px]" />;
 }
 
 function GlobeIcon() {
@@ -52,18 +90,48 @@ function normalizePhoneHref(phone: string): string | null {
     return null;
   }
 
-  return hasLeadingPlus ? `+${digits}` : digits;
+  return hasLeadingPlus ? `tel:+${digits}` : `tel:${digits}`;
 }
 
-function ContactIconLink(props: {
+function formatWebsiteCaption(hostname: string | null, fallback: string): string {
+  if (!hostname) {
+    return fallback;
+  }
+
+  const normalizedHostname = hostname.replace(/^www\./i, "");
+  if (normalizedHostname.length > 32 || normalizedHostname.includes("xn--")) {
+    return fallback;
+  }
+
+  return normalizedHostname;
+}
+
+function ContactChannelLink(props: {
   label: string;
+  compactLabel?: string;
   href: string;
-  short: string;
+  caption: string;
+  compactDescription?: string | null;
+  icon: ReactNode;
   className?: string;
-  brand?: ContactBrand;
-  children?: ReactNode;
+  compact?: boolean;
+  fullWidthCompact?: boolean;
+  iconOnlyCompact?: boolean;
 }) {
-  const { label, href, short, className, brand, children } = props;
+  const {
+    label,
+    compactLabel,
+    href,
+    caption,
+    compactDescription = null,
+    icon,
+    className,
+    compact = false,
+    fullWidthCompact = false,
+    iconOnlyCompact = false,
+  } = props;
+  const effectiveLabel = compact ? (compactLabel ?? label) : label;
+  const showCompactAsIconOnly = compact && iconOnlyCompact;
 
   return (
     <a
@@ -73,202 +141,373 @@ function ContactIconLink(props: {
       title={label}
       aria-label={label}
       className={cn(
-        "inline-flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/70 bg-white/82 text-xs font-semibold shadow-[0_12px_28px_rgba(15,118,110,0.1),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-terra/30",
+        "group flex items-center border text-left transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-terra/25",
+        showCompactAsIconOnly
+          ? "h-10 w-10 shrink-0 justify-center rounded-[14px] p-0 shadow-[0_10px_22px_rgba(58,43,35,0.04)]"
+          : compact
+          ? fullWidthCompact
+            ? "h-full w-full gap-2.5 rounded-[18px] px-3 py-3 shadow-[0_10px_22px_rgba(58,43,35,0.04)]"
+            : "h-12 w-full flex-col justify-center gap-1 rounded-[16px] px-2 py-2 shadow-[0_10px_22px_rgba(58,43,35,0.04)]"
+          : "w-full gap-3 rounded-[20px] px-3.5 py-3.5 shadow-[0_14px_30px_rgba(58,43,35,0.05)]",
+        compact && fullWidthCompact && !showCompactAsIconOnly && "col-span-full",
         className,
       )}
-      data-brand={brand}
     >
-      {children ?? short}
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-center border border-white/80 bg-white/95",
+          showCompactAsIconOnly
+            ? "h-8 w-8 rounded-[11px] shadow-[0_8px_18px_rgba(58,43,35,0.06)]"
+            : compact
+            ? fullWidthCompact
+              ? "h-10 w-10 rounded-[14px] shadow-[0_8px_18px_rgba(58,43,35,0.06)]"
+              : "h-8 w-8 rounded-[12px] shadow-[0_8px_18px_rgba(58,43,35,0.06)]"
+            : "h-11 w-11 rounded-[16px] shadow-[0_10px_22px_rgba(58,43,35,0.08)]",
+        )}
+      >
+        {icon}
+      </span>
+      {!showCompactAsIconOnly ? (
+        <span className={cn(compact && !fullWidthCompact ? "w-full" : "min-w-0 flex-1")}>
+          <span
+            className={cn(
+              "block font-semibold text-olive",
+              compact
+                ? fullWidthCompact
+                  ? "text-[12.5px] leading-[1.15] whitespace-normal break-words"
+                  : "truncate text-center text-[10.5px] leading-none"
+                : "truncate text-sm",
+            )}
+          >
+            {effectiveLabel}
+          </span>
+          {!compact ? (
+            <span className="mt-0.5 block truncate text-xs text-olive/56">{caption}</span>
+          ) : compactDescription && fullWidthCompact ? (
+            <span className="mt-1 block text-[11px] leading-4 text-olive/54">
+              {compactDescription}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+      {!compact || (fullWidthCompact && !showCompactAsIconOnly) ? (
+        <AppIcon
+          icon={ChevronRight}
+          className={cn(
+            "shrink-0 text-olive/35 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary",
+            compact ? "h-3.5 w-3.5" : "h-4 w-4",
+          )}
+        />
+      ) : null}
     </a>
   );
 }
 
 export function PropertyContactsPanel({
   phone,
+  phoneLabel = null,
+  phoneName = null,
+  extraPhones = [],
   websiteUrl,
-  email,
   whatsappUrl,
   telegramUrl,
   vkUrl,
   maxUrl,
   okUrl,
+  text,
+  variant = "default",
+  secondaryContactsCompact = false,
 }: PropertyContactsPanelProps) {
   const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
-  const isLikelyMobile =
-    typeof window !== "undefined" &&
-    (window.matchMedia("(pointer: coarse)").matches ||
-      /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(window.navigator.userAgent));
-
+  const isCompact = variant === "compact";
+  const isSecondaryContactsCompact = isCompact || secondaryContactsCompact;
   const preparedPhone = phone?.trim() ? phone.trim() : null;
+  const preparedExtraPhones = extraPhones
+    .map((item) => ({
+      phone: item.phone.trim(),
+      label: item.label?.trim() || null,
+      name: item.name?.trim() || null,
+    }))
+    .filter((item) => item.phone.length > 0);
   const preparedWebsiteUrl = websiteUrl?.trim() ? websiteUrl.trim() : null;
-  const preparedEmail = email?.trim() ? email.trim() : null;
-  const preparedWhatsappUrl = whatsappUrl?.trim() ? whatsappUrl.trim() : null;
+  const preparedWhatsappUrl = normalizeWhatsappUrl(whatsappUrl);
   const preparedTelegramUrl = normalizeTelegramProfileUrl(telegramUrl);
-  const preparedVkUrl = vkUrl?.trim() ? vkUrl.trim() : null;
-  const preparedMaxUrl = maxUrl?.trim() ? maxUrl.trim() : null;
-  const preparedOkUrl = okUrl?.trim() ? okUrl.trim() : null;
+  const preparedVkUrl = normalizeVkProfileUrl(vkUrl);
+  const preparedMaxUrl = normalizeMaxProfileUrl(maxUrl);
+  const preparedOkUrl = normalizeOkProfileUrl(okUrl);
+  const normalizedWebsiteHref = preparedWebsiteUrl ? normalizeWebsiteUrl(preparedWebsiteUrl) : null;
   const [failedWebsiteFaviconUrl, setFailedWebsiteFaviconUrl] = useState<string | null>(null);
+  const copy = {
+    emptyState: text?.emptyState ?? "Контакты владельца пока не добавлены.",
+    primaryPhoneEyebrow: text?.primaryPhoneEyebrow ?? "Телефон владельца",
+    primaryPhoneFallbackName: text?.primaryPhoneFallbackName ?? "Основной номер для связи",
+    secondaryContactsEyebrow: text?.secondaryContactsEyebrow ?? "Другие способы связи",
+    websiteLabel: text?.websiteLabel ?? "Сайт владельца",
+    websiteCaptionFallback: text?.websiteCaptionFallback ?? "Открыть сайт владельца",
+    whatsappCaption: text?.whatsappCaption ?? "Открыть чат с владельцем",
+    telegramCaption: text?.telegramCaption ?? "Написать в Telegram",
+    vkCaption: text?.vkCaption ?? "Открыть страницу VK",
+    maxCaption: text?.maxCaption ?? "Открыть профиль Max",
+    okCaption: text?.okCaption ?? "Открыть профиль в Одноклассниках",
+  } satisfies Required<PropertyContactsPanelText>;
 
-  const websiteFaviconUrl = useMemo(
-    () => buildWebsiteFaviconUrl(preparedWebsiteUrl),
-    [preparedWebsiteUrl],
-  );
+  const websiteFaviconUrl = buildWebsiteFaviconUrl(preparedWebsiteUrl);
+  const websiteHostname = readWebsiteHostname(preparedWebsiteUrl);
+  const websiteCaption = formatWebsiteCaption(websiteHostname, copy.websiteCaptionFallback);
   const shouldShowWebsiteFavicon = Boolean(
     websiteFaviconUrl && websiteFaviconUrl !== failedWebsiteFaviconUrl,
   );
 
-  const phoneHref = useMemo(() => {
-    if (!preparedPhone) {
-      return null;
-    }
+  const phoneItems = [
+    preparedPhone
+      ? {
+          key: "primary",
+          href: normalizePhoneHref(preparedPhone),
+          label: phoneLabel?.trim() || preparedPhone,
+          name: phoneName?.trim() || null,
+        }
+      : null,
+    ...preparedExtraPhones.map((item, index) => ({
+      key: `extra-${index}`,
+      href: normalizePhoneHref(item.phone),
+      label: item.label || item.phone,
+      name: item.name,
+    })),
+  ].filter((item): item is PhoneItem => item !== null);
 
-    const normalized = normalizePhoneHref(preparedPhone);
-    return normalized ? `tel:${normalized}` : null;
-  }, [preparedPhone]);
+  const primaryPhone = phoneItems[0] ?? null;
+  const extraPhoneItems = phoneItems.slice(1);
 
-  const actions = [
+  const actions: ContactAction[] = [
     {
       id: "whatsapp",
       label: "WhatsApp",
+      compactLabel: "WA",
       href: preparedWhatsappUrl ?? "",
-      short: "WA",
       brand: "whatsapp",
+      caption: copy.whatsappCaption,
       className:
-        "border-[#25D366]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(37,211,102,0.12))] hover:border-[#25D366]/38 hover:shadow-[0_16px_32px_rgba(37,211,102,0.16),inset_0_1px_0_rgba(255,255,255,0.96)]",
+        "border-[#25D366]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(37,211,102,0.12))] hover:border-[#25D366]/34 hover:shadow-[0_16px_32px_rgba(37,211,102,0.14)]",
     },
     {
       id: "telegram",
       label: "Telegram",
+      compactLabel: "TG",
       href: preparedTelegramUrl ?? "",
-      short: "TG",
       brand: "telegram",
+      caption: copy.telegramCaption,
       className:
-        "border-[#27A7E7]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(39,167,231,0.12))] hover:border-[#27A7E7]/38 hover:shadow-[0_16px_32px_rgba(39,167,231,0.16),inset_0_1px_0_rgba(255,255,255,0.96)]",
+        "border-[#27A7E7]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(39,167,231,0.12))] hover:border-[#27A7E7]/34 hover:shadow-[0_16px_32px_rgba(39,167,231,0.14)]",
     },
     {
       id: "vk",
       label: "VK",
+      compactLabel: "VK",
       href: preparedVkUrl ?? "",
-      short: "VK",
       brand: "vk",
+      caption: copy.vkCaption,
       className:
-        "border-[#0077FF]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(0,119,255,0.12))] hover:border-[#0077FF]/38 hover:shadow-[0_16px_32px_rgba(0,119,255,0.16),inset_0_1px_0_rgba(255,255,255,0.96)]",
+        "border-[#0077FF]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(0,119,255,0.12))] hover:border-[#0077FF]/34 hover:shadow-[0_16px_32px_rgba(0,119,255,0.14)]",
     },
     {
       id: "max",
       label: "Max",
+      compactLabel: "Max",
       href: preparedMaxUrl ?? "",
-      short: "MX",
       brand: "max",
+      caption: copy.maxCaption,
       className:
-        "border-[#FF7A1A]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(255,122,26,0.12))] hover:border-[#FF7A1A]/38 hover:shadow-[0_16px_32px_rgba(255,122,26,0.16),inset_0_1px_0_rgba(255,255,255,0.96)]",
+        "border-[#FF7A1A]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(255,122,26,0.12))] hover:border-[#FF7A1A]/34 hover:shadow-[0_16px_32px_rgba(255,122,26,0.14)]",
     },
     {
       id: "ok",
-      label: "РћРґРЅРѕРєР»Р°СЃСЃРЅРёРєРё",
+      compactLabel: "OK",
+      label: "Одноклассники",
       href: preparedOkUrl ?? "",
-      short: "OK",
       brand: "ok",
+      caption: copy.okCaption,
       className:
-        "border-[#EE8208]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(238,130,8,0.12))] hover:border-[#EE8208]/38 hover:shadow-[0_16px_32px_rgba(238,130,8,0.16),inset_0_1px_0_rgba(255,255,255,0.96)]",
+        "border-[#EE8208]/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(238,130,8,0.12))] hover:border-[#EE8208]/34 hover:shadow-[0_16px_32px_rgba(238,130,8,0.14)]",
     },
-  ] satisfies ContactAction[];
+  ];
 
   const visibleActions = actions.filter((item) => item.href.trim().length > 0);
-
-  const hasAnyContact = Boolean(
-    preparedPhone || preparedWebsiteUrl || preparedEmail || visibleActions.length > 0,
-  );
+  const hasSecondaryContacts = Boolean(normalizedWebsiteHref || visibleActions.length > 0);
+  const hasAnyContact = Boolean(phoneItems.length > 0 || hasSecondaryContacts);
 
   return (
-    <div className="space-y-3">
-      {!hasAnyContact ? (
-        <p className="text-sm text-olive/60">РљРѕРЅС‚Р°РєС‚С‹ РІР»Р°РґРµР»СЊС†Р° РїРѕРєР° РЅРµ РґРѕР±Р°РІР»РµРЅС‹.</p>
-      ) : null}
+    <div className={cn("space-y-4", isCompact && "space-y-3")}>
+      {!hasAnyContact ? <p className="text-sm text-olive/60">{copy.emptyState}</p> : null}
 
-      {hasAnyContact ? (
-        <div className="flex flex-wrap gap-2">
-          {preparedPhone ? (
-            <button
-              type="button"
-              onClick={() => setIsPhoneExpanded((value) => !value)}
-              title={isPhoneExpanded ? "РЎРєСЂС‹С‚СЊ С‚РµР»РµС„РѕРЅ" : "РџРѕРєР°Р·Р°С‚СЊ С‚РµР»РµС„РѕРЅ"}
-              aria-label={isPhoneExpanded ? "РЎРєСЂС‹С‚СЊ С‚РµР»РµС„РѕРЅ" : "РџРѕРєР°Р·Р°С‚СЊ С‚РµР»РµС„РѕРЅ"}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[16px] border border-primary/22 bg-[linear-gradient(145deg,rgba(15,118,110,0.98),rgba(14,116,144,0.92))] text-white shadow-[0_16px_32px_rgba(15,118,110,0.28),inset_0_1px_0_rgba(255,255,255,0.18)] transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-terra/30"
+      {primaryPhone ? (
+        <div
+          className={cn(
+            "rounded-[24px] border border-primary/14 bg-[linear-gradient(160deg,rgba(247,251,250,0.96),rgba(229,245,243,0.98))] shadow-[0_18px_40px_rgba(15,118,110,0.08)]",
+            isCompact ? "p-3" : "p-4",
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-[16px] bg-[linear-gradient(145deg,rgba(15,118,110,0.98),rgba(14,116,144,0.92))] text-white shadow-[0_16px_32px_rgba(15,118,110,0.22)]",
+                isCompact ? "h-9 w-9" : "h-11 w-11",
+              )}
             >
               <PhoneIcon />
-            </button>
-          ) : null}
-
-          {preparedWebsiteUrl ? (
-            <ContactIconLink
-              label="РЎР°Р№С‚"
-              href={preparedWebsiteUrl}
-              short="WEB"
-              className="border-primary/16 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(14,116,144,0.10))] text-primary hover:border-primary/32 hover:shadow-[0_16px_30px_rgba(14,116,144,0.14),inset_0_1px_0_rgba(255,255,255,0.96)]"
-            >
-              {shouldShowWebsiteFavicon ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={websiteFaviconUrl!}
-                  alt=""
-                  aria-hidden="true"
-                  className="h-4 w-4 rounded-sm object-contain"
-                  onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
-                />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/72">
+                {copy.primaryPhoneEyebrow}
+              </p>
+              {primaryPhone.href ? (
+                <a
+                  href={primaryPhone.href}
+                  className={cn(
+                    "mt-2 block font-semibold leading-tight text-olive transition-colors hover:text-primary",
+                    isCompact ? "text-base" : "text-lg",
+                  )}
+                >
+                  {primaryPhone.label}
+                </a>
               ) : (
-                <GlobeIcon />
+                <p
+                  className={cn(
+                    "mt-2 font-semibold leading-tight text-olive",
+                    isCompact ? "text-base" : "text-lg",
+                  )}
+                >
+                  {primaryPhone.label}
+                </p>
               )}
-            </ContactIconLink>
+              <p className={cn("mt-1 text-olive/58", isCompact ? "text-[13px]" : "text-sm")}>
+                {primaryPhone.name || copy.primaryPhoneFallbackName}
+              </p>
+            </div>
+          </div>
+
+          {extraPhoneItems.length > 0 ? (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setIsPhoneExpanded((value) => !value)}
+                aria-expanded={isPhoneExpanded}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-[18px] border border-primary/10 bg-white/82 text-left shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition-all duration-200 hover:border-primary/18 hover:bg-white focus:outline-none focus:ring-2 focus:ring-terra/25",
+                  isCompact ? "px-3.5 py-2.5" : "px-4 py-3",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-olive">Дополнительные</span>
+                  <span className="mt-0.5 block text-xs text-olive/55">
+                    {isPhoneExpanded
+                      ? "Скрыть дополнительные номера"
+                      : `Показать ещё ${extraPhoneItems.length}`}
+                  </span>
+                </span>
+                <span className="ml-3 flex items-center gap-2">
+                  <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
+                    {extraPhoneItems.length}
+                  </span>
+                  <AppIcon
+                    icon={isPhoneExpanded ? ChevronUp : ChevronDown}
+                    className="h-4 w-4 text-primary"
+                  />
+                </span>
+              </button>
+            </div>
           ) : null}
 
-          {preparedEmail ? (
-            <a
-              href={`mailto:${preparedEmail}`}
-              title="Email"
-              aria-label="Email"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[16px] border border-terra/14 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(167,101,73,0.10))] text-terra shadow-[0_12px_28px_rgba(167,101,73,0.1),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:border-terra/28 hover:shadow-[0_16px_30px_rgba(167,101,73,0.14),inset_0_1px_0_rgba(255,255,255,0.96)] focus:outline-none focus:ring-2 focus:ring-terra/30"
-            >
-              <MailIcon />
-            </a>
-          ) : null}
+          {isPhoneExpanded ? (
+            <div className="mt-3 space-y-2">
+              {extraPhoneItems.map((item, index) => {
+                const content = (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-olive/45">
+                      {item.name || `Доп. номер ${index + 1}`}
+                    </p>
+                    <p className="mt-1 truncate text-base font-semibold text-olive">{item.label}</p>
+                  </>
+                );
 
-          {visibleActions.map((action) => (
-            <ContactIconLink
-              key={action.id}
-              label={action.label}
-              href={action.href}
-              short={action.short}
-              brand={action.brand}
-              className={action.className}
-            >
-              <ContactBrandMark brand={action.brand} bare className="h-5 w-5" />
-            </ContactIconLink>
-          ))}
+                return item.href ? (
+                  <a
+                    key={item.key}
+                    href={item.href}
+                    className={cn(
+                      "block rounded-[18px] border border-white/80 bg-white/88 shadow-sm transition-colors hover:border-primary/14 hover:text-primary",
+                      isCompact ? "px-3.5 py-2.5" : "px-4 py-3",
+                    )}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div
+                    key={item.key}
+                    className={cn(
+                      "rounded-[18px] border border-white/80 bg-white/88 shadow-sm",
+                      isCompact ? "px-3.5 py-2.5" : "px-4 py-3",
+                    )}
+                  >
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {preparedPhone && isPhoneExpanded ? (
-        <div className="inline-flex max-w-full items-center gap-2 rounded-xl bg-cream px-3 py-2 text-sm">
-          <span className="text-olive/70">РўРµР»РµС„РѕРЅ:</span>
-          {isLikelyMobile && phoneHref ? (
-            <a
-              href={phoneHref}
-              className="font-semibold text-olive hover:text-terra hover:underline"
-            >
-              {preparedPhone}
-            </a>
-          ) : (
-            <span className="font-semibold text-olive">{preparedPhone}</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setIsPhoneExpanded(false)}
-            aria-label="РЎРєСЂС‹С‚СЊ С‚РµР»РµС„РѕРЅ"
-            className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-semibold text-olive shadow-sm hover:bg-sand"
+      {hasSecondaryContacts ? (
+        <div className={cn(isSecondaryContactsCompact ? "space-y-2.5" : "space-y-2")}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
+            {copy.secondaryContactsEyebrow}
+          </p>
+
+          <div
+            className={cn(
+              isSecondaryContactsCompact ? "flex flex-wrap gap-1.5" : "space-y-2",
+            )}
           >
-            x
-          </button>
+            {normalizedWebsiteHref ? (
+              <ContactChannelLink
+                label={copy.websiteLabel}
+                href={normalizedWebsiteHref}
+                caption={websiteCaption}
+                compact={isSecondaryContactsCompact}
+                iconOnlyCompact={isSecondaryContactsCompact}
+                className="border-primary/16 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(14,116,144,0.10))] hover:border-primary/30 hover:shadow-[0_16px_30px_rgba(14,116,144,0.12)]"
+                icon={
+                  shouldShowWebsiteFavicon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={websiteFaviconUrl!}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-5 w-5 rounded-sm object-contain"
+                      onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                    />
+                  ) : (
+                    <GlobeIcon />
+                  )
+                }
+              />
+            ) : null}
+
+            {visibleActions.map((action) => (
+              <ContactChannelLink
+                key={action.id}
+                label={action.id === "ok" ? "Одноклассники" : action.label}
+                compactLabel={action.compactLabel}
+                href={action.href}
+                caption={action.caption}
+                compact={isSecondaryContactsCompact}
+                iconOnlyCompact={isSecondaryContactsCompact}
+                compactDescription={action.compactDescription}
+                className={action.className}
+                icon={<ContactBrandMark brand={action.brand} bare className="h-5 w-5" />}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

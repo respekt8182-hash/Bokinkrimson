@@ -22,7 +22,7 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
           type="button"
           onClick={() => setTab("login")}
           className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-semibold transition",
+            "inline-flex min-h-10 items-center rounded-lg px-3.5 py-1.5 text-sm font-semibold transition",
             isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
           )}
         >
@@ -32,7 +32,7 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
           type="button"
           onClick={() => setTab("register")}
           className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-semibold transition",
+            "inline-flex min-h-10 items-center rounded-lg px-3.5 py-1.5 text-sm font-semibold transition",
             !isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
           )}
         >
@@ -94,4 +94,3 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
     </div>
   );
 }
-

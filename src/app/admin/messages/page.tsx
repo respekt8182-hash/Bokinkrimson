@@ -1,6 +1,11 @@
 // Next.js page for route /admin/messages.
 import { AdminMessageSourceType } from "@prisma/client";
 import { AdminMessageDeleteButton } from "@/components/admin/admin-message-delete-button";
+import {
+  AdminEmptyState,
+  AdminPageHeader,
+  AdminStatCard,
+} from "@/components/admin/admin-ui";
 import { serializeAdminMessage } from "@/lib/admin-messages";
 import { db } from "@/lib/db";
 
@@ -37,31 +42,20 @@ export default async function AdminMessagesPage() {
   const excursionCount = items.filter((item) => item.sourceType === AdminMessageSourceType.EXCURSION).length;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl text-olive">Сообщения пользователей</h1>
-      <p className="text-sm text-olive/70">
-        Сообщения из рабочих разделов объектов и экскурсий. Сообщение можно удалить после обработки.
-      </p>
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Сообщения"
+        description="Сообщения из карточек жилья и экскурсий."
+      />
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">Всего</p>
-          <p className="text-xl font-semibold text-olive">{items.length}</p>
-        </div>
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">По объектам</p>
-          <p className="text-xl font-semibold text-olive">{objectCount}</p>
-        </div>
-        <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">По экскурсиям</p>
-          <p className="text-xl font-semibold text-olive">{excursionCount}</p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <AdminStatCard label="Всего" value={items.length} />
+        <AdminStatCard label="По жилью" value={objectCount} />
+        <AdminStatCard label="По экскурсиям" value={excursionCount} />
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-olive/30 p-4 text-sm text-olive/70">
-          Сообщений пока нет.
-        </p>
+        <AdminEmptyState title="Сообщений пока нет" description="Новые обращения появятся здесь." />
       ) : (
         <div className="space-y-3">
           {items.map((item) => {

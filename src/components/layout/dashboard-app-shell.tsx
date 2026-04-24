@@ -24,7 +24,6 @@ import {
 } from "react";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
-import { AdminMessageWidget } from "@/components/support/admin-message-widget";
 
 // Global owner-dashboard shell:
 // - top desktop nav
@@ -538,7 +537,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
         </aside>
       </div>
 
-      <AdminMessageWidget />
     </div>
   );
 }

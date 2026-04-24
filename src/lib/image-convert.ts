@@ -6,6 +6,7 @@ import {
   supportedPhotoUploadExtensions,
   supportedPhotoUploadMimeTypes,
 } from "@/lib/photo-upload";
+import { sanitizeStoredFileName } from "@/lib/upload-validation";
 
 const WEBP_MIME_TYPE = "image/webp";
 const defaultWebpQuality = 82;
@@ -56,8 +57,7 @@ export function replaceFileExtension(fileName: string, extension: string): strin
 }
 
 export function sanitizeUploadedFileName(fileName: string, fallback = "file"): string {
-  const sanitized = fileName.trim().replace(/[^a-zA-Z0-9_.-]/g, "_");
-  return sanitized || fallback;
+  return sanitizeStoredFileName(fileName, fallback);
 }
 
 function sniffImageTypeByMagicBytes(bytes: Buffer): SupportedImageUploadType | "webp" | null {

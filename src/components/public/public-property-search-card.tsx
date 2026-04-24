@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   AirVent,
@@ -15,25 +16,27 @@ import {
   Mountain,
   PanelsTopLeft,
   PawPrint,
-  Star,
   Users,
   Van,
   WashingMachine,
   Waves,
   Wifi,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 
 const SWIPE_THRESHOLD = 50;
+const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
 type PublicPropertySearchCardProps = {
   item: PublicCatalogItem;
   initialIsFavorite: boolean;
   view?: "list" | "grid";
+  prioritizeImage?: boolean;
   searchGuests?: number | null;
   isHighlighted?: boolean;
   isNew?: boolean;
@@ -41,7 +44,7 @@ type PublicPropertySearchCardProps = {
 };
 
 function formatMoney(value: number, currency: string): string {
-  const amount = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+  const amount = ruNumberFormat.format(value);
   if (currency === "RUB") {
     return `${amount} ₽`;
   }
@@ -217,10 +220,11 @@ function resolveStatusBadges(input: PublicCatalogItem): StatusBadge[] {
   return badges.slice(0, 3);
 }
 
-export function PublicPropertySearchCard({
+function PublicPropertySearchCardInner({
   item,
   initialIsFavorite,
   view = "list",
+  prioritizeImage = false,
   searchGuests = null,
   isHighlighted = false,
   isNew = false,
@@ -228,12 +232,12 @@ export function PublicPropertySearchCard({
 }: PublicPropertySearchCardProps) {
   const titleId = `property-card-title-${item.id}`;
   const cardRef = useRef<HTMLElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
   const swipeHandledRef = useRef(false);
   const [imageIndex, setImageIndex] = useState(0);
   const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
+  const [referenceOptimizedSrc, setReferenceOptimizedSrc] = useState<string | null>(null);
   const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(() => new Set());
 
   const imageCandidates = useMemo(() => {
@@ -250,7 +254,14 @@ export function PublicPropertySearchCard({
   const safeImageIndex =
     images.length > 0 ? ((imageIndex % images.length) + images.length) % images.length : 0;
   const currentImage = images.length > 0 ? images[safeImageIndex] : null;
-  const isImageLoaded = currentImage !== null && loadedImageUrl === currentImage;
+  const readyImages = useCarouselImagePreload(images, safeImageIndex, {
+    enabled: images.length > 1,
+    preloadCount: 2,
+    referenceOptimizedSrc,
+  });
+  const isImageLoaded =
+    currentImage !== null && (loadedImageUrl === currentImage || readyImages.has(currentImage));
+  const shouldShowImageSkeleton = !isImageLoaded && loadedImageUrl === null;
 
   const priceSummary = useMemo(() => buildPriceSummary(item), [item]);
   const badges = useMemo(() => resolveStatusBadges(item), [item]);
@@ -272,7 +283,10 @@ export function PublicPropertySearchCard({
     () => item.amenityHighlights.slice(0, amenityLimit),
     [amenityLimit, item.amenityHighlights],
   );
-  const remainingAmenitiesCount = Math.max(0, item.amenityHighlights.length - amenityHighlights.length);
+  const remainingAmenitiesCount = Math.max(
+    0,
+    item.amenityHighlights.length - amenityHighlights.length,
+  );
 
   const guestsForLinks = useMemo(() => {
     if (typeof searchGuests === "number" && Number.isFinite(searchGuests) && searchGuests > 0)
@@ -328,13 +342,6 @@ export function PublicPropertySearchCard({
     });
   }
 
-  function handleImageRef(node: HTMLImageElement | null) {
-    imageRef.current = node;
-    if (!node || !currentImage) return;
-    if (node.complete && node.naturalWidth > 0)
-      setLoadedImageUrl((prev) => (prev === currentImage ? prev : currentImage));
-  }
-
   function handleOverlayTouchStart(event: React.TouchEvent<HTMLAnchorElement>) {
     if (images.length <= 1) return;
     swipeHandledRef.current = false;
@@ -376,27 +383,31 @@ export function PublicPropertySearchCard({
     >
       {currentImage ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            key={currentImage}
-            ref={handleImageRef}
+          <Image
             src={currentImage}
             alt={item.name}
-            loading="lazy"
-            decoding="async"
+            priority={prioritizeImage}
+            loading={prioritizeImage ? "eager" : "lazy"}
+            fetchPriority={prioritizeImage ? "high" : "low"}
+            width={400}
+            height={300}
+            quality={72}
             sizes={
               isGrid
-                ? "(min-width: 1024px) 40vw, 100vw"
+                ? "(min-width: 1536px) 18vw, (min-width: 1280px) 22vw, (min-width: 1024px) 28vw, (min-width: 480px) 50vw, 100vw"
                 : "(min-width: 1280px) 280px, (min-width: 768px) 240px, 100vw"
             }
-            onLoad={() => setLoadedImageUrl(currentImage)}
+            onLoad={(event) => {
+              setLoadedImageUrl(currentImage);
+              setReferenceOptimizedSrc(event.currentTarget.currentSrc || event.currentTarget.src);
+            }}
             onError={handleImageError}
             className={cn(
               "card-img h-full w-full object-cover transition-all duration-500",
               isImageLoaded ? "opacity-100" : "opacity-0",
             )}
           />
-          {!isImageLoaded && (
+          {shouldShowImageSkeleton && (
             <div className="catalog-skeleton absolute inset-0" aria-hidden="true" />
           )}
         </>
@@ -428,12 +439,11 @@ export function PublicPropertySearchCard({
       )}
 
       {/* Favorite button */}
-      <div className="pointer-events-auto absolute right-2.5 top-2.5">
+      <div className="pointer-events-auto absolute right-2 top-2 z-30 p-1 sm:right-2.5 sm:top-2.5">
         <FavoriteToggleButton
-          propertyId={item.id}
+          itemId={item.id}
           initialIsFavorite={initialIsFavorite}
           variant="icon"
-          className="border-white/70 bg-white/90 text-olive/90 shadow-sm backdrop-blur-md hover:bg-white"
           onToggle={onWishlistToggle}
         />
       </div>
@@ -488,23 +498,24 @@ export function PublicPropertySearchCard({
   );
 
   // ── Rating block ──────────────────────────────────────────────────────
-  const ratingBlock = item.avgRating > 0 ? (
-    <div className="flex items-center gap-2">
-      <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
-        {item.avgRating.toFixed(1)}
-      </span>
-      <div className="min-w-0">
-        <span className="text-[12px] font-semibold text-olive">
-          {getRatingText(item.avgRating)}
+  const ratingBlock =
+    item.avgRating > 0 ? (
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
+          {item.avgRating.toFixed(1)}
         </span>
-        {item.reviewsCount > 0 && (
-          <span className="ml-1 text-[12px] text-olive/45">
-            · {formatReviewsLabel(item.reviewsCount)}
+        <div className="min-w-0">
+          <span className="text-[12px] font-semibold text-olive">
+            {getRatingText(item.avgRating)}
           </span>
-        )}
+          {item.reviewsCount > 0 && (
+            <span className="ml-1 text-[12px] text-olive/45">
+              · {formatReviewsLabel(item.reviewsCount)}
+            </span>
+          )}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   // ── Sea distance tag ──────────────────────────────────────────────────
   const seaTag = seaDistanceLabel ? (
@@ -523,26 +534,27 @@ export function PublicPropertySearchCard({
   ) : null;
 
   // ── Amenities ─────────────────────────────────────────────────────────
-  const amenitiesBlock = amenityHighlights.length > 0 ? (
-    <div className="flex flex-wrap gap-1.5" role="list" aria-label="Ключевые удобства">
-      {amenityHighlights.map((amenity) => (
-        <span
-          key={`${item.id}-amenity-${amenity}`}
-          title={amenity}
-          role="listitem"
-          className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
-        >
-          <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{amenity}</span>
-        </span>
-      ))}
-      {remainingAmenitiesCount > 0 && (
-        <span className="inline-flex items-center rounded-md border border-dashed border-olive/12 bg-white px-2 py-0.5 text-[11px] font-semibold text-olive/45">
-          +{remainingAmenitiesCount}
-        </span>
-      )}
-    </div>
-  ) : null;
+  const amenitiesBlock =
+    amenityHighlights.length > 0 ? (
+      <div className="flex flex-wrap gap-1.5" role="list" aria-label="Ключевые удобства">
+        {amenityHighlights.map((amenity) => (
+          <span
+            key={`${item.id}-amenity-${amenity}`}
+            title={amenity}
+            role="listitem"
+            className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
+          >
+            <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{amenity}</span>
+          </span>
+        ))}
+        {remainingAmenitiesCount > 0 && (
+          <span className="inline-flex items-center rounded-md border border-dashed border-olive/12 bg-white px-2 py-0.5 text-[11px] font-semibold text-olive/45">
+            +{remainingAmenitiesCount}
+          </span>
+        )}
+      </div>
+    ) : null;
 
   // ── GRID VIEW ─────────────────────────────────────────────────────────
   if (isGrid) {
@@ -785,3 +797,26 @@ export function PublicPropertySearchCard({
     </article>
   );
 }
+
+function arePublicPropertySearchCardPropsEqual(
+  prev: PublicPropertySearchCardProps,
+  next: PublicPropertySearchCardProps,
+) {
+  return (
+    prev.item === next.item &&
+    prev.initialIsFavorite === next.initialIsFavorite &&
+    prev.view === next.view &&
+    prev.prioritizeImage === next.prioritizeImage &&
+    prev.searchGuests === next.searchGuests &&
+    prev.isHighlighted === next.isHighlighted &&
+    prev.isNew === next.isNew &&
+    prev.onWishlistToggle === next.onWishlistToggle
+  );
+}
+
+export const PublicPropertySearchCard = memo(
+  PublicPropertySearchCardInner,
+  arePublicPropertySearchCardPropsEqual,
+);
+
+PublicPropertySearchCard.displayName = "PublicPropertySearchCard";

@@ -3,7 +3,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Save, Trash2, UserCheck } from "lucide-react";
+import { Save, UserCheck } from "lucide-react";
+import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 
 type PropertyData = {
   id: string;
@@ -64,13 +65,12 @@ const PROPERTY_TYPES = [
   { value: "hostel", label: "Хостел" },
   { value: "camp", label: "Турбаза / Кемпинг" },
   { value: "sanatorium", label: "Санаторий" },
-  { value: "villa", label: "Вилла" },
+  { value: "villa", label: "Р’РёР»Р»Р°" },
 ];
 
 export function AdminPropertyEditor({ property, users, locations }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -117,26 +117,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm("Удалить этот объект? Это действие необратимо.")) return;
-    setDeleting(true);
-    try {
-      const res = await fetch(`/api/admin/properties/${property.id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        router.push("/admin/objects");
-        router.refresh();
-      } else {
-        setMessage({ type: "err", text: "Ошибка удаления" });
-        setDeleting(false);
-      }
-    } catch {
-      setMessage({ type: "err", text: "Ошибка сети" });
-      setDeleting(false);
-    }
-  }
-
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {message && (
@@ -151,11 +131,10 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </div>
       )}
 
-      {/* Owner assignment */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-olive">
           <UserCheck className="h-5 w-5 text-primary" />
-          Владелец
+          Р’Р»Р°РґРµР»РµС†
         </h2>
         <Field label="Назначить владельца">
           <select name="ownerId" defaultValue={property.ownerId} className={select}>
@@ -168,7 +147,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </Field>
       </section>
 
-      {/* Basic info */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Основная информация</h2>
         <div className="grid gap-4 md:grid-cols-2">
@@ -199,7 +177,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </div>
       </section>
 
-      {/* Location */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Локация</h2>
         <div className="grid gap-4 md:grid-cols-2">
@@ -225,7 +202,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </div>
       </section>
 
-      {/* Description */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Описание</h2>
         <Field label="Описание">
@@ -238,7 +214,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </Field>
       </section>
 
-      {/* Contacts */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Контакты</h2>
         <div className="grid gap-4 md:grid-cols-2">
@@ -263,7 +238,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </div>
       </section>
 
-      {/* Rules */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Правила и услуги</h2>
         <div className="grid gap-4 md:grid-cols-2">
@@ -273,7 +247,7 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
           <Field label="Выезд до">
             <input type="time" name="checkOutUntil" defaultValue={property.checkOutUntil ?? ""} className={input} />
           </Field>
-          <Field label="Дети">
+          <Field label="Р”РµС‚Рё">
             <select name="childrenAllowed" defaultValue={property.childrenAllowed === null ? "" : String(property.childrenAllowed)} className={select}>
               <option value="">Не указано</option>
               <option value="true">Разрешены</option>
@@ -305,7 +279,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </div>
       </section>
 
-      {/* Admin notes */}
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 text-lg font-semibold text-olive">Заметки модерации</h2>
         <Field label="Комментарий администратора">
@@ -318,7 +291,6 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         </Field>
       </section>
 
-      {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
@@ -328,15 +300,15 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
           <Save className="h-4 w-4" />
           {saving ? "Сохранение..." : "Сохранить"}
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting}
-          className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
-        >
-          <Trash2 className="h-4 w-4" />
-          {deleting ? "Удаление..." : "Удалить"}
-        </button>
+        {property.status === "DRAFT" ? (
+          <AdminDeleteDraftButton
+            endpoint={`/api/admin/properties/${property.id}`}
+            draftLabel="Черновик объекта"
+            entityName={property.name ?? "Объект без названия"}
+            redirectTo="/admin/objects"
+            buttonClassName="border border-red-200 bg-red-50 px-6 py-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+          />
+        ) : null}
       </div>
     </form>
   );

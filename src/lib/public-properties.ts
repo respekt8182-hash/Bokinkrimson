@@ -5,6 +5,7 @@ import {
   PropertyStatus,
   ReviewStatus,
 } from "@prisma/client";
+import { cache } from "react";
 import {
   crimeaLocationById,
   crimeaLocations,
@@ -15,7 +16,7 @@ import { findCrimeaSettlementById, findCrimeaSettlementByName } from "@/lib/crim
 import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { normalizeLocationName, searchLocationDirectory } from "@/lib/location-directory";
-import { serializeMedia } from "@/lib/media";
+import { normalizeLegacyFotoImageUrl, serializeMedia } from "@/lib/media";
 import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
 import {
   parsePublishedPropertySnapshot,
@@ -25,6 +26,7 @@ import {
 import { serializeReview } from "@/lib/reviews";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import { serializeRoom, roomInclude } from "@/lib/rooms";
+import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 import type { FaqItem } from "@/types/excursions";
 
 // Public catalog domain layer:
@@ -54,6 +56,8 @@ export type PublicCatalogQuery = {
   sort?: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
   page?: number;
   pageSize?: number;
+  trackSearchImpressions?: boolean;
+  allowLargePageSize?: boolean;
 };
 
 export type PublicCatalogRoomPreview = {
@@ -446,16 +450,26 @@ export function buildPropertySlug(name: string | null, id: string): string {
   return `${base}-${id}`;
 }
 
-// Supports both raw id and slug with trailing id segment.
+const publicEntityIdPatterns = [
+  /^c[a-z0-9]{10,}$/i,
+  /^(?:property|excursion)_[a-z0-9]{10,}$/i,
+  /^demo_(?:property|excursion|tour)_\d+$/i,
+];
+
+function isPublicEntityId(value: string): boolean {
+  return publicEntityIdPatterns.some((pattern) => pattern.test(value));
+}
+
+// Supports both raw id and slug with trailing id segment, including seeded demo ids.
 export function extractPropertyId(identifier: string): string {
   const clean = identifier.trim();
-  if (/^c[a-z0-9]{10,}$/i.test(clean)) {
+  if (isPublicEntityId(clean)) {
     return clean;
   }
 
   const parts = clean.split("-");
   const last = parts[parts.length - 1] ?? "";
-  if (/^c[a-z0-9]{10,}$/i.test(last)) {
+  if (isPublicEntityId(last)) {
     return last;
   }
 
@@ -707,7 +721,9 @@ export function resolvePublicCatalogDisplayState(property: {
     imageUrls: (snapshot
       ? snapshot.media.map((media) => media.url)
       : property.media.map((media) => media.url)
-    ).filter((url) => url.trim().length > 0),
+    )
+      .map((url) => normalizeLegacyFotoImageUrl(url))
+      .filter((url) => url.trim().length > 0),
     rooms,
   };
 }
@@ -1204,7 +1220,8 @@ function parseCatalogSort(
 // Main query used by /search page and /api/public/properties.
 export async function getPublicCatalog(query: PublicCatalogQuery): Promise<PublicCatalogResult> {
   const page = Math.max(1, query.page ?? 1);
-  const pageSize = Math.min(30, Math.max(1, query.pageSize ?? 30));
+  const pageSizeCap = query.allowLargePageSize ? 480 : 30;
+  const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
   const searchQuery = query.query?.trim() ?? "";
   const stayRange = resolveCatalogStayRange(query.checkIn, query.checkOut);
   const guestsCount =
@@ -1245,8 +1262,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       : null;
 
   const where: Prisma.PropertyWhereInput = {
-    status: PropertyStatus.PUBLISHED,
-    ownerDeletedAt: null,
+    ...buildPublishedPropertyVisibilityWhere(),
     ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
     ...(hasReviews ? { reviewsCount: { gt: 0 } } : {}),
   };
@@ -1475,10 +1491,11 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const safePage = Math.min(page, totalPages);
   const pagedRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pagedPropertyIds = pagedRows.map((entry) => entry.property.id);
+  const shouldTrackSearchImpressions = query.trackSearchImpressions !== false;
 
   // Fire-and-forget: track how many times each property has appeared in paginated results.
   // Used by the ranking formula (searchImpressions signal). Don't await — keep response fast.
-  if (pagedPropertyIds.length > 0) {
+  if (shouldTrackSearchImpressions && pagedPropertyIds.length > 0) {
     db.property
       .updateMany({
         where: { id: { in: pagedPropertyIds } },
@@ -1721,110 +1738,126 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   };
 }
 
-// Main query used by /crimea/[location]/[slug] and /api/public/properties/[identifier].
-export async function getPublicPropertyByIdentifier(
-  identifier: string,
-  expectedLocationId?: string | null,
-  viewerUserId?: string | null,
-): Promise<PublicPropertyCard | null> {
-  const id = extractPropertyId(identifier);
-
-  const property = await db.property.findFirst({
-    where: {
-      id,
-      status: PropertyStatus.PUBLISHED,
-      ownerDeletedAt: null,
+const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
+  owner: {
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      avatarUrl: true,
     },
+  },
+  media: {
+    where: { roomId: null },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  },
+  amenities: {
     include: {
-      owner: {
+      amenity: true,
+    },
+  },
+  customAmenities: true,
+  roomAmenitySettings: {
+    where: {
+      enabled: true,
+      isKeyAmenity: true,
+    },
+    orderBy: [{ updatedAt: "asc" }],
+    select: {
+      feature: {
         select: {
-          id: true,
-          email: true,
+          name: true,
+        },
+      },
+    },
+  },
+  reviews: {
+    where: {
+      status: ReviewStatus.ACTIVE,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 9,
+    include: {
+      user: {
+        select: {
           firstName: true,
           lastName: true,
           avatarUrl: true,
         },
       },
-      media: {
-        where: { roomId: null },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      },
-      amenities: {
-        include: {
-          amenity: true,
-        },
-      },
-      customAmenities: true,
-      roomAmenitySettings: {
-        where: {
-          enabled: true,
-          isKeyAmenity: true,
-        },
-        orderBy: [{ updatedAt: "asc" }],
-        select: {
-          feature: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-      reviews: {
-        where: {
-          status: ReviewStatus.ACTIVE,
-        },
-        orderBy: [{ createdAt: "desc" }],
-        take: 9,
-        include: {
-          user: {
-            select: {
-              firstName: true,
-              lastName: true,
-              avatarUrl: true,
-            },
-          },
-          ...(viewerUserId
-            ? {
-                reactions: {
-                  where: { userId: viewerUserId },
-                  select: { value: true },
-                  take: 1,
-                },
-              }
-            : {}),
-        },
-      },
-      rooms: {
-        where: { isActive: true },
-        orderBy: [{ updatedAt: "desc" }],
-        include: roomInclude,
-      },
     },
-  });
+  },
+  rooms: {
+    where: { isActive: true },
+    orderBy: [{ updatedAt: "desc" }],
+    include: roomInclude,
+  },
+});
 
-  if (!property) {
-    return null;
-  }
+type PublicPropertyRecord = Prisma.PropertyGetPayload<{
+  include: typeof publicPropertyInclude;
+}>;
 
+const getCachedPublicPropertyRecord = cache(
+  async (propertyId: string): Promise<PublicPropertyRecord | null> =>
+    db.property.findFirst({
+      where: {
+        id: propertyId,
+        ...buildPublishedPropertyVisibilityWhere(),
+      },
+      include: publicPropertyInclude,
+    }),
+);
+
+async function getReviewReactionById(
+  property: Pick<PublicPropertyRecord, "reviews">,
+  viewerUserId?: string | null,
+): Promise<Map<string, "LIKE" | "DISLIKE"> | null> {
+  const reviewReactionById =
+    viewerUserId && property.reviews.length > 0
+      ? new Map(
+          (
+            await db.reviewReaction.findMany({
+              where: {
+                userId: viewerUserId,
+                reviewId: { in: property.reviews.map((review) => review.id) },
+              },
+              select: {
+                reviewId: true,
+                value: true,
+              },
+            })
+          ).map((reaction) => [reaction.reviewId, reaction.value]),
+        )
+      : null;
+
+  return reviewReactionById;
+}
+
+function buildPublicPropertyCardFromRecord(
+  property: PublicPropertyRecord,
+  reviewReactionById: Map<string, "LIKE" | "DISLIKE"> | null,
+  options?: { usePublishedSnapshot?: boolean },
+): PublicPropertyCard {
   // When a published property has a pending owner edit under moderation, serve the
   // published snapshot (last approved version) instead of the live (unmoderated) data.
-  const snap = shouldUsePublishedSnapshot({
-    status: property.status,
-    pendingEditStatus: property.pendingEditStatus,
-    publishedSnapshot: property.publishedSnapshot,
-  })
-    ? parsePublishedPropertySnapshot(property.publishedSnapshot)
-    : null;
-
-  // For the location URL-match check, use the approved location (snapshot) when available.
-  const checkLocationId = snap?.property.locationId ?? property.locationId;
-  if (expectedLocationId && checkLocationId !== expectedLocationId) {
-    return null;
-  }
+  const snap =
+    options?.usePublishedSnapshot !== false &&
+    shouldUsePublishedSnapshot({
+      status: property.status,
+      pendingEditStatus: property.pendingEditStatus,
+      publishedSnapshot: property.publishedSnapshot,
+    })
+      ? parsePublishedPropertySnapshot(property.publishedSnapshot)
+      : null;
 
   // Content fields: use snapshot (approved) or live.
   const sp = snap?.property ?? null;
-  const displayMedia = snap ? snap.media : property.media.map(serializeMedia);
+  const displayMedia = (snap ? snap.media : property.media.map(serializeMedia)).map((media) => ({
+    ...media,
+    url: normalizeLegacyFotoImageUrl(media.url),
+  }));
   const displayAmenities = snap ? snap.amenities : property.amenities.map((item) => item.amenity);
   const displayCustomAmenities = snap
     ? snap.customAmenities
@@ -1970,7 +2003,12 @@ export async function getPublicPropertyByIdentifier(
     currency,
     avgRating: Number(property.avgRating),
     reviewsCount: property.reviewsCount,
-    reviews: property.reviews.map(serializeReview),
+    reviews: property.reviews.map((review) =>
+      serializeReview({
+        ...review,
+        currentUserReaction: reviewReactionById?.get(review.id) ?? null,
+      }),
+    ),
     owner: {
       id: property.owner.id,
       firstName: property.owner.firstName,
@@ -1978,4 +2016,57 @@ export async function getPublicPropertyByIdentifier(
       avatarUrl: property.owner.avatarUrl,
     },
   };
+}
+
+// Main query used by /crimea/[location]/[slug] and /api/public/properties/[identifier].
+export async function getPublicPropertyByIdentifier(
+  identifier: string,
+  expectedLocationId?: string | null,
+  viewerUserId?: string | null,
+): Promise<PublicPropertyCard | null> {
+  const id = extractPropertyId(identifier);
+  const property = await getCachedPublicPropertyRecord(id);
+
+  if (!property) {
+    return null;
+  }
+
+  const reviewReactionById = await getReviewReactionById(property, viewerUserId);
+  const item = buildPublicPropertyCardFromRecord(property, reviewReactionById, {
+    usePublishedSnapshot: true,
+  });
+
+  if (expectedLocationId && item.locationId !== expectedLocationId) {
+    return null;
+  }
+
+  return item;
+}
+
+export async function getOwnerPreviewPropertyByIdentifier(
+  identifier: string,
+  ownerId: string,
+  _expectedLocationId?: string | null,
+  viewerUserId?: string | null,
+): Promise<PublicPropertyCard | null> {
+  const id = extractPropertyId(identifier);
+  const property = await db.property.findFirst({
+    where: {
+      id,
+      ownerId,
+      ownerDeletedAt: null,
+    },
+    include: publicPropertyInclude,
+  });
+
+  if (!property) {
+    return null;
+  }
+
+  const reviewReactionById = await getReviewReactionById(property, viewerUserId);
+  const item = buildPublicPropertyCardFromRecord(property, reviewReactionById, {
+    usePublishedSnapshot: false,
+  });
+
+  return item;
 }

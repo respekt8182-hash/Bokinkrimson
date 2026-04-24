@@ -1,5 +1,4 @@
 // Next.js page for route /dashboard/objects/[id]/room-categories.
-import { PropertyStatus } from "@prisma/client";
 import { BedDouble, Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -8,27 +7,8 @@ import { RoomFundManager } from "@/components/rooms/room-fund-manager";
 import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  getPropertyWorkflowStatus,
-  getPropertyWorkflowStatusLabel,
-  getPropertyDisplayNumberFromOrderedIds,
-} from "@/lib/properties";
+import { getPropertyDisplayNumberFromOrderedIds } from "@/lib/properties";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
-
-function getStatusBadgeClass(status: PropertyStatus): string {
-  const workflowStatus = getPropertyWorkflowStatus(status, null);
-
-  switch (workflowStatus) {
-    case PropertyStatus.PUBLISHED:
-      return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
-    case PropertyStatus.PENDING_MODERATION:
-      return "bg-sky-100 text-sky-800 ring-1 ring-sky-200";
-    case PropertyStatus.REJECTED:
-      return "bg-red-100 text-red-800 ring-1 ring-red-200";
-    default:
-      return "bg-sand text-olive/70 ring-1 ring-olive/15";
-  }
-}
 
 type DashboardObjectRoomCategoriesPageProps = {
   params: Promise<{ id: string }>;
@@ -51,10 +31,6 @@ export default async function DashboardObjectRoomCategoriesPage({
       where: { id },
       select: {
         id: true,
-        name: true,
-        status: true,
-        pendingEditStatus: true,
-        moderationNotes: true,
         ownerId: true,
         ownerDeletedAt: true,
       },
@@ -105,27 +81,10 @@ export default async function DashboardObjectRoomCategoriesPage({
                     ID объекта: {displayPropertyNumber}
                   </p>
                   <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">Номера</h1>
-                  <p className="mt-0.5 text-sm text-olive/55">
-                    Категории номеров и цены
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-olive/45">
-                    {property.name ?? "Объект без названия"}
-                  </p>
                 </div>
               </div>
 
               <div className="flex w-full shrink-0 items-center justify-between gap-3 sm:w-auto sm:flex-col sm:items-end">
-                <span
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${getStatusBadgeClass(
-                    getPropertyWorkflowStatus(property.status, property.pendingEditStatus),
-                  )}`}
-                >
-                  {getPropertyWorkflowStatusLabel(
-                    property.status,
-                    property.moderationNotes,
-                    property.pendingEditStatus,
-                  )}
-                </span>
                 {!isCreateRequested ? (
                   <Link
                     href={`/dashboard/objects/${property.id}/room-categories?create=1#room-category-form`}
@@ -138,11 +97,6 @@ export default async function DashboardObjectRoomCategoriesPage({
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="rounded-xl bg-terra/5 px-4 py-3 text-[13px] leading-relaxed text-olive/70">
-          Создайте категории номеров вашего объекта. Для каждой категории укажите название, описание, вместимость и цены.
-          Нажмите «Создать номер», чтобы добавить первую категорию.
         </div>
 
         <RoomFundManager

@@ -178,21 +178,20 @@ export function CrimeaDistrictMapPicker({ value, onChange }: CrimeaDistrictMapPi
     };
 
     void setup();
+    const polygons = polygonsRef.current;
 
     return () => {
       mounted = false;
       mapRef.current?.destroy();
       mapRef.current = null;
-      polygonsRef.current.clear();
+      polygons.clear();
       setMapLoaded(false);
     };
-    // apiKey doesn't change after mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
 
   const selectedDistrict = value ? CRIMEA_DISTRICT_BY_SLUG[value] : null;
   const keyError = !apiKey
-    ? "Добавьте NEXT_PUBLIC_YANDEX_MAPS_API_KEY в .env для карты районов и округов."
+    ? "Добавьте NEXT_PUBLIC_YANDEX_MAPS_API_KEY в .env.local или .env для карты районов и округов."
     : "";
   const areaGroups = [
     {

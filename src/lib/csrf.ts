@@ -43,6 +43,14 @@ function resolveRequestProtocol(request: RequestOriginContext): string {
   return request.nextUrl.protocol.replace(/:$/, "");
 }
 
+function getOriginFromReferer(refererHeader: string | null): string | null {
+  if (!refererHeader) {
+    return null;
+  }
+
+  return normalizeOrigin(refererHeader);
+}
+
 export function getAllowedOrigins(request: RequestOriginContext): string[] {
   const allowedOrigins = new Set<string>([request.nextUrl.origin]);
   const protocol = resolveRequestProtocol(request);
@@ -78,16 +86,23 @@ export function getAllowedOrigins(request: RequestOriginContext): string[] {
 }
 
 export function isSameOrigin(request: RequestOriginContext): boolean {
-  const originHeader = request.headers.get("origin");
+  const allowedOrigins = getAllowedOrigins(request);
+  const secFetchSite = request.headers.get("sec-fetch-site")?.trim().toLowerCase();
 
-  if (!originHeader) {
-    return true;
-  }
-
-  const origin = normalizeOrigin(originHeader);
-  if (!origin) {
+  if (secFetchSite && !["same-origin", "same-site", "none"].includes(secFetchSite)) {
     return false;
   }
 
-  return getAllowedOrigins(request).includes(origin);
+  const originHeader = request.headers.get("origin");
+  if (originHeader) {
+    const origin = normalizeOrigin(originHeader);
+    return Boolean(origin && allowedOrigins.includes(origin));
+  }
+
+  const refererOrigin = getOriginFromReferer(request.headers.get("referer"));
+  if (refererOrigin) {
+    return allowedOrigins.includes(refererOrigin);
+  }
+
+  return true;
 }

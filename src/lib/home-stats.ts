@@ -1,15 +1,39 @@
-import { ExcursionStatus, PropertyStatus } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import {
   isConfiguredDatabaseReachable,
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
+import {
+  buildPublishedExcursionVisibilityWhere,
+  buildPublishedPropertyVisibilityWhere,
+} from "@/lib/public-visibility";
 
 export type HomeStats = {
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
 };
+
+const getCachedHomeStats = unstable_cache(
+  async (): Promise<HomeStats> => {
+    const [publishedPropertiesCount, publishedExcursionsCount] = await Promise.all([
+      db.property.count({
+        where: buildPublishedPropertyVisibilityWhere(),
+      }),
+      db.excursion.count({
+        where: buildPublishedExcursionVisibilityWhere(),
+      }),
+    ]);
+
+    return {
+      publishedPropertiesCount,
+      publishedExcursionsCount,
+    };
+  },
+  ["home-stats-v1"],
+  { revalidate: 600 },
+);
 
 export async function getHomeStats(): Promise<HomeStats> {
   const canUseFallback = process.env.NODE_ENV !== "production";
@@ -27,24 +51,7 @@ export async function getHomeStats(): Promise<HomeStats> {
   }
 
   try {
-    const [publishedPropertiesCount, publishedExcursionsCount] = await Promise.all([
-      db.property.count({
-        where: {
-          status: PropertyStatus.PUBLISHED,
-          ownerDeletedAt: null,
-        },
-      }),
-      db.excursion.count({
-        where: {
-          status: ExcursionStatus.PUBLISHED,
-        },
-      }),
-    ]);
-
-    return {
-      publishedPropertiesCount,
-      publishedExcursionsCount,
-    };
+    return await getCachedHomeStats();
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;

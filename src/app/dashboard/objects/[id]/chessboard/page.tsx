@@ -62,22 +62,24 @@ export default async function DashboardObjectChessboardPage({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <ObjectSectionNav propertyId={property.id} activeSection="chessboard" />
 
-      <div className="min-w-0 space-y-5">
-        <div className="rounded-2xl bg-cream p-4">
+      <div className="min-w-0 space-y-4">
+        <div className="rounded-xl border border-olive/10 bg-cream/70 px-3 py-3 shadow-[0_12px_30px_-30px_rgba(58,43,35,0.4)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-olive/60">
                 ID объекта: {displayPropertyNumber}
               </p>
-              <h1 className="text-3xl text-olive">Шахматка</h1>
-              <p className="mt-1 text-sm text-olive/70">Календарь занятости и цен по текущему объекту.</p>
+              <h1 className="text-2xl text-olive">Шахматка</h1>
+              <p className="mt-1 text-sm text-olive/68">
+                Календарь занятости и цен по текущему объекту.
+              </p>
             </div>
             <Link
               href={`/dashboard/objects/${property.id}/amenities`}
-              className="inline-flex items-center justify-center rounded-xl border border-terra/45 px-4 py-2.5 text-sm font-semibold text-terra hover:bg-terra/10"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-terra/40 px-3 text-xs font-semibold text-terra transition hover:bg-terra/10 sm:text-sm"
             >
               Назад к удобствам
             </Link>

@@ -1,7 +1,7 @@
 // Domain/service module for media.
 import { MediaType } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
 import { mediaLimits } from "@/lib/constants";
+import type { DbClientLike } from "@/lib/db";
 import {
   formatUploadMegabytes,
   getAccommodationPhotoUploadSizeLimitBytes,
@@ -22,10 +22,16 @@ export type SerializedMedia = {
   createdAt: string;
 };
 
+type MediaSortOrderClient = Pick<DbClientLike, "media">;
+
 const imageExtensionFallbacks = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp", "avif"]);
 const videoExtensionFallbacks = new Set(["mp4", "mov", "webm", "m4v", "avi", "mkv"]);
 export const accommodationVideoUploadSizeLimitBytes = 100 * 1024 * 1024;
 export const accommodationVideoUploadDurationLimitSeconds = 60;
+
+export function normalizeLegacyFotoImageUrl(url: string): string {
+  return url.replace(/^\/Foto\/([^?#]+)\.png(?=($|[?#]))/i, "/Foto/$1.webp");
+}
 
 export function formatVideoUploadDuration(seconds: number): string {
   if (seconds > 0 && seconds % 60 === 0) {
@@ -127,7 +133,7 @@ export function serializeMedia(media: {
     propertyId: media.propertyId,
     roomId: media.roomId,
     type: media.type,
-    url: media.url,
+    url: normalizeLegacyFotoImageUrl(media.url),
     mimeType: media.mimeType,
     fileSize: media.fileSize,
     originalName: media.originalName,
@@ -136,7 +142,7 @@ export function serializeMedia(media: {
   };
 }
 
-export async function normalizePropertyMediaSortOrder(db: PrismaClient, propertyId: string) {
+export async function normalizePropertyMediaSortOrder(db: MediaSortOrderClient, propertyId: string) {
   const rows = await db.media.findMany({
     where: { propertyId, roomId: null },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -153,7 +159,7 @@ export async function normalizePropertyMediaSortOrder(db: PrismaClient, property
   );
 }
 
-export async function normalizeRoomMediaSortOrder(db: PrismaClient, roomId: string) {
+export async function normalizeRoomMediaSortOrder(db: MediaSortOrderClient, roomId: string) {
   const rows = await db.media.findMany({
     where: { roomId },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

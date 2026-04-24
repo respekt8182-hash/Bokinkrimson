@@ -8,7 +8,6 @@ type PropertyDocumentRecord = {
   mimeType: string;
   fileSize: number;
   url: string;
-  storageKey: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -22,12 +21,17 @@ export type SerializedPropertyDocument = {
   mimeType: string;
   fileSize: number;
   url: string;
-  storageKey: string;
   createdAt: string;
   updatedAt: string;
 };
 
+export const propertyDocumentMaxItems = 10;
+
 export const propertyDocumentSizeLimitBytes = 20 * 1024 * 1024;
+
+export function buildPropertyDocumentDownloadUrl(propertyId: string, documentId: string): string {
+  return `/api/properties/${propertyId}/documents/${documentId}`;
+}
 
 export function serializePropertyDocument(
   document: PropertyDocumentRecord,
@@ -41,7 +45,6 @@ export function serializePropertyDocument(
     mimeType: document.mimeType,
     fileSize: document.fileSize,
     url: document.url,
-    storageKey: document.storageKey,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
   };

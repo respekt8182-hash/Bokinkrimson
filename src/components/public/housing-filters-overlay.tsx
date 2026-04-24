@@ -9,6 +9,7 @@ import {
   type SidebarFilterOutput,
 } from "@/components/public/housing-search-sidebar-filters";
 import { AppIcon } from "@/components/ui/app-icon";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 
 type HousingFiltersOverlayProps = Omit<HousingSearchSidebarFiltersProps, "formId" | "onSubmit">;
 
@@ -28,19 +29,12 @@ export function HousingFiltersOverlay({
   const [isOpen, setIsOpen] = useState(false);
   const [localLocation, setLocalLocation] = useState(props.location ?? "");
   const titleId = useId();
-
-  // Keep local location in sync when parent location changes
-  useEffect(() => {
-    setLocalLocation(props.location ?? "");
-  }, [props.location]);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -51,7 +45,6 @@ export function HousingFiltersOverlay({
     window.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
   }, [isOpen]);
@@ -137,7 +130,10 @@ export function HousingFiltersOverlay({
         type="button"
         aria-label="Фильтры"
         title="Фильтры"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setLocalLocation(props.location ?? "");
+          setIsOpen(true);
+        }}
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-olive/18 bg-white px-3.5 text-sm font-semibold text-olive transition hover:bg-cream/70 active:bg-cream/90"
       >
         <AppIcon icon={SlidersHorizontal} className="h-4 w-4 shrink-0" />

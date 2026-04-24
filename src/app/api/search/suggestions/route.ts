@@ -1,4 +1,3 @@
-import { ExcursionStatus, PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { crimeaLocationById, crimeaLocations } from "@/lib/constants";
 import { db } from "@/lib/db";
@@ -8,19 +7,19 @@ import {
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
+import {
+  buildPublishedExcursionVisibilityWhere,
+  buildPublishedPropertyVisibilityWhere,
+} from "@/lib/public-visibility";
 import { createInMemoryRateLimiter } from "@/lib/rate-limit";
+import {
+  getPopularExcursionSuggestions,
+  getPopularHousingSuggestions,
+  type SearchSuggestionItem,
+} from "@/lib/search-suggestions";
 
 type SuggestionDirection = "housing" | "excursions";
 type SuggestionType = "location" | "hotel";
-
-type SearchSuggestionItem = {
-  type: SuggestionType;
-  id: string;
-  name: string;
-  subtitle: string;
-  locationId: string | null;
-  activeListingsCount: number;
-};
 
 type SearchSuggestionsResponse = {
   recent: SearchSuggestionItem[];
@@ -68,7 +67,6 @@ const defaultLimit = 10;
 const minLimit = 5;
 const maxLimit = 20;
 const sourceCacheTtlMs = 60_000;
-const popularLocationsCacheTtlMs = 24 * 60 * 60_000; // refresh once a day
 const popularLocationsLimit = 5;
 
 const addressNormalizationRules: ReadonlyArray<readonly [RegExp, string]> = [
@@ -126,11 +124,6 @@ const suggestionsRateLimiter = createInMemoryRateLimiter({
 // Short-lived in-memory caches reduce repeated DB scans under fast typing in search box.
 let housingRowsCache: CachedRows<HousingSuggestionRow> | null = null;
 let excursionRowsCache: CachedRows<ExcursionSuggestionRow> | null = null;
-
-// Long-lived caches for popular location IDs derived from ViewLog aggregation (refreshed daily).
-type PopularLocationEntry = { locationId: string; viewCount: number };
-let housingPopularCache: CachedRows<PopularLocationEntry> | null = null;
-let excursionPopularCache: CachedRows<PopularLocationEntry> | null = null;
 
 function normalizeText(value: string): string {
   return value
@@ -559,112 +552,6 @@ function buildFallbackSuggestionsResponse(input: {
   };
 }
 
-async function getPopularHousingLocationIds(): Promise<PopularLocationEntry[]> {
-  const now = Date.now();
-  if (housingPopularCache && housingPopularCache.expiresAt > now) {
-    return housingPopularCache.rows;
-  }
-
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
-
-  try {
-    const viewGroups = await db.viewLog.groupBy({
-      by: ["entityId"],
-      where: { entityType: "property", date: { gte: thirtyDaysAgo } },
-      _sum: { count: true },
-    });
-
-    const propertyIds = viewGroups.map((g) => g.entityId);
-    const properties =
-      propertyIds.length > 0
-        ? await db.property.findMany({
-            where: {
-              id: { in: propertyIds },
-              status: PropertyStatus.PUBLISHED,
-              ownerDeletedAt: null,
-            },
-            select: { id: true, locationId: true },
-          })
-        : [];
-
-    const propertyLocationMap = new Map(
-      properties.filter((p) => p.locationId).map((p) => [p.id, p.locationId as string]),
-    );
-
-    const locationViewCounts = new Map<string, number>();
-    for (const group of viewGroups) {
-      const locationId = propertyLocationMap.get(group.entityId);
-      if (!locationId) continue;
-      locationViewCounts.set(
-        locationId,
-        (locationViewCounts.get(locationId) ?? 0) + (group._sum.count ?? 0),
-      );
-    }
-
-    const rows = Array.from(locationViewCounts.entries())
-      .map(([locationId, viewCount]) => ({ locationId, viewCount }))
-      .sort((a, b) => b.viewCount - a.viewCount);
-
-    housingPopularCache = { rows, expiresAt: now + popularLocationsCacheTtlMs };
-    return rows;
-  } catch {
-    return housingPopularCache?.rows ?? [];
-  }
-}
-
-async function getPopularExcursionLocationIds(): Promise<PopularLocationEntry[]> {
-  const now = Date.now();
-  if (excursionPopularCache && excursionPopularCache.expiresAt > now) {
-    return excursionPopularCache.rows;
-  }
-
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
-
-  try {
-    const viewGroups = await db.viewLog.groupBy({
-      by: ["entityId"],
-      where: { entityType: "excursion", date: { gte: thirtyDaysAgo } },
-      _sum: { count: true },
-    });
-
-    const excursionIds = viewGroups.map((g) => g.entityId);
-    const excursions =
-      excursionIds.length > 0
-        ? await db.excursion.findMany({
-            where: { id: { in: excursionIds }, status: ExcursionStatus.PUBLISHED },
-            select: { id: true, anchorLocationId: true, mainLocationId: true },
-          })
-        : [];
-
-    const excursionLocationMap = new Map(
-      excursions.map((e) => [e.id, e.anchorLocationId ?? e.mainLocationId ?? null]),
-    );
-
-    const locationViewCounts = new Map<string, number>();
-    for (const group of viewGroups) {
-      const locationId = excursionLocationMap.get(group.entityId);
-      if (!locationId) continue;
-      locationViewCounts.set(
-        locationId,
-        (locationViewCounts.get(locationId) ?? 0) + (group._sum.count ?? 0),
-      );
-    }
-
-    const rows = Array.from(locationViewCounts.entries())
-      .map(([locationId, viewCount]) => ({ locationId, viewCount }))
-      .sort((a, b) => b.viewCount - a.viewCount);
-
-    excursionPopularCache = { rows, expiresAt: now + popularLocationsCacheTtlMs };
-    return rows;
-  } catch {
-    return excursionPopularCache?.rows ?? [];
-  }
-}
-
 async function getHousingSuggestionRows(): Promise<HousingSuggestionRow[]> {
   const now = Date.now();
   if (housingRowsCache && housingRowsCache.expiresAt > now) {
@@ -673,8 +560,7 @@ async function getHousingSuggestionRows(): Promise<HousingSuggestionRow[]> {
 
   const rows = await db.property.findMany({
     where: {
-      status: PropertyStatus.PUBLISHED,
-      ownerDeletedAt: null,
+      ...buildPublishedPropertyVisibilityWhere(),
       rooms: {
         some: {
           isActive: true,
@@ -708,7 +594,7 @@ async function getExcursionSuggestionRows(): Promise<ExcursionSuggestionRow[]> {
 
   const rows = await db.excursion.findMany({
     where: {
-      status: ExcursionStatus.PUBLISHED,
+      ...buildPublishedExcursionVisibilityWhere(),
     },
     select: {
       id: true,
@@ -876,7 +762,7 @@ function mergeRankedSuggestions(input: {
 }
 
 export async function GET(request: Request) {
-  const rate = suggestionsRateLimiter.limit(getClientRateLimitKey(request));
+  const rate = await suggestionsRateLimiter.limit(getClientRateLimitKey(request));
   if (!rate.allowed) {
     return NextResponse.json(
       { error: "RATE_LIMITED" },
@@ -897,7 +783,7 @@ export async function GET(request: Request) {
   const query = (searchParams.get("query") ?? "").trim().slice(0, queryMaxLength);
   const canUseFallback = process.env.NODE_ENV !== "production";
   const responseHeaders = {
-    "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+    "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
     "X-RateLimit-Remaining": String(rate.remaining),
   };
 
@@ -925,32 +811,18 @@ export async function GET(request: Request) {
     let matches: SearchSuggestionItem[] = [];
 
     if (direction === "housing") {
-      // Housing can return both locations and specific properties ("hotels").
-      const rows = await getHousingSuggestionRows();
-      const locationAggregates = buildHousingLocationAggregates(rows);
-      const locationCountById = new Map(
-        locationAggregates.map((item) => [item.id, item.activeListingsCount]),
-      );
-
       if (!query && include.has("location")) {
-        const popularEntries = await getPopularHousingLocationIds();
-        if (popularEntries.length > 0) {
-          const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
-          const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
-          popular = popularEntries
-            .slice(0, popularLocationsLimit)
-            .map((e) => locationById.get(e.locationId))
-            .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
-            .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
-            .map(toLocationSuggestion);
-        }
-        // Fall back to listing-count ordering if there are no view stats yet.
-        if (popular.length === 0) {
-          popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
-        }
+        popular = await getPopularHousingSuggestions();
       }
 
       if (query) {
+        // Housing can return both locations and specific properties ("hotels").
+        const rows = await getHousingSuggestionRows();
+        const locationAggregates = buildHousingLocationAggregates(rows);
+        const locationCountById = new Map(
+          locationAggregates.map((item) => [item.id, item.activeListingsCount]),
+        );
+
         // For housing we blend location + hotel matches into one ranked list.
         const locationMatches = include.has("location")
           ? rankLocationMatches({
@@ -975,28 +847,14 @@ export async function GET(request: Request) {
         });
       }
     } else {
-      // Excursions currently expose location suggestions only.
-      const rows = await getExcursionSuggestionRows();
-      const locationAggregates = buildExcursionLocationAggregates(rows);
-
       if (!query && include.has("location")) {
-        const popularEntries = await getPopularExcursionLocationIds();
-        if (popularEntries.length > 0) {
-          const viewRankMap = new Map(popularEntries.map((e, i) => [e.locationId, i]));
-          const locationById = new Map(locationAggregates.map((a) => [a.id, a]));
-          popular = popularEntries
-            .slice(0, popularLocationsLimit)
-            .map((e) => locationById.get(e.locationId))
-            .filter((a): a is (typeof locationAggregates)[0] => Boolean(a))
-            .sort((a, b) => (viewRankMap.get(a.id) ?? 999) - (viewRankMap.get(b.id) ?? 999))
-            .map(toLocationSuggestion);
-        }
-        if (popular.length === 0) {
-          popular = locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
-        }
+        popular = await getPopularExcursionSuggestions();
       }
 
       if (query && include.has("location")) {
+        // Excursions currently expose location suggestions only.
+        const rows = await getExcursionSuggestionRows();
+        const locationAggregates = buildExcursionLocationAggregates(rows);
         matches = rankLocationMatches({
           query,
           items: locationAggregates,

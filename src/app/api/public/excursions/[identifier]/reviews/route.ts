@@ -1,10 +1,12 @@
 // API route handler for /api/public/excursions/[identifier]/reviews.
-import { ExcursionStatus, ReviewEntityType, ReviewStatus } from "@prisma/client";
+import { Prisma, ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { reviewRateLimit } from "@/lib/constants";
 import { db } from "@/lib/db";
+import { normalizePlainText } from "@/lib/plain-text";
 import { extractPropertyId } from "@/lib/public-properties";
+import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 import { serializeReview } from "@/lib/reviews";
 import { createReviewSchema } from "@/lib/schemas";
 
@@ -19,10 +21,7 @@ function parsePagination(request: Request): { offset: number; limit: number } {
 
   return {
     offset: Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0,
-    limit:
-      Number.isFinite(rawLimit) && rawLimit > 0
-        ? Math.min(rawLimit, 12)
-        : 9,
+    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 12) : 9,
   };
 }
 
@@ -35,7 +34,7 @@ export async function GET(request: Request, context: RouteContext) {
   const excursion = await db.excursion.findFirst({
     where: {
       id: excursionId,
-      status: ExcursionStatus.PUBLISHED,
+      ...buildPublishedExcursionVisibilityWhere(),
     },
     select: {
       id: true,
@@ -46,7 +45,7 @@ export async function GET(request: Request, context: RouteContext) {
   });
 
   if (!excursion) {
-    return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
+    return NextResponse.json({ error: "Excursion not found" }, { status: 404 });
   }
 
   const items = await db.review.findMany({
@@ -98,7 +97,7 @@ export async function POST(request: Request, context: RouteContext) {
   if (!session) {
     return NextResponse.json(
       {
-        error: "Чтобы оставить отзыв, войдите или зарегистрируйтесь",
+        error: "Sign in to leave a review",
         code: "AUTH_REQUIRED",
       },
       { status: 401 },
@@ -111,7 +110,7 @@ export async function POST(request: Request, context: RouteContext) {
   const excursion = await db.excursion.findFirst({
     where: {
       id: excursionId,
-      status: ExcursionStatus.PUBLISHED,
+      ...buildPublishedExcursionVisibilityWhere(),
     },
     select: {
       id: true,
@@ -122,17 +121,29 @@ export async function POST(request: Request, context: RouteContext) {
   });
 
   if (!excursion) {
-    return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
+    return NextResponse.json({ error: "Excursion not found" }, { status: 404 });
   }
 
   if (excursion.ownerId === session.id) {
     return NextResponse.json(
       {
-        error: "Нельзя оставить отзыв на собственную экскурсию. Вы можете отвечать на отзывы гостей.",
+        error: "You cannot leave a review for your own excursion",
         code: "OWNER_SELF_REVIEW_FORBIDDEN",
       },
       { status: 403 },
     );
+  }
+
+  const existingReview = await db.review.findFirst({
+    where: {
+      userId: session.id,
+      excursionId: excursion.id,
+    },
+    select: { id: true },
+  });
+
+  if (existingReview) {
+    return NextResponse.json({ error: "You have already reviewed this excursion" }, { status: 409 });
   }
 
   const dayStart = new Date();
@@ -151,14 +162,11 @@ export async function POST(request: Request, context: RouteContext) {
   });
 
   if (reviewsToday >= reviewRateLimit.maxReviewsPerUser) {
-    const retryAfterSeconds = Math.max(
-      1,
-      Math.ceil((nextDayStart.getTime() - Date.now()) / 1000),
-    );
+    const retryAfterSeconds = Math.max(1, Math.ceil((nextDayStart.getTime() - Date.now()) / 1000));
 
     return NextResponse.json(
       {
-        error: `Лимит отзывов: не более ${reviewRateLimit.maxReviewsPerUser} в сутки на пользователя`,
+        error: `Daily review limit reached: no more than ${reviewRateLimit.maxReviewsPerUser} reviews per day`,
         code: "RATE_LIMIT_REACHED",
         nextAllowedAt: nextDayStart.toISOString(),
       },
@@ -176,42 +184,48 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = createReviewSchema.safeParse(payload);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Проверьте корректность оценки и текста отзыва" }, { status: 400 });
+    return NextResponse.json({ error: "Check the rating and review text" }, { status: 400 });
   }
 
-  const data = parsed.data;
-
-  const created = await db.review.create({
-    data: {
-      entityType: ReviewEntityType.EXCURSION,
-      excursionId: excursion.id,
-      userId: session.id,
-      rating: data.rating,
-      text: data.text,
-      status: ReviewStatus.PENDING,
-    },
-    include: {
-      user: {
-        select: { firstName: true, lastName: true, avatarUrl: true },
+  try {
+    const created = await db.review.create({
+      data: {
+        entityType: ReviewEntityType.EXCURSION,
+        excursionId: excursion.id,
+        userId: session.id,
+        rating: parsed.data.rating,
+        text: normalizePlainText(parsed.data.text),
+        status: ReviewStatus.PENDING,
       },
-    },
-  });
-
-  return NextResponse.json(
-    {
-      item: serializeReview(created),
-      summary: {
-        avgRating: Number(excursion.avgRating),
-        reviewsCount: excursion.reviewsCount,
+      include: {
+        user: {
+          select: { firstName: true, lastName: true, avatarUrl: true },
+        },
       },
-      moderationStatus: ReviewStatus.PENDING,
-      message: "Отзыв отправлен на модерацию",
-    },
-    { status: 201 },
-  );
+    });
+
+    return NextResponse.json(
+      {
+        item: serializeReview(created),
+        summary: {
+          avgRating: Number(excursion.avgRating),
+          reviewsCount: excursion.reviewsCount,
+        },
+        moderationStatus: ReviewStatus.PENDING,
+        message: "Review submitted for moderation",
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "You have already reviewed this excursion" }, { status: 409 });
+    }
+
+    throw error;
+  }
 }

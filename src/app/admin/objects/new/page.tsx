@@ -1,14 +1,37 @@
 // Admin page: create a new property and assign to a user.
 import { redirect } from "next/navigation";
+import {
+  countOwnerActivePropertyDrafts,
+  OWNER_ACTIVE_PROPERTY_DRAFT_LIMIT,
+} from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
+import { createPropertyDraft } from "@/lib/properties";
 import { AdminCreatePropertyForm } from "@/components/admin/admin-create-property-form";
 
-export default async function AdminCreatePropertyPage() {
+type AdminCreatePropertyPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function getErrorMessage(value: string | string[] | undefined): string | null {
+  const code = Array.isArray(value) ? value[0] : value;
+
+  if (code === "draft-limit") {
+    return `У владельца уже есть ${OWNER_ACTIVE_PROPERTY_DRAFT_LIMIT} черновика объекта. Освободите один слот, чтобы создать новый.`;
+  }
+
+  return null;
+}
+
+export default async function AdminCreatePropertyPage({
+  searchParams,
+}: AdminCreatePropertyPageProps) {
   const users = await db.user.findMany({
-    where: { role: "USER" },
+    where: { role: "USER", deletedAt: null },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: { id: true, firstName: true, lastName: true, phone: true },
   });
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const errorMessage = getErrorMessage(resolvedSearchParams.error);
 
   async function createProperty(formData: FormData) {
     "use server";
@@ -18,12 +41,15 @@ export default async function AdminCreatePropertyPage() {
 
     if (!ownerId) return;
 
-    const created = await db.property.create({
-      data: {
-        ownerId,
-        name,
-        type,
-      },
+    const activeDrafts = await countOwnerActivePropertyDrafts(db, ownerId);
+    if (activeDrafts >= OWNER_ACTIVE_PROPERTY_DRAFT_LIMIT) {
+      redirect("/admin/objects/new?error=draft-limit");
+    }
+
+    const created = await createPropertyDraft(db, {
+      ownerId,
+      name,
+      type,
     });
 
     redirect(`/admin/objects/${created.id}/about`);
@@ -38,7 +64,11 @@ export default async function AdminCreatePropertyPage() {
         </p>
       </div>
 
-      <AdminCreatePropertyForm users={users} action={createProperty} />
+      <AdminCreatePropertyForm
+        users={users}
+        action={createProperty}
+        errorMessage={errorMessage}
+      />
     </div>
   );
 }

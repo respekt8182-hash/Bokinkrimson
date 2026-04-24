@@ -8,8 +8,8 @@ import {
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
+import { purgeExpiredExcursionDraftsForOwner } from "@/lib/excursions";
 import { purgeExpiredPropertyDraftsForOwner } from "@/lib/properties";
-import { getOptionalSessionUserProfile } from "@/lib/session-user-profile";
 
 async function purgeDashboardDraftsSafely(ownerId: string): Promise<void> {
   const canUseFallback = process.env.NODE_ENV !== "production";
@@ -22,7 +22,10 @@ async function purgeDashboardDraftsSafely(ownerId: string): Promise<void> {
   }
 
   try {
-    await purgeExpiredPropertyDraftsForOwner(db, ownerId);
+    await Promise.all([
+      purgeExpiredPropertyDraftsForOwner(db, ownerId),
+      purgeExpiredExcursionDraftsForOwner(db, ownerId),
+    ]);
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;
@@ -48,11 +51,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   await purgeDashboardDraftsSafely(session.id);
 
-  const profile = await getOptionalSessionUserProfile(session.id);
-
-  const firstName = profile?.firstName ?? session.firstName;
-  const lastName = profile?.lastName ?? session.lastName;
-  const avatarUrl = profile?.avatarUrl ?? null;
+  const firstName = session.firstName;
+  const lastName = session.lastName;
+  const avatarUrl = session.avatarUrl ?? null;
   const initials = (firstName.trim().slice(0, 1) || lastName.trim().slice(0, 1) || "?").toUpperCase();
 
   return (

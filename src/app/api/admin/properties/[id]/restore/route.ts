@@ -1,9 +1,10 @@
 // API route handler for /api/admin/properties/[id]/restore.
 import { PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
+import { isSoftDeleteWindowActive } from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
-import { isOwnerDeletionWindowActive } from "@/lib/property-owner-delete";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -37,23 +38,19 @@ export async function POST(_request: Request, context: RouteContext) {
   if (property.status !== PropertyStatus.PUBLISHED) {
     return NextResponse.json(
       {
-        error: "Восстановление через администратора доступно только для опубликованных объектов",
+        error: "Отмена удаления доступна только для опубликованных объектов",
       },
       { status: 400 },
     );
   }
 
   if (!property.ownerDeletedAt) {
-    return NextResponse.json({ error: "Объект не находится в удаленных у владельца" }, { status: 400 });
+    return NextResponse.json({ error: "Объект не находится в очереди на удаление" }, { status: 400 });
   }
 
-  if (!isOwnerDeletionWindowActive(property.ownerDeletionExpiresAt, now)) {
-    await db.property.delete({
-      where: { id: property.id },
-    });
-
+  if (!isSoftDeleteWindowActive(property.ownerDeletionExpiresAt, now)) {
     return NextResponse.json(
-      { error: "Срок хранения для восстановления истек, объект окончательно удален" },
+      { error: "Срок отмены удаления уже истёк" },
       { status: 410 },
     );
   }
@@ -65,21 +62,21 @@ export async function POST(_request: Request, context: RouteContext) {
     await tx.property.update({
       where: { id: property.id },
       data: {
+        isPublishedVisible: true,
         ownerDeletedAt: null,
         ownerDeletionExpiresAt: null,
       },
     });
 
-    await tx.adminActionLog.create({
-      data: {
-        adminUserId: admin.id,
-        action: "restore_owner_deleted_property",
-        targetType: "property",
-        targetId: property.id,
-        details: {
-          previousOwnerDeletedAt: ownerDeletedAt.toISOString(),
-          previousOwnerDeletionExpiresAt: ownerDeletionExpiresAt?.toISOString() ?? null,
-        },
+    await writeAdminAuditLog(tx, {
+      adminUserId: admin.id,
+      action: "restore_property",
+      targetType: "property",
+      targetId: property.id,
+      details: {
+        previousOwnerDeletedAt: ownerDeletedAt.toISOString(),
+        previousOwnerDeletionExpiresAt: ownerDeletionExpiresAt?.toISOString() ?? null,
+        outcome: "restored",
       },
     });
   });
@@ -91,6 +88,7 @@ export async function POST(_request: Request, context: RouteContext) {
       name: property.name,
       restoredAt: now.toISOString(),
       restoredByAdminId: admin.id,
+      isPublishedVisible: true,
     },
   });
 }

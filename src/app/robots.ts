@@ -1,26 +1,18 @@
-// Robots policy generator for search engine crawlers.
 import type { MetadataRoute } from "next";
-
-function resolveBaseUrl(): string {
-  try {
-    return new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000")
-      .toString()
-      .replace(/\/$/, "");
-  } catch {
-    return "http://localhost:3000";
-  }
-}
+import { resolveBaseUrl } from "@/lib/seo/site";
 
 export default function robots(): MetadataRoute.Robots {
+  const baseUrl = resolveBaseUrl();
+  const host = new URL(baseUrl).host;
+
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/search", "/crimea", "/legal"],
         disallow: ["/dashboard", "/admin", "/api"],
       },
     ],
-    sitemap: `${resolveBaseUrl()}/sitemap.xml`,
-    host: resolveBaseUrl(),
+    sitemap: `${baseUrl}/sitemap.xml`,
+    host,
   };
 }

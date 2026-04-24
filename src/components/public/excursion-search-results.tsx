@@ -1,54 +1,58 @@
-"use client";
+﻿"use client";
 
 import {
   ArrowDown,
-  ArrowRight,
+  ArrowUpDown,
+  Check,
   CalendarDays,
-  ChevronDown,
   Clock3,
   LoaderCircle,
   MapPin,
   Route,
+  Search,
   SlidersHorizontal,
-  Star,
+  Sparkles,
   Users,
-  X,
+  WalletCards,
+  ArrowRight,
 } from "lucide-react";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { CatalogMapPreviewCard } from "@/components/maps/catalog-map-preview-card";
 import { AppIcon } from "@/components/ui/app-icon";
+import {
+  CatalogFieldGroup,
+  CatalogFilterChipButton,
+  CatalogFilterPanelActions,
+  CatalogFilterShell,
+  ResponsiveFilterPanel,
+  useIsMobileViewport,
+} from "@/components/public/catalog-filter-shell";
+import { UnifiedCalendarContent } from "@/components/ui/unified-calendar-content";
+import { UnifiedGuestsEditor } from "@/components/ui/unified-guests-editor";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { cn } from "@/lib/cn";
+import { buildCanonicalPath } from "@/lib/seo/canonical";
 import {
   formatProgramDuration,
   formatProgramPrice,
   getOfferTypeLabel,
 } from "@/lib/excursion-offers";
+import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
+import { excursionsHubPath, toursHubPath } from "@/lib/seo/routes";
+import { formatLocationInPrepositional } from "@/lib/seo/site";
 import {
   YandexMapMultiViewer,
   type YandexMapPoint,
   type YandexMapRadiusCircle,
 } from "@/components/maps/yandex-map-multi-viewer";
+import { MapExcursionPopupCard } from "@/components/public/map-excursion-popup-card";
 import type {
   PublicExcursionCatalogItem,
   PublicExcursionCatalogResult,
 } from "@/lib/public-excursions";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type FilterSectionKey =
-  | "search"
-  | "location"
-  | "district"
-  | "category"
-  | "date"
-  | "participants"
-  | "format"
-  | "duration"
-  | "price"
-  | "radius"
-  | "extra"
-  | "sort";
 
 export type ExcursionSearchResultsProps = {
   items: PublicExcursionCatalogItem[];
@@ -57,6 +61,8 @@ export type ExcursionSearchResultsProps = {
   districts: { slug: string; name: string }[];
   categories: { slug: string; name: string }[];
   locationNames: string[];
+  initialPopularLocationSuggestions: ExcursionLocationSuggestionItem[];
+  catalogDirection?: "excursions" | "tours";
 };
 
 type ExcursionLocationSuggestionSection = "recent" | "popular" | "matches";
@@ -117,12 +123,29 @@ function pluralizeReviews(count: number): string {
   return `${count} отзывов`;
 }
 
-function buildSearchUrl(params: Record<string, string>): string {
-  const query = new URLSearchParams({ direction: "excursions" });
-  for (const [key, value] of Object.entries(params)) {
-    if (value) query.set(key, value);
-  }
-  return `/search?${query.toString()}`;
+function buildSearchUrl(direction: "excursions" | "tours", params: Record<string, string>): string {
+  const basePath = direction === "tours" ? toursHubPath : excursionsHubPath;
+  const entries = Object.entries(params).filter(([, value]) => value);
+
+  return buildCanonicalPath(basePath, entries, [
+    "location",
+    "district",
+    "category",
+    "dateFrom",
+    "dateTo",
+    "guests",
+    "format",
+    "durationBucket",
+    "minPrice",
+    "maxPrice",
+    "radiusKm",
+    "pickup",
+    "kids",
+    "sort",
+    "offerType",
+    "q",
+    "page",
+  ]);
 }
 
 const excursionLocationSuggestionsListboxId = "exc-search-suggestions-listbox";
@@ -147,12 +170,43 @@ const monthNamesGenitive = [
   "декабря",
 ] as const;
 
+const offerTypeOptions = [
+  { value: "", label: "Все программы" },
+  { value: "excursion", label: "Экскурсии" },
+  { value: "tour", label: "Туры" },
+] as const;
+
+const formatOptions = [
+  { value: "", label: "Любой формат" },
+  { value: "group", label: "Групповая" },
+  { value: "private", label: "Индивидуальная" },
+] as const;
+
+const durationOptions = [
+  { value: "", label: "Любая длительность" },
+  { value: "up_to_3h", label: "До 3 часов" },
+  { value: "between_3h_6h", label: "3–6 часов" },
+  { value: "more_6h", label: "Более 6 часов" },
+] as const;
+
+const sortOptions = [
+  { value: "", label: "По релевантности" },
+  { value: "rating_desc", label: "По рейтингу" },
+  { value: "popular_desc", label: "По отзывам" },
+  { value: "price_asc", label: "Сначала дешевле" },
+  { value: "price_desc", label: "Сначала дороже" },
+  { value: "distance_asc", label: "По расстоянию" },
+  { value: "duration_asc", label: "По длительности" },
+] as const;
+
+const EXCURSION_PRICE_MIN_BOUND = 0;
+const EXCURSION_PRICE_MAX_BOUND = 100_000;
+const EXCURSION_PRICE_STEP = 100;
+const DATE_PANEL_WIDTH = 840;
+const DATE_PANEL_MAX_HEIGHT = 720;
+
 function normalizeLocationText(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/\s+/g, " ");
+  return value.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
 }
 
 function normalizeStoredIsoDate(value: unknown): string {
@@ -181,19 +235,138 @@ function formatDayMonth(iso: string): string {
   return `${day} ${monthNamesGenitive[month - 1]}`;
 }
 
-function pluralizeParticipants(value: number): string {
+function pluralizeGuests(value: number): string {
   const abs = Math.abs(value) % 100;
   const mod = abs % 10;
   if (abs > 10 && abs < 20) {
-    return "участников";
+    return "гостей";
   }
   if (mod > 1 && mod < 5) {
-    return "участника";
+    return "гостя";
   }
   if (mod === 1) {
-    return "участник";
+    return "гость";
   }
-  return "участников";
+  return "гостей";
+}
+
+function getOfferTypeFilterLabel(
+  value: PublicExcursionCatalogResult["filters"]["offerType"] | "",
+): string {
+  if (!value) {
+    return "Программы";
+  }
+
+  return offerTypeOptions.find((option) => option.value === value)?.label ?? "Программы";
+}
+
+function getFormatFilterLabel(value: string | null): string {
+  if (!value) {
+    return "Формат";
+  }
+
+  return formatOptions.find((option) => option.value === value)?.label ?? "Формат";
+}
+
+function getDurationShortFilterLabel(
+  value: PublicExcursionCatalogResult["filters"]["durationBucket"] | "",
+): string {
+  if (!value) {
+    return "Длительность";
+  }
+
+  if (value === "up_to_3h") {
+    return "До 3 ч";
+  }
+
+  if (value === "between_3h_6h") {
+    return "3-6 ч";
+  }
+
+  if (value === "more_6h") {
+    return "6+ ч";
+  }
+
+  return "Длительность";
+}
+
+function getSortFilterLabel(value: PublicExcursionCatalogResult["filters"]["sort"] | ""): string {
+  if (!value) {
+    return "Сортировка";
+  }
+
+  return sortOptions.find((option) => option.value === value)?.label ?? "Сортировка";
+}
+
+function getExcursionBudgetLabel(minPrice: number | null, maxPrice: number | null): string {
+  if (minPrice && maxPrice) {
+    return `${formatMoney(minPrice)} - ${formatMoney(maxPrice)}`;
+  }
+
+  if (minPrice) {
+    return `от ${formatMoney(minPrice)}`;
+  }
+
+  if (maxPrice) {
+    return `до ${formatMoney(maxPrice)}`;
+  }
+
+  return "Цена";
+}
+
+function getProgramFilterChipLabel(input: {
+  query: string | null;
+  offerType: PublicExcursionCatalogResult["filters"]["offerType"] | "";
+  format: PublicExcursionCatalogResult["filters"]["format"] | null;
+  durationBucket: PublicExcursionCatalogResult["filters"]["durationBucket"] | "";
+}): string {
+  const appliedCount =
+    Number(Boolean(input.query?.trim())) +
+    Number(Boolean(input.offerType)) +
+    Number(Boolean(input.format)) +
+    Number(Boolean(input.durationBucket));
+
+  if (appliedCount === 0) {
+    return "Программа";
+  }
+
+  if (appliedCount === 1 && input.query?.trim()) {
+    return `«${input.query.trim()}»`;
+  }
+
+  if (appliedCount === 1 && input.offerType) {
+    return getOfferTypeFilterLabel(input.offerType);
+  }
+
+  if (appliedCount === 1 && input.format) {
+    return getFormatFilterLabel(input.format);
+  }
+
+  if (appliedCount === 1 && input.durationBucket) {
+    return getDurationShortFilterLabel(input.durationBucket);
+  }
+
+  return `Программа · ${appliedCount}`;
+}
+
+function getLocationFilterChipLabel(locationName: string | null, radiusKm: number): string {
+  if (!locationName) {
+    return "Весь Крым";
+  }
+
+  if (radiusKm !== 30) {
+    return `${locationName} · ${radiusKm} км`;
+  }
+
+  return locationName;
+}
+
+function getParticipantsFilterChipLabel(people: number | null): string {
+  if (!people || people === 2) {
+    return "Гости";
+  }
+
+  return `${people} ${pluralizeGuests(people)}`;
 }
 
 function formatExcursionRecentLocationSubtitle(input: {
@@ -201,8 +374,10 @@ function formatExcursionRecentLocationSubtitle(input: {
   isAnyDate: boolean;
   guests: number;
 }): string {
-  const normalizedGuests = Number.isFinite(input.guests) ? Math.max(1, Math.round(input.guests)) : 2;
-  const guestsLabel = `${normalizedGuests} ${pluralizeParticipants(normalizedGuests)}`;
+  const normalizedGuests = Number.isFinite(input.guests)
+    ? Math.max(1, Math.round(input.guests))
+    : 2;
+  const guestsLabel = `${normalizedGuests} ${pluralizeGuests(normalizedGuests)}`;
 
   if (input.isAnyDate) {
     return `Любая дата, ${guestsLabel}`;
@@ -283,7 +458,9 @@ function parseExcursionRecentLocationSuggestions(raw: string): ExcursionLocation
   return suggestions;
 }
 
-function parseExcursionLocationSuggestionsPayload(raw: unknown): ExcursionLocationSuggestionsPayload {
+function parseExcursionLocationSuggestionsPayload(
+  raw: unknown,
+): ExcursionLocationSuggestionsPayload {
   const fallback: ExcursionLocationSuggestionsPayload = {
     popular: [],
     matches: [],
@@ -374,94 +551,70 @@ function renderHighlightedLocationText(text: string, query: string): React.React
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StarRating({ rating }: { rating: number }) {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-label={`Рейтинг ${rating.toFixed(1)}`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <AppIcon
-          key={i}
-          className={cn(
-            "h-3 w-3 shrink-0",
-            i < full
-              ? "text-amber-400"
-              : i === full && half
-                ? "text-amber-300"
-                : "text-olive/20",
-          )}
-          icon={Star}
-          filled
-        />
-      ))}
-    </span>
-  );
-}
-
-function FilterSection({
-  label,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="border-b border-olive/10 last:border-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-olive hover:bg-olive/5 transition-colors"
-      >
-        {label}
-        <AppIcon
-          icon={ChevronDown}
-          className={cn("h-4 w-4 text-olive/50 transition-transform duration-200", open && "rotate-180")}
-        />
-      </button>
-      <div
-        className={cn(
-          "transition-all duration-300 ease-in-out",
-          open ? "max-h-[640px] opacity-100 overflow-visible" : "max-h-0 opacity-0 overflow-hidden",
-        )}
-      >
-        <div className="px-4 pb-4 space-y-2">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function ActiveFilterChip({
-  label,
-  onRemove,
-}: {
-  label: string;
-  onRemove: () => void;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-      {label}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-0.5 rounded-full hover:bg-primary/20 p-0.5 transition-colors"
-        aria-label={`Убрать фильтр ${label}`}
-      >
-        <AppIcon icon={X} className="h-3 w-3" />
-      </button>
-    </span>
-  );
-}
-
 function ClockIcon(props: { className?: string }) {
   return <AppIcon icon={Clock3} className={props.className} />;
 }
 
 function LocationPinIcon(props: { className?: string }) {
   return <AppIcon icon={MapPin} className={props.className} />;
+}
+
+function ExcursionOptionPill(props: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={cn(
+        "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-semibold transition",
+        props.selected
+          ? "border-primary/22 bg-primary text-white shadow-[0_14px_24px_-18px_rgba(15,118,110,0.55)]"
+          : "border-olive/12 bg-white text-olive hover:bg-cream/55",
+      )}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function ExcursionToggleCard(props: {
+  label: string;
+  description?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={cn(
+        "flex min-h-[74px] w-full items-start justify-between gap-3 rounded-[22px] border px-4 py-3.5 text-left transition",
+        props.selected
+          ? "border-primary/22 bg-primary/10 text-primary shadow-[0_16px_30px_-26px_rgba(15,118,110,0.45)]"
+          : "border-olive/12 bg-white text-olive hover:bg-cream/55",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold leading-tight">{props.label}</span>
+        {props.description ? (
+          <span className="mt-1 block text-xs leading-5 text-olive/55">{props.description}</span>
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition",
+          props.selected
+            ? "border-primary bg-primary text-white"
+            : "border-olive/14 bg-cream/50 text-transparent",
+        )}
+      >
+        <Check className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -473,15 +626,20 @@ export function ExcursionSearchResults({
   districts,
   categories,
   locationNames,
+  initialPopularLocationSuggestions,
+  catalogDirection = "excursions",
 }: ExcursionSearchResultsProps) {
   const router = useRouter();
+  const isMobileViewport = useIsMobileViewport();
 
   // ── Filter state (mirrors URL params, user edits locally then submits) ──────
+  const [offerType, setOfferType] = useState(filters.offerType ?? "");
   const [query, setQuery] = useState(filters.query ?? "");
   const [location, setLocation] = useState(filters.locationName ?? "");
   const [district, setDistrict] = useState(filters.districtSlug ?? "");
   const [category, setCategory] = useState(filters.categorySlug ?? "");
   const [dateFrom, setDateFrom] = useState(filters.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(filters.dateTo ?? "");
   const [guests, setGuests] = useState(String(filters.people ?? 2));
   const [format, setFormat] = useState(filters.format ?? "");
   const [durationBucket, setDurationBucket] = useState(filters.durationBucket ?? "");
@@ -491,12 +649,7 @@ export function ExcursionSearchResults({
   const [pickup, setPickup] = useState(filters.pickup ?? false);
   const [kids, setKids] = useState(filters.kids ?? false);
   const [sort, setSort] = useState(filters.sort === "relevance" ? "" : filters.sort);
-
-  // ── Sidebar open/closed sections ────────────────────────────────────────────
-  const [openSections, setOpenSections] = useState<Set<FilterSectionKey>>(
-    new Set(["search", "location", "radius"]),
-  );
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openFilterPanel, setOpenFilterPanel] = useState<string | null>(null);
   // One shared dropdown mode keeps keyboard navigation logic identical for desktop and mobile.
   const [activeLocationDropdown, setActiveLocationDropdown] = useState<"desktop" | "mobile" | null>(
     null,
@@ -507,7 +660,7 @@ export function ExcursionSearchResults({
   >([]);
   const [locationPopularSuggestions, setLocationPopularSuggestions] = useState<
     ExcursionLocationSuggestionItem[]
-  >([]);
+  >(initialPopularLocationSuggestions);
   const [locationMatchSuggestions, setLocationMatchSuggestions] = useState<
     ExcursionLocationSuggestionItem[]
   >([]);
@@ -516,6 +669,7 @@ export function ExcursionSearchResults({
   const desktopLocationInputRef = useRef<HTMLInputElement | null>(null);
   const mobileLocationComboboxRef = useRef<HTMLDivElement | null>(null);
   const mobileLocationInputRef = useRef<HTMLInputElement | null>(null);
+  const locationDropdownSuppressUntilRef = useRef(0);
   const locationSuggestionsCacheRef = useRef<
     Map<string, { payload: ExcursionLocationSuggestionsPayload; expiresAt: number }>
   >(new Map());
@@ -530,19 +684,23 @@ export function ExcursionSearchResults({
   // ── Map state ────────────────────────────────────────────────────────────────
   const [isMapActivated, setIsMapActivated] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+  useBodyScrollLock(mapExpanded);
 
   // ── Card refs for scroll-to-card on pin hover ────────────────────────────────
   const cardRefsMap = useRef<Map<string, HTMLElement>>(new Map());
 
   // Keep local form controls in sync with applied URL filters after navigation.
   useEffect(() => {
+    setOfferType(filters.offerType ?? "");
     setQuery(filters.query ?? "");
     setLocation(filters.locationName ?? "");
     setDistrict(filters.districtSlug ?? "");
     setCategory(filters.categorySlug ?? "");
     setDateFrom(filters.dateFrom ?? "");
+    setDateTo(filters.dateTo ?? "");
     setGuests(String(filters.people ?? 2));
     setFormat(filters.format ?? "");
     setDurationBucket(filters.durationBucket ?? "");
@@ -552,14 +710,17 @@ export function ExcursionSearchResults({
     setPickup(filters.pickup ?? false);
     setKids(filters.kids ?? false);
     setSort(filters.sort === "relevance" ? "" : filters.sort);
+    setOpenFilterPanel(null);
     setActiveLocationDropdown(null);
     setActiveLocationSuggestionIndex(-1);
   }, [
+    filters.offerType,
     filters.query,
     filters.locationName,
     filters.districtSlug,
     filters.categorySlug,
     filters.dateFrom,
+    filters.dateTo,
     filters.people,
     filters.format,
     filters.durationBucket,
@@ -576,19 +737,29 @@ export function ExcursionSearchResults({
     setDisplayItems(items);
     setLoadedPage(pagination.page);
     setIsLoadingMore(false);
+    setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
     cardRefsMap.current.clear();
   }, [items, pagination.page]);
 
-  const toggleSection = useCallback((key: FilterSectionKey) => {
-    setOpenSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    if (!mapExpanded) {
+      return;
+    }
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMapFully();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mapExpanded]);
 
   const isLocationQueryMode = location.trim().length > 0;
   const locationDropdownOptions = useMemo<ExcursionLocationDropdownOption[]>(() => {
@@ -629,8 +800,7 @@ export function ExcursionSearchResults({
     locationRecentSuggestions,
   ]);
   const locationDropdownOptionIndexByKey = useMemo(
-    () =>
-      new Map(locationDropdownOptions.map((option, index) => [option.key, index])),
+    () => new Map(locationDropdownOptions.map((option, index) => [option.key, index])),
     [locationDropdownOptions],
   );
   const activeLocationOption = locationDropdownOptions[activeLocationSuggestionIndex] ?? null;
@@ -644,6 +814,34 @@ export function ExcursionSearchResults({
       : undefined;
   const isDesktopLocationDropdownVisible = activeLocationDropdown === "desktop";
   const isMobileLocationDropdownVisible = activeLocationDropdown === "mobile";
+  const locationScope: "desktop" | "mobile" = isMobileViewport ? "mobile" : "desktop";
+  const isLocationDropdownVisible =
+    locationScope === "mobile" ? isMobileLocationDropdownVisible : isDesktopLocationDropdownVisible;
+  const activeLocationOptionId =
+    locationScope === "mobile" ? activeMobileLocationOptionId : activeDesktopLocationOptionId;
+  const activeLocationListboxId =
+    locationScope === "mobile"
+      ? mobileExcursionLocationSuggestionsListboxId
+      : excursionLocationSuggestionsListboxId;
+
+  useEffect(() => {
+    if (initialPopularLocationSuggestions.length === 0) {
+      return;
+    }
+
+    locationSuggestionsCacheRef.current.set("exc-location|", {
+      payload: {
+        popular: initialPopularLocationSuggestions,
+        matches: [],
+      },
+      expiresAt: Date.now() + excursionLocationSuggestionsCacheTtlMs,
+    });
+
+    if (location.trim().length === 0) {
+      setLocationPopularSuggestions(initialPopularLocationSuggestions);
+      setLocationMatchSuggestions([]);
+    }
+  }, [initialPopularLocationSuggestions, location]);
 
   useEffect(() => {
     setActiveLocationSuggestionIndex((prev) =>
@@ -723,38 +921,43 @@ export function ExcursionSearchResults({
     }
 
     const abortController = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setIsLocationSuggestionsLoading(true);
+    const timer = window.setTimeout(
+      async () => {
+        setIsLocationSuggestionsLoading(true);
 
-      try {
-        const params = new URLSearchParams({
-          direction: "excursions",
-          include: "locations",
-          query,
-          limit: "12",
-        });
-        const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
-          signal: abortController.signal,
-        });
-        if (!response.ok) {
-          return;
+        try {
+          const isEmptyQuery = query.length === 0;
+          const params = new URLSearchParams({
+            direction: "excursions",
+            include: "locations",
+            query,
+            limit: isEmptyQuery ? "5" : "12",
+          });
+          const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
+            credentials: "omit",
+            signal: abortController.signal,
+          });
+          if (!response.ok) {
+            return;
+          }
+
+          const payload = parseExcursionLocationSuggestionsPayload(await response.json());
+          locationSuggestionsCacheRef.current.set(cacheKey, {
+            payload,
+            expiresAt: Date.now() + excursionLocationSuggestionsCacheTtlMs,
+          });
+          setLocationPopularSuggestions(
+            payload.popular.length > 0 ? payload.popular : fallbackPopular,
+          );
+          setLocationMatchSuggestions(payload.matches);
+        } catch {
+          // Ignore transient autocomplete fetch errors.
+        } finally {
+          setIsLocationSuggestionsLoading(false);
         }
-
-        const payload = parseExcursionLocationSuggestionsPayload(await response.json());
-        locationSuggestionsCacheRef.current.set(cacheKey, {
-          payload,
-          expiresAt: Date.now() + excursionLocationSuggestionsCacheTtlMs,
-        });
-        setLocationPopularSuggestions(
-          payload.popular.length > 0 ? payload.popular : fallbackPopular,
-        );
-        setLocationMatchSuggestions(payload.matches);
-      } catch {
-        // Ignore transient autocomplete fetch errors.
-      } finally {
-        setIsLocationSuggestionsLoading(false);
-      }
-    }, query.length === 0 ? 0 : 220);
+      },
+      query.length === 0 ? 0 : 220,
+    );
 
     return () => {
       abortController.abort();
@@ -838,21 +1041,23 @@ export function ExcursionSearchResults({
     [dateFrom, guests],
   );
 
+  const openLocationDropdown = useCallback((scope: "desktop" | "mobile") => {
+    if (Date.now() < locationDropdownSuppressUntilRef.current) {
+      return;
+    }
+
+    setActiveLocationDropdown(scope);
+  }, []);
+
   const applyLocationSuggestion = useCallback(
     (item: ExcursionLocationSuggestionItem) => {
       setLocation(item.name);
       commitRecentExcursionLocation(item.name);
-      const source = activeLocationDropdown;
+      locationDropdownSuppressUntilRef.current = Date.now() + 250;
       setActiveLocationDropdown(null);
       setActiveLocationSuggestionIndex(-1);
-
-      if (source === "mobile") {
-        mobileLocationInputRef.current?.focus();
-      } else {
-        desktopLocationInputRef.current?.focus();
-      }
     },
-    [activeLocationDropdown, commitRecentExcursionLocation],
+    [commitRecentExcursionLocation],
   );
 
   const handleLocationInputKeyDown = useCallback(
@@ -930,14 +1135,15 @@ export function ExcursionSearchResults({
       }
 
       const isActive =
-        activeLocationDropdown === scope &&
-        optionIndex === activeLocationSuggestionIndex;
+        activeLocationDropdown === scope && optionIndex === activeLocationSuggestionIndex;
       const icon =
-        section === "recent" ? <ClockIcon className="h-4 w-4" /> : <LocationPinIcon className="h-4 w-4" />;
+        section === "recent" ? (
+          <ClockIcon className="h-4 w-4" />
+        ) : (
+          <LocationPinIcon className="h-4 w-4" />
+        );
       const nameContent =
-        section === "matches"
-          ? renderHighlightedLocationText(item.name, location)
-          : item.name;
+        section === "matches" ? renderHighlightedLocationText(item.name, location) : item.name;
 
       return (
         <button
@@ -958,7 +1164,9 @@ export function ExcursionSearchResults({
           </span>
           <span className="block min-w-0">
             <span className="block truncate text-sm font-semibold text-olive">{nameContent}</span>
-            {item.subtitle ? <span className="block truncate text-xs text-olive/64">{item.subtitle}</span> : null}
+            {item.subtitle ? (
+              <span className="block truncate text-xs text-olive/64">{item.subtitle}</span>
+            ) : null}
           </span>
         </button>
       );
@@ -981,28 +1189,22 @@ export function ExcursionSearchResults({
       centerLat !== null && centerLng !== null ? filters.radiusKm / 1.3 : null;
 
     return displayItems
-      .filter(
-        (item): item is typeof item & { latitude: number; longitude: number } => {
-          if (
-            item.latitude === null ||
-            item.longitude === null ||
-            !Number.isFinite(item.latitude) ||
-            !Number.isFinite(item.longitude)
-          ) {
-            return false;
-          }
-          // Only show pins inside the radius circle when a location center is set
-          if (
-            haversineRadius !== null &&
-            centerLat !== null &&
-            centerLng !== null
-          ) {
-            const dist = haversineKm(centerLat, centerLng, item.latitude, item.longitude);
-            return dist <= haversineRadius;
-          }
-          return true;
-        },
-      )
+      .filter((item): item is typeof item & { latitude: number; longitude: number } => {
+        if (
+          item.latitude === null ||
+          item.longitude === null ||
+          !Number.isFinite(item.latitude) ||
+          !Number.isFinite(item.longitude)
+        ) {
+          return false;
+        }
+        // Only show pins inside the radius circle when a location center is set
+        if (haversineRadius !== null && centerLat !== null && centerLng !== null) {
+          const dist = haversineKm(centerLat, centerLng, item.latitude, item.longitude);
+          return dist <= haversineRadius;
+        }
+        return true;
+      })
       .map((item) => ({
         id: item.id,
         title: item.title,
@@ -1014,6 +1216,11 @@ export function ExcursionSearchResults({
         reviewsCount: item.reviewsCount,
       }));
   }, [displayItems, filters.centerLat, filters.centerLng, filters.radiusKm]);
+  const mapItemById = useMemo(
+    () => new Map(displayItems.map((item) => [item.id, item] as const)),
+    [displayItems],
+  );
+  const activePopupItem = activePointId ? (mapItemById.get(activePointId) ?? null) : null;
 
   const radiusCircle = useMemo<YandexMapRadiusCircle | null>(() => {
     if (
@@ -1031,13 +1238,21 @@ export function ExcursionSearchResults({
     return null;
   }, [filters.centerLat, filters.centerLng, filters.radiusKm]);
 
+  const focusCardById = useCallback((pointId: string) => {
+    const node = cardRefsMap.current.get(pointId);
+    node?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
   // ── Navigation on pin click ──────────────────────────────────────────────────
-  const handlePinClick = useCallback(
+  const handleMapPointClick = useCallback(
     (pointId: string) => {
-      const item = displayItems.find((it) => it.id === pointId);
-      if (item) router.push(item.path);
+      setActivePointId(pointId);
+      setHoveredPinId(pointId);
+      if (!mapExpanded) {
+        focusCardById(pointId);
+      }
     },
-    [displayItems, router],
+    [focusCardById, mapExpanded],
   );
 
   // ── Load more ─────────────────────────────────────────────────────────────────
@@ -1053,6 +1268,7 @@ export function ExcursionSearchResults({
       if (filters.districtSlug) p.set("district", filters.districtSlug);
       if (filters.categorySlug) p.set("category", filters.categorySlug);
       if (filters.dateFrom) p.set("dateFrom", filters.dateFrom);
+      if (filters.dateTo) p.set("dateTo", filters.dateTo);
       if (filters.people) p.set("people", String(filters.people));
       p.set("radiusKm", String(filters.radiusKm));
       if (filters.sort && filters.sort !== "relevance") p.set("sort", filters.sort);
@@ -1065,7 +1281,7 @@ export function ExcursionSearchResults({
 
       const response = await fetch(`/api/search/excursions?${p.toString()}`);
       if (!response.ok) throw new Error("fetch_failed");
-      const data = await response.json() as { items: PublicExcursionCatalogItem[]; page: number };
+      const data = (await response.json()) as { items: PublicExcursionCatalogItem[]; page: number };
       setDisplayItems((prev) => [...prev, ...data.items]);
       setLoadedPage(data.page);
     } catch {
@@ -1078,12 +1294,12 @@ export function ExcursionSearchResults({
   const handlePinHover = useCallback(
     (pointId: string | null) => {
       setHoveredPinId(pointId);
-      if (pointId) {
+      if (pointId && !mapExpanded) {
         const el = cardRefsMap.current.get(pointId);
         el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
     },
-    [],
+    [mapExpanded],
   );
 
   // ── Map helpers ───────────────────────────────────────────────────────────────
@@ -1095,6 +1311,7 @@ export function ExcursionSearchResults({
   function closeMapFully() {
     setMapExpanded(false);
     setIsMapActivated(false);
+    setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
   }
@@ -1109,11 +1326,12 @@ export function ExcursionSearchResults({
       // URL is the source of truth: push a new search URL and let server return canonical filters.
       const params: Record<string, string> = {
         q: query,
-        offerType: filters.offerType ?? "",
+        offerType,
         location,
         district,
         category,
         checkIn: dateFrom,
+        checkOut: dateTo,
         guests,
         format,
         durationBucket,
@@ -1126,184 +1344,930 @@ export function ExcursionSearchResults({
         page: "1",
         ...overrides,
       };
-      router.push(buildSearchUrl(params));
+      const nextDirection =
+        catalogDirection === "tours" && params.offerType === "tour" ? "tours" : "excursions";
+
+      if (nextDirection === "tours" && params.offerType === "tour") {
+        params.offerType = "";
+      }
+
+      setOpenFilterPanel(null);
+      setActiveLocationDropdown(null);
+      router.push(buildSearchUrl(nextDirection, params));
     },
-    [query, filters.offerType, location, district, category, dateFrom, guests, format, durationBucket, minPrice, maxPrice, radiusKm, pickup, kids, sort, router],
+    [
+      catalogDirection,
+      query,
+      offerType,
+      location,
+      district,
+      category,
+      dateFrom,
+      dateTo,
+      guests,
+      format,
+      durationBucket,
+      minPrice,
+      maxPrice,
+      radiusKm,
+      pickup,
+      kids,
+      sort,
+      router,
+    ],
   );
 
-  const handleRadiusChange = useCallback(
-    (nextRadiusKm: string) => {
-      setRadiusKm(nextRadiusKm);
-      applyFilters({ radiusKm: nextRadiusKm });
-    },
-    [applyFilters],
-  );
+  const resetAllFilters = useCallback(() => {
+    router.push(catalogDirection === "tours" ? toursHubPath : excursionsHubPath);
+  }, [catalogDirection, router]);
 
   // ── Active filter chips data ──────────────────────────────────────────────────
   const activeChips = useMemo(() => {
-    const chips: { key: string; label: string; clear: () => void }[] = [];
+    const chips: { key: string; label: string; onClear: () => void }[] = [];
 
     if (filters.locationName) {
       chips.push({
         key: "location",
         label: filters.locationName,
-        clear: () => applyFilters({ location: "", radiusKm: "" }),
+        onClear: () => applyFilters({ location: "", radiusKm: "30" }),
       });
     }
-    if (filters.radiusKm && filters.locationName) {
+    if (filters.locationName && filters.radiusKm !== 30) {
       chips.push({
         key: "radius",
         label: `${filters.radiusKm} км`,
-        clear: () => applyFilters({ radiusKm: "30" }),
+        onClear: () => applyFilters({ radiusKm: "30" }),
       });
     }
     if (filters.districtName) {
       chips.push({
         key: "district",
         label: filters.districtName,
-        clear: () => applyFilters({ district: "" }),
+        onClear: () => applyFilters({ district: "" }),
       });
     }
     if (filters.categoryName) {
       chips.push({
         key: "category",
         label: filters.categoryName,
-        clear: () => applyFilters({ category: "" }),
+        onClear: () => applyFilters({ category: "" }),
       });
     }
     if (filters.offerType === "excursion") {
       chips.push({
         key: "offerType",
         label: "Экскурсии",
-        clear: () => applyFilters({ offerType: "" }),
+        onClear: () => applyFilters({ offerType: "" }),
       });
     } else if (filters.offerType === "tour") {
       chips.push({
         key: "offerType",
         label: "Туры",
-        clear: () => applyFilters({ offerType: "" }),
+        onClear: () => applyFilters({ offerType: "" }),
       });
     }
     if (filters.query) {
       chips.push({
         key: "query",
         label: `«${filters.query}»`,
-        clear: () => applyFilters({ q: "" }),
+        onClear: () => applyFilters({ q: "" }),
       });
     }
-    if (filters.minPrice) {
+    if (filters.dateFrom) {
+      const dateLabel = filters.dateTo
+        ? `${formatDayMonth(filters.dateFrom)} - ${formatDayMonth(filters.dateTo)}`
+        : formatDayMonth(filters.dateFrom);
       chips.push({
-        key: "minPrice",
-        label: `от ${formatMoney(filters.minPrice)}`,
-        clear: () => applyFilters({ minPrice: "" }),
+        key: "date",
+        label: dateLabel,
+        onClear: () => applyFilters({ checkIn: "", checkOut: "" }),
       });
     }
-    if (filters.maxPrice) {
+    if (filters.people && filters.people !== 2) {
       chips.push({
-        key: "maxPrice",
-        label: `до ${formatMoney(filters.maxPrice)}`,
-        clear: () => applyFilters({ maxPrice: "" }),
+        key: "people",
+        label: `${filters.people} ${pluralizeGuests(filters.people)}`,
+        onClear: () => applyFilters({ guests: "2" }),
+      });
+    }
+    if (filters.minPrice || filters.maxPrice) {
+      chips.push({
+        key: "price",
+        label: getExcursionBudgetLabel(filters.minPrice, filters.maxPrice),
+        onClear: () => applyFilters({ minPrice: "", maxPrice: "" }),
       });
     }
     if (filters.durationBucket === "up_to_3h") {
-      chips.push({ key: "duration", label: "До 3 ч", clear: () => applyFilters({ durationBucket: "" }) });
+      chips.push({
+        key: "duration",
+        label: getDurationShortFilterLabel(filters.durationBucket),
+        onClear: () => applyFilters({ durationBucket: "" }),
+      });
     } else if (filters.durationBucket === "between_3h_6h") {
-      chips.push({ key: "duration", label: "3–6 ч", clear: () => applyFilters({ durationBucket: "" }) });
+      chips.push({
+        key: "duration",
+        label: getDurationShortFilterLabel(filters.durationBucket),
+        onClear: () => applyFilters({ durationBucket: "" }),
+      });
     } else if (filters.durationBucket === "more_6h") {
-      chips.push({ key: "duration", label: "6+ ч", clear: () => applyFilters({ durationBucket: "" }) });
+      chips.push({
+        key: "duration",
+        label: getDurationShortFilterLabel(filters.durationBucket),
+        onClear: () => applyFilters({ durationBucket: "" }),
+      });
     }
     if (filters.format === "group") {
-      chips.push({ key: "format", label: "Групповая", clear: () => applyFilters({ format: "" }) });
+      chips.push({
+        key: "format",
+        label: "Групповая",
+        onClear: () => applyFilters({ format: "" }),
+      });
     } else if (filters.format === "private") {
-      chips.push({ key: "format", label: "Индивидуальная", clear: () => applyFilters({ format: "" }) });
+      chips.push({
+        key: "format",
+        label: "Индивидуальная",
+        onClear: () => applyFilters({ format: "" }),
+      });
     }
     if (filters.pickup) {
-      chips.push({ key: "pickup", label: "Трансфер", clear: () => applyFilters({ pickup: "" }) });
+      chips.push({ key: "pickup", label: "Трансфер", onClear: () => applyFilters({ pickup: "" }) });
     }
     if (filters.kids) {
-      chips.push({ key: "kids", label: "Для детей", clear: () => applyFilters({ kids: "" }) });
+      chips.push({ key: "kids", label: "Для детей", onClear: () => applyFilters({ kids: "" }) });
+    }
+    if (filters.sort && filters.sort !== "relevance") {
+      chips.push({
+        key: "sort",
+        label: getSortFilterLabel(filters.sort),
+        onClear: () => applyFilters({ sort: "" }),
+      });
     }
 
     return chips;
   }, [filters, applyFilters]);
 
+  const moreFiltersCount =
+    Number(Boolean(filters.districtName)) +
+    Number(Boolean(filters.categoryName)) +
+    Number(filters.pickup) +
+    Number(filters.kids);
+  const programFiltersCount =
+    Number(Boolean(filters.query?.trim())) +
+    Number(Boolean(filters.offerType)) +
+    Number(Boolean(filters.format)) +
+    Number(Boolean(filters.durationBucket));
+  const moreFiltersLabel = moreFiltersCount > 0 ? `Еще · ${moreFiltersCount}` : "Еще";
+  const programChipLabel = getProgramFilterChipLabel({
+    query: filters.query,
+    offerType: filters.offerType ?? "",
+    format: filters.format,
+    durationBucket: filters.durationBucket ?? "",
+  });
+  const locationChipLabel = getLocationFilterChipLabel(filters.locationName, filters.radiusKm);
+  const appliedDateLabel = filters.dateFrom
+    ? filters.dateTo
+      ? `${formatDayMonth(filters.dateFrom)} - ${formatDayMonth(filters.dateTo)}`
+      : formatDayMonth(filters.dateFrom)
+    : "Даты";
+  const participantsChipLabel = getParticipantsFilterChipLabel(filters.people);
+  const budgetChipLabel = getExcursionBudgetLabel(filters.minPrice, filters.maxPrice);
+  const sortChipLabel = getSortFilterLabel(
+    (filters.sort === "relevance" ? "" : filters.sort) ?? "",
+  );
+  const locationPhrase = filters.locationName
+    ? (formatLocationInPrepositional(filters.locationName) ?? `в городе ${filters.locationName}`)
+    : null;
+  const catalogTitle =
+    filters.offerType === "tour"
+      ? locationPhrase
+        ? `Туры ${locationPhrase}`
+        : "Туры по Крыму"
+      : filters.offerType === "excursion"
+        ? locationPhrase
+          ? `Экскурсии ${locationPhrase}`
+          : "Экскурсии по Крыму"
+        : locationPhrase
+          ? `Экскурсии и туры ${locationPhrase}`
+          : "Экскурсии и туры по Крыму";
+  const mapTitle =
+    filters.offerType === "tour"
+      ? "Карта туров"
+      : filters.offerType === "excursion"
+        ? "Карта экскурсий"
+        : "Карта программ";
+  const resultsTitle =
+    filters.offerType === "tour"
+      ? "туры"
+      : filters.offerType === "excursion"
+        ? "экскурсии"
+        : "варианты";
+  const draftGuestsValue = Number.isFinite(Number.parseInt(guests, 10))
+    ? Math.max(1, Math.min(40, Number.parseInt(guests, 10)))
+    : 2;
+  const radiusIsEnabled = Boolean(location.trim() || filters.locationName);
+  const leftPricePct =
+    ((Number(minPrice || EXCURSION_PRICE_MIN_BOUND) - EXCURSION_PRICE_MIN_BOUND) /
+      (EXCURSION_PRICE_MAX_BOUND - EXCURSION_PRICE_MIN_BOUND)) *
+    100;
+  const rightPricePct =
+    ((Number(maxPrice || EXCURSION_PRICE_MAX_BOUND) - EXCURSION_PRICE_MIN_BOUND) /
+      (EXCURSION_PRICE_MAX_BOUND - EXCURSION_PRICE_MIN_BOUND)) *
+    100;
+
+  const updatePriceRange = useCallback(
+    (patch: { minPrice?: number; maxPrice?: number }) => {
+      const currentMin = Number(minPrice || EXCURSION_PRICE_MIN_BOUND);
+      const currentMax = Number(maxPrice || EXCURSION_PRICE_MAX_BOUND);
+      const nextMin = patch.minPrice ?? currentMin;
+      const nextMax = patch.maxPrice ?? currentMax;
+      const safeMin = Math.min(
+        nextMax,
+        Math.max(
+          EXCURSION_PRICE_MIN_BOUND,
+          Math.floor(nextMin / EXCURSION_PRICE_STEP) * EXCURSION_PRICE_STEP,
+        ),
+      );
+      const safeMax = Math.max(
+        safeMin,
+        Math.min(
+          EXCURSION_PRICE_MAX_BOUND,
+          Math.ceil(nextMax / EXCURSION_PRICE_STEP) * EXCURSION_PRICE_STEP,
+        ),
+      );
+
+      setMinPrice(safeMin > EXCURSION_PRICE_MIN_BOUND ? String(safeMin) : "");
+      setMaxPrice(safeMax < EXCURSION_PRICE_MAX_BOUND ? String(safeMax) : "");
+    },
+    [maxPrice, minPrice],
+  );
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-6 pb-24 md:px-6 md:py-8 md:pb-8">
-
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4">
         <div>
-          <h1 className="text-2xl font-semibold text-olive">
-            {filters.locationName ? `Экскурсии и туры · ${filters.locationName}` : "Экскурсии и туры в Крыму"}
-          </h1>
+          <h1 className="text-2xl font-semibold text-olive">{catalogTitle}</h1>
           <p className="mt-0.5 text-sm text-olive/60">
-            Найдено: {pagination.total}{" "}
-            {filters.locationName
-              ? `· радиус ${filters.radiusKm} км`
-              : "· весь Крым"}
+            Найдено {pagination.total} программ
+            {filters.locationName ? ` · радиус ${filters.radiusKm} км` : " · весь Крым"}
           </p>
         </div>
-
-        {/* Mobile filter toggle */}
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border border-olive/20 bg-white px-4 py-2 text-sm font-medium text-olive hover:bg-cream transition-colors md:hidden"
-        >
-          <AppIcon icon={SlidersHorizontal} className="h-4 w-4" />
-          Фильтры
-        </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {[
-          { key: "", label: "Все программы" },
-          { key: "excursion", label: "Экскурсии" },
-          { key: "tour", label: "Туры" },
-        ].map((option) => {
-          const isActive = (filters.offerType ?? "") === option.key;
-          return (
-            <button
-              key={option.label}
-              type="button"
-              onClick={() => applyFilters({ offerType: option.key })}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                isActive
-                  ? "bg-primary text-white"
-                  : "border border-olive/15 bg-white text-olive/70 hover:border-primary/35 hover:text-olive"
-              }`}
+      <CatalogFilterShell
+        sticky={false}
+        chips={
+          <>
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "program"}
+              title="Программа"
+              onClose={() => setOpenFilterPanel(null)}
+              width={520}
+              trigger={
+                <CatalogFilterChipButton
+                  icon={Sparkles}
+                  label={programChipLabel}
+                  active={programFiltersCount > 0}
+                  open={openFilterPanel === "program"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "program" ? null : "program"))
+                  }
+                  onClear={
+                    programFiltersCount > 0
+                      ? () =>
+                          applyFilters({
+                            q: "",
+                            offerType: "",
+                            format: "",
+                            durationBucket: "",
+                          })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setQuery("");
+                    setOfferType("");
+                    setFormat("");
+                    setDurationBucket("");
+                    applyFilters({ q: "", offerType: "", format: "", durationBucket: "" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
             >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+              <div className="space-y-5">
+                <CatalogFieldGroup label="Что хочется найти">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-olive/35" />
+                    <input
+                      name="searchQuery"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Название, маршрут, формат..."
+                      className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 pl-11 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </CatalogFieldGroup>
 
-      {/* ── Active filter chips ─────────────────────────────────────────────── */}
-      {activeChips.length > 0 ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-olive/50">Активные:</span>
-          {activeChips.map((chip) => (
-            <ActiveFilterChip key={chip.key} label={chip.label} onRemove={chip.clear} />
-          ))}
-          {activeChips.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => router.push("/search?direction=excursions")}
-              className="text-xs text-olive/50 hover:text-olive underline transition-colors"
+                <div className="grid gap-4 md:grid-cols-2">
+                  <CatalogFieldGroup label="Тип программы">
+                    <div className="flex flex-wrap gap-2">
+                      {offerTypeOptions.map((option) => (
+                        <ExcursionOptionPill
+                          key={option.label}
+                          selected={offerType === option.value}
+                          onClick={() => setOfferType(option.value)}
+                        >
+                          {option.label}
+                        </ExcursionOptionPill>
+                      ))}
+                    </div>
+                  </CatalogFieldGroup>
+
+                  <CatalogFieldGroup label="Формат">
+                    <div className="flex flex-wrap gap-2">
+                      {formatOptions.map((option) => (
+                        <ExcursionOptionPill
+                          key={option.value || "any"}
+                          selected={format === option.value}
+                          onClick={() => setFormat(option.value)}
+                        >
+                          {option.label}
+                        </ExcursionOptionPill>
+                      ))}
+                    </div>
+                  </CatalogFieldGroup>
+                </div>
+
+                <CatalogFieldGroup label="Длительность">
+                  <div className="flex flex-wrap gap-2">
+                    {durationOptions.map((option) => (
+                      <ExcursionOptionPill
+                        key={option.value || "any"}
+                        selected={durationBucket === option.value}
+                        onClick={() => setDurationBucket(option.value)}
+                      >
+                        {option.label}
+                      </ExcursionOptionPill>
+                    ))}
+                  </div>
+                </CatalogFieldGroup>
+              </div>
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "location"}
+              title="Локация"
+              onClose={() => {
+                setOpenFilterPanel(null);
+                setActiveLocationDropdown(null);
+                setActiveLocationSuggestionIndex(-1);
+              }}
+              width={440}
+              trigger={
+                <CatalogFilterChipButton
+                  icon={MapPin}
+                  label={locationChipLabel}
+                  active={Boolean(filters.locationName)}
+                  open={openFilterPanel === "location"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "location" ? null : "location"))
+                  }
+                  onClear={
+                    filters.locationName
+                      ? () => applyFilters({ location: "", radiusKm: "30" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => {
+                    commitRecentExcursionLocation(location);
+                    applyFilters();
+                  }}
+                  onClear={() => {
+                    setLocation("");
+                    setRadiusKm("30");
+                    setActiveLocationDropdown(null);
+                    setActiveLocationSuggestionIndex(-1);
+                    applyFilters({ location: "", radiusKm: "30" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
             >
-              Сбросить всё
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+              <div className="space-y-5">
+                <div
+                  ref={isMobileViewport ? mobileLocationComboboxRef : desktopLocationComboboxRef}
+                  className={cn("relative", isLocationDropdownVisible ? "z-[30]" : "")}
+                >
+                  <input
+                    name="location"
+                    ref={isMobileViewport ? mobileLocationInputRef : desktopLocationInputRef}
+                    value={location}
+                    onChange={(event) => {
+                      setLocation(event.target.value.slice(0, 120));
+                      setActiveLocationDropdown(locationScope);
+                      setActiveLocationSuggestionIndex(-1);
+                    }}
+                    autoComplete="off"
+                    placeholder="Ялта, Судак..."
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={isLocationDropdownVisible}
+                    aria-controls={activeLocationListboxId}
+                    aria-activedescendant={activeLocationOptionId}
+                    onClick={() => openLocationDropdown(locationScope)}
+                    onKeyDown={(event) => handleLocationInputKeyDown(locationScope, event)}
+                    className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+
+                  {isLocationDropdownVisible ? (
+                    <div className="mt-2 overflow-hidden rounded-[24px] border border-sand bg-white shadow-[0_20px_36px_-24px_rgba(15,118,110,0.52)]">
+                      <div
+                        id={activeLocationListboxId}
+                        role="listbox"
+                        className="max-h-[320px] overflow-y-auto p-1.5"
+                      >
+                        {isLocationSuggestionsLoading && locationDropdownOptions.length === 0 ? (
+                          <p className="px-3 py-5 text-sm text-olive/65">
+                            Ищем подходящие варианты...
+                          </p>
+                        ) : null}
+                        {!isLocationSuggestionsLoading &&
+                        !isLocationQueryMode &&
+                        locationRecentSuggestions.length > 0 ? (
+                          <div className="pb-1">
+                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                              Ранее вы уже искали
+                            </p>
+                            <div className="space-y-1">
+                              {locationRecentSuggestions.map((item, index) =>
+                                renderLocationSuggestionButton(
+                                  locationScope,
+                                  "recent",
+                                  item,
+                                  index,
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!isLocationSuggestionsLoading &&
+                        !isLocationQueryMode &&
+                        locationPopularSuggestions.length > 0 ? (
+                          <div className="pb-1">
+                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                              Популярные направления
+                            </p>
+                            <div className="space-y-1">
+                              {locationPopularSuggestions.map((item, index) =>
+                                renderLocationSuggestionButton(
+                                  locationScope,
+                                  "popular",
+                                  item,
+                                  index,
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!isLocationSuggestionsLoading &&
+                        isLocationQueryMode &&
+                        locationMatchSuggestions.length > 0 ? (
+                          <div className="pb-1">
+                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                              Локации
+                            </p>
+                            <div className="space-y-1">
+                              {locationMatchSuggestions.map((item, index) =>
+                                renderLocationSuggestionButton(
+                                  locationScope,
+                                  "matches",
+                                  item,
+                                  index,
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!isLocationSuggestionsLoading &&
+                        !isLocationQueryMode &&
+                        locationRecentSuggestions.length === 0 &&
+                        locationPopularSuggestions.length === 0 ? (
+                          <p className="px-3 py-5 text-sm text-olive/65">Начните вводить город.</p>
+                        ) : null}
+                        {!isLocationSuggestionsLoading &&
+                        isLocationQueryMode &&
+                        locationMatchSuggestions.length === 0 ? (
+                          <p className="px-3 py-5 text-sm text-olive/65">Ничего не найдено.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <CatalogFieldGroup
+                  label="Радиус поиска"
+                  description={
+                    radiusIsEnabled
+                      ? "Подберем программы рядом с выбранной локацией."
+                      : "Сначала выберите локацию, затем уточните расстояние."
+                  }
+                >
+                  <div className="rounded-[24px] border border-olive/10 bg-cream/40 px-4 py-4">
+                    <div className="flex items-center justify-between text-xs text-olive/60">
+                      <span>5 км</span>
+                      <span className="text-sm font-semibold text-olive">{radiusKm} км</span>
+                      <span>100 км</span>
+                    </div>
+                    <input
+                      name="radiusKm"
+                      type="range"
+                      min={5}
+                      max={100}
+                      step={5}
+                      value={radiusKm}
+                      onChange={(event) => setRadiusKm(event.target.value)}
+                      disabled={!radiusIsEnabled}
+                      className="mt-3 w-full accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </div>
+                </CatalogFieldGroup>
+              </div>
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "date"}
+              title="Даты"
+              onClose={() => setOpenFilterPanel(null)}
+              width={DATE_PANEL_WIDTH}
+              maxHeight={DATE_PANEL_MAX_HEIGHT}
+              trigger={
+                <CatalogFilterChipButton
+                  icon={CalendarDays}
+                  label={appliedDateLabel}
+                  active={Boolean(filters.dateFrom || filters.dateTo)}
+                  open={openFilterPanel === "date"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "date" ? null : "date"))
+                  }
+                  onClear={
+                    filters.dateFrom || filters.dateTo
+                      ? () => applyFilters({ checkIn: "", checkOut: "" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                    applyFilters({ checkIn: "", checkOut: "" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
+            >
+              <UnifiedCalendarContent
+                mode="range"
+                value={{ checkIn: dateFrom, checkOut: dateTo }}
+                onChange={({ checkIn, checkOut }) => {
+                  setDateFrom(checkIn);
+                  setDateTo(checkOut);
+                }}
+                renderHeaderAside={
+                  dateFrom || dateTo ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateFrom("");
+                        setDateTo("");
+                      }}
+                      className="rounded-md px-2 py-0.5 text-olive/65 transition hover:bg-foam hover:text-olive"
+                    >
+                      Очистить
+                    </button>
+                  ) : null
+                }
+              />
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "guests"}
+              title="Гости"
+              onClose={() => setOpenFilterPanel(null)}
+              width={412}
+              trigger={
+                <CatalogFilterChipButton
+                  icon={Users}
+                  label={participantsChipLabel}
+                  active={Boolean(filters.people && filters.people !== 2)}
+                  open={openFilterPanel === "guests"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "guests" ? null : "guests"))
+                  }
+                  onClear={
+                    filters.people && filters.people !== 2
+                      ? () => applyFilters({ guests: "2" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setGuests("2");
+                    applyFilters({ guests: "2" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
+            >
+              <UnifiedGuestsEditor
+                mode="simple"
+                value={draftGuestsValue}
+                onChange={(nextValue) => setGuests(String(nextValue))}
+                min={1}
+                max={40}
+                label="Гости"
+                description="От 1 до 40 человек"
+              />
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "price"}
+              title="Цена"
+              onClose={() => setOpenFilterPanel(null)}
+              width={420}
+              trigger={
+                <CatalogFilterChipButton
+                  icon={WalletCards}
+                  label={budgetChipLabel}
+                  active={Boolean(filters.minPrice || filters.maxPrice)}
+                  open={openFilterPanel === "price"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "price" ? null : "price"))
+                  }
+                  onClear={
+                    filters.minPrice || filters.maxPrice
+                      ? () => applyFilters({ minPrice: "", maxPrice: "" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setMinPrice("");
+                    setMaxPrice("");
+                    applyFilters({ minPrice: "", maxPrice: "" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
+            >
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <CatalogFieldGroup label="От">
+                    <input
+                      name="minPrice"
+                      type="number"
+                      min={EXCURSION_PRICE_MIN_BOUND}
+                      max={EXCURSION_PRICE_MAX_BOUND}
+                      step={EXCURSION_PRICE_STEP}
+                      value={minPrice}
+                      onChange={(event) =>
+                        updatePriceRange({
+                          minPrice: Number(event.target.value || EXCURSION_PRICE_MIN_BOUND),
+                        })
+                      }
+                      className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Без минимума"
+                    />
+                  </CatalogFieldGroup>
+                  <CatalogFieldGroup label="До">
+                    <input
+                      name="maxPrice"
+                      type="number"
+                      min={EXCURSION_PRICE_MIN_BOUND}
+                      max={EXCURSION_PRICE_MAX_BOUND}
+                      step={EXCURSION_PRICE_STEP}
+                      value={maxPrice}
+                      onChange={(event) =>
+                        updatePriceRange({
+                          maxPrice: Number(event.target.value || EXCURSION_PRICE_MAX_BOUND),
+                        })
+                      }
+                      className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Без лимита"
+                    />
+                  </CatalogFieldGroup>
+                </div>
+                <div className="rounded-2xl border border-olive/10 bg-cream/45 px-4 py-4">
+                  <div className="relative h-8">
+                    <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-olive/10" />
+                    <div
+                      className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-primary/70"
+                      style={{
+                        left: `${leftPricePct}%`,
+                        width: `${Math.max(0, rightPricePct - leftPricePct)}%`,
+                      }}
+                    />
+                    <input
+                      name="minPriceRange"
+                      type="range"
+                      min={EXCURSION_PRICE_MIN_BOUND}
+                      max={EXCURSION_PRICE_MAX_BOUND}
+                      step={EXCURSION_PRICE_STEP}
+                      value={Number(minPrice || EXCURSION_PRICE_MIN_BOUND)}
+                      onChange={(event) =>
+                        updatePriceRange({ minPrice: Number(event.target.value) })
+                      }
+                      className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
+                    />
+                    <input
+                      name="maxPriceRange"
+                      type="range"
+                      min={EXCURSION_PRICE_MIN_BOUND}
+                      max={EXCURSION_PRICE_MAX_BOUND}
+                      step={EXCURSION_PRICE_STEP}
+                      value={Number(maxPrice || EXCURSION_PRICE_MAX_BOUND)}
+                      onChange={(event) =>
+                        updatePriceRange({ maxPrice: Number(event.target.value) })
+                      }
+                      className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs font-medium text-olive/55">
+                    <span>0 ₽</span>
+                    <span>50 000 ₽</span>
+                    <span>100 000 ₽+</span>
+                  </div>
+                </div>
+              </div>
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "more"}
+              title="Еще параметры"
+              onClose={() => setOpenFilterPanel(null)}
+              width={440}
+              align="end"
+              trigger={
+                <CatalogFilterChipButton
+                  icon={SlidersHorizontal}
+                  label={moreFiltersLabel}
+                  active={moreFiltersCount > 0}
+                  open={openFilterPanel === "more"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "more" ? null : "more"))
+                  }
+                  onClear={
+                    moreFiltersCount > 0
+                      ? () => applyFilters({ district: "", category: "", pickup: "", kids: "" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setDistrict("");
+                    setCategory("");
+                    setPickup(false);
+                    setKids(false);
+                    applyFilters({ district: "", category: "", pickup: "", kids: "" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
+            >
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <CatalogFieldGroup label="Округ">
+                    <select
+                      name="district"
+                      value={district}
+                      onChange={(event) => setDistrict(event.target.value)}
+                      className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">Все округа</option>
+                      {districts.map((item) => (
+                        <option key={item.slug} value={item.slug}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </CatalogFieldGroup>
+
+                  <CatalogFieldGroup label="Категория">
+                    <select
+                      name="category"
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">Все категории</option>
+                      {categories.map((item) => (
+                        <option key={item.slug} value={item.slug}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </CatalogFieldGroup>
+                </div>
+
+                <CatalogFieldGroup label="Полезные детали">
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <ExcursionToggleCard
+                      label="Нужен трансфер"
+                      selected={pickup}
+                      onClick={() => setPickup((current) => !current)}
+                    />
+                    <ExcursionToggleCard
+                      label="Подходит для детей"
+                      selected={kids}
+                      onClick={() => setKids((current) => !current)}
+                    />
+                  </div>
+                </CatalogFieldGroup>
+              </div>
+            </ResponsiveFilterPanel>
+
+            <ResponsiveFilterPanel
+              open={openFilterPanel === "sort"}
+              title="Сортировка"
+              onClose={() => setOpenFilterPanel(null)}
+              width={360}
+              align="end"
+              trigger={
+                <CatalogFilterChipButton
+                  icon={ArrowUpDown}
+                  label={sortChipLabel}
+                  active={Boolean(filters.sort && filters.sort !== "relevance")}
+                  open={openFilterPanel === "sort"}
+                  onClick={() =>
+                    setOpenFilterPanel((current) => (current === "sort" ? null : "sort"))
+                  }
+                  onClear={
+                    filters.sort && filters.sort !== "relevance"
+                      ? () => applyFilters({ sort: "" })
+                      : undefined
+                  }
+                />
+              }
+              footer={
+                <CatalogFilterPanelActions
+                  onApply={() => applyFilters()}
+                  onClear={() => {
+                    setSort("");
+                    applyFilters({ sort: "" });
+                  }}
+                  applyLabel="Показать варианты"
+                />
+              }
+            >
+              <div className="space-y-1.5">
+                {sortOptions.map((option) => (
+                  <button
+                    key={option.value || "relevance"}
+                    type="button"
+                    onClick={() => setSort(option.value)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition",
+                      sort === option.value
+                        ? "bg-primary/10 text-primary"
+                        : "text-olive hover:bg-cream/60",
+                    )}
+                  >
+                    <span>{option.label}</span>
+                    {sort === option.value ? <Check className="h-4 w-4" /> : null}
+                  </button>
+                ))}
+              </div>
+            </ResponsiveFilterPanel>
+          </>
+        }
+        totalLabel=""
+        hasActiveFilters={activeChips.length > 0}
+        onResetAll={resetAllFilters}
+      />
 
       {/* ── md-only map preview (tablet: md, hidden on lg) ──────────────────── */}
       <section className="hidden rounded-2xl bg-white/94 p-3 ring-1 ring-olive/10 md:block lg:hidden mb-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-olive">Карта экскурсий</p>
+            <p className="text-sm font-semibold text-olive">{mapTitle}</p>
             <p className="text-xs text-olive/65">{mapStatsLabel}</p>
           </div>
           <button
@@ -1314,387 +2278,32 @@ export function ExcursionSearchResults({
             Открыть карту
           </button>
         </div>
-        <button
-          type="button"
-          onClick={openMapFully}
-          className="relative mt-3 block h-[160px] w-full overflow-hidden rounded-xl border border-olive/16 text-left"
-          aria-label="Открыть карту полностью"
-        >
-          <iframe
-            src="https://yandex.ru/map-widget/v1/?ll=34.1%2C45.05&z=7&source=constructorsearch"
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            style={{ border: "none" }}
-            title="Карта Крыма"
-            aria-hidden="true"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-midnight/55 via-midnight/20 to-transparent" />
-        </button>
+        <CatalogMapPreviewCard
+          title={mapTitle}
+          subtitle="Карта загружается только после явного открытия, чтобы ускорить листинг."
+          actionLabel="Открыть карту"
+          ariaLabel="Открыть карту полностью"
+          onOpen={openMapFully}
+          variant="crimea-preview"
+          className="mt-3 h-[160px] w-full rounded-xl"
+        />
       </section>
 
       {/* ── Three-column layout ─────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-5 items-start md:flex-row">
-
-        {/* ── Left: Filter sidebar (desktop) ─────────────────────────────── */}
-        <aside className="hidden w-64 shrink-0 md:block">
-          <div className="sticky top-6 rounded-2xl bg-white/94 ring-1 ring-olive/10 overflow-hidden">
-            <div className="border-b border-olive/10 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-olive/50">Фильтры</p>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                commitRecentExcursionLocation(location);
-                applyFilters();
-              }}
-            >
-              <FilterSection
-                label="Поиск"
-                open={openSections.has("search")}
-                onToggle={() => toggleSection("search")}
-              >
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Название, маршрут..."
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                />
-              </FilterSection>
-
-              <FilterSection
-                label="Локация"
-                open={openSections.has("location")}
-                onToggle={() => toggleSection("location")}
-              >
-                <div
-                  ref={desktopLocationComboboxRef}
-                  className={cn("relative", isDesktopLocationDropdownVisible ? "z-[30]" : "")}
-                >
-                  <input
-                    ref={desktopLocationInputRef}
-                    value={location}
-                    onChange={(event) => {
-                      setLocation(event.target.value.slice(0, 120));
-                      setActiveLocationDropdown("desktop");
-                      setActiveLocationSuggestionIndex(-1);
-                    }}
-                    autoComplete="off"
-                    placeholder="Ялта, Судак..."
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-expanded={isDesktopLocationDropdownVisible}
-                    aria-controls={excursionLocationSuggestionsListboxId}
-                    aria-activedescendant={activeDesktopLocationOptionId}
-                    onFocus={() => setActiveLocationDropdown("desktop")}
-                    onClick={() => setActiveLocationDropdown("desktop")}
-                    onKeyDown={(event) => handleLocationInputKeyDown("desktop", event)}
-                    className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  />
-
-                  {isDesktopLocationDropdownVisible ? (
-                    <div className="mt-1 overflow-hidden rounded-xl border border-sand bg-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.6)]">
-                      <div
-                        id={excursionLocationSuggestionsListboxId}
-                        role="listbox"
-                        className="max-h-[380px] overflow-y-auto p-1.5"
-                      >
-                        {isLocationSuggestionsLoading && locationDropdownOptions.length === 0 ? (
-                          <p className="px-3 py-5 text-sm text-olive/65">Ищем подходящие варианты...</p>
-                        ) : null}
-
-                        {!isLocationSuggestionsLoading &&
-                        !isLocationQueryMode &&
-                        locationRecentSuggestions.length > 0 ? (
-                          <div className="pb-1">
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              Ранее вы уже искали
-                            </p>
-                            <div className="space-y-1">
-                              {locationRecentSuggestions.map((item, index) =>
-                                renderLocationSuggestionButton("desktop", "recent", item, index),
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {!isLocationSuggestionsLoading &&
-                        !isLocationQueryMode &&
-                        locationPopularSuggestions.length > 0 ? (
-                          <div className="pb-1">
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              Популярные направления
-                            </p>
-                            <div className="space-y-1">
-                              {locationPopularSuggestions.map((item, index) =>
-                                renderLocationSuggestionButton("desktop", "popular", item, index),
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {!isLocationSuggestionsLoading &&
-                        isLocationQueryMode &&
-                        locationMatchSuggestions.length > 0 ? (
-                          <div className="pb-1">
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              Локации
-                            </p>
-                            <div className="space-y-1">
-                              {locationMatchSuggestions.map((item, index) =>
-                                renderLocationSuggestionButton("desktop", "matches", item, index),
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {!isLocationSuggestionsLoading &&
-                        !isLocationQueryMode &&
-                        locationRecentSuggestions.length === 0 &&
-                        locationPopularSuggestions.length === 0 ? (
-                          <p className="px-3 py-5 text-sm text-olive/65">Начните вводить город.</p>
-                        ) : null}
-
-                        {!isLocationSuggestionsLoading &&
-                        isLocationQueryMode &&
-                        locationMatchSuggestions.length === 0 ? (
-                          <p className="px-3 py-5 text-sm text-olive/65">Ничего не найдено.</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </FilterSection>
-
-              <FilterSection
-                label="Округ"
-                open={openSections.has("district")}
-                onToggle={() => toggleSection("district")}
-              >
-                <select
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                >
-                  <option value="">Все округа</option>
-                  {districts.map((d) => (
-                    <option key={d.slug} value={d.slug}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </FilterSection>
-
-              <FilterSection
-                label="Категория"
-                open={openSections.has("category")}
-                onToggle={() => toggleSection("category")}
-              >
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                >
-                  <option value="">Все категории</option>
-                  {categories.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </FilterSection>
-
-              <FilterSection
-                label="Дата"
-                open={openSections.has("date")}
-                onToggle={() => toggleSection("date")}
-              >
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                />
-              </FilterSection>
-
-              <FilterSection
-                label="Участники"
-                open={openSections.has("participants")}
-                onToggle={() => toggleSection("participants")}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  max={40}
-                  value={guests}
-                  onChange={(e) => setGuests(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                />
-              </FilterSection>
-
-              <FilterSection
-                label="Формат"
-                open={openSections.has("format")}
-                onToggle={() => toggleSection("format")}
-              >
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                >
-                  <option value="">Любой</option>
-                  <option value="group">Групповая</option>
-                  <option value="private">Индивидуальная</option>
-                </select>
-              </FilterSection>
-
-              <FilterSection
-                label="Длительность"
-                open={openSections.has("duration")}
-                onToggle={() => toggleSection("duration")}
-              >
-                <div className="space-y-2">
-                  {[
-                    { value: "", label: "Любая" },
-                    { value: "up_to_3h", label: "До 3 часов" },
-                    { value: "between_3h_6h", label: "3–6 часов" },
-                    { value: "more_6h", label: "Более 6 часов" },
-                  ].map((option) => (
-                    <label key={option.value} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="durationBucket"
-                        value={option.value}
-                        checked={durationBucket === option.value}
-                        onChange={() => setDurationBucket(option.value)}
-                        className="accent-primary"
-                      />
-                      <span className="text-sm text-olive">{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </FilterSection>
-
-              <FilterSection
-                label="Цена"
-                open={openSections.has("price")}
-                onToggle={() => toggleSection("price")}
-              >
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step={100}
-                    placeholder="от"
-                    value={minPrice}
-                    onChange={(e) => setMinPrice(e.target.value)}
-                    className="w-1/2 rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step={100}
-                    placeholder="до"
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(e.target.value)}
-                    className="w-1/2 rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  />
-                </div>
-              </FilterSection>
-
-              <FilterSection
-                label="Радиус поиска"
-                open={openSections.has("radius")}
-                onToggle={() => toggleSection("radius")}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-olive/60">
-                    <span>5 км</span>
-                    <span className="font-semibold text-olive">{radiusKm} км</span>
-                    <span>100 км</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={5}
-                    max={100}
-                    step={5}
-                    value={radiusKm}
-                    onChange={(e) => handleRadiusChange(e.target.value)}
-                    className="w-full accent-primary"
-                  />
-                  <p className="text-xs text-olive/50">Приблизительное расстояние по дорогам</p>
-                </div>
-              </FilterSection>
-
-              <FilterSection
-                label="Дополнительно"
-                open={openSections.has("extra")}
-                onToggle={() => toggleSection("extra")}
-              >
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={pickup}
-                    onChange={(e) => setPickup(e.target.checked)}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm text-olive">Нужен трансфер</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={kids}
-                    onChange={(e) => setKids(e.target.checked)}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm text-olive">Подходит детям</span>
-                </label>
-              </FilterSection>
-
-              <FilterSection
-                label="Сортировка"
-                open={openSections.has("sort")}
-                onToggle={() => toggleSection("sort")}
-              >
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                  className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                >
-                  <option value="">По релевантности</option>
-                  <option value="rating_desc">По рейтингу</option>
-                  <option value="popular_desc">По отзывам</option>
-                  <option value="price_asc">Сначала дешёвые</option>
-                  <option value="price_desc">Сначала дорогие</option>
-                  <option value="distance_asc">По расстоянию</option>
-                  <option value="duration_asc">По длительности</option>
-                </select>
-              </FilterSection>
-
-              <div className="px-4 py-3">
-                <button
-                  type="submit"
-                  className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/88 transition-colors"
-                >
-                  Найти
-                </button>
-              </div>
-            </form>
-          </div>
-        </aside>
-
+      <div className="flex flex-col gap-5 items-start lg:flex-row">
         {/* ── Center: Results ─────────────────────────────────────────────── */}
         <div className="min-w-0 flex-1">
           {displayItems.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
               <p className="text-sm text-olive/60">
-                По вашим параметрам экскурсии не найдены.
+                По вашим параметрам {resultsTitle} не найдены.
               </p>
               <p className="mt-1 text-xs text-olive/45">
                 Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
               </p>
               <button
                 type="button"
-                onClick={() => router.push("/search?direction=excursions")}
+                onClick={resetAllFilters}
                 className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
               >
                 Сбросить все фильтры
@@ -1706,8 +2315,11 @@ export function ExcursionSearchResults({
                 <ExcursionCard
                   key={item.id}
                   item={item}
-                  isHighlighted={hoveredPinId === item.id}
-                  onMouseEnter={() => setHoveredCardId(item.id)}
+                  isHighlighted={hoveredPinId === item.id || activePointId === item.id}
+                  onMouseEnter={() => {
+                    setActivePointId(null);
+                    setHoveredCardId(item.id);
+                  }}
                   onMouseLeave={() => setHoveredCardId(null)}
                   cardRef={(el) => {
                     if (el) cardRefsMap.current.set(item.id, el);
@@ -1758,7 +2370,7 @@ export function ExcursionSearchResults({
           <section className="flex h-full flex-col rounded-2xl bg-white/94 p-3.5 ring-1 ring-olive/10 md:p-4">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-olive">Карта экскурсий</p>
+                <p className="text-sm font-semibold text-olive">{mapTitle}</p>
                 <p className="text-xs text-olive/65">{mapStatsLabel}</p>
               </div>
               <button
@@ -1771,38 +2383,38 @@ export function ExcursionSearchResults({
             </div>
 
             {isMapActivated ? (
-              <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-olive/14">
+              <div className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-olive/14">
                 <YandexMapMultiViewer
                   points={mapPoints}
-                  activePointId={hoveredCardId}
+                  activePointId={activePointId ?? hoveredCardId}
                   hoveredPointId={hoveredPinId}
-                  onPointClick={handlePinClick}
+                  onPointClick={handleMapPointClick}
                   onPointHoverChange={handlePinHover}
                   radiusCircle={radiusCircle}
                   className="h-full w-full"
                 />
+
+                {activePopupItem ? (
+                  <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center">
+                    <MapExcursionPopupCard
+                      key={activePopupItem.id}
+                      item={activePopupItem}
+                      onClose={() => setActivePointId(null)}
+                      className="pointer-events-auto w-full max-w-md"
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={openMapFully}
-                className="group relative mt-3 block min-h-0 flex-1 overflow-hidden rounded-xl border border-olive/16 text-left"
-                aria-label="Открыть карту полностью"
-              >
-                <iframe
-                  src="https://yandex.ru/map-widget/v1/?ll=34.1%2C45.05&z=7&source=constructorsearch"
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={{ border: "none" }}
-                  title="Карта Крыма"
-                  aria-hidden="true"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-midnight/60 via-midnight/25 to-midnight/10" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
-                  <span className="inline-flex h-11 items-center rounded-full bg-white/92 px-5 text-sm font-semibold text-olive shadow-sm backdrop-blur transition group-hover:bg-white">
-                    Открыть полностью
-                  </span>
-                </div>
-              </button>
+              <CatalogMapPreviewCard
+                title={mapTitle}
+                subtitle="Откройте карту, когда захотите проверить маршрут и точки на местности."
+                actionLabel="Открыть карту"
+                ariaLabel="Открыть карту полностью"
+                onOpen={openMapFully}
+                variant="crimea-preview"
+                className="mt-3 min-h-0 flex-1 rounded-xl"
+              />
             )}
           </section>
         </aside>
@@ -1821,11 +2433,19 @@ export function ExcursionSearchResults({
 
       {/* ── Expanded map modal ──────────────────────────────────────────────── */}
       {mapExpanded ? (
-        <div id="excursion-map-modal" className="fixed inset-0 z-[90] bg-midnight/55 p-3 backdrop-blur-[1px] sm:p-5">
+        <div
+          id="excursion-map-modal"
+          className="fixed inset-0 z-[90] bg-midnight/55 p-3 backdrop-blur-[1px] sm:p-5"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeMapFully();
+            }
+          }}
+        >
           <section className="mx-auto flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white/97 p-3 ring-1 ring-olive/10 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-olive">Карта экскурсий</p>
+                <p className="text-sm font-semibold text-olive">{mapTitle}</p>
                 <p className="text-xs text-olive/65">
                   {filters.locationName ? `· ${filters.locationName}` : "· весь Крым"}
                   {radiusCircle ? ` · радиус ${filters.radiusKm} км` : ""}
@@ -1836,236 +2456,35 @@ export function ExcursionSearchResults({
                 onClick={closeMapFully}
                 className="inline-flex h-9 items-center rounded-xl border border-olive/16 bg-white px-3 text-xs font-semibold text-olive transition hover:bg-cream/70"
               >
-                × Закрыть карту
+                Закрыть карту
               </button>
             </div>
 
             <div className="relative mt-3 min-h-0 flex-1">
               <YandexMapMultiViewer
                 points={mapPoints}
-                activePointId={hoveredCardId}
+                activePointId={activePointId ?? hoveredCardId}
                 hoveredPointId={hoveredPinId}
                 onPointClick={(id) => {
-                  handlePinClick(id);
-                  closeMapFully();
+                  handleMapPointClick(id);
                 }}
                 onPointHoverChange={handlePinHover}
                 radiusCircle={radiusCircle}
                 className="h-[calc(100dvh-190px)] min-h-[360px] w-full"
               />
+
+              {activePopupItem ? (
+                <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center lg:justify-start">
+                  <MapExcursionPopupCard
+                    key={activePopupItem.id}
+                    item={activePopupItem}
+                    onClose={() => setActivePointId(null)}
+                    className="pointer-events-auto w-full max-w-md"
+                  />
+                </div>
+              ) : null}
             </div>
           </section>
-        </div>
-      ) : null}
-
-      {/* ── Mobile filter drawer ────────────────────────────────────────────── */}
-      {sidebarOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex md:hidden"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSidebarOpen(false);
-          }}
-        >
-          <div className="absolute inset-0 bg-midnight/40 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative ml-auto h-full w-80 overflow-y-auto bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-olive/10 px-4 py-3">
-              <span className="font-semibold text-olive">Фильтры</span>
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(false)}
-                className="rounded-lg p-1.5 text-olive/50 hover:bg-olive/8 transition-colors"
-              >
-                <AppIcon icon={X} className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Reuse same form in mobile drawer */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSidebarOpen(false);
-                commitRecentExcursionLocation(location);
-                applyFilters();
-              }}
-            >
-              <div className="px-4 py-3 space-y-3">
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Поиск</span>
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Название, маршрут..."
-                    className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Локация</span>
-                  <div
-                    ref={mobileLocationComboboxRef}
-                    className={cn("relative", isMobileLocationDropdownVisible ? "z-[30]" : "")}
-                  >
-                    <input
-                      ref={mobileLocationInputRef}
-                      value={location}
-                      onChange={(event) => {
-                        setLocation(event.target.value.slice(0, 120));
-                        setActiveLocationDropdown("mobile");
-                        setActiveLocationSuggestionIndex(-1);
-                      }}
-                      autoComplete="off"
-                      placeholder="Ялта, Судак..."
-                      role="combobox"
-                      aria-autocomplete="list"
-                      aria-expanded={isMobileLocationDropdownVisible}
-                      aria-controls={mobileExcursionLocationSuggestionsListboxId}
-                      aria-activedescendant={activeMobileLocationOptionId}
-                      onFocus={() => setActiveLocationDropdown("mobile")}
-                      onClick={() => setActiveLocationDropdown("mobile")}
-                      onKeyDown={(event) => handleLocationInputKeyDown("mobile", event)}
-                      className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                    />
-
-                    {isMobileLocationDropdownVisible ? (
-                      <div className="mt-1 overflow-hidden rounded-xl border border-sand bg-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.6)]">
-                        <div
-                          id={mobileExcursionLocationSuggestionsListboxId}
-                          role="listbox"
-                          className="max-h-[380px] overflow-y-auto p-1.5"
-                        >
-                          {isLocationSuggestionsLoading && locationDropdownOptions.length === 0 ? (
-                            <p className="px-3 py-5 text-sm text-olive/65">Ищем подходящие варианты...</p>
-                          ) : null}
-
-                          {!isLocationSuggestionsLoading &&
-                          !isLocationQueryMode &&
-                          locationRecentSuggestions.length > 0 ? (
-                            <div className="pb-1">
-                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                                Ранее вы уже искали
-                              </p>
-                              <div className="space-y-1">
-                                {locationRecentSuggestions.map((item, index) =>
-                                  renderLocationSuggestionButton("mobile", "recent", item, index),
-                                )}
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {!isLocationSuggestionsLoading &&
-                          !isLocationQueryMode &&
-                          locationPopularSuggestions.length > 0 ? (
-                            <div className="pb-1">
-                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                                Популярные направления
-                              </p>
-                              <div className="space-y-1">
-                                {locationPopularSuggestions.map((item, index) =>
-                                  renderLocationSuggestionButton("mobile", "popular", item, index),
-                                )}
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {!isLocationSuggestionsLoading &&
-                          isLocationQueryMode &&
-                          locationMatchSuggestions.length > 0 ? (
-                            <div className="pb-1">
-                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                                Локации
-                              </p>
-                              <div className="space-y-1">
-                                {locationMatchSuggestions.map((item, index) =>
-                                  renderLocationSuggestionButton("mobile", "matches", item, index),
-                                )}
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {!isLocationSuggestionsLoading &&
-                          !isLocationQueryMode &&
-                          locationRecentSuggestions.length === 0 &&
-                          locationPopularSuggestions.length === 0 ? (
-                            <p className="px-3 py-5 text-sm text-olive/65">Начните вводить город.</p>
-                          ) : null}
-
-                          {!isLocationSuggestionsLoading &&
-                          isLocationQueryMode &&
-                          locationMatchSuggestions.length === 0 ? (
-                            <p className="px-3 py-5 text-sm text-olive/65">Ничего не найдено.</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Округ</span>
-                  <select
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  >
-                    <option value="">Все округа</option>
-                    {districts.map((d) => (
-                      <option key={d.slug} value={d.slug}>{d.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Категория</span>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  >
-                    <option value="">Все категории</option>
-                    {categories.map((c) => (
-                      <option key={c.slug} value={c.slug}>{c.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Радиус, км</span>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={5}
-                      max={100}
-                      step={5}
-                      value={radiusKm}
-                      onChange={(e) => handleRadiusChange(e.target.value)}
-                      className="flex-1 accent-primary"
-                    />
-                    <span className="w-14 text-right text-sm font-medium text-olive">{radiusKm} км</span>
-                  </div>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Сортировка</span>
-                  <select
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value)}
-                    className="w-full rounded-xl border border-olive/20 bg-foam px-3 py-2 text-sm text-olive outline-none focus:border-primary"
-                  >
-                    <option value="">По релевантности</option>
-                    <option value="rating_desc">По рейтингу</option>
-                    <option value="popular_desc">По отзывам</option>
-                    <option value="price_asc">Сначала дешёвые</option>
-                    <option value="price_desc">Сначала дорогие</option>
-                    <option value="distance_asc">По расстоянию</option>
-                    <option value="duration_asc">По длительности</option>
-                  </select>
-                </label>
-              </div>
-              <div className="border-t border-olive/10 px-4 py-3">
-                <button
-                  type="submit"
-                  className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/88 transition-colors"
-                >
-                  Применить
-                </button>
-              </div>
-            </form>
-          </aside>
         </div>
       ) : null}
     </div>
@@ -2107,24 +2526,6 @@ function ExcursionCard({
   const duration = formatProgramDuration(item);
   const priceLabel = formatProgramPrice(item);
 
-  const ratingBlock = item.avgRating > 0 ? (
-    <div className="flex items-center gap-2">
-      <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
-        {item.avgRating.toFixed(1)}
-      </span>
-      <div className="min-w-0">
-        <span className="text-[12px] font-semibold text-olive">
-          {getRatingText(item.avgRating)}
-        </span>
-        {item.reviewsCount > 0 && (
-          <span className="ml-1 text-[12px] text-olive/45">
-            · {pluralizeReviews(item.reviewsCount)}
-          </span>
-        )}
-      </div>
-    </div>
-  ) : null;
-
   return (
     <article
       ref={cardRef}
@@ -2159,6 +2560,9 @@ function ExcursionCard({
               alt={item.title}
               loading="lazy"
               decoding="async"
+              fetchPriority="low"
+              width={400}
+              height={300}
               sizes="(min-width: 1024px) 280px, (min-width: 768px) 240px, 100vw"
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
@@ -2167,6 +2571,15 @@ function ExcursionCard({
               Без фото
             </div>
           )}
+
+          <div className="pointer-events-auto absolute right-2 top-2 z-30 p-1 sm:right-2.5 sm:top-2.5">
+            <FavoriteToggleButton
+              itemId={item.id}
+              entityType={getFavoriteEntityTypeFromOfferType(item.offerType)}
+              initialIsFavorite={false}
+              variant="icon"
+            />
+          </div>
 
           {/* Type badge on image */}
           <div className="pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1.5">
@@ -2228,8 +2641,7 @@ function ExcursionCard({
 
               {item.distanceKm !== null ? (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-sand/60 px-2 py-1 text-[11px] font-medium text-olive/60">
-                  <AppIcon icon={Route} className="h-3 w-3 shrink-0" />
-                  ~{item.distanceKm} км
+                  <AppIcon icon={Route} className="h-3 w-3 shrink-0" />~{item.distanceKm} км
                 </span>
               ) : null}
 
@@ -2262,9 +2674,6 @@ function ExcursionCard({
               ) : null}
             </div>
 
-            {/* Rating */}
-            {ratingBlock}
-
             {/* Mobile: price + CTA (below md) */}
             <div className="mt-auto flex items-end justify-between gap-3 border-t border-olive/[0.06] pt-3 md:hidden">
               <div className="min-w-0">
@@ -2284,7 +2693,6 @@ function ExcursionCard({
 
           {/* Right column: rating + price + CTA (desktop only) */}
           <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[160px] lg:w-[180px]">
-            {/* Rating top-right */}
             <div className="text-right">
               {item.avgRating > 0 ? (
                 <div className="flex items-center gap-2">
@@ -2292,11 +2700,11 @@ function ExcursionCard({
                     <span className="text-[12px] font-semibold text-olive">
                       {getRatingText(item.avgRating)}
                     </span>
-                    {item.reviewsCount > 0 && (
+                    {item.reviewsCount > 0 ? (
                       <p className="text-[11px] text-olive/40">
                         {pluralizeReviews(item.reviewsCount)}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-[14px] font-bold text-white">
                     {item.avgRating.toFixed(1)}
@@ -2307,7 +2715,6 @@ function ExcursionCard({
               )}
             </div>
 
-            {/* Price + CTA bottom-right */}
             <div className="mt-auto text-right">
               <p className="text-[18px] font-extrabold leading-tight tracking-tight text-olive">
                 {priceLabel}

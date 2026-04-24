@@ -681,19 +681,23 @@ export function RoomAmenitiesManager({ propertyId, onChanged }: RoomAmenitiesMan
                       : "border-olive/10 bg-cream/30 hover:border-olive/20 hover:bg-cream/50",
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={cn(
-                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-                          draft.enabled ? "bg-sage/30 text-olive" : "bg-white/85 text-olive/60",
-                        )}
-                      >
-                        {featureIcon}
-                      </span>
-                      <p className="text-sm font-medium text-olive">{displayFeatureName}</p>
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          className={cn(
+                            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+                            draft.enabled ? "bg-sage/30 text-olive" : "bg-white/85 text-olive/60",
+                          )}
+                        >
+                          {featureIcon}
+                        </span>
+                        <p className="min-w-0 text-sm font-medium leading-5 text-olive">
+                          {displayFeatureName}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
                       {draft.enabled ? (
                         <button
                           type="button"

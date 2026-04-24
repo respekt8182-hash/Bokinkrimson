@@ -1,4 +1,3 @@
-// API route handler for /api/auth/forgot-password.
 import { PasswordResetRequestStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
@@ -9,11 +8,16 @@ import {
 import { authRateLimit } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { createInMemoryRateLimiter } from "@/lib/rate-limit";
-import { forgotPasswordSchema } from "@/lib/schemas";
+import {
+  createRateLimiter,
+  RateLimitBackendUnavailableError,
+  RateLimitConfigurationError,
+} from "@/lib/rate-limit";
+import { forgotPasswordSchema } from "@/lib/schemas/auth";
 import { getRequestIp } from "@/lib/security";
+import { buildUserPhoneLookupCandidates } from "@/lib/user-phone";
 
-const forgotPasswordLimiter = createInMemoryRateLimiter({
+const forgotPasswordLimiter = createRateLimiter({
   id: "auth-forgot-password",
   windowMs: authRateLimit.forgotPassword.windowMinutes * 60 * 1000,
   maxRequests: authRateLimit.forgotPassword.maxRequestsPerWindow,
@@ -21,22 +25,23 @@ const forgotPasswordLimiter = createInMemoryRateLimiter({
 
 export async function POST(request: Request) {
   const ip = getRequestIp(request);
-  const limit = forgotPasswordLimiter.limit(ip);
-  if (!limit.allowed) {
-    return NextResponse.json(
-      {
-        error: `Слишком много запросов на восстановление. Повторите через ${limit.retryAfterSeconds} сек.`,
-      },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(limit.retryAfterSeconds),
-        },
-      },
-    );
-  }
 
   try {
+    const limit = await forgotPasswordLimiter.limit(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Слишком много запросов на восстановление. Повторите через ${limit.retryAfterSeconds} сек.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+
     const payload = await request.json();
     const parsed = forgotPasswordSchema.safeParse(payload);
 
@@ -52,9 +57,12 @@ export async function POST(request: Request) {
       return unavailableResponse;
     }
 
-    const phone = parsed.data.phone.replace(/\D/g, "");
-    const user = await db.user.findUnique({
-      where: { phone },
+    const user = await db.user.findFirst({
+      where: {
+        phone: {
+          in: buildUserPhoneLookupCandidates(parsed.data.phone),
+        },
+      },
       select: {
         id: true,
         phone: true,
@@ -82,6 +90,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
+    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+      return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
+    }
+
     if (isAuthDatabaseUnavailable(error)) {
       logger.warn(
         "Forgot password is temporarily unavailable because the database is down or credentials are invalid",

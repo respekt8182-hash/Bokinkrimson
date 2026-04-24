@@ -76,12 +76,15 @@ export default async function DashboardChessboardPage({
         : "К объектам";
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-16 z-40 overflow-y-auto bg-cream [@media(orientation:landscape)_and_(max-height:560px)]:top-0">
-      <div className="mx-auto w-full max-w-[1600px] space-y-4 px-3 py-3 md:px-6 md:py-5 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
-        <div className="rounded-2xl border border-olive/10 bg-white p-4 [@media(orientation:landscape)_and_(max-height:560px)]:hidden">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="fixed inset-x-0 bottom-0 top-16 z-40 overflow-y-auto bg-cream/92 [@media(orientation:landscape)_and_(max-height:560px)]:top-0">
+      <div className="mx-auto w-full max-w-[1560px] space-y-3 px-2.5 py-2.5 md:px-5 md:py-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+        <div className="rounded-xl border border-olive/10 bg-white/94 px-3 py-2.5 shadow-[0_12px_30px_-28px_rgba(58,43,35,0.38)] [@media(orientation:landscape)_and_(max-height:560px)]:hidden">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h1 className="text-2xl text-olive md:text-3xl">Шахматка</h1>
+              <h1 className="text-xl text-olive md:text-2xl">Шахматка</h1>
+              <p className="mt-0.5 text-xs text-olive/62 md:text-sm">
+                Занятость и цены по объектам в плотном рабочем режиме.
+              </p>
             </div>
           </div>
         </div>

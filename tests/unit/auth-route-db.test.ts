@@ -15,11 +15,10 @@ vi.mock("@/lib/prisma-errors", () => ({
   logDatabaseFallbackOnce: prismaErrorMocks.logDatabaseFallbackOnce,
 }));
 
-import {
-  ensureAuthDatabaseAvailable,
-  getAuthDatabaseUnavailableMessage,
-  isAuthDatabaseUnavailable,
-} from "../../src/lib/auth-route-db";
+async function loadAuthRouteDb() {
+  vi.resetModules();
+  return import("../../src/lib/auth-route-db");
+}
 
 describe("auth route database guard", () => {
   beforeEach(() => {
@@ -28,6 +27,7 @@ describe("auth route database guard", () => {
 
   it("returns null when database is reachable", async () => {
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(true);
+    const { ensureAuthDatabaseAvailable } = await loadAuthRouteDb();
 
     const response = await ensureAuthDatabaseAvailable({
       routeId: "auth-login",
@@ -40,6 +40,7 @@ describe("auth route database guard", () => {
 
   it("returns 503 response when database is unreachable", async () => {
     prismaErrorMocks.isConfiguredDatabaseReachable.mockResolvedValue(false);
+    const { ensureAuthDatabaseAvailable, getAuthDatabaseUnavailableMessage } = await loadAuthRouteDb();
 
     const response = await ensureAuthDatabaseAvailable({
       routeId: "auth-login",
@@ -57,17 +58,19 @@ describe("auth route database guard", () => {
     );
   });
 
-  it("reuses prisma unavailability detection", () => {
+  it("reuses prisma unavailability detection", async () => {
     prismaErrorMocks.isDatabaseUnavailableError.mockReturnValue(true);
     prismaErrorMocks.isDatabaseAuthenticationError.mockReturnValue(false);
+    const { isAuthDatabaseUnavailable } = await loadAuthRouteDb();
 
     expect(isAuthDatabaseUnavailable(new Error("db"))).toBe(true);
     expect(prismaErrorMocks.isDatabaseUnavailableError).toHaveBeenCalledTimes(1);
   });
 
-  it("treats authentication failures as auth service unavailability", () => {
+  it("treats authentication failures as auth service unavailability", async () => {
     prismaErrorMocks.isDatabaseUnavailableError.mockReturnValue(false);
     prismaErrorMocks.isDatabaseAuthenticationError.mockReturnValue(true);
+    const { isAuthDatabaseUnavailable } = await loadAuthRouteDb();
 
     expect(isAuthDatabaseUnavailable(new Error("db auth"))).toBe(true);
     expect(prismaErrorMocks.isDatabaseAuthenticationError).toHaveBeenCalledTimes(1);

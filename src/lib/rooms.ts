@@ -45,6 +45,20 @@ export type SerializedRoom = {
   updatedAt: string;
 };
 
+export type SerializedChessboardRoom = {
+  id: string;
+  propertyId: string;
+  title: string;
+  beds: number;
+  extraBeds: number;
+  roomsCount: number;
+  areaSqm: number | null;
+  bathroomType: BathroomType;
+  bathroomTypeLabel: string;
+  isActive: boolean;
+  prices: SerializedRoomPrice[];
+};
+
 export function getBathroomTypeLabel(type: BathroomType): string {
   switch (type) {
     case "IN_ROOM":
@@ -181,5 +195,42 @@ export function serializeRoom(room: {
     prices,
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
+  };
+}
+
+export function serializeRoomForChessboard(room: {
+  id: string;
+  propertyId: string;
+  title: string;
+  beds: number;
+  extraBeds: number;
+  roomsCount: number;
+  areaSqm: Prisma.Decimal | null;
+  bathroomType: BathroomType;
+  isActive: boolean;
+  prices?: Array<{
+    id: string;
+    roomId: string;
+    dateFrom: Date;
+    dateTo: Date;
+    price: Prisma.Decimal;
+    minGuests?: number | null;
+    currency: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}): SerializedChessboardRoom {
+  return {
+    id: room.id,
+    propertyId: room.propertyId,
+    title: normalizeRoomTitle(room.title),
+    beds: room.beds,
+    extraBeds: room.extraBeds,
+    roomsCount: room.roomsCount,
+    areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
+    bathroomType: room.bathroomType,
+    bathroomTypeLabel: getBathroomTypeLabel(room.bathroomType),
+    isActive: room.isActive,
+    prices: room.prices?.map(serializeRoomPrice) ?? [],
   };
 }

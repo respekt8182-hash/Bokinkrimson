@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { normalizePlainText } from "@/lib/plain-text";
 import { serializeReview } from "@/lib/reviews";
 
 type RouteContext = {
@@ -87,7 +88,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const updated = await db.review.update({
     where: { id: review.id },
     data: {
-      ownerReply: parsed.data.text,
+      ownerReply: normalizePlainText(parsed.data.text),
       ownerRepliedAt: new Date(),
     },
     include: {

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput, type PhoneInputValue } from "@/components/ui/phone-input";
-import { registerSchema } from "@/lib/schemas";
+import { registerSchema } from "@/lib/schemas/auth";
 
 // The form schema without phone (phone is handled separately via PhoneInput)
 const formFieldsSchema = z.object({
@@ -143,7 +143,7 @@ export function RegisterForm() {
           <button
             type="button"
             onClick={() => setIsPasswordVisible((prev) => !prev)}
-            className="absolute inset-y-0 right-2 my-auto h-8 rounded-md px-2 text-xs font-semibold text-olive/70 transition hover:bg-cream"
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-10 items-center rounded-md px-2.5 text-sm font-semibold text-olive/78 transition hover:bg-cream"
           >
             {isPasswordVisible ? "Скрыть" : "Показать"}
           </button>

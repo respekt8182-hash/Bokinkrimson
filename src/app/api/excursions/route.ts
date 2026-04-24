@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { ExcursionOfferType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
+import {
+  countOwnerActiveExcursionDrafts,
+  OWNER_ACTIVE_EXCURSION_DRAFT_LIMIT,
+  purgeExpiredDeletedExcursions,
+} from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
-import { serializeExcursion } from "@/lib/excursions";
+import { createExcursionDraft, serializeExcursion } from "@/lib/excursions";
 
 // Owner excursions collection endpoint:
 // GET  -> list own excursions
@@ -14,9 +19,12 @@ export async function GET() {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
+  await purgeExpiredDeletedExcursions(db, new Date());
+
   const items = await db.excursion.findMany({
     where: {
       ownerId: session.id,
+      deletedAt: null,
     },
     include: {
       mainLocation: { select: { name: true } },
@@ -43,6 +51,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
+  await purgeExpiredDeletedExcursions(db, new Date());
+
   let offerType: ExcursionOfferType = ExcursionOfferType.EXCURSION;
   try {
     const payload = (await request.json()) as { offerType?: string };
@@ -53,13 +63,28 @@ export async function POST(request: Request) {
     // Empty body is allowed for backwards compatibility.
   }
 
-  const created = await db.excursion.create({
-    data: {
-      ownerId: session.id,
-      offerType,
-      contactFirstName: session.firstName,
-      contactLastName: session.lastName,
-      contactEmail: "",
+  const activeDraftsCount = await countOwnerActiveExcursionDrafts(db, session.id);
+  if (activeDraftsCount >= OWNER_ACTIVE_EXCURSION_DRAFT_LIMIT) {
+    return NextResponse.json(
+      {
+        error:
+          "Доступно не больше 3 активных черновиков программ. Опубликуйте или удалите одну из текущих карточек.",
+      },
+      { status: 409 },
+    );
+  }
+
+  const createdDraft = await createExcursionDraft(db, {
+    ownerId: session.id,
+    offerType,
+    contactFirstName: session.firstName,
+    contactLastName: session.lastName,
+    contactEmail: "",
+  });
+
+  const created = await db.excursion.findUniqueOrThrow({
+    where: {
+      id: createdDraft.id,
     },
     include: {
       mainLocation: { select: { name: true } },

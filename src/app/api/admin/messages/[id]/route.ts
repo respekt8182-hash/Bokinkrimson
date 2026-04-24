@@ -1,5 +1,6 @@
 // API route handler for /api/admin/messages/[id].
 import { NextResponse } from "next/server";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 
@@ -27,6 +28,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   await db.adminMessage.delete({
     where: { id: existing.id },
+  });
+
+  await writeAdminAuditLog(db, {
+    adminUserId: admin.id,
+    action: "message_delete",
+    targetType: "admin_message",
+    targetId: existing.id,
+    details: {
+      outcome: "deleted",
+    },
   });
 
   return NextResponse.json({ ok: true });

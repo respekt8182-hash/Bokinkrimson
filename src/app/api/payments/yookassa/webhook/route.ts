@@ -1,4 +1,5 @@
 // YooKassa webhook endpoint that verifies provider state and syncs local payment/property status.
+import { createHash } from "crypto";
 import { PaymentProvider, PaymentStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -9,16 +10,20 @@ import {
   type YookassaStatus,
 } from "@/lib/payments";
 import { db } from "@/lib/db";
+import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { logger } from "@/lib/logger";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
-import { getYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
+import {
+  getYookassaPayment,
+  isTrustedYookassaWebhookSource,
+  isYookassaConfigured,
+} from "@/lib/yookassa";
 
 const webhookSchema = z.object({
   event: z.string().optional(),
   object: z
     .object({
       id: z.string(),
-      status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]).optional(),
       confirmation: z
         .object({
           confirmation_url: z.string().url().optional(),
@@ -28,43 +33,94 @@ const webhookSchema = z.object({
     .passthrough(),
 });
 
-function resolveStatusFromEvent(event: string | undefined): YookassaStatus | null {
-  const value = (event ?? "").toLowerCase();
+function buildWebhookFingerprint(rawBody: string): string {
+  return createHash("sha256").update(rawBody).digest("hex");
+}
 
-  if (value.includes("succeeded")) {
-    return "succeeded";
+async function createWebhookReceipt(input: {
+  fingerprint: string;
+  providerEventId: string | null;
+  providerPaymentId: string;
+  localPaymentId: string | null;
+  outcome: string;
+  metadata?: Prisma.InputJsonValue;
+}): Promise<"created" | "duplicate"> {
+  try {
+    await db.webhookReceipt.create({
+      data: {
+        provider: PaymentProvider.YOOKASSA,
+        fingerprint: input.fingerprint,
+        providerEventId: input.providerEventId,
+        providerPaymentId: input.providerPaymentId,
+        localPaymentId: input.localPaymentId,
+        outcome: input.outcome,
+        metadata: input.metadata,
+      },
+    });
+
+    return "created";
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return "duplicate";
+    }
+
+    throw error;
   }
-
-  if (value.includes("canceled")) {
-    return "canceled";
-  }
-
-  if (value.includes("waiting_for_capture")) {
-    return "waiting_for_capture";
-  }
-
-  if (value.includes("pending")) {
-    return "pending";
-  }
-
-  return null;
 }
 
 export async function POST(request: Request) {
+  if (!isTrustedYookassaWebhookSource(request)) {
+    logger.warn("Rejected YooKassa webhook from untrusted source");
+    return NextResponse.json({ error: "Webhook source is not trusted" }, { status: 403 });
+  }
+
+  if (!isYookassaConfigured()) {
+    logger.error("Rejected YooKassa webhook because provider configuration is missing");
+    return NextResponse.json({ error: "Payment provider is unavailable" }, { status: 503 });
+  }
+
+  const rawBody = await request.text();
   let payload: unknown;
 
   try {
-    payload = await request.json();
+    payload = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = webhookSchema.safeParse(payload);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректный формат webhook" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
   }
 
+  const providerEventId = parsed.data.event ?? null;
   const providerPaymentId = parsed.data.object.id;
+  const fingerprint = buildWebhookFingerprint(rawBody);
+
+  let providerSnapshot: Awaited<ReturnType<typeof getYookassaPayment>>;
+
+  try {
+    providerSnapshot = await getYookassaPayment(providerPaymentId);
+  } catch (error) {
+    logger.error("Failed to verify YooKassa payment via API", {
+      providerPaymentId,
+      providerEventId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return NextResponse.json({ error: "Payment verification is temporarily unavailable" }, { status: 503 });
+  }
+
+  if (providerSnapshot.id !== providerPaymentId) {
+    logger.warn("YooKassa verification returned mismatched payment id", {
+      providerPaymentId,
+      verifiedPaymentId: providerSnapshot.id,
+      providerEventId,
+    });
+    return NextResponse.json({ error: "Payment verification mismatch" }, { status: 409 });
+  }
 
   const existing = await db.payment.findFirst({
     where: {
@@ -81,38 +137,42 @@ export async function POST(request: Request) {
     },
   });
 
+  const receiptStatus = await createWebhookReceipt({
+    fingerprint,
+    providerEventId,
+    providerPaymentId,
+    localPaymentId: existing?.id ?? null,
+    outcome: existing ? "verified" : "payment_not_found",
+    metadata: {
+      event: providerEventId,
+      verifiedStatus: providerSnapshot.status,
+    },
+  });
+
+  if (receiptStatus === "duplicate") {
+    return NextResponse.json({ ok: true, duplicate: true });
+  }
+
   if (!existing) {
+    logger.info("Ignoring verified YooKassa webhook for unknown local payment", {
+      providerPaymentId,
+      providerEventId,
+      verifiedStatus: providerSnapshot.status,
+    });
     return NextResponse.json({ ok: true, ignored: "payment_not_found" });
   }
 
-  let providerSnapshot: Awaited<ReturnType<typeof getYookassaPayment>> | null = null;
-
-  if (isYookassaConfigured()) {
-    try {
-      providerSnapshot = await getYookassaPayment(providerPaymentId);
-    } catch (error) {
-      logger.error("Failed to verify YooKassa payment via API", {
-        providerPaymentId,
-        error: error instanceof Error ? error.message : "unknown",
-      });
-    }
-  }
-
-  const rawStatus =
-    providerSnapshot?.status ??
-    parsed.data.object.status ??
-    resolveStatusFromEvent(parsed.data.event) ??
-    "pending";
-
-  const nextStatus = resolvePaymentStatusTransition(existing.status, mapYookassaStatus(rawStatus));
+  const nextStatus = resolvePaymentStatusTransition(
+    existing.status,
+    mapYookassaStatus(providerSnapshot.status as YookassaStatus),
+  );
   const nextConfirmationUrl =
-    providerSnapshot?.confirmation?.confirmation_url ??
-    parsed.data.object.confirmation?.confirmation_url ??
-    existing.confirmationUrl;
+    providerSnapshot.confirmation?.confirmation_url ?? existing.confirmationUrl;
   const providerPayload = JSON.parse(
     JSON.stringify({
-      webhook: parsed.data,
       verified: providerSnapshot,
+      receivedEvent: providerEventId,
+      receivedObjectId: providerPaymentId,
     }),
   ) as Prisma.InputJsonValue;
 
@@ -125,6 +185,21 @@ export async function POST(request: Request) {
     if (nextStatus === PaymentStatus.SUCCEEDED && existing.propertyId) {
       await autoSubmitPropertyAfterSuccessfulPayment(db, existing.propertyId);
     }
+    if (nextStatus === PaymentStatus.SUCCEEDED && existing.excursionId) {
+      await autoSubmitExcursionAfterSuccessfulPayment(db, existing.excursionId);
+    }
+
+    await db.webhookReceipt.update({
+      where: {
+        provider_fingerprint: {
+          provider: PaymentProvider.YOOKASSA,
+          fingerprint,
+        },
+      },
+      data: {
+        outcome: "noop",
+      },
+    });
 
     return NextResponse.json({ ok: true, updated: false });
   }
@@ -145,23 +220,43 @@ export async function POST(request: Request) {
             ? (existing.canceledAt ?? new Date())
             : existing.canceledAt,
         placementValidUntil:
-          nextStatus === PaymentStatus.SUCCEEDED
+          nextStatus === PaymentStatus.SUCCEEDED && existing.propertyId
             ? (existing.placementValidUntil ?? getPlacementValidUntil(new Date()))
             : existing.placementValidUntil,
       },
-      include: {
-        property: {
-          select: {
-            status: true,
-            pendingEditStatus: true,
-          },
+    });
+
+    if (updated.status === PaymentStatus.SUCCEEDED && updated.propertyId) {
+      await autoSubmitPropertyAfterSuccessfulPayment(tx, updated.propertyId);
+    }
+    if (updated.status === PaymentStatus.SUCCEEDED && updated.excursionId) {
+      await autoSubmitExcursionAfterSuccessfulPayment(tx, updated.excursionId);
+    }
+
+    await tx.webhookReceipt.update({
+      where: {
+        provider_fingerprint: {
+          provider: PaymentProvider.YOOKASSA,
+          fingerprint,
+        },
+      },
+      data: {
+        outcome: "processed",
+        localPaymentId: updated.id,
+        metadata: {
+          event: providerEventId,
+          verifiedStatus: providerSnapshot.status,
+          paymentStatus: updated.status,
         },
       },
     });
+  });
 
-    if (updated.status === PaymentStatus.SUCCEEDED && existing.propertyId) {
-      await autoSubmitPropertyAfterSuccessfulPayment(tx, existing.propertyId);
-    }
+  logger.info("Processed verified YooKassa webhook", {
+    paymentId: existing.id,
+    providerPaymentId,
+    providerEventId,
+    status: nextStatus,
   });
 
   return NextResponse.json({ ok: true, updated: true });
