@@ -1,8 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ArrowRight, CircleAlert, Eye, EyeOff } from "lucide-react";
+
+function formatWaitTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function parseRetryAfter(value: string | null, fallback?: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return typeof fallback === "number" && fallback > 0 ? Math.ceil(fallback) : 0;
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -11,9 +26,30 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const isLockedOut = lockoutSeconds > 0;
+  const visibleError = isLockedOut
+    ? `Слишком много попыток входа. Подождите ${formatWaitTime(lockoutSeconds)} и попробуйте снова.`
+    : error;
+
+  useEffect(() => {
+    if (!isLockedOut) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setLockoutSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isLockedOut, lockoutSeconds]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isLockedOut) {
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -25,7 +61,22 @@ export default function AdminLoginPage() {
       });
 
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+          retryAfterSeconds?: number;
+        } | null;
+        if (response.status === 429) {
+          const retryAfterSeconds = parseRetryAfter(
+            response.headers.get("Retry-After"),
+            data?.retryAfterSeconds,
+          );
+          if (retryAfterSeconds > 0) {
+            setLockoutSeconds(retryAfterSeconds);
+            setError("");
+            return;
+          }
+        }
+
         setError(data?.error ?? "Не удалось выполнить вход.");
         return;
       }
@@ -66,10 +117,10 @@ export default function AdminLoginPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  {error ? (
+                  {visibleError ? (
                     <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">
                       <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{error}</span>
+                      <span>{visibleError}</span>
                     </div>
                   ) : null}
 
@@ -119,10 +170,16 @@ export default function AdminLoginPage() {
 
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || isLockedOut}
                     className="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f766e_0%,#0f766e_46%,#164e63_100%)] px-5 text-base font-semibold text-white shadow-[0_18px_38px_rgba(15,118,110,0.24)] transition hover:translate-y-[-1px] hover:shadow-[0_20px_40px_rgba(15,118,110,0.3)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    <span>{loading ? "Входим..." : "Войти в админку"}</span>
+                    <span>
+                      {isLockedOut
+                        ? `Подождите ${formatWaitTime(lockoutSeconds)}`
+                        : loading
+                          ? "Входим..."
+                          : "Войти в админку"}
+                    </span>
                     <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
                   </button>
                 </form>

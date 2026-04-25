@@ -35,7 +35,6 @@ export type SearchSeoState = {
   index: boolean;
   follow: boolean;
   heading: string;
-  lead: string;
   breadcrumbItems: SearchSeoBreadcrumbItem[];
 };
 
@@ -299,9 +298,6 @@ export async function getSearchSeoState(
       : locationLabel
         ? `Жильё ${locationLabelPhrase ?? `в городе ${locationLabel}`} у моря`
         : "Жильё в Крыму у моря";
-    const lead = locationLabel
-      ? `Собрали актуальные варианты размещения ${locationLabelPhrase ?? `в ${locationLabel}`}: прямые контакты владельцев, фото, цены и условия проживания без комиссии за бронирование.`
-      : "Каталог жилья у моря по Крыму: отели, гостевые дома, квартиры и дома с прямыми контактами владельцев и удобным поиском по локациям.";
 
     return {
       direction,
@@ -311,7 +307,6 @@ export async function getSearchSeoState(
       index: isIndexable,
       follow: true,
       heading,
-      lead,
       breadcrumbItems: buildHousingBreadcrumbs({
         location: locationLabel,
         propertyTypeLabel,
@@ -330,9 +325,6 @@ export async function getSearchSeoState(
     const canonicalPath = location ? buildToursHubPath({ location }) : toursHubPath;
     const title = location ? `Туры ${locationPhrase ?? `в городе ${location}`}` : "Туры по Крыму";
     const heading = location ? `Туры ${locationPhrase ?? `в городе ${location}`}` : "Туры по Крыму";
-    const lead = location
-      ? `Подборка туров ${locationPhrase ?? `в ${location}`}: маршруты, продолжительность поездки, условия участия и прямой контакт с организатором.`
-      : "Собрали туры по Крыму с разной продолжительностью и форматом участия: от коротких программ до многодневных маршрутов по полуострову.";
 
     return {
       direction,
@@ -342,7 +334,6 @@ export async function getSearchSeoState(
       index: !hasNoise,
       follow: true,
       heading,
-      lead,
       breadcrumbItems: buildExcursionBreadcrumbs({
         direction,
         locationLabel: location || null,
@@ -394,9 +385,6 @@ export async function getSearchSeoState(
   const heading = location
     ? `Экскурсии ${locationPhrase ?? `в городе ${location}`}`
     : "Экскурсии по Крыму";
-  const lead = location
-    ? `Подборка экскурсий ${locationPhrase ?? `в ${location}`}: маршруты по полуострову, условия участия, стоимость и прямой контакт с организатором.`
-    : "Каталог экскурсий по Крыму: городские прогулки, природные маршруты, морские программы и туры с удобным подбором по локациям.";
 
   return {
     direction,
@@ -406,7 +394,6 @@ export async function getSearchSeoState(
     index: isIndexable,
     follow: true,
     heading,
-    lead,
     breadcrumbItems: buildExcursionBreadcrumbs({
       direction,
       locationLabel: matchedLocation?.name ?? location ?? null,

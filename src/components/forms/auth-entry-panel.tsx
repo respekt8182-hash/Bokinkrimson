@@ -67,15 +67,14 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
         <section className="space-y-4">
           <div>
             <h1 className="text-3xl text-olive">Регистрация</h1>
-            <p className="mt-2 text-sm text-olive/70">
-              Создайте аккаунт, чтобы управлять объявлениями и профилем.
-            </p>
           </div>
 
           <RegisterForm />
 
           <div className="rounded-xl border border-dashed border-olive/20 bg-white/65 p-3 text-sm text-olive/70">
-            Здесь будет блок: зачем пользователю выбирать именно нас и для кого сервис подходит.
+            Разместитесь один раз и работайте напрямую с клиентами: без дополнительных комиссий,
+            взносов и процентов с бронирований. Удобно отелям, гостевым домам, владельцам жилья и
+            съемщикам, потому что итоговая цена остается честнее.
           </div>
 
           <p className="text-sm text-olive/72">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CatalogFilterBar } from "@/components/public/catalog-filter-bar";
+import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { PublicHousingResultsWithMap } from "@/components/public/public-housing-results-with-map";
 import { useLoadMore } from "@/hooks/use-load-more";
 import {
@@ -575,69 +576,74 @@ export function HousingCatalogClient({
       <div className="mx-auto w-full max-w-[1680px] px-4 py-6 pb-28 md:px-6 md:py-8 md:pb-8 lg:pb-8">
         <div className="space-y-3">
           {items.length === 0 && !isRefreshing ? (
-            <section className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-6 text-center">
-              <div className="flex justify-center">
-                <EmptyStateIcon />
-              </div>
-              <h2 className="mt-2 text-[22px] text-olive">Ничего не найдено</h2>
-              <p className="mt-1 text-sm text-olive/65">Попробуйте изменить параметры поиска</p>
+            <>
+              <section className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-6 text-center">
+                <div className="flex justify-center">
+                  <EmptyStateIcon />
+                </div>
+                <h2 className="mt-2 text-[22px] text-olive">Ничего не найдено</h2>
+                <p className="mt-1 text-sm text-olive/65">Попробуйте изменить параметры поиска</p>
 
-              {emptySuggestions.length > 0 ? (
-                <div className="mx-auto mt-4 grid max-w-3xl gap-2 text-left">
-                  {emptySuggestions.map((suggestion) => (
+                {emptySuggestions.length > 0 ? (
+                  <div className="mx-auto mt-4 grid max-w-3xl gap-2 text-left">
+                    {emptySuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.title}-${suggestion.ctaLabel}`}
+                        type="button"
+                        onClick={() =>
+                          void applyFilters(
+                            {
+                              ...filters,
+                              ...suggestion.filters,
+                            },
+                            `${suggestion.count} вариантов`,
+                          )
+                        }
+                        className="rounded-xl border border-primary/22 bg-foam/60 px-3 py-2.5 text-sm text-olive transition hover:bg-foam"
+                      >
+                        <span className="font-semibold text-primary">{suggestion.title}</span>
+                        <span className="mt-0.5 block text-xs text-olive/72">
+                          {suggestion.description}
+                        </span>
+                        <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-primary">
+                          {suggestion.ctaLabel}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
                     <button
-                      key={`${suggestion.title}-${suggestion.ctaLabel}`}
                       type="button"
                       onClick={() =>
-                        void applyFilters(
-                          {
-                            ...filters,
-                            ...suggestion.filters,
-                          },
-                          `${suggestion.count} вариантов`,
-                        )
+                        void applyFilters({ ...filters, minRating: "", hasReviews: false })
                       }
-                      className="rounded-xl border border-primary/22 bg-foam/60 px-3 py-2.5 text-sm text-olive transition hover:bg-foam"
+                      className="rounded-full border border-olive/16 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive"
                     >
-                      <span className="font-semibold text-primary">{suggestion.title}</span>
-                      <span className="mt-0.5 block text-xs text-olive/72">
-                        {suggestion.description}
-                      </span>
-                      <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-primary">
-                        {suggestion.ctaLabel}
-                      </span>
+                      Расширить фильтры
                     </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void applyFilters({ ...filters, minRating: "", hasReviews: false })
-                    }
-                    className="rounded-full border border-olive/16 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive"
-                  >
-                    Расширить фильтры
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void applyFilters({ ...filters, location: "", locationId: "" })}
-                    className="rounded-full border border-olive/16 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive"
-                  >
-                    Другой город
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void applyFilters({ ...filters, location: "", locationId: "" })
+                      }
+                      className="rounded-full border border-olive/16 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive"
+                    >
+                      Другой город
+                    </button>
+                  </div>
+                )}
 
-              <button
-                type="button"
-                onClick={() => void resetFilters()}
-                className="mt-4 inline-flex h-10 items-center rounded-xl border border-olive/18 bg-white px-3.5 text-sm font-semibold text-olive transition hover:bg-cream/70"
-              >
-                Сбросить все фильтры
-              </button>
-            </section>
+                <button
+                  type="button"
+                  onClick={() => void resetFilters()}
+                  className="mt-4 inline-flex h-10 items-center rounded-xl border border-olive/18 bg-white px-3.5 text-sm font-semibold text-olive transition hover:bg-cream/70"
+                >
+                  Сбросить все фильтры
+                </button>
+              </section>
+              <FirstListingPromo kind="housing" />
+            </>
           ) : (
             <PublicHousingResultsWithMap
               items={items}

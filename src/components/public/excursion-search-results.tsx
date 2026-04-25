@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { CatalogMapPreviewCard } from "@/components/maps/catalog-map-preview-card";
+import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import {
   CatalogFieldGroup,
@@ -2294,20 +2295,23 @@ export function ExcursionSearchResults({
         {/* ── Center: Results ─────────────────────────────────────────────── */}
         <div className="min-w-0 flex-1">
           {displayItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
-              <p className="text-sm text-olive/60">
-                По вашим параметрам {resultsTitle} не найдены.
-              </p>
-              <p className="mt-1 text-xs text-olive/45">
-                Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
-              </p>
-              <button
-                type="button"
-                onClick={resetAllFilters}
-                className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-              >
-                Сбросить все фильтры
-              </button>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
+                <p className="text-sm text-olive/60">
+                  По вашим параметрам {resultsTitle} не найдены.
+                </p>
+                <p className="mt-1 text-xs text-olive/45">
+                  Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
+                </p>
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+                >
+                  Сбросить все фильтры
+                </button>
+              </div>
+              <FirstListingPromo kind="excursions" />
             </div>
           ) : (
             <div className="space-y-3">

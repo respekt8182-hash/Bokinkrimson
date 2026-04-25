@@ -1882,14 +1882,14 @@ export function PropertyChessboardWorkspace({
             {rooms.length > 0 ? (
               <div
                 ref={boardScrollRef}
-                className="chessboard-board-scroll custom-scrollbar mt-1.5 max-h-[70dvh] overflow-auto overscroll-contain rounded-lg border border-olive/10 bg-[linear-gradient(180deg,rgba(247,243,235,0.78),rgba(255,255,255,0.98)_18%,rgba(255,255,255,0.98))] md:max-h-[78vh] [@media(orientation:landscape)_and_(max-height:560px)]:mt-1 [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[72dvh]"
+                className="chessboard-board-scroll custom-scrollbar relative isolate mt-1.5 max-h-[70dvh] overflow-auto overscroll-contain rounded-lg border border-olive/10 bg-[linear-gradient(180deg,rgba(247,243,235,0.78),rgba(255,255,255,0.98)_18%,rgba(255,255,255,0.98))] md:max-h-[78vh] [@media(orientation:landscape)_and_(max-height:560px)]:mt-1 [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[72dvh]"
               >
-                <table className="min-w-max border-separate border-spacing-0">
+                <table className="relative z-0 min-w-max border-separate border-spacing-0">
                   <thead>
                     <tr>
                       <th
                         className={cn(
-                          `sticky left-0 top-0 z-50 border-b border-r border-olive/10 bg-[#f7f3eb] px-2 text-left text-[11px] font-semibold text-olive md:px-2.5 md:text-xs ${LS}:px-1.5 ${LS}:text-[10px]`,
+                          `sticky left-0 top-0 z-[70] border-b border-r border-olive/10 bg-[#f7f3eb] px-2 text-left text-[11px] font-semibold text-olive md:px-2.5 md:text-xs ${LS}:px-1.5 ${LS}:text-[10px]`,
                         )}
                         style={{
                           width: "var(--cb-sidebar-w)",
@@ -1904,7 +1904,7 @@ export function PropertyChessboardWorkspace({
                           key={segment.key}
                           colSpan={segment.daysCount}
                           className={cn(
-                            `sticky top-0 z-30 border-b px-0 text-center text-[11px] font-semibold text-olive/82 md:text-xs ${LS}:text-[10px]`,
+                            `sticky top-0 z-[60] border-b px-0 text-center text-[11px] font-semibold text-olive/82 md:text-xs ${LS}:text-[10px]`,
                             segmentIndex === 0
                               ? "border-l border-olive/10"
                               : "border-l-2 border-l-terra/32",
@@ -1928,7 +1928,7 @@ export function PropertyChessboardWorkspace({
                     <tr>
                       <th
                         className={cn(
-                          `sticky left-0 z-50 border-b border-r border-olive/10 bg-white px-2 text-left text-[9px] uppercase tracking-[0.12em] text-olive/48 md:px-2.5 md:text-[10px] ${LS}:px-1.5 ${LS}:text-[8px]`,
+                          `sticky left-0 z-[70] border-b border-r border-olive/10 bg-white px-2 text-left text-[9px] uppercase tracking-[0.12em] text-olive/48 md:px-2.5 md:text-[10px] ${LS}:px-1.5 ${LS}:text-[8px]`,
                         )}
                         style={{
                           top: "var(--cb-header-h1)",
@@ -1945,14 +1945,14 @@ export function PropertyChessboardWorkspace({
                           <th
                             key={day.iso}
                             className={cn(
-                              `sticky z-20 border-b border-l border-olive/10 px-0 text-center ${LS}:px-0`,
+                              `sticky z-[60] border-b border-l border-olive/10 px-0 text-center ${LS}:px-0`,
                               isDayToday
-                                ? "bg-primary/7"
+                                ? "bg-[#f1f8f7]"
                                 : day.isMonthStart
-                                  ? "bg-[linear-gradient(180deg,rgba(244,235,225,0.96),rgba(255,255,255,0.98))]"
+                                  ? "bg-[linear-gradient(180deg,#f4ebe1,#fffaf5)]"
                                 : day.isWeekend
-                                  ? "bg-sand/55"
-                                  : "bg-white/96",
+                                  ? "bg-[#f7f3ed]"
+                                  : "bg-white",
                               day.isMonthStart
                                 ? "border-l-2 border-l-terra/40 shadow-[inset_1px_0_0_rgba(154,98,69,0.14)]"
                                 : day.isWeekStart

@@ -3,8 +3,6 @@ import { HousingCatalogClient } from "@/components/public/housing-catalog-client
 import { ExcursionSearchResults } from "@/components/public/excursion-search-results";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { SeoBreadcrumbs } from "@/components/seo/seo-breadcrumbs";
-import { SeoHubLinks, type SeoHubLinkGroup } from "@/components/seo/seo-hub-links";
-import { propertyTypes } from "@/lib/constants";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getExcursionSeoDirectoryData, getPublicExcursionCatalog } from "@/lib/public-excursions";
 import { getPublicCatalog } from "@/lib/public-properties";
@@ -12,11 +10,6 @@ import {
   getPopularExcursionSuggestions,
   getPopularHousingSuggestions,
 } from "@/lib/search-suggestions";
-import {
-  buildHousingHubPath,
-  buildHousingLocationPath,
-  buildToursHubPath,
-} from "@/lib/seo/routes";
 import { buildCollectionPageStructuredData, buildBreadcrumbListStructuredData } from "@/lib/seo/structured-data";
 import { buildSearchMetadata, getSearchSeoState } from "@/lib/seo/search-metadata";
 
@@ -108,91 +101,14 @@ function toLocationSuggestions(
     }));
 }
 
-function buildHousingHubGroups(input: {
-  location: string;
-  locationId?: string;
-  popularLocations: Array<{ id: string; name: string }>;
-}): SeoHubLinkGroup[] {
-  const groups: SeoHubLinkGroup[] = [];
-
-  if (input.popularLocations.length > 0) {
-    groups.push({
-      title: "Популярные города",
-      links: input.popularLocations.slice(0, 8).map((item) => ({
-        label: item.name,
-        href: buildHousingLocationPath(item.id),
-      })),
-    });
-  }
-
-  if (input.location) {
-    groups.push({
-      title: `Типы жилья ${input.location ? "в выбранной локации" : "в Крыму"}`,
-      links: propertyTypes.slice(0, 8).map((item) => ({
-        label: item.name,
-        href: buildHousingHubPath({ location: input.location, propertyType: item.id }),
-      })),
-    });
-  }
-
-  return groups;
-}
-
-function buildExcursionHubGroups(input: {
-  direction: "excursions" | "tours";
-  directory: Awaited<ReturnType<typeof getExcursionSeoDirectoryData>>;
-  popularLocations: Array<{ id: string; name: string }>;
-}): SeoHubLinkGroup[] {
-  if (input.direction === "tours") {
-    return [
-      {
-        title: "Популярные города для туров",
-        links: input.popularLocations.slice(0, 8).map((item) => ({
-          label: item.name,
-          href: buildToursHubPath({ location: item.name }),
-        })),
-      },
-    ];
-  }
-
-  return [
-    {
-      title: "Города",
-      links: input.directory.cities.slice(0, 8).map((item) => ({
-        label: item.name,
-        href: `/excursions/${item.slug}`,
-      })),
-    },
-    {
-      title: "Категории",
-      links: input.directory.categories.slice(0, 8).map((item) => ({
-        label: item.name,
-        href: `/excursions/category/${item.slug}`,
-      })),
-    },
-    {
-      title: "Районы",
-      links: input.directory.districts.slice(0, 8).map((item) => ({
-        label: item.name,
-        href: `/excursions/district/${item.slug}`,
-      })),
-    },
-  ];
-}
-
 function SearchIntro({
   breadcrumbs,
-  lead,
 }: {
   breadcrumbs: Array<{ name: string; path: string }>;
-  lead: string;
 }) {
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
       <SeoBreadcrumbs items={breadcrumbs} />
-      <section className="mt-4 rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10 md:p-5">
-        <p className="text-sm leading-7 text-olive/72">{lead}</p>
-      </section>
     </div>
   );
 }
@@ -295,12 +211,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       page,
       pageSize: 30,
     });
-    const linkGroups = buildExcursionHubGroups({
-      direction: normalizedDirection === "tours" ? "tours" : "excursions",
-      directory: excursionSeoDirectory,
-      popularLocations: popularExcursionLocationSuggestions,
-    });
-
     return (
       <>
         {canEmitSearchSchema ? (
@@ -321,7 +231,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </>
         ) : null}
 
-        <SearchIntro breadcrumbs={seoState.breadcrumbItems} lead={seoState.lead} />
+        <SearchIntro breadcrumbs={seoState.breadcrumbItems} />
 
         <ExcursionSearchResults
           items={result.items}
@@ -334,9 +244,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           catalogDirection={normalizedDirection === "tours" ? "tours" : "excursions"}
         />
 
-        <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 md:px-6">
-          <SeoHubLinks groups={linkGroups} />
-        </div>
       </>
     );
   }
@@ -387,12 +294,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       guestsChildren,
     }),
   }));
-  const housingHubGroups = buildHousingHubGroups({
-    location: initialHousingResult.filters.locationName ?? location,
-    locationId: initialHousingResult.filters.locationId ?? undefined,
-    popularLocations: popularHousingLocationSuggestions,
-  });
-
   return (
     <>
       {canEmitSearchSchema ? (
@@ -413,7 +314,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </>
       ) : null}
 
-      <SearchIntro breadcrumbs={seoState.breadcrumbItems} lead={seoState.lead} />
+      <SearchIntro breadcrumbs={seoState.breadcrumbItems} />
 
       <HousingCatalogClient
         initialResponse={{
@@ -449,9 +350,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         initialLocationLabel={initialHousingResult.filters.locationName ?? (location || "весь Крым")}
       />
 
-      <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 md:px-6">
-        <SeoHubLinks groups={housingHubGroups} />
-      </div>
     </>
   );
 }

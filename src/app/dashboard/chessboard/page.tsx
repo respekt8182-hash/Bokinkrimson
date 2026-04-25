@@ -82,9 +82,6 @@ export default async function DashboardChessboardPage({
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-xl text-olive md:text-2xl">Шахматка</h1>
-              <p className="mt-0.5 text-xs text-olive/62 md:text-sm">
-                Занятость и цены по объектам в плотном рабочем режиме.
-              </p>
             </div>
           </div>
         </div>

@@ -7,21 +7,32 @@ import {
   getAdminAuthConfigurationError,
   getAdminCookieOptions,
 } from "@/lib/admin-session-token";
-import {
-  createRateLimiter,
-  RateLimitBackendUnavailableError,
-  RateLimitConfigurationError,
-} from "@/lib/rate-limit";
+import { createFailedLoginLockout } from "@/lib/login-lockout";
 import { getRequestIp } from "@/lib/security";
 import { getAdminLoginValue } from "@/lib/security-config";
 import { getAdminSession } from "@/lib/admin-auth";
 import { isDatabaseSchemaMissingError } from "@/lib/prisma-errors";
 
-const adminLoginLimiter = createRateLimiter({
-  id: "admin-login",
-  windowMs: 15 * 60 * 1000,
-  maxRequests: 8,
+const adminLoginLockout = createFailedLoginLockout({
+  id: "admin-login-failed",
+  lockoutMs: 2 * 60 * 1000,
+  maxFailedAttempts: 5,
 });
+
+function createAdminLoginLockoutResponse(retryAfterSeconds: number) {
+  return NextResponse.json(
+    {
+      error: `Слишком много попыток входа. Подождите ${retryAfterSeconds} сек. и попробуйте снова.`,
+      retryAfterSeconds,
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(retryAfterSeconds),
+      },
+    },
+  );
+}
 
 export async function POST(request: Request) {
   const configurationError = getAdminAuthConfigurationError();
@@ -32,17 +43,9 @@ export async function POST(request: Request) {
   const ip = getRequestIp(request);
 
   try {
-    const limit = await adminLoginLimiter.limit(ip);
-    if (!limit.allowed) {
-      return NextResponse.json(
-        { error: `Слишком много попыток входа. Повторите через ${limit.retryAfterSeconds} сек.` },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(limit.retryAfterSeconds),
-          },
-        },
-      );
+    const activeLockout = adminLoginLockout.check(ip);
+    if (activeLockout.locked) {
+      return createAdminLoginLockoutResponse(activeLockout.retryAfterSeconds);
     }
 
     const body = (await request.json()) as { login?: string; password?: string };
@@ -54,6 +57,11 @@ export async function POST(request: Request) {
     }
 
     if (!(await validateAdminCredentials(login, password))) {
+      const lockout = adminLoginLockout.recordFailure(ip);
+      if (lockout.locked) {
+        return createAdminLoginLockoutResponse(lockout.retryAfterSeconds);
+      }
+
       return NextResponse.json({ error: "Неверный логин или пароль." }, { status: 401 });
     }
 
@@ -82,12 +90,9 @@ export async function POST(request: Request) {
     const token = await createAdminSessionToken(login, sessionVersion);
     const response = NextResponse.json({ ok: true });
     response.cookies.set(ADMIN_COOKIE_NAME, token, getAdminCookieOptions());
+    adminLoginLockout.reset(ip);
     return response;
-  } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
-      return NextResponse.json({ error: "Сервис временно недоступен" }, { status: 503 });
-    }
-
+  } catch {
     return NextResponse.json(
       { error: "Не удалось выполнить вход. Попробуйте ещё раз." },
       { status: 500 },
@@ -102,20 +107,22 @@ export async function DELETE() {
     return NextResponse.json({ error: "Доступ запрещен" }, { status: 403 });
   }
 
-  await db.adminSessionState.upsert({
-    where: {
-      login: getAdminLoginValue(),
-    },
-    update: {
-      sessionVersion: {
-        increment: 1,
+  await db.adminSessionState
+    .upsert({
+      where: {
+        login: getAdminLoginValue(),
       },
-    },
-    create: {
-      login: getAdminLoginValue(),
-      sessionVersion: 1,
-    },
-  }).catch(() => null);
+      update: {
+        sessionVersion: {
+          increment: 1,
+        },
+      },
+      create: {
+        login: getAdminLoginValue(),
+        sessionVersion: 1,
+      },
+    })
+    .catch(() => null);
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_COOKIE_NAME, "", {

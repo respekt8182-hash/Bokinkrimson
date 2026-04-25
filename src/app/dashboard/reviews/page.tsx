@@ -120,10 +120,6 @@ export default async function DashboardReviewsPage() {
         )}
       </section>
 
-      <p className="text-xs text-olive/45">
-        Кнопка <span className="font-medium">«Пожаловаться»</span> (значок флажка) на каждом отзыве
-        отправляет жалобу в администрацию сайта. Администратор рассмотрит её и при необходимости удалит отзыв.
-      </p>
     </div>
   );
 }

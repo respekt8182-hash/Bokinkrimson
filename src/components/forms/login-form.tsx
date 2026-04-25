@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PhoneInput, type PhoneInputValue } from "@/components/ui/phone-input";
 import { loginSchema } from "@/lib/schemas/auth";
@@ -14,10 +14,26 @@ type LoginFormProps = {
 
 type LoginResponse = {
   error?: string;
+  retryAfterSeconds?: number;
   user?: {
     role: "USER" | "ADMIN";
   };
 };
+
+function formatWaitTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function parseRetryAfter(value: string | null, fallback?: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return typeof fallback === "number" && fallback > 0 ? Math.ceil(fallback) : 0;
+}
 
 function resolveLoginErrorMessage(status: number, bodyError?: string): string {
   if (status === 503) {
@@ -36,6 +52,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   const [serverError, setServerError] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
   const [phoneValue, setPhoneValue] = useState<PhoneInputValue>({
     countryCode: "+7",
@@ -45,10 +62,30 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
   const [phoneError, setPhoneError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const isLockedOut = lockoutSeconds > 0;
+  const visibleServerError = isLockedOut
+    ? `Слишком много попыток входа. Подождите ${formatWaitTime(lockoutSeconds)} и попробуйте снова.`
+    : serverError;
+
+  useEffect(() => {
+    if (!isLockedOut) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setLockoutSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isLockedOut, lockoutSeconds]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+      if (lockoutSeconds > 0) {
+        return;
+      }
+
       setServerError("");
       setPhoneError("");
       setPasswordError("");
@@ -80,6 +117,19 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         }
 
         if (!response.ok) {
+          if (response.status === 429) {
+            const retryAfterSeconds = parseRetryAfter(
+              response.headers.get("Retry-After"),
+              body.retryAfterSeconds,
+            );
+            if (retryAfterSeconds > 0) {
+              setLockoutSeconds(retryAfterSeconds);
+              setServerError("");
+              setIsSubmitting(false);
+              return;
+            }
+          }
+
           setServerError(resolveLoginErrorMessage(response.status, body.error));
           setIsSubmitting(false);
           return;
@@ -93,7 +143,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         setIsSubmitting(false);
       }
     },
-    [phoneValue, password, nextPath, router],
+    [phoneValue, password, nextPath, router, lockoutSeconds],
   );
 
   return (
@@ -143,10 +193,14 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         {passwordError ? <p className="mt-1 text-xs text-red-600">{passwordError}</p> : null}
       </div>
 
-      {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}
+      {visibleServerError ? <p className="text-sm text-red-600">{visibleServerError}</p> : null}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? "Вход..." : "Войти"}
+      <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut}>
+        {isLockedOut
+          ? `Подождите ${formatWaitTime(lockoutSeconds)}`
+          : isSubmitting
+            ? "Вход..."
+            : "Войти"}
       </Button>
     </form>
   );

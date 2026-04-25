@@ -14,26 +14,25 @@ import {
   isAuthDatabaseUnavailable,
 } from "@/lib/auth-route-db";
 import { authRateLimit } from "@/lib/constants";
+import { createFailedLoginLockout } from "@/lib/login-lockout";
 import { logger } from "@/lib/logger";
-import {
-  createRateLimiter,
-  RateLimitBackendUnavailableError,
-  RateLimitConfigurationError,
-} from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/schemas/auth";
 import { getRequestIp } from "@/lib/security";
 import { buildUserPhoneLookupCandidates } from "@/lib/user-phone";
 
-const loginLimiter = createRateLimiter({
-  id: "auth-login",
-  windowMs: authRateLimit.login.windowMinutes * 60 * 1000,
-  maxRequests: authRateLimit.login.maxRequestsPerWindow,
+const failedLoginLockout = createFailedLoginLockout({
+  id: "auth-login-failed",
+  lockoutMs: authRateLimit.login.windowMinutes * 60 * 1000,
+  maxFailedAttempts: authRateLimit.login.maxRequestsPerWindow,
 });
 
-function createLoginRateLimitResponse(retryAfterSeconds: number) {
+const unknownUserMessage = "Возможно, такой пользователь не существует. Зарегистрируйте аккаунт.";
+
+function createLoginLockoutResponse(retryAfterSeconds: number) {
   return NextResponse.json(
     {
-      error: `Слишком много попыток входа. Повторите через ${retryAfterSeconds} сек.`,
+      error: `Слишком много попыток входа. Подождите ${retryAfterSeconds} сек. и попробуйте снова.`,
+      retryAfterSeconds,
     },
     {
       status: 429,
@@ -44,13 +43,13 @@ function createLoginRateLimitResponse(retryAfterSeconds: number) {
   );
 }
 
-async function consumeFailedLoginAttempt(ip: string): Promise<NextResponse | null> {
-  const limit = await loginLimiter.limit(ip);
-  if (limit.allowed) {
+function recordFailedLoginAttempt(ip: string): NextResponse | null {
+  const lockout = failedLoginLockout.recordFailure(ip);
+  if (!lockout.locked) {
     return null;
   }
 
-  return createLoginRateLimitResponse(limit.retryAfterSeconds);
+  return createLoginLockoutResponse(lockout.retryAfterSeconds);
 }
 
 export async function POST(request: Request) {
@@ -62,6 +61,11 @@ export async function POST(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json({ error: "Проверьте корректность данных" }, { status: 400 });
+    }
+
+    const activeLockout = failedLoginLockout.check(ip);
+    if (activeLockout.locked) {
+      return createLoginLockoutResponse(activeLockout.retryAfterSeconds);
     }
 
     const unavailableResponse = await ensureAuthDatabaseAvailable({
@@ -81,20 +85,20 @@ export async function POST(request: Request) {
     });
 
     if (!user || user.deletedAt) {
-      const rateLimitResponse = await consumeFailedLoginAttempt(ip);
-      if (rateLimitResponse) {
-        return rateLimitResponse;
+      const lockoutResponse = recordFailedLoginAttempt(ip);
+      if (lockoutResponse) {
+        return lockoutResponse;
       }
 
-      return NextResponse.json({ error: "Неверный телефон или пароль" }, { status: 401 });
+      return NextResponse.json({ error: unknownUserMessage }, { status: 401 });
     }
 
     const isPasswordValid = await comparePasswords(parsed.data.password, user.passwordHash);
 
     if (!isPasswordValid) {
-      const rateLimitResponse = await consumeFailedLoginAttempt(ip);
-      if (rateLimitResponse) {
-        return rateLimitResponse;
+      const lockoutResponse = recordFailedLoginAttempt(ip);
+      if (lockoutResponse) {
+        return lockoutResponse;
       }
 
       return NextResponse.json({ error: "Неверный телефон или пароль" }, { status: 401 });
@@ -102,6 +106,11 @@ export async function POST(request: Request) {
 
     const sessionUser = await buildSessionUser(user.id);
     if (!sessionUser) {
+      const lockoutResponse = recordFailedLoginAttempt(ip);
+      if (lockoutResponse) {
+        return lockoutResponse;
+      }
+
       return NextResponse.json({ error: "Неверный телефон или пароль" }, { status: 401 });
     }
 
@@ -109,25 +118,16 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ ok: true, user: sessionUser });
     response.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+    failedLoginLockout.reset(ip);
 
     return response;
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
-      return NextResponse.json(
-        { error: "Сервис временно недоступен" },
-        { status: 503 },
-      );
-    }
-
     if (isAuthDatabaseUnavailable(error)) {
       logger.warn(
         "Login is temporarily unavailable because the database is down or credentials are invalid",
         { ip },
       );
-      return NextResponse.json(
-        { error: getAuthDatabaseUnavailableMessage() },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: getAuthDatabaseUnavailableMessage() }, { status: 503 });
     }
 
     logger.error("Login failed", { ip, error: error instanceof Error ? error.message : "unknown" });
