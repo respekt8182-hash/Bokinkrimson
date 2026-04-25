@@ -2,6 +2,15 @@
   email {$ACME_EMAIL}
 }
 
+http://krymvokrug.ru, http://www.krymvokrug.ru {
+  @yandex_verification path /yandex_162a9e404c5f12fc.html
+  handle @yandex_verification {
+    reverse_proxy app:3000
+  }
+
+  redir https://krymvokrug.ru{uri} permanent
+}
+
 www.krymvokrug.ru {
   redir https://krymvokrug.ru{uri} permanent
 }
