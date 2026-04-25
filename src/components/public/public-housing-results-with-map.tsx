@@ -2,7 +2,15 @@
 "use client";
 
 import { Map as MapIcon } from "lucide-react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/cn";
 import { CatalogMapPreviewCard } from "@/components/maps/catalog-map-preview-card";
 import {
@@ -29,6 +37,7 @@ type PublicHousingResultsWithMapProps = {
   hasMore: boolean;
   loadingMore: boolean;
   loadingInitial?: boolean;
+  emptyContent?: ReactNode;
   newItemIds?: string[];
   onLoadMore?: () => void;
   onWishlistToggle?: (isFavorite: boolean) => void;
@@ -314,6 +323,7 @@ export function PublicHousingResultsWithMap({
   hasMore,
   loadingMore,
   loadingInitial = false,
+  emptyContent = null,
   newItemIds = [],
   onLoadMore,
   onWishlistToggle,
@@ -656,11 +666,14 @@ export function PublicHousingResultsWithMap({
                 view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
               )}
             >
-              {loadingInitial && items.length === 0
-                ? Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
-                    <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
-                  ))
-                : items.map((item, index) => {
+              {loadingInitial && items.length === 0 ? (
+                Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
+                  <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
+                ))
+              ) : items.length === 0 ? (
+                emptyContent
+              ) : (
+                items.map((item, index) => {
                     const isHighlighted =
                       item.id === activePointId ||
                       item.id === hoveredPointId ||
@@ -703,7 +716,8 @@ export function PublicHousingResultsWithMap({
                         />
                       </div>
                     );
-                  })}
+                  })
+              )}
             </div>
 
             {loadingMore ? (
