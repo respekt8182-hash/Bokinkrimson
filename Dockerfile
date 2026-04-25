@@ -15,6 +15,14 @@ RUN npm ci --include=dev
 
 COPY . .
 
+ARG NEXT_PUBLIC_APP_URL="https://krymvokrug.ru"
+ARG S3_PUBLIC_BASE_URL=""
+ARG S3_ENDPOINT=""
+
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV S3_PUBLIC_BASE_URL=$S3_PUBLIC_BASE_URL
+ENV S3_ENDPOINT=$S3_ENDPOINT
+
 RUN npm run build
 RUN chmod +x scripts/deploy/entrypoint.sh
 

@@ -518,16 +518,19 @@ export function SupportChatWidget() {
     }
   }, []);
 
+  const isChatEnabled = data?.enabled !== false;
+  const hasChatConsent = data?.chatConsentGiven === true;
+
   useEffect(() => {
     if (!isDocumentVisible) {
       return;
     }
 
-    if (data && !data.enabled) {
+    if (!isChatEnabled) {
       return;
     }
 
-    const baseDelayMs = open ? 6000 : data?.chatConsentGiven ? 30000 : 90000;
+    const baseDelayMs = open ? 6000 : hasChatConsent ? 30000 : 90000;
     let cancelled = false;
     let timer: number | null = null;
 
@@ -563,7 +566,7 @@ export function SupportChatWidget() {
       activeFetchControllerRef.current?.abort();
       activeFetchControllerRef.current = null;
     };
-  }, [data?.chatConsentGiven, fetchData, isDocumentVisible, open]);
+  }, [fetchData, hasChatConsent, isChatEnabled, isDocumentVisible, open]);
 
   // Auto-scroll
   useEffect(() => {
