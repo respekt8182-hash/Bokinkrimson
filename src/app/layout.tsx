@@ -81,9 +81,9 @@ export const metadata: Metadata = {
     images: [defaultSocialImageUrl],
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-    apple: "/favicon.svg",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   robots: {
     index: true,
@@ -118,13 +118,13 @@ export default function RootLayout({
         <meta property="og:image" content={defaultSocialImageUrl} />
         <meta property="og:image:alt" content={siteConfig.name} />
         <meta name="twitter:image" content={defaultSocialImageUrl} />
+        <Script id="yandex-metrika" strategy="beforeInteractive">
+          {yandexMetrikaScript}
+        </Script>
       </head>
       <body
         className={`${bodyFont.variable} ${headingFont.variable} min-h-screen overflow-x-hidden bg-cream text-olive antialiased`}
       >
-        <Script id="yandex-metrika" strategy="afterInteractive">
-          {yandexMetrikaScript}
-        </Script>
         <noscript>
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
