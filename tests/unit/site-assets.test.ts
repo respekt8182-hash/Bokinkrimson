@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 describe("site public assets", () => {
@@ -10,13 +11,17 @@ describe("site public assets", () => {
     expect(readFileSync(verificationFile, "utf8")).toContain("Verification: 162a9e404c5f12fc");
   });
 
-  it("keeps the root favicon assets available for crawlers", () => {
+  it("keeps the root favicon assets available for crawlers", async () => {
     const faviconSvg = join(process.cwd(), "public", "favicon.svg");
     const faviconIco = join(process.cwd(), "public", "favicon.ico");
+    const favicon32Png = join(process.cwd(), "public", "favicon-32x32.png");
+    const favicon120Png = join(process.cwd(), "public", "favicon-120x120.png");
     const appleTouchIcon = join(process.cwd(), "public", "apple-touch-icon.png");
 
     expect(existsSync(faviconSvg)).toBe(true);
     expect(existsSync(faviconIco)).toBe(true);
+    expect(existsSync(favicon32Png)).toBe(true);
+    expect(existsSync(favicon120Png)).toBe(true);
     expect(existsSync(appleTouchIcon)).toBe(true);
 
     const svg = readFileSync(faviconSvg, "utf8");
@@ -46,5 +51,21 @@ describe("site public assets", () => {
       { width: 32, height: 32 },
       { width: 120, height: 120 },
     ]);
+
+    await expect(sharp(favicon32Png).metadata()).resolves.toMatchObject({
+      format: "png",
+      width: 32,
+      height: 32,
+    });
+    await expect(sharp(favicon120Png).metadata()).resolves.toMatchObject({
+      format: "png",
+      width: 120,
+      height: 120,
+    });
+    await expect(sharp(appleTouchIcon).metadata()).resolves.toMatchObject({
+      format: "png",
+      width: 180,
+      height: 180,
+    });
   });
 });

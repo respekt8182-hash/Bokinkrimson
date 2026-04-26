@@ -45,6 +45,8 @@ const headingFont = Yeseva_One({
 });
 
 const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
+const faviconVersion = "20260426";
+const versionedFavicon = (path: string) => `${path}?v=${faviconVersion}`;
 
 export const metadata: Metadata = {
   metadataBase: resolveMetadataBase(),
@@ -82,11 +84,16 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
-      { url: "/favicon.ico", type: "image/x-icon", sizes: "16x16 32x32 120x120" },
+      {
+        url: versionedFavicon("/favicon.ico"),
+        type: "image/x-icon",
+        sizes: "16x16 32x32 120x120",
+      },
+      { url: versionedFavicon("/favicon-32x32.png"), type: "image/png", sizes: "32x32" },
+      { url: versionedFavicon("/favicon-120x120.png"), type: "image/png", sizes: "120x120" },
     ],
-    shortcut: [{ url: "/favicon.ico", type: "image/x-icon" }],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: [{ url: versionedFavicon("/favicon.ico"), type: "image/x-icon" }],
+    apple: [{ url: versionedFavicon("/apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
   },
   robots: {
     index: true,
