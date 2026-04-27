@@ -2,9 +2,11 @@
 
 import {
   Compass,
+  Car,
   Heart,
   House,
   Info,
+  Landmark,
   Menu,
   MessageCircleMore,
   ShieldCheck,
@@ -27,7 +29,13 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { isDrawerLinkActive } from "@/components/layout/site-header-mobile-drawer-link-state";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { cn } from "@/lib/cn";
-import { excursionsHubPath, housingHubPath, toursHubPath } from "@/lib/seo/routes";
+import {
+  attractionsHubPath,
+  excursionsHubPath,
+  housingHubPath,
+  toursHubPath,
+  transfersHubPath,
+} from "@/lib/seo/routes";
 
 type SiteHeaderMobileDrawerProps = {
   accountHref: string;
@@ -44,7 +52,9 @@ type DrawerLink = {
 
 const primaryLinks: DrawerLink[] = [
   { href: housingHubPath, label: "Жильё", icon: House },
+  { href: attractionsHubPath, label: "Достопримечательности", icon: Landmark },
   { href: excursionsHubPath, label: "Экскурсии", icon: Compass },
+  { href: transfersHubPath, label: "Трансферы", icon: Car },
   { href: toursHubPath, label: "Туры", icon: Compass },
   { href: "/about", label: "О сервисе", icon: Info, exact: true },
   { href: "/cooperation", label: "Сотрудничество", icon: MessageCircleMore, exact: true },

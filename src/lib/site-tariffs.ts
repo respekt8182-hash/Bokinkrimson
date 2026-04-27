@@ -3,6 +3,7 @@ import { placementTariffsByGroup } from "@/lib/constants";
 import { PLACEMENT_VALIDITY_DAYS } from "@/lib/payments";
 
 export const EXCURSION_PUBLICATION_FEE_RUB = 1990;
+export const TRANSFER_PUBLICATION_FEE_RUB = 2000;
 export const SERVICES_AND_TARIFFS_PATH = "/uslugi-i-tarify";
 export const OFFER_PATH = "/oferta";
 
@@ -62,6 +63,14 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
     conditionsLabel: "Количество номеров не применяется",
     durationLabel: placementDurationLabel,
   },
+  {
+    id: "transfer_standard",
+    serviceName: "Размещение информации о трансфере",
+    serviceNote: "Публикация карточки водителя, автомобиля и маршрутов трансфера",
+    priceRub: TRANSFER_PUBLICATION_FEE_RUB,
+    conditionsLabel: "Одна карточка трансфера",
+    durationLabel: placementDurationLabel,
+  },
 ];
 
 export type AdditionalServiceRow = {
@@ -92,8 +101,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
   {
     id: "photo_out_of_city",
     serviceName: "Фотосъёмка объекта",
-    serviceNote:
-      "Профессиональная фотосъёмка номеров вашего объекта — выезд за пределы города",
+    serviceNote: "Профессиональная фотосъёмка номеров вашего объекта — выезд за пределы города",
     priceLabel: "300 ₽ / номер + 300 ₽ за выезд",
     conditionsLabel: "Минимум 3 номера при выезде за город",
   },
@@ -102,7 +110,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 export const publicTariffHighlights = [
   "Сервис берет оплату только за размещение карточки и не удерживает комиссию с каждого бронирования.",
   "Для объектов размещения тариф рассчитывается по количеству активных номеров и типу объекта.",
-  "Для экскурсий и туров действует единоразовая публикация карточки перед модерацией.",
+  "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией.",
   "Если карточка возвращена на доработку в рамках оплаченного периода, повторная оплата не требуется.",
 ];
 

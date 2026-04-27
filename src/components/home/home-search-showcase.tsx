@@ -31,15 +31,19 @@ import { FieldAdornmentIcon } from "@/components/ui/field-adornment-icon";
 import { cn } from "@/lib/cn";
 import type { HomeCityShowcaseItem } from "@/lib/home-cities";
 import {
+  attractionsHubPath,
   buildExcursionsLocationPath,
   buildHousingLocationPath,
   excursionsHubPath,
   housingHubPath,
+  transfersHubPath,
 } from "@/lib/seo/routes";
 
 const directionLabels = {
   housing: "Жильё",
+  attractions: "Достопримечательности",
   excursions: "Экскурсии",
+  transfers: "Трансферы",
 } as const;
 
 type Direction = keyof typeof directionLabels;
@@ -71,7 +75,7 @@ type HomeSearchShowcaseProps = {
   locationSuggestions: string[];
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
-  initialPopularSuggestionsByDirection?: Record<Direction, HomeSearchSuggestionItem[]>;
+  initialPopularSuggestionsByDirection?: Partial<Record<Direction, HomeSearchSuggestionItem[]>>;
 };
 
 type SearchSuggestionType = "location" | "hotel";
@@ -147,6 +151,7 @@ const calendarMonthCount = 14;
 const popoverExitDurationMs = 250;
 const guestsPopoverTransitionMs = 200;
 const maxGuestsCount = 20;
+const radiusOptions = [5, 10, 15, 25, 30, 50, 100] as const;
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -378,6 +383,15 @@ function isSuggestionType(value: unknown): value is SearchSuggestionType {
   return value === "location" || value === "hotel";
 }
 
+function isDirection(value: unknown): value is Direction {
+  return (
+    value === "housing" ||
+    value === "attractions" ||
+    value === "excursions" ||
+    value === "transfers"
+  );
+}
+
 function parseSuggestionItem(value: unknown): HomeSearchSuggestionItem | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -456,6 +470,14 @@ function formatRecentSearchSubtitle(entry: RecentSearchEntry): string {
     return `Без даты, ${guestsLabel}`;
   }
 
+  if (entry.direction === "attractions") {
+    return "Достопримечательности рядом с локацией";
+  }
+
+  if (entry.direction === "transfers") {
+    return "Трансферы и маршруты рядом с локацией";
+  }
+
   if (entry.checkIn && entry.checkOut) {
     return `${formatDayMonth(entry.checkIn, false)} - ${formatDayMonth(entry.checkOut, false)}, ${guestsLabel}`;
   }
@@ -506,7 +528,7 @@ function parseRecentSearches(raw: string): RecentSearchEntry[] {
           typeof candidate.locationId === "string" && candidate.locationId.trim().length > 0
             ? candidate.locationId.trim().slice(0, 120)
             : null,
-        direction: candidate.direction === "excursions" ? "excursions" : "housing",
+        direction: isDirection(candidate.direction) ? candidate.direction : "housing",
         checkIn: normalizeStoredIsoDate(candidate.checkIn),
         checkOut: normalizeStoredIsoDate(candidate.checkOut),
         isAnyDate: Boolean(candidate.isAnyDate),
@@ -619,7 +641,7 @@ function parsePersistedSearchState(raw: string): PersistedHomeSearchState | null
 
   const candidate = parsed as PersistedHomeSearchState;
   return {
-    direction: candidate.direction === "excursions" ? "excursions" : "housing",
+    direction: isDirection(candidate.direction) ? candidate.direction : "housing",
     searchValue:
       typeof candidate.searchValue === "string" ? candidate.searchValue.slice(0, 120) : "",
     housingDates: {
@@ -642,6 +664,14 @@ function formatCardPrice(value: number, direction: Direction): string {
   const rounded = Math.max(0, Math.round(value));
   const money = `${rubFormatter.format(rounded)} ₽`;
 
+  if (direction === "attractions") {
+    return "места рядом с городом";
+  }
+
+  if (direction === "transfers") {
+    return "водители и маршруты";
+  }
+
   if (direction === "excursions") {
     return `от ${money}`;
   }
@@ -652,9 +682,18 @@ function formatCardPrice(value: number, direction: Direction): string {
 function buildCityHref(input: {
   direction: Direction;
   locationId: string;
+  locationName: string;
 }): string {
   if (input.direction === "housing") {
     return buildHousingLocationPath(input.locationId);
+  }
+
+  if (input.direction === "attractions") {
+    return `${attractionsHubPath}?${new URLSearchParams({ location: input.locationName }).toString()}`;
+  }
+
+  if (input.direction === "transfers") {
+    return `${transfersHubPath}?${new URLSearchParams({ location: input.locationName }).toString()}`;
   }
 
   return buildExcursionsLocationPath(input.locationId);
@@ -732,7 +771,15 @@ export function HomeSearchShowcase({
   const seededPopularSuggestions = useMemo(
     () => ({
       housing: initialPopularSuggestionsByDirection?.housing ?? [],
+      attractions:
+        initialPopularSuggestionsByDirection?.attractions ??
+        initialPopularSuggestionsByDirection?.excursions ??
+        [],
       excursions: initialPopularSuggestionsByDirection?.excursions ?? [],
+      transfers:
+        initialPopularSuggestionsByDirection?.transfers ??
+        initialPopularSuggestionsByDirection?.excursions ??
+        [],
     }),
     [initialPopularSuggestionsByDirection],
   );
@@ -798,6 +845,9 @@ export function HomeSearchShowcase({
   const calendarMonths = useMemo(() => buildCalendarMonths(new Date(), calendarMonthCount), []);
   const firstMonthKey = calendarMonths[0]?.key ?? "";
   const isLocationEmpty = searchValue.trim().length === 0;
+  const usesDateGuests = direction === "housing" || direction === "excursions";
+  const usesRadius = direction !== "housing";
+  const suggestionDirection = direction === "housing" ? "housing" : "excursions";
   const housingStat = useMemo(() => {
     if (publishedPropertiesCount !== null) {
       return {
@@ -858,7 +908,7 @@ export function HomeSearchShowcase({
   const normalizedSearchQuery = searchValue.trim();
   useEffect(() => {
     const expiresAt = Date.now() + homeSearchSuggestionsCacheTtlMs;
-    for (const directionKey of ["housing", "excursions"] as const) {
+    for (const directionKey of Object.keys(directionLabels) as Direction[]) {
       const popular = seededPopularSuggestions[directionKey];
       if (popular.length === 0) {
         continue;
@@ -1080,7 +1130,11 @@ export function HomeSearchShowcase({
         locationId: item.locationId,
         direction,
         checkIn:
-          direction === "housing" ? housingDates.checkIn : isExcursionAnyDate ? "" : excursionDate,
+          direction === "housing"
+            ? housingDates.checkIn
+            : direction === "excursions" && !isExcursionAnyDate
+              ? excursionDate
+              : "",
         checkOut: direction === "housing" ? housingDates.checkOut : "",
         isAnyDate: direction === "excursions" ? isExcursionAnyDate : false,
         guests: safeGuests,
@@ -1575,7 +1629,7 @@ export function HomeSearchShowcase({
         try {
           const isEmptyQuery = query.length === 0;
           const params = new URLSearchParams({
-            direction,
+            direction: suggestionDirection,
             query,
             include: isEmptyQuery ? "locations" : include,
             limit: isEmptyQuery ? "5" : "12",
@@ -1622,7 +1676,13 @@ export function HomeSearchShowcase({
       abortController.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [isSearchDropdownOpen, normalizedSearchQuery, direction, recentSuggestions.length]);
+  }, [
+    isSearchDropdownOpen,
+    normalizedSearchQuery,
+    direction,
+    suggestionDirection,
+    recentSuggestions.length,
+  ]);
 
   useEffect(() => {
     if (activeSuggestionIndex < searchDropdownOptions.length) {
@@ -1699,9 +1759,11 @@ export function HomeSearchShowcase({
       selectedSuggestion &&
       normalizeLocation(selectedSuggestion.name) === normalizeLocation(normalizedQuery);
     const safeGuests = clampGuests(activeGuestsTotal);
-    const params = new URLSearchParams({
-      guests: String(safeGuests),
-    });
+    const params = new URLSearchParams();
+
+    if (usesDateGuests) {
+      params.set("guests", String(safeGuests));
+    }
 
     if (isSelectedSuggestionMatch && selectedSuggestion) {
       if (selectedSuggestion.type === "location") {
@@ -1725,7 +1787,7 @@ export function HomeSearchShowcase({
     } else {
       params.set("q", normalizedQuery);
       commitRecentSuggestion({
-        type: "hotel",
+        type: direction === "housing" ? "hotel" : "location",
         id: `query:${normalizeLocation(normalizedQuery).slice(0, 110)}`,
         name: normalizedQuery,
         subtitle: "",
@@ -1741,15 +1803,24 @@ export function HomeSearchShowcase({
       if (housingDates.checkOut) {
         params.set("checkOut", housingDates.checkOut);
       }
-    } else {
+    } else if (direction === "excursions") {
       if (!isExcursionAnyDate && excursionDate) {
         params.set("checkIn", excursionDate);
       }
       params.set("radiusKm", String(excursionRadius));
+    } else if (usesRadius) {
+      params.set("radiusKm", String(excursionRadius));
     }
 
     closeSearchDropdown();
-    const basePath = direction === "housing" ? housingHubPath : excursionsHubPath;
+    const basePath =
+      direction === "housing"
+        ? housingHubPath
+        : direction === "attractions"
+          ? attractionsHubPath
+          : direction === "transfers"
+            ? transfersHubPath
+            : excursionsHubPath;
     router.push(`${basePath}?${params.toString()}`);
   };
 
@@ -1807,10 +1878,10 @@ export function HomeSearchShowcase({
         </div>
         <div className="mb-6 text-center">
           <h1 className="mt-3 text-3xl text-midnight sm:text-4xl md:text-5xl md:leading-tight">
-            Поиск жилья и экскурсий
+            Поиск по Крыму
           </h1>
           <p className="mt-2 text-base text-olive/60 md:text-lg">
-            Лучшие предложения по всему полуострову
+            Жильё, маршруты, места и трансферы по всему полуострову
           </p>
         </div>
 
@@ -1818,25 +1889,7 @@ export function HomeSearchShowcase({
           onSubmit={onSubmit}
           className="mt-5 rounded-2xl bg-cream/78 p-3 ring-1 ring-olive/12 md:p-4"
         >
-          <div className="relative mx-auto mb-4 grid w-full max-w-md grid-cols-2 overflow-hidden rounded-xl bg-foam p-1 ring-1 ring-olive/12">
-            <div
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute bottom-1 left-1 top-1 z-0 w-[calc(50%-0.25rem)] rounded-lg bg-primary/40 blur-[10px]",
-                "transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
-                direction === "excursions" ? "translate-x-full" : "translate-x-0",
-              )}
-            />
-            <div
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute bottom-1 left-1 top-1 z-0 w-[calc(50%-0.25rem)] rounded-lg bg-primary ring-1 ring-white/18",
-                "shadow-md shadow-primary/30 will-change-transform",
-                "after:absolute after:inset-y-0 after:left-3 after:w-1/3 after:rounded-full after:bg-white/16 after:blur-md after:content-['']",
-                "transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
-                direction === "excursions" ? "translate-x-full" : "translate-x-0",
-              )}
-            />
+          <div className="relative mx-auto mb-4 grid w-full max-w-3xl grid-cols-2 gap-1 overflow-hidden rounded-xl bg-foam p-1 ring-1 ring-olive/12 sm:grid-cols-4">
             {(Object.keys(directionLabels) as Direction[]).map((item) => (
               <button
                 key={item}
@@ -1852,7 +1905,9 @@ export function HomeSearchShowcase({
                   "relative z-10 min-h-11 rounded-lg px-3 py-2 text-sm font-semibold",
                   "outline-none transition-all duration-300 ease-out active:scale-[0.97]",
                   "focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 focus-visible:ring-offset-foam motion-reduce:transition-none",
-                  direction === item ? "text-white" : "text-olive/72 hover:text-olive",
+                  direction === item
+                    ? "bg-primary text-white shadow-md shadow-primary/25"
+                    : "text-olive/72 hover:bg-white/55 hover:text-olive",
                 )}
               >
                 {directionLabels[item]}
@@ -1860,18 +1915,41 @@ export function HomeSearchShowcase({
             ))}
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1.7fr)_minmax(0,1.3fr)_155px] md:items-end">
+          <div
+            className={cn(
+              "grid gap-3 md:items-end",
+              usesDateGuests
+                ? "md:grid-cols-[minmax(0,2fr)_minmax(0,1.7fr)_minmax(0,1.3fr)_155px]"
+                : "md:grid-cols-[minmax(0,1fr)_155px]",
+            )}
+          >
             <div ref={searchFieldRef} className="relative min-w-0">
               <label htmlFor="home-search-input" className="sr-only">
-                {direction === "housing" ? "Город или отель" : "Город или место"}
+                {direction === "housing"
+                  ? "Город или отель"
+                  : direction === "transfers"
+                    ? "Город, маршрут или автомобиль"
+                    : "Город или место"}
               </label>
               <input
                 id="home-search-input"
                 ref={searchInputRef}
                 name="search"
                 autoComplete="off"
-                placeholder={direction === "housing" ? "Город или отель" : "Город или место"}
-                aria-label={direction === "housing" ? "Город или отель" : "Город или место"}
+                placeholder={
+                  direction === "housing"
+                    ? "Город или отель"
+                    : direction === "transfers"
+                      ? "Город, маршрут или авто"
+                      : "Город или место"
+                }
+                aria-label={
+                  direction === "housing"
+                    ? "Город или отель"
+                    : direction === "transfers"
+                      ? "Город, маршрут или автомобиль"
+                      : "Город или место"
+                }
                 role="combobox"
                 aria-autocomplete="list"
                 aria-expanded={isSearchDropdownOpen}
@@ -2055,518 +2133,535 @@ export function HomeSearchShowcase({
               ) : null}
             </div>
 
-            <div ref={dateFieldRef} className="relative min-w-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (openedPanel === "date") {
-                    setHoverHousingDate("");
-                    setOpenedPanel(null);
-                    return;
-                  }
-
-                  closeAllPopovers("date");
-                  clearDatePanelCloseTimer();
-                  setIsDatePanelMounted(true);
-                  setIsChildAgeSelectExpanded(false);
-                  setOpenedPanel("date");
-                }}
-                aria-haspopup="dialog"
-                aria-expanded={openedPanel === "date"}
-                className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-              >
-                <div className="truncate pr-12 text-sm font-semibold">{dateFieldValue}</div>
-                <CalendarIcon className="right-3.5" />
-              </button>
-
-              {isDatePanelMounted ? (
-                <>
+            {usesDateGuests ? (
+              <>
+                <div ref={dateFieldRef} className="relative min-w-0">
                   <button
                     type="button"
-                    className={cn(
-                      "fixed inset-0 z-20 bg-primary/30 xl:hidden",
-                      openedPanel === "date"
-                        ? "popover-overlay-enter"
-                        : "popover-overlay-exit pointer-events-none",
-                    )}
-                    onClick={closeDatePanelByOutside}
-                    aria-label="Закрыть календарь"
-                  />
-                  <div
-                    className={cn(
-                      "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:bottom-auto xl:right-auto xl:left-0 xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
-                      openedPanel === "date" ? "popover-enter" : "popover-exit pointer-events-none",
-                    )}
-                  >
-                    {/* Mobile drag handle */}
-                    <div
-                      aria-hidden="true"
-                      className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden"
-                    />
-                    <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)]">
-                      <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 xl:block">
-                        {calendarMonths.map((month) => (
-                          <button
-                            key={month.key}
-                            type="button"
-                            onClick={() => scrollToMonth(month.key)}
-                            className={cn(
-                              "mb-1 block w-full touch-manipulation rounded-lg px-2.5 py-2 text-left text-sm transition",
-                              month.key === activeMonthKey
-                                ? "bg-primary text-white"
-                                : "text-olive/75 hover:bg-foam",
-                            )}
-                          >
-                            {month.label}
-                          </button>
-                        ))}
-                      </aside>
+                    onClick={() => {
+                      if (openedPanel === "date") {
+                        setHoverHousingDate("");
+                        setOpenedPanel(null);
+                        return;
+                      }
 
-                      <div className="min-w-0">
-                        <div className="mb-3 flex items-center justify-between rounded-xl bg-cream/75 px-3 py-2 text-xs text-olive/80">
-                          {direction === "housing" ? (
-                            housingDates.checkIn && !housingDates.checkOut ? (
-                              <span>Выберите дату выезда</span>
-                            ) : (
-                              <span>Выберите даты проживания</span>
-                            )
-                          ) : (
-                            <span>Выберите дату экскурсии</span>
-                          )}
-                          {direction === "excursions" ? (
+                      closeAllPopovers("date");
+                      clearDatePanelCloseTimer();
+                      setIsDatePanelMounted(true);
+                      setIsChildAgeSelectExpanded(false);
+                      setOpenedPanel("date");
+                    }}
+                    aria-haspopup="dialog"
+                    aria-expanded={openedPanel === "date"}
+                    className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+                  >
+                    <div className="truncate pr-12 text-sm font-semibold">{dateFieldValue}</div>
+                    <CalendarIcon className="right-3.5" />
+                  </button>
+
+                  {isDatePanelMounted ? (
+                    <>
+                      <button
+                        type="button"
+                        className={cn(
+                          "fixed inset-0 z-20 bg-primary/30 xl:hidden",
+                          openedPanel === "date"
+                            ? "popover-overlay-enter"
+                            : "popover-overlay-exit pointer-events-none",
+                        )}
+                        onClick={closeDatePanelByOutside}
+                        aria-label="Закрыть календарь"
+                      />
+                      <div
+                        className={cn(
+                          "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:bottom-auto xl:right-auto xl:left-0 xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
+                          openedPanel === "date"
+                            ? "popover-enter"
+                            : "popover-exit pointer-events-none",
+                        )}
+                      >
+                        {/* Mobile drag handle */}
+                        <div
+                          aria-hidden="true"
+                          className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden"
+                        />
+                        <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)]">
+                          <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 xl:block">
+                            {calendarMonths.map((month) => (
+                              <button
+                                key={month.key}
+                                type="button"
+                                onClick={() => scrollToMonth(month.key)}
+                                className={cn(
+                                  "mb-1 block w-full touch-manipulation rounded-lg px-2.5 py-2 text-left text-sm transition",
+                                  month.key === activeMonthKey
+                                    ? "bg-primary text-white"
+                                    : "text-olive/75 hover:bg-foam",
+                                )}
+                              >
+                                {month.label}
+                              </button>
+                            ))}
+                          </aside>
+
+                          <div className="min-w-0">
+                            <div className="mb-3 flex items-center justify-between rounded-xl bg-cream/75 px-3 py-2 text-xs text-olive/80">
+                              {direction === "housing" ? (
+                                housingDates.checkIn && !housingDates.checkOut ? (
+                                  <span>Выберите дату выезда</span>
+                                ) : (
+                                  <span>Выберите даты проживания</span>
+                                )
+                              ) : (
+                                <span>Выберите дату экскурсии</span>
+                              )}
+                              {direction === "excursions" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsExcursionAnyDate(true);
+                                    setExcursionDate("");
+                                    setOpenedPanel(null);
+                                    setIsChildAgeSelectExpanded(false);
+                                  }}
+                                  className={cn(
+                                    "inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
+                                    isExcursionAnyDate
+                                      ? "bg-primary text-white"
+                                      : "bg-white text-olive ring-1 ring-olive/15 hover:bg-cream",
+                                  )}
+                                >
+                                  Любая дата
+                                </button>
+                              ) : null}
+                            </div>
+
+                            <div
+                              ref={monthListRef}
+                              className="max-h-[68dvh] touch-pan-y overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
+                              onMouseLeave={() => {
+                                if (
+                                  direction === "housing" &&
+                                  housingDates.checkIn &&
+                                  !housingDates.checkOut
+                                ) {
+                                  setHoverHousingDate("");
+                                }
+                              }}
+                            >
+                              {calendarMonths.map((month) => (
+                                <div
+                                  key={month.key}
+                                  ref={(node) => {
+                                    monthSectionRefs.current[month.key] = node;
+                                  }}
+                                  className="mb-5 last:mb-0"
+                                >
+                                  <h3 className="text-sm font-semibold text-olive">
+                                    {month.label}
+                                  </h3>
+                                  <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
+                                    {weekdayLabels.map((weekday) => (
+                                      <span key={`${month.key}-${weekday}`}>{weekday}</span>
+                                    ))}
+                                  </div>
+
+                                  <div className="mt-1 grid grid-cols-7 gap-1">
+                                    {month.cells.map((cell, cellIndex) => {
+                                      const iso = cell.iso;
+
+                                      if (!iso || !cell.day) {
+                                        return (
+                                          <span
+                                            key={`${month.key}-blank-${cellIndex}`}
+                                            className="h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
+                                            aria-hidden="true"
+                                          />
+                                        );
+                                      }
+
+                                      const isDisabled = iso < todayIso;
+                                      const isHousingStart =
+                                        direction === "housing" && iso === housingDates.checkIn;
+                                      const isHousingEnd =
+                                        direction === "housing" && iso === housingPreviewCheckOut;
+                                      const hasHousingRange =
+                                        direction === "housing" &&
+                                        Boolean(
+                                          housingDates.checkIn &&
+                                          housingPreviewCheckOut &&
+                                          housingPreviewCheckOut > housingDates.checkIn,
+                                        );
+                                      const isHousingMiddle =
+                                        direction === "housing" &&
+                                        Boolean(
+                                          housingDates.checkIn &&
+                                          housingPreviewCheckOut &&
+                                          iso > housingDates.checkIn &&
+                                          iso < housingPreviewCheckOut,
+                                        );
+                                      const isExcursionSelected =
+                                        direction === "excursions" &&
+                                        !isExcursionAnyDate &&
+                                        iso === excursionDate;
+                                      const isSelected =
+                                        isHousingStart || isHousingEnd || isExcursionSelected;
+                                      const isHousingRangeStart = isHousingStart && hasHousingRange;
+                                      const isHousingRangeEnd = isHousingEnd && hasHousingRange;
+                                      const isHousingPreviewEnd =
+                                        direction === "housing" &&
+                                        !housingDates.checkOut &&
+                                        isHousingRangeEnd;
+
+                                      return (
+                                        <button
+                                          key={iso}
+                                          type="button"
+                                          disabled={isDisabled}
+                                          onMouseEnter={() => {
+                                            if (
+                                              direction !== "housing" ||
+                                              !housingDates.checkIn ||
+                                              housingDates.checkOut ||
+                                              isDisabled
+                                            ) {
+                                              return;
+                                            }
+                                            setHoverHousingDate(
+                                              iso > housingDates.checkIn ? iso : "",
+                                            );
+                                          }}
+                                          onFocus={() => {
+                                            if (
+                                              direction !== "housing" ||
+                                              !housingDates.checkIn ||
+                                              housingDates.checkOut ||
+                                              isDisabled
+                                            ) {
+                                              return;
+                                            }
+                                            setHoverHousingDate(
+                                              iso > housingDates.checkIn ? iso : "",
+                                            );
+                                          }}
+                                          onClick={() =>
+                                            direction === "housing"
+                                              ? onHousingDateSelect(iso)
+                                              : onExcursionDateSelect(iso)
+                                          }
+                                          className={cn(
+                                            "h-10 touch-manipulation text-sm transition-all duration-200 ease-out min-[390px]:h-11 min-[480px]:h-12 xl:h-9",
+                                            isSelected
+                                              ? isHousingRangeStart
+                                                ? "rounded-l-lg rounded-r-[4px] bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
+                                                : isHousingRangeEnd
+                                                  ? cn(
+                                                      "rounded-r-lg rounded-l-[4px] font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]",
+                                                      isHousingPreviewEnd
+                                                        ? "calendar-range-pulse bg-primary/92"
+                                                        : "bg-primary",
+                                                    )
+                                                  : "rounded-lg bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
+                                              : isHousingMiddle
+                                                ? "rounded-none bg-foam text-olive"
+                                                : isDisabled
+                                                  ? "cursor-not-allowed rounded-lg text-olive/28"
+                                                  : cell.isWeekend
+                                                    ? "rounded-lg text-terra hover:bg-cream"
+                                                    : "rounded-lg text-olive hover:bg-cream",
+                                            iso === todayIso && !isSelected && !isHousingMiddle
+                                              ? "ring-1 ring-sage/45"
+                                              : "",
+                                          )}
+                                        >
+                                          {cell.day}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+
+                <div ref={guestsFieldRef} className="relative min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsChildAgeSelectExpanded(false);
+                      if (openedPanel === "guests") {
+                        setOpenedPanel(null);
+                        return;
+                      }
+
+                      closeAllPopovers("guests");
+                      clearGuestsPanelCloseTimer();
+                      setIsGuestsPanelMounted(true);
+                      setOpenedPanel("guests");
+                    }}
+                    aria-haspopup="dialog"
+                    aria-expanded={openedPanel === "guests"}
+                    className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+                  >
+                    <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/72">
+                      {guestsFieldLabel}
+                    </span>
+                    <span className="block truncate pr-12 text-sm font-semibold">
+                      {guestsFieldValue}
+                    </span>
+                    <UserIcon className="right-3.5" />
+                  </button>
+
+                  {isGuestsPanelMounted ? (
+                    <div
+                      className={cn(
+                        "absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)] origin-top transition-all duration-200 ease-out md:right-0 md:left-auto md:w-[412px]",
+                        openedPanel === "guests"
+                          ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                          : "pointer-events-none opacity-0 scale-95 -translate-y-2",
+                      )}
+                    >
+                      <h3 className="text-lg font-semibold text-olive">
+                        {direction === "housing" ? "Гости" : "Участники"}
+                      </h3>
+
+                      <div className="mt-3 space-y-3">
+                        <section className="rounded-xl border border-sand bg-cream p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-olive">Взрослые</p>
+                              <p className="text-xs text-olive">от 18 лет</p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => updateAdults(direction, activeGuests.adults - 1)}
+                                disabled={activeGuests.adults <= 1}
+                                aria-label="Уменьшить количество взрослых"
+                                className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center text-sm font-semibold text-olive">
+                                {activeGuests.adults}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateAdults(direction, activeGuests.adults + 1)}
+                                disabled={
+                                  activeGuests.adults + activeGuests.childrenAges.length >=
+                                  maxGuestsCount
+                                }
+                                aria-label="Увеличить количество взрослых"
+                                className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section className="rounded-xl border border-sand bg-cream p-3">
+                          <p className="text-sm font-semibold text-olive">Дети</p>
+                          <p className="mt-0.5 text-xs text-olive">
+                            Возраст на момент выезда из отеля
+                          </p>
+
+                          <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                            <div ref={childAgeSelectRef} className="relative">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsChildAgeSelectExpanded((prev) => !prev);
+                                  setOpenedChildAgeDropdownKey(null);
+                                }}
+                                aria-haspopup="listbox"
+                                aria-expanded={isChildAgeSelectExpanded}
+                                className="flex h-10 w-full items-center justify-between rounded-xl border border-sand bg-white px-3 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                              >
+                                <span className="truncate">{pendingChildAgeLabel}</span>
+                                <AppIcon
+                                  icon={ChevronDown}
+                                  className={cn(
+                                    "h-4 w-4 transition-transform duration-200",
+                                    isChildAgeSelectExpanded ? "rotate-180" : "",
+                                  )}
+                                />
+                              </button>
+
+                              <div
+                                role="listbox"
+                                className={cn(
+                                  "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
+                                  isChildAgeSelectExpanded
+                                    ? "visible translate-y-0 opacity-100 pointer-events-auto"
+                                    : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
+                                )}
+                              >
+                                <div className="flex flex-col gap-0.5">
+                                  {Array.from({ length: 18 }, (_, age) => {
+                                    const value = String(age);
+                                    const isSelected = value === pendingChildAgeValue;
+
+                                    return (
+                                      <button
+                                        key={`child-age-${age}`}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={isSelected}
+                                        onClick={() => {
+                                          setPendingChildAge(direction, value);
+                                          setIsChildAgeSelectExpanded(false);
+                                        }}
+                                        className={cn(
+                                          "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
+                                          isSelected ? "bg-cream" : "hover:bg-cream",
+                                        )}
+                                      >
+                                        {formatChildAgeOption(age)}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => {
-                                setIsExcursionAnyDate(true);
-                                setExcursionDate("");
-                                setOpenedPanel(null);
-                                setIsChildAgeSelectExpanded(false);
-                              }}
-                              className={cn(
-                                "inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
-                                isExcursionAnyDate
-                                  ? "bg-primary text-white"
-                                  : "bg-white text-olive ring-1 ring-olive/15 hover:bg-cream",
-                              )}
+                              onClick={() => addChild(direction, pendingChildAgeValue)}
+                              disabled={
+                                !pendingChildAgeValue ||
+                                activeGuests.adults + activeGuests.childrenAges.length >=
+                                  maxGuestsCount
+                              }
+                              className="h-10 rounded-xl border border-sand bg-white px-3 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
                             >
-                              Любая дата
+                              Добавить
                             </button>
-                          ) : null}
-                        </div>
+                          </div>
 
-                        <div
-                          ref={monthListRef}
-                          className="max-h-[68dvh] touch-pan-y overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
-                          onMouseLeave={() => {
-                            if (
-                              direction === "housing" &&
-                              housingDates.checkIn &&
-                              !housingDates.checkOut
-                            ) {
-                              setHoverHousingDate("");
-                            }
-                          }}
-                        >
-                          {calendarMonths.map((month) => (
-                            <div
-                              key={month.key}
-                              ref={(node) => {
-                                monthSectionRefs.current[month.key] = node;
-                              }}
-                              className="mb-5 last:mb-0"
-                            >
-                              <h3 className="text-sm font-semibold text-olive">{month.label}</h3>
-                              <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
-                                {weekdayLabels.map((weekday) => (
-                                  <span key={`${month.key}-${weekday}`}>{weekday}</span>
-                                ))}
-                              </div>
-
-                              <div className="mt-1 grid grid-cols-7 gap-1">
-                                {month.cells.map((cell, cellIndex) => {
-                                  const iso = cell.iso;
-
-                                  if (!iso || !cell.day) {
-                                    return (
-                                      <span
-                                        key={`${month.key}-blank-${cellIndex}`}
-                                        className="h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
-                                        aria-hidden="true"
-                                      />
-                                    );
-                                  }
-
-                                  const isDisabled = iso < todayIso;
-                                  const isHousingStart =
-                                    direction === "housing" && iso === housingDates.checkIn;
-                                  const isHousingEnd =
-                                    direction === "housing" && iso === housingPreviewCheckOut;
-                                  const hasHousingRange =
-                                    direction === "housing" &&
-                                    Boolean(
-                                      housingDates.checkIn &&
-                                      housingPreviewCheckOut &&
-                                      housingPreviewCheckOut > housingDates.checkIn,
-                                    );
-                                  const isHousingMiddle =
-                                    direction === "housing" &&
-                                    Boolean(
-                                      housingDates.checkIn &&
-                                      housingPreviewCheckOut &&
-                                      iso > housingDates.checkIn &&
-                                      iso < housingPreviewCheckOut,
-                                    );
-                                  const isExcursionSelected =
-                                    direction === "excursions" &&
-                                    !isExcursionAnyDate &&
-                                    iso === excursionDate;
-                                  const isSelected =
-                                    isHousingStart || isHousingEnd || isExcursionSelected;
-                                  const isHousingRangeStart = isHousingStart && hasHousingRange;
-                                  const isHousingRangeEnd = isHousingEnd && hasHousingRange;
-                                  const isHousingPreviewEnd =
-                                    direction === "housing" &&
-                                    !housingDates.checkOut &&
-                                    isHousingRangeEnd;
+                          <div className="mt-2 space-y-2">
+                            {activeGuests.childrenAges.length === 0 ? (
+                              <p className="text-xs text-olive">Дети не добавлены</p>
+                            ) : (
+                              <div ref={childAgeRowsRef} className="space-y-2">
+                                {activeGuests.childrenAges.map((age, index) => {
+                                  const ageKey = `${direction}-${index}`;
+                                  const isAgeDropdownOpen = openedChildAgeDropdownKey === ageKey;
 
                                   return (
-                                    <button
-                                      key={iso}
-                                      type="button"
-                                      disabled={isDisabled}
-                                      onMouseEnter={() => {
-                                        if (
-                                          direction !== "housing" ||
-                                          !housingDates.checkIn ||
-                                          housingDates.checkOut ||
-                                          isDisabled
-                                        ) {
-                                          return;
-                                        }
-                                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
-                                      }}
-                                      onFocus={() => {
-                                        if (
-                                          direction !== "housing" ||
-                                          !housingDates.checkIn ||
-                                          housingDates.checkOut ||
-                                          isDisabled
-                                        ) {
-                                          return;
-                                        }
-                                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
-                                      }}
-                                      onClick={() =>
-                                        direction === "housing"
-                                          ? onHousingDateSelect(iso)
-                                          : onExcursionDateSelect(iso)
-                                      }
-                                      className={cn(
-                                        "h-10 touch-manipulation text-sm transition-all duration-200 ease-out min-[390px]:h-11 min-[480px]:h-12 xl:h-9",
-                                        isSelected
-                                          ? isHousingRangeStart
-                                            ? "rounded-l-lg rounded-r-[4px] bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
-                                            : isHousingRangeEnd
-                                              ? cn(
-                                                  "rounded-r-lg rounded-l-[4px] font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]",
-                                                  isHousingPreviewEnd
-                                                    ? "calendar-range-pulse bg-primary/92"
-                                                    : "bg-primary",
-                                                )
-                                              : "rounded-lg bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
-                                          : isHousingMiddle
-                                            ? "rounded-none bg-foam text-olive"
-                                            : isDisabled
-                                              ? "cursor-not-allowed rounded-lg text-olive/28"
-                                              : cell.isWeekend
-                                                ? "rounded-lg text-terra hover:bg-cream"
-                                                : "rounded-lg text-olive hover:bg-cream",
-                                        iso === todayIso && !isSelected && !isHousingMiddle
-                                          ? "ring-1 ring-sage/45"
-                                          : "",
-                                      )}
+                                    <div
+                                      key={`child-${direction}-${index}`}
+                                      className="grid grid-cols-[1fr_minmax(0,120px)_auto] items-center gap-2 rounded-lg bg-white px-2 py-1.5"
                                     >
-                                      {cell.day}
-                                    </button>
+                                      <span className="text-xs font-medium text-olive">
+                                        Ребенок {index + 1}
+                                      </span>
+
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          aria-haspopup="listbox"
+                                          aria-expanded={isAgeDropdownOpen}
+                                          onClick={() => {
+                                            setIsChildAgeSelectExpanded(false);
+                                            setOpenedChildAgeDropdownKey((prev) =>
+                                              prev === ageKey ? null : ageKey,
+                                            );
+                                          }}
+                                          className="flex h-8 w-full items-center justify-between rounded-lg border border-sand bg-white px-2 text-xs text-olive outline-none transition hover:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+                                        >
+                                          <span className="truncate">
+                                            {formatChildAgeOption(age)}
+                                          </span>
+                                          <AppIcon
+                                            icon={ChevronDown}
+                                            className={cn(
+                                              "ml-1 h-4 w-4 shrink-0 transition-transform duration-200",
+                                              isAgeDropdownOpen ? "rotate-180" : "",
+                                            )}
+                                          />
+                                        </button>
+
+                                        <div
+                                          role="listbox"
+                                          className={cn(
+                                            "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
+                                            isAgeDropdownOpen
+                                              ? "visible translate-y-0 opacity-100 pointer-events-auto"
+                                              : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
+                                          )}
+                                        >
+                                          <div className="flex flex-col gap-0.5">
+                                            {Array.from({ length: 18 }, (_, ageOption) => {
+                                              const optionValue = String(ageOption);
+                                              const isSelected = ageOption === age;
+
+                                              return (
+                                                <button
+                                                  key={`child-age-option-${direction}-${index}-${ageOption}`}
+                                                  type="button"
+                                                  role="option"
+                                                  aria-selected={isSelected}
+                                                  onClick={() => {
+                                                    updateChildAge(direction, index, optionValue);
+                                                    setOpenedChildAgeDropdownKey(null);
+                                                  }}
+                                                  className={cn(
+                                                    "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
+                                                    isSelected ? "bg-cream" : "hover:bg-cream",
+                                                  )}
+                                                >
+                                                  {formatChildAgeOption(ageOption)}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenedChildAgeDropdownKey((prev) =>
+                                            prev === ageKey ? null : prev,
+                                          );
+                                          removeChild(direction, index);
+                                        }}
+                                        aria-label={`Удалить ребенка ${index + 1}`}
+                                        className="h-8 rounded-lg border border-terra bg-white px-2 text-xs font-semibold text-terra transition hover:bg-foam"
+                                      >
+                                        Удалить
+                                      </button>
+                                    </div>
                                   );
                                 })}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            <div ref={guestsFieldRef} className="relative min-w-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChildAgeSelectExpanded(false);
-                  if (openedPanel === "guests") {
-                    setOpenedPanel(null);
-                    return;
-                  }
-
-                  closeAllPopovers("guests");
-                  clearGuestsPanelCloseTimer();
-                  setIsGuestsPanelMounted(true);
-                  setOpenedPanel("guests");
-                }}
-                aria-haspopup="dialog"
-                aria-expanded={openedPanel === "guests"}
-                className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-              >
-                <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/72">
-                  {guestsFieldLabel}
-                </span>
-                <span className="block truncate pr-12 text-sm font-semibold">
-                  {guestsFieldValue}
-                </span>
-                <UserIcon className="right-3.5" />
-              </button>
-
-              {isGuestsPanelMounted ? (
-                <div
-                  className={cn(
-                    "absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)] origin-top transition-all duration-200 ease-out md:right-0 md:left-auto md:w-[412px]",
-                    openedPanel === "guests"
-                      ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                      : "pointer-events-none opacity-0 scale-95 -translate-y-2",
-                  )}
-                >
-                  <h3 className="text-lg font-semibold text-olive">
-                    {direction === "housing" ? "Гости" : "Участники"}
-                  </h3>
-
-                  <div className="mt-3 space-y-3">
-                    <section className="rounded-xl border border-sand bg-cream p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-olive">Взрослые</p>
-                          <p className="text-xs text-olive">от 18 лет</p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => updateAdults(direction, activeGuests.adults - 1)}
-                            disabled={activeGuests.adults <= 1}
-                            aria-label="Уменьшить количество взрослых"
-                            className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            -
-                          </button>
-                          <span className="w-8 text-center text-sm font-semibold text-olive">
-                            {activeGuests.adults}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateAdults(direction, activeGuests.adults + 1)}
-                            disabled={
-                              activeGuests.adults + activeGuests.childrenAges.length >=
-                              maxGuestsCount
-                            }
-                            aria-label="Увеличить количество взрослых"
-                            className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="rounded-xl border border-sand bg-cream p-3">
-                      <p className="text-sm font-semibold text-olive">Дети</p>
-                      <p className="mt-0.5 text-xs text-olive">Возраст на момент выезда из отеля</p>
-
-                      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                        <div ref={childAgeSelectRef} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsChildAgeSelectExpanded((prev) => !prev);
-                              setOpenedChildAgeDropdownKey(null);
-                            }}
-                            aria-haspopup="listbox"
-                            aria-expanded={isChildAgeSelectExpanded}
-                            className="flex h-10 w-full items-center justify-between rounded-xl border border-sand bg-white px-3 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                          >
-                            <span className="truncate">{pendingChildAgeLabel}</span>
-                            <AppIcon
-                              icon={ChevronDown}
-                              className={cn(
-                                "h-4 w-4 transition-transform duration-200",
-                                isChildAgeSelectExpanded ? "rotate-180" : "",
-                              )}
-                            />
-                          </button>
-
-                          <div
-                            role="listbox"
-                            className={cn(
-                              "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
-                              isChildAgeSelectExpanded
-                                ? "visible translate-y-0 opacity-100 pointer-events-auto"
-                                : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
                             )}
-                          >
-                            <div className="flex flex-col gap-0.5">
-                              {Array.from({ length: 18 }, (_, age) => {
-                                const value = String(age);
-                                const isSelected = value === pendingChildAgeValue;
-
-                                return (
-                                  <button
-                                    key={`child-age-${age}`}
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isSelected}
-                                    onClick={() => {
-                                      setPendingChildAge(direction, value);
-                                      setIsChildAgeSelectExpanded(false);
-                                    }}
-                                    className={cn(
-                                      "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
-                                      isSelected ? "bg-cream" : "hover:bg-cream",
-                                    )}
-                                  >
-                                    {formatChildAgeOption(age)}
-                                  </button>
-                                );
-                              })}
-                            </div>
                           </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addChild(direction, pendingChildAgeValue)}
-                          disabled={
-                            !pendingChildAgeValue ||
-                            activeGuests.adults + activeGuests.childrenAges.length >= maxGuestsCount
-                          }
-                          className="h-10 rounded-xl border border-sand bg-white px-3 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          Добавить
-                        </button>
+                        </section>
                       </div>
 
-                      <div className="mt-2 space-y-2">
-                        {activeGuests.childrenAges.length === 0 ? (
-                          <p className="text-xs text-olive">Дети не добавлены</p>
-                        ) : (
-                          <div ref={childAgeRowsRef} className="space-y-2">
-                            {activeGuests.childrenAges.map((age, index) => {
-                              const ageKey = `${direction}-${index}`;
-                              const isAgeDropdownOpen = openedChildAgeDropdownKey === ageKey;
-
-                              return (
-                                <div
-                                  key={`child-${direction}-${index}`}
-                                  className="grid grid-cols-[1fr_minmax(0,120px)_auto] items-center gap-2 rounded-lg bg-white px-2 py-1.5"
-                                >
-                                  <span className="text-xs font-medium text-olive">
-                                    Ребенок {index + 1}
-                                  </span>
-
-                                  <div className="relative">
-                                    <button
-                                      type="button"
-                                      aria-haspopup="listbox"
-                                      aria-expanded={isAgeDropdownOpen}
-                                      onClick={() => {
-                                        setIsChildAgeSelectExpanded(false);
-                                        setOpenedChildAgeDropdownKey((prev) =>
-                                          prev === ageKey ? null : ageKey,
-                                        );
-                                      }}
-                                      className="flex h-8 w-full items-center justify-between rounded-lg border border-sand bg-white px-2 text-xs text-olive outline-none transition hover:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                                    >
-                                      <span className="truncate">{formatChildAgeOption(age)}</span>
-                                      <AppIcon
-                                        icon={ChevronDown}
-                                        className={cn(
-                                          "ml-1 h-4 w-4 shrink-0 transition-transform duration-200",
-                                          isAgeDropdownOpen ? "rotate-180" : "",
-                                        )}
-                                      />
-                                    </button>
-
-                                    <div
-                                      role="listbox"
-                                      className={cn(
-                                        "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
-                                        isAgeDropdownOpen
-                                          ? "visible translate-y-0 opacity-100 pointer-events-auto"
-                                          : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
-                                      )}
-                                    >
-                                      <div className="flex flex-col gap-0.5">
-                                        {Array.from({ length: 18 }, (_, ageOption) => {
-                                          const optionValue = String(ageOption);
-                                          const isSelected = ageOption === age;
-
-                                          return (
-                                            <button
-                                              key={`child-age-option-${direction}-${index}-${ageOption}`}
-                                              type="button"
-                                              role="option"
-                                              aria-selected={isSelected}
-                                              onClick={() => {
-                                                updateChildAge(direction, index, optionValue);
-                                                setOpenedChildAgeDropdownKey(null);
-                                              }}
-                                              className={cn(
-                                                "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
-                                                isSelected ? "bg-cream" : "hover:bg-cream",
-                                              )}
-                                            >
-                                              {formatChildAgeOption(ageOption)}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenedChildAgeDropdownKey((prev) =>
-                                        prev === ageKey ? null : prev,
-                                      );
-                                      removeChild(direction, index);
-                                    }}
-                                    aria-label={`Удалить ребенка ${index + 1}`}
-                                    className="h-8 rounded-lg border border-terra bg-white px-2 text-xs font-semibold text-terra transition hover:bg-foam"
-                                  >
-                                    Удалить
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setOpenedPanel(null);
-                      setIsChildAgeSelectExpanded(false);
-                    }}
-                    className="mt-3 h-10 w-full rounded-xl"
-                  >
-                    Готово
-                  </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setOpenedPanel(null);
+                          setIsChildAgeSelectExpanded(false);
+                        }}
+                        className="mt-3 h-10 w-full rounded-xl"
+                      >
+                        Готово
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            ) : null}
 
             <Button
               type="submit"
@@ -2577,13 +2672,11 @@ export function HomeSearchShowcase({
             </Button>
           </div>
 
-          {/* ── Distance row: slides in when Excursions is selected ── */}
+          {/* ── Distance row: slides in for geo-based catalogs ── */}
           <div
             className={cn(
               "overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
-              direction === "excursions"
-                ? "mt-3 max-h-20 opacity-100"
-                : "max-h-0 opacity-0 pointer-events-none",
+              usesRadius ? "mt-3 max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none",
             )}
           >
             <div className="flex items-center gap-3 px-1">
@@ -2598,11 +2691,11 @@ export function HomeSearchShowcase({
                   <div
                     className="pointer-events-none absolute inset-y-0 rounded-[13px] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] transition-all duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]"
                     style={{
-                      width: `${100 / 5}%`,
-                      left: `${[5, 10, 15, 20, 25].indexOf(excursionRadius) * (100 / 5)}%`,
+                      width: `${100 / radiusOptions.length}%`,
+                      left: `${radiusOptions.indexOf(excursionRadius as (typeof radiusOptions)[number]) * (100 / radiusOptions.length)}%`,
                     }}
                   />
-                  {[5, 10, 15, 20, 25].map((km) => (
+                  {radiusOptions.map((km) => (
                     <button
                       key={km}
                       type="button"
@@ -2690,6 +2783,7 @@ export function HomeSearchShowcase({
               const href = buildCityHref({
                 direction,
                 locationId: city.locationId,
+                locationName: city.locationName,
               });
 
               return (

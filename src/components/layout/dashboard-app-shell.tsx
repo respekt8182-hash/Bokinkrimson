@@ -105,7 +105,8 @@ function resolveActiveMenuKey(pathname: string): DrawerItemKey | null {
   if (
     pathname === "/dashboard" ||
     pathname.startsWith("/dashboard/objects") ||
-    pathname.startsWith("/dashboard/excursions")
+    pathname.startsWith("/dashboard/excursions") ||
+    pathname.startsWith("/dashboard/transfers")
   ) {
     return "home";
   }
@@ -536,7 +537,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
           </div>
         </aside>
       </div>
-
     </div>
   );
 }

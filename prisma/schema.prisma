@@ -33,6 +33,19 @@ enum ExcursionStatus {
   REJECTED           @map("rejected")
 }
 
+enum AttractionStatus {
+  DRAFT     @map("draft")
+  PUBLISHED @map("published")
+  HIDDEN    @map("hidden")
+}
+
+enum TransferStatus {
+  DRAFT              @map("draft")
+  PENDING_MODERATION @map("pending_moderation")
+  PUBLISHED          @map("published")
+  REJECTED           @map("rejected")
+}
+
 enum ExcursionLocationKind {
   CITY     @map("city")
   TOWN     @map("town")
@@ -156,6 +169,7 @@ enum ApplicationEntityType {
 enum ReviewEntityType {
   PROPERTY  @map("property")
   EXCURSION @map("excursion")
+  TRANSFER  @map("transfer")
 }
 
 enum AdminMessageSourceType {
@@ -192,6 +206,7 @@ model User {
   updatedAt                 DateTime               @updatedAt
   properties                Property[]
   excursions                Excursion[]
+  transfers                 Transfer[]
   applications              Application[]          @relation("GuestApplications")
   payments                  Payment[]              @relation("OwnerPayments")
   confirmedPayments         Payment[]              @relation("ConfirmedPayments")
@@ -383,14 +398,16 @@ model CustomLocation {
 }
 
 model ExcursionDistrict {
-  id         String              @id @default(cuid())
-  slug       String              @unique
-  name       String
-  isActive   Boolean             @default(true)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  locations  ExcursionLocation[]
-  excursions Excursion[]
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  name        String
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  locations   ExcursionLocation[]
+  excursions  Excursion[]
+  attractions Attraction[]
+  transfers   Transfer[]
 
   @@index([isActive, name])
 }
@@ -428,6 +445,8 @@ model ExcursionLocation {
   meetingExcursions Excursion[]               @relation("ExcursionMeetingLocation")
   pickupExcursions  ExcursionPickupLocation[]
   routeExcursions   ExcursionRouteLocation[]
+  attractions       Attraction[]
+  transfers         Transfer[]
 
   @@index([districtId, isMajor])
   @@index([name])
@@ -657,11 +676,94 @@ model Excursion {
   @@index([pickupAvailable])
 }
 
+model Attraction {
+  id                 String             @id @default(cuid())
+  title              String
+  slug               String             @unique
+  category           String?
+  locationId         String?
+  locationName       String?
+  districtId         String?
+  address            String?
+  latitude           Decimal?           @db.Decimal(9, 6)
+  longitude          Decimal?           @db.Decimal(9, 6)
+  shortDescription   String?
+  description        String?
+  photoUrls          String[]           @default([])
+  websiteUrl         String?
+  status             AttractionStatus   @default(DRAFT)
+  isPublishedVisible Boolean            @default(true)
+  publishedAt        DateTime?
+  createdByLogin     String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  location           ExcursionLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  district           ExcursionDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+
+  @@index([status, isPublishedVisible, updatedAt])
+  @@index([locationId, status, updatedAt])
+  @@index([districtId, status, updatedAt])
+}
+
+model Transfer {
+  id                 String             @id @default(cuid())
+  ownerId            String
+  title              String?
+  slug               String             @unique
+  transferType       String?
+  vehicleClass       String?
+  vehicleModel       String?
+  seats              Int?
+  luggage            Int?
+  locationId         String?
+  locationName       String?
+  districtId         String?
+  serviceArea        String?
+  routeExamples      String?
+  latitude           Decimal?           @db.Decimal(9, 6)
+  longitude          Decimal?           @db.Decimal(9, 6)
+  priceFrom          Decimal?           @db.Decimal(10, 2)
+  priceUnitLabel     String?
+  currency           String             @default("RUB") @db.VarChar(3)
+  shortDescription   String?
+  description        String?
+  photoUrls          String[]           @default([])
+  contactName        String?
+  phone              String?
+  phone2             String?
+  websiteUrl         String?
+  whatsappUrl        String?
+  telegramUrl        String?
+  vkUrl              String?
+  maxUrl             String?
+  okUrl              String?
+  receiveRequests    Boolean            @default(true)
+  avgRating          Decimal            @default(0) @db.Decimal(3, 2)
+  reviewsCount       Int                @default(0)
+  profileViews       Int                @default(0)
+  moderationNotes    String?
+  status             TransferStatus     @default(DRAFT)
+  isPublishedVisible Boolean            @default(true)
+  publishedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  owner              User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  location           ExcursionLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  district           ExcursionDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  reviews            Review[]
+
+  @@index([ownerId, updatedAt])
+  @@index([status, isPublishedVisible, updatedAt])
+  @@index([locationId, status, updatedAt])
+  @@index([districtId, status, updatedAt])
+}
+
 model Review {
   id             String           @id @default(cuid())
   entityType     ReviewEntityType @default(PROPERTY)
   propertyId     String?
   excursionId    String?
+  transferId     String?
   userId         String
   rating         Decimal          @db.Decimal(2, 1)
   text           String
@@ -675,15 +777,18 @@ model Review {
   deletedAt      DateTime?
   property       Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   excursion      Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  transfer       Transfer?        @relation(fields: [transferId], references: [id], onDelete: Cascade)
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   reactions      ReviewReaction[]
   reports        ReviewReport[]
 
   @@unique([userId, propertyId])
   @@unique([userId, excursionId])
+  @@unique([userId, transferId])
   @@index([entityType, createdAt])
   @@index([propertyId, status, createdAt])
   @@index([excursionId, status, createdAt])
+  @@index([transferId, status, createdAt])
   @@index([userId, entityType, createdAt])
 }
 

@@ -4,16 +4,19 @@ import type { MetadataRoute } from "next";
 import { crimeaLocationById } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { buildPublicExcursionPath, getExcursionSeoDirectoryData } from "@/lib/public-excursions";
+import { buildPublicAttractionPath, buildPublicTransferPath } from "@/lib/public-marketplace";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
 import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 import {
+  attractionsHubPath,
   buildHousingLocationPath,
   excursionsHubPath,
   housingHubPath,
   toursHubPath,
+  transfersHubPath,
 } from "@/lib/seo/routes";
 import { absoluteUrl } from "@/lib/seo/site";
 
@@ -48,10 +51,22 @@ const staticRouteFiles: RouteFileEntry[] = [
     priority: 0.9,
   },
   {
+    path: attractionsHubPath,
+    file: "src/app/attractions/page.tsx",
+    changeFrequency: "weekly",
+    priority: 0.82,
+  },
+  {
     path: toursHubPath,
     file: "src/app/tours/page.tsx",
     changeFrequency: "weekly",
     priority: 0.84,
+  },
+  {
+    path: transfersHubPath,
+    file: "src/app/transfers/page.tsx",
+    changeFrequency: "daily",
+    priority: 0.8,
   },
   {
     path: "/about",
@@ -239,15 +254,77 @@ async function buildExcursionEntries(): Promise<MetadataRoute.Sitemap> {
   }
 }
 
+async function buildAttractionEntries(): Promise<MetadataRoute.Sitemap> {
+  try {
+    const attractions = await db.attraction.findMany({
+      where: {
+        status: "PUBLISHED",
+        isPublishedVisible: true,
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    });
+
+    return attractions.map((item) => ({
+      url: absoluteUrl(buildPublicAttractionPath(item)),
+      lastModified: item.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function buildTransferEntries(): Promise<MetadataRoute.Sitemap> {
+  try {
+    const transfers = await db.transfer.findMany({
+      where: {
+        status: "PUBLISHED",
+        isPublishedVisible: true,
+        owner: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    });
+
+    return transfers.map((item) => ({
+      url: absoluteUrl(buildPublicTransferPath(item)),
+      lastModified: item.updatedAt,
+      changeFrequency: "daily" as const,
+      priority: 0.72,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [staticEntries, housingSeoEntries, excursionSeoEntries, propertyEntries, excursionEntries] =
-    await Promise.all([
-      buildStaticEntries(),
-      buildHousingSeoEntries(),
-      buildExcursionSeoEntries(),
-      buildPropertyEntries(),
-      buildExcursionEntries(),
-    ]);
+  const [
+    staticEntries,
+    housingSeoEntries,
+    excursionSeoEntries,
+    propertyEntries,
+    excursionEntries,
+    attractionEntries,
+    transferEntries,
+  ] = await Promise.all([
+    buildStaticEntries(),
+    buildHousingSeoEntries(),
+    buildExcursionSeoEntries(),
+    buildPropertyEntries(),
+    buildExcursionEntries(),
+    buildAttractionEntries(),
+    buildTransferEntries(),
+  ]);
 
   return [
     ...staticEntries,
@@ -255,5 +332,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...excursionSeoEntries,
     ...propertyEntries,
     ...excursionEntries,
+    ...attractionEntries,
+    ...transferEntries,
   ];
 }

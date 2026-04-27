@@ -5,6 +5,11 @@ import { companyConfig } from "@/config/company";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 
 const navigationLinks = [
+  { href: "/rent", label: "Жильё" },
+  { href: "/attractions", label: "Достопримечательности" },
+  { href: "/excursions", label: "Экскурсии" },
+  { href: "/transfers", label: "Трансферы" },
+  { href: "/tours", label: "Туры" },
   { href: "/about", label: "О сервисе" },
   { href: "/cooperation", label: "Сотрудничество" },
 ];
@@ -38,9 +43,7 @@ function normalizePhoneHref(phone: string | null | undefined): string | null {
 export function SiteFooter() {
   const year = new Date().getFullYear();
   const phoneHref = normalizePhoneHref(companyConfig.phone);
-  const telegramUrl = normalizeTelegramProfileUrl(
-    companyConfig.publicMessengerLinks.telegram,
-  );
+  const telegramUrl = normalizeTelegramProfileUrl(companyConfig.publicMessengerLinks.telegram);
   const maxUrl = companyConfig.publicMessengerLinks.max.trim() || null;
 
   return (
@@ -170,14 +173,15 @@ export function SiteFooter() {
               </div>
             </div>
           </div>
-
         </div>
 
         <div className="mt-10 flex flex-col items-center gap-3 border-t border-olive/[0.06] pt-8 text-center">
           <p className="flex items-center gap-1.5 text-xs text-olive/35">
             Сделано с <Heart className="inline h-3 w-3 fill-terra/40 text-terra/50" /> в Крыму
           </p>
-          <p className="text-xs text-olive/25">&copy; {year} {companyConfig.brandName}</p>
+          <p className="text-xs text-olive/25">
+            &copy; {year} {companyConfig.brandName}
+          </p>
         </div>
       </div>
     </footer>

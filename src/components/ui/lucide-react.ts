@@ -149,9 +149,7 @@ export type LucideProps = Omit<TablerIconProps, "stroke"> & {
   absoluteStrokeWidth?: boolean;
 };
 
-export type LucideIcon = ForwardRefExoticComponent<
-  LucideProps & RefAttributes<SVGSVGElement>
->;
+export type LucideIcon = ForwardRefExoticComponent<LucideProps & RefAttributes<SVGSVGElement>>;
 
 const asLucideIcon = (icon: TablerIcon): LucideIcon => icon as unknown as LucideIcon;
 
@@ -180,8 +178,10 @@ export const CakeSlice = asLucideIcon(IconCake);
 export const CalendarDays = asLucideIcon(IconCalendarEvent);
 export const Camera = asLucideIcon(IconCamera);
 export const Car = asLucideIcon(IconCar);
+export const CarFront = asLucideIcon(IconCar);
 export const Castle = asLucideIcon(IconBuildingCastle);
 export const Check = asLucideIcon(IconCheck);
+export const CheckCircle2 = asLucideIcon(IconCircleCheck);
 export const ChevronDown = asLucideIcon(IconChevronDown);
 export const ChevronLeft = asLucideIcon(IconChevronLeft);
 export const ChevronRight = asLucideIcon(IconChevronRight);
@@ -202,6 +202,7 @@ export const Copy = asLucideIcon(IconCopy);
 export const CookingPot = asLucideIcon(IconToolsKitchen2);
 export const CreditCard = asLucideIcon(IconCreditCard);
 export const DoorOpen = asLucideIcon(IconDoorEnter);
+export const ExternalLink = asLucideIcon(IconArrowUpRight);
 export const Eye = asLucideIcon(IconEye);
 export const EyeOff = asLucideIcon(IconEyeOff);
 export const Fan = asLucideIcon(IconPropeller);
@@ -233,6 +234,7 @@ export const LoaderCircle = asLucideIcon(IconLoader2);
 export const LocateFixed = asLucideIcon(IconCurrentLocation);
 export const LockKeyhole = asLucideIcon(IconLock);
 export const LogOut = asLucideIcon(IconLogout);
+export const Luggage = asLucideIcon(IconBriefcase2);
 export const Mail = asLucideIcon(IconMail);
 export const Map = asLucideIcon(IconMap);
 export const MapPin = asLucideIcon(IconMapPin);

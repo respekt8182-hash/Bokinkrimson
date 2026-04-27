@@ -1,11 +1,14 @@
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 
 export const housingHubPath = "/rent";
+export const attractionsHubPath = "/attractions";
 export const excursionsHubPath = "/excursions";
 export const toursHubPath = "/tours";
+export const transfersHubPath = "/transfers";
 
 const housingHubQueryOrder = ["location", "propertyType"] as const;
 const excursionHubQueryOrder = ["location"] as const;
+const marketplaceHubQueryOrder = ["q", "location", "radiusKm"] as const;
 
 export function buildHousingHubPath(input?: {
   location?: string | null;
@@ -42,6 +45,50 @@ export function buildToursHubPath(input?: { location?: string | null }): string 
   }
 
   return buildCanonicalPath(toursHubPath, entries, excursionHubQueryOrder);
+}
+
+export function buildAttractionsHubPath(input?: {
+  query?: string | null;
+  location?: string | null;
+  radiusKm?: number | string | null;
+}): string {
+  const entries: Array<[string, string]> = [];
+
+  if (input?.query) {
+    entries.push(["q", input.query]);
+  }
+
+  if (input?.location) {
+    entries.push(["location", input.location]);
+  }
+
+  if (input?.radiusKm) {
+    entries.push(["radiusKm", String(input.radiusKm)]);
+  }
+
+  return buildCanonicalPath(attractionsHubPath, entries, marketplaceHubQueryOrder);
+}
+
+export function buildTransfersHubPath(input?: {
+  query?: string | null;
+  location?: string | null;
+  radiusKm?: number | string | null;
+}): string {
+  const entries: Array<[string, string]> = [];
+
+  if (input?.query) {
+    entries.push(["q", input.query]);
+  }
+
+  if (input?.location) {
+    entries.push(["location", input.location]);
+  }
+
+  if (input?.radiusKm) {
+    entries.push(["radiusKm", String(input.radiusKm)]);
+  }
+
+  return buildCanonicalPath(transfersHubPath, entries, marketplaceHubQueryOrder);
 }
 
 export function buildHousingLocationPath(locationSlug: string): string {

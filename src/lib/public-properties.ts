@@ -452,8 +452,8 @@ export function buildPropertySlug(name: string | null, id: string): string {
 
 const publicEntityIdPatterns = [
   /^c[a-z0-9]{10,}$/i,
-  /^(?:property|excursion)_[a-z0-9]{10,}$/i,
-  /^demo_(?:property|excursion|tour)_\d+$/i,
+  /^(?:property|excursion|attraction|transfer)_[a-z0-9]{10,}$/i,
+  /^demo_(?:property|excursion|tour|attraction|transfer)_\d+$/i,
 ];
 
 function isPublicEntityId(value: string): boolean {

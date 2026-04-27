@@ -3,6 +3,7 @@
 import {
   BedDouble,
   Building2,
+  Car,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,7 @@ type SidebarIconName =
   | "chessboard"
   | "payment"
   | "excursions"
+  | "transfers"
   | "favorites"
   | "profile";
 
@@ -99,6 +101,7 @@ const objectTabs: ObjectTabItem[] = [
 const mainMenu: MainMenuItem[] = [
   { href: "/dashboard/chessboard", label: "Шахматка", icon: "chessboard" },
   { href: "/dashboard/excursions", label: "Экскурсии", icon: "excursions" },
+  { href: "/dashboard/transfers", label: "Трансферы", icon: "transfers" },
   { href: "/dashboard/favorites", label: "Избранное", icon: "favorites" },
   { href: "/dashboard/profile", label: "Профиль", icon: "profile" },
 ];
@@ -131,6 +134,7 @@ function SidebarIcon({ name, className }: { name: SidebarIconName; className?: s
     chessboard: SquareChartGantt,
     payment: WalletCards,
     excursions: Map,
+    transfers: Car,
     favorites: Heart,
     profile: UserRound,
   };
@@ -200,7 +204,13 @@ export function DashboardSidebar({
       <div className="mt-2 flex items-center gap-2">
         <span className="inline-flex h-9 w-9 overflow-hidden rounded-full bg-cream ring-1 ring-olive/15">
           {avatarUrl ? (
-            <Image src={avatarUrl} alt="Профиль" width={36} height={36} className="h-full w-full object-cover" />
+            <Image
+              src={avatarUrl}
+              alt="Профиль"
+              width={36}
+              height={36}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-olive/75">
               {initials}

@@ -43,8 +43,8 @@ export function ServicesAndTariffsSection({
       )}
       <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
         На сайте действует открытая модель оплаты: сервис берет фиксированную стоимость только за
-        размещение карточки объекта, экскурсии или тура. Все тарифы ниже собраны из текущей логики
-        публикации сайта.
+        размещение карточки объекта, экскурсии, тура или трансфера. Все тарифы ниже собраны из
+        текущей логики публикации сайта.
       </p>
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">

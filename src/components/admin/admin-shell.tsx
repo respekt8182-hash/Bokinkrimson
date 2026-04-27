@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Compass,
+  Car,
   CreditCard,
   FileText,
   Headset,
   House,
   KeyRound,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -42,7 +44,9 @@ const menu: MenuItem[] = [
   { href: "/admin/moderation", label: "Модерация жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
   { href: "/admin/objects", label: "Жильё и размещение", icon: House },
+  { href: "/admin/attractions", label: "Достопримечательности", icon: Landmark },
   { href: "/admin/excursions", label: "Каталог экскурсий", icon: Compass },
+  { href: "/admin/transfers", label: "Трансферы", icon: Car },
   { href: "/admin/users", label: "Пользователи", icon: Users },
   { href: "/admin/payments", label: "Оплата", icon: CreditCard },
   { href: "/admin/applications", label: "Заявки", icon: FileText },
@@ -104,8 +108,16 @@ function getPageTitle(pathname: string): string {
     return "Жильё и размещение";
   }
 
+  if (pathname.startsWith("/admin/attractions")) {
+    return "Достопримечательности";
+  }
+
   if (pathname.startsWith("/admin/excursions")) {
     return "Каталог экскурсий";
+  }
+
+  if (pathname.startsWith("/admin/transfers")) {
+    return "Трансферы";
   }
 
   if (pathname.startsWith("/admin/users")) {
@@ -149,13 +161,19 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
 
   useEffect(() => {
     if (pathname.startsWith("/admin/moderation/excursions")) {
-      const seen = Math.max(Date.now(), moderationSnapshot.excursions.latestPendingUpdatedAtMs ?? 0);
+      const seen = Math.max(
+        Date.now(),
+        moderationSnapshot.excursions.latestPendingUpdatedAtMs ?? 0,
+      );
       writeSeenValue(EXCURSION_SEEN_KEY, seen);
       return;
     }
 
     if (pathname.startsWith("/admin/moderation")) {
-      const seen = Math.max(Date.now(), moderationSnapshot.properties.latestPendingUpdatedAtMs ?? 0);
+      const seen = Math.max(
+        Date.now(),
+        moderationSnapshot.properties.latestPendingUpdatedAtMs ?? 0,
+      );
       writeSeenValue(PROPERTY_SEEN_KEY, seen);
       return;
     }

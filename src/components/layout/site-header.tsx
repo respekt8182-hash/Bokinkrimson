@@ -5,7 +5,13 @@ import { SiteHeaderMobileDrawer } from "@/components/layout/site-header-mobile-d
 import { SiteHeaderUserMenu } from "@/components/layout/site-header-user-menu";
 import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
-import { excursionsHubPath, housingHubPath, toursHubPath } from "@/lib/seo/routes";
+import {
+  attractionsHubPath,
+  excursionsHubPath,
+  housingHubPath,
+  toursHubPath,
+  transfersHubPath,
+} from "@/lib/seo/routes";
 
 export async function SiteHeader() {
   const session = await getSession();
@@ -66,10 +72,22 @@ export async function SiteHeader() {
             Жильё
           </Link>
           <Link
+            href={attractionsHubPath}
+            className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
+          >
+            Достопримечательности
+          </Link>
+          <Link
             href={excursionsHubPath}
             className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
           >
             Экскурсии
+          </Link>
+          <Link
+            href={transfersHubPath}
+            className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
+          >
+            Трансферы
           </Link>
           <Link
             href={toursHubPath}
