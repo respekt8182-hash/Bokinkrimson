@@ -19,8 +19,18 @@ import {
   type LocalFavoriteItem,
 } from "@/lib/local-favorites";
 import type { PublicExcursionCard } from "@/lib/public-excursions";
+import type {
+  PublicAttractionCatalogItem,
+  PublicTransferCatalogItem,
+} from "@/lib/public-marketplace";
 import type { PublicPropertyCard } from "@/lib/public-properties";
-import { excursionsHubPath, housingHubPath, toursHubPath } from "@/lib/seo/routes";
+import {
+  attractionsHubPath,
+  excursionsHubPath,
+  housingHubPath,
+  toursHubPath,
+  transfersHubPath,
+} from "@/lib/seo/routes";
 
 type FavoriteViewFilter = "all" | FavoriteEntityType;
 
@@ -47,6 +57,16 @@ type FavoriteCardsBatchResponse = {
         key: string;
         entityType: "excursion" | "tour";
         item: PublicExcursionCard;
+      }
+    | {
+        key: string;
+        entityType: "attraction";
+        item: PublicAttractionCatalogItem;
+      }
+    | {
+        key: string;
+        entityType: "transfer";
+        item: PublicTransferCatalogItem;
       }
   >;
 };
@@ -144,6 +164,66 @@ function mapExcursionCard(
   };
 }
 
+function mapTransferCard(item: PublicTransferCatalogItem): FavoriteCardItem {
+  const vehicleModel = item.vehicleModel?.trim() ?? "";
+  const visibleVehicleModel = /^\d{5,}$/.test(vehicleModel) ? null : vehicleModel || null;
+  const coverImageUrl =
+    item.coverImageUrl ??
+    item.photoUrls.find((url) => url.trim().length > 0) ??
+    item.fleet.find((fleetItem) => fleetItem.photoUrl?.trim())?.photoUrl ??
+    null;
+  const priceLabel =
+    item.priceFrom !== null
+      ? `от ${ruNumberFormat.format(item.priceFrom)} ₽${item.priceUnitLabel ? ` ${item.priceUnitLabel}` : ""}`
+      : "Цена по запросу";
+
+  return {
+    key: buildFavoriteKey({ entityType: "transfer", id: item.id }),
+    id: item.id,
+    entityType: "transfer",
+    path: item.path,
+    name: item.title,
+    eyebrow: item.transferType
+      ? `${getFavoriteEntityCardLabel("transfer")} • ${item.transferType}`
+      : getFavoriteEntityCardLabel("transfer"),
+    subtitle: item.locationName ?? item.serviceArea ?? "Крым",
+    coverImageUrl,
+    badges: [
+      item.fleet.length > 1 ? `Вариантов: ${item.fleet.length}` : visibleVehicleModel,
+      item.seats ? `${item.seats} мест` : null,
+      item.luggage ? `${item.luggage} багажа` : null,
+      item.reviewsCount > 0
+        ? `Рейтинг ${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
+        : "Пока без отзывов",
+      priceLabel,
+    ].filter((value): value is string => Boolean(value)),
+  };
+}
+
+function mapAttractionCard(item: PublicAttractionCatalogItem): FavoriteCardItem {
+  const coverImageUrl =
+    item.coverImageUrl ?? item.photoUrls.find((url) => url.trim().length > 0) ?? null;
+
+  return {
+    key: buildFavoriteKey({ entityType: "attraction", id: item.id }),
+    id: item.id,
+    entityType: "attraction",
+    path: item.path,
+    name: item.title,
+    eyebrow: item.category
+      ? `${getFavoriteEntityCardLabel("attraction")} • ${item.category}`
+      : getFavoriteEntityCardLabel("attraction"),
+    subtitle: [item.locationName, item.districtName].filter(Boolean).join(" • ") || "Крым",
+    coverImageUrl,
+    badges: [
+      item.address,
+      item.tags[0],
+      item.tags[1],
+      item.shortDescription ? "Место для прогулки" : null,
+    ].filter((value): value is string => Boolean(value)),
+  };
+}
+
 function orderFavoriteItemsFromSource(
   favorites: LocalFavoriteItem[],
   sourceItems: FavoriteCardItem[],
@@ -183,11 +263,21 @@ async function fetchFavoriteItems(favorites: LocalFavoriteItem[]): Promise<Favor
 
       const body = (await response.json()) as FavoriteCardsBatchResponse;
       const items =
-        body.items?.map((entry) =>
-          entry.entityType === "property"
-            ? mapPropertyCard(entry.item)
-            : mapExcursionCard(entry.item, entry.entityType),
-        ) ?? [];
+        body.items?.map((entry) => {
+          if (entry.entityType === "property") {
+            return mapPropertyCard(entry.item);
+          }
+
+          if (entry.entityType === "transfer") {
+            return mapTransferCard(entry.item);
+          }
+
+          if (entry.entityType === "attraction") {
+            return mapAttractionCard(entry.item);
+          }
+
+          return mapExcursionCard(entry.item, entry.entityType);
+        }) ?? [];
 
       favoriteCardsCache.set(cacheKey, items);
       return items;
@@ -265,6 +355,8 @@ export function LocalFavoritesPage() {
       property: items.filter((item) => item.entityType === "property").length,
       excursion: items.filter((item) => item.entityType === "excursion").length,
       tour: items.filter((item) => item.entityType === "tour").length,
+      attraction: items.filter((item) => item.entityType === "attraction").length,
+      transfer: items.filter((item) => item.entityType === "transfer").length,
     }),
     [items],
   );
@@ -277,7 +369,11 @@ export function LocalFavoritesPage() {
           ? "excursion"
           : counts.tour > 0
             ? "tour"
-            : "all";
+            : counts.attraction > 0
+              ? "attraction"
+              : counts.transfer > 0
+                ? "transfer"
+                : "all";
 
     if (selectedFilter === "all") {
       return selectedFilter;
@@ -295,8 +391,23 @@ export function LocalFavoritesPage() {
       return selectedFilter;
     }
 
+    if (selectedFilter === "attraction" && counts.attraction > 0) {
+      return selectedFilter;
+    }
+
+    if (selectedFilter === "transfer" && counts.transfer > 0) {
+      return selectedFilter;
+    }
+
     return fallbackFilter;
-  }, [counts.excursion, counts.property, counts.tour, selectedFilter]);
+  }, [
+    counts.attraction,
+    counts.excursion,
+    counts.property,
+    counts.tour,
+    counts.transfer,
+    selectedFilter,
+  ]);
 
   const filteredItems = useMemo(() => {
     if (activeFilter === "all") {
@@ -312,9 +423,18 @@ export function LocalFavoritesPage() {
         { value: "property", count: counts.property },
         { value: "excursion", count: counts.excursion },
         { value: "tour", count: counts.tour },
+        { value: "attraction", count: counts.attraction },
+        { value: "transfer", count: counts.transfer },
         { value: "all", count: counts.total },
       ] satisfies Array<{ value: FavoriteViewFilter; count: number }>,
-    [counts.excursion, counts.property, counts.total, counts.tour],
+    [
+      counts.attraction,
+      counts.excursion,
+      counts.property,
+      counts.total,
+      counts.tour,
+      counts.transfer,
+    ],
   );
 
   const hasFavorites = counts.total > 0;
@@ -328,8 +448,8 @@ export function LocalFavoritesPage() {
           {isLoading ? "Загрузка избранного..." : `Избранное (${counts.total})`}
         </h1>
         <p className="mt-2 text-sm text-olive/70">
-          Объекты, экскурсии и туры сохраняются только в этом браузере. Если очистить данные
-          браузера, список сбросится.
+          Объекты, экскурсии, туры, досуг и трансферы сохраняются только в этом браузере. Если
+          очистить данные браузера, список сбросится.
         </p>
 
         {hasFavorites ? (
@@ -371,26 +491,39 @@ export function LocalFavoritesPage() {
       {isEmpty ? (
         <section className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-6">
           <p className="text-sm text-olive/75">
-            Список пока пуст. Добавьте сердечком объекты, экскурсии или туры в каталоге.
+            Список пока пуст. Добавьте сердечком объекты, экскурсии, туры, досуг или трансферы в
+            каталоге.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-              <Link
-                href={housingHubPath}
-                className="inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
-              >
+            <Link
+              href={housingHubPath}
+              className="inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+            >
               Открыть жилье
             </Link>
-              <Link
-                href={excursionsHubPath}
-                className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
-              >
+            <Link
+              href={excursionsHubPath}
+              className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
+            >
               Смотреть экскурсии
             </Link>
-              <Link
-                href={toursHubPath}
-                className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
-              >
+            <Link
+              href={toursHubPath}
+              className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
+            >
               Смотреть туры
+            </Link>
+            <Link
+              href={attractionsHubPath}
+              className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
+            >
+              Смотреть досуг
+            </Link>
+            <Link
+              href={transfersHubPath}
+              className="inline-flex rounded-xl border border-olive/12 bg-white px-4 py-2 text-sm font-semibold text-olive hover:bg-cream/55"
+            >
+              Смотреть трансферы
             </Link>
           </div>
         </section>

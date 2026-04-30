@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { normalizePlainText } from "@/lib/plain-text";
 import { serializeReview } from "@/lib/reviews";
+import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -46,6 +47,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Проверьте текст ответа" }, { status: 400 });
   }
 
+  const transferReviewsSupported = await hasTransferReviewSupport();
+
   const review = await db.review.findUnique({
     where: { id },
     include: {
@@ -58,6 +61,13 @@ export async function PATCH(request: Request, context: RouteContext) {
       excursion: {
         select: { ownerId: true },
       },
+      ...(transferReviewsSupported
+        ? {
+            transfer: {
+              select: { ownerId: true },
+            },
+          }
+        : {}),
     },
   });
 
@@ -72,10 +82,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
+  const transferOwnerId =
+    "transfer" in review && review.transfer ? review.transfer.ownerId ?? null : null;
+
   const ownerId =
     review.entityType === ReviewEntityType.PROPERTY
       ? review.property?.ownerId ?? null
-      : review.excursion?.ownerId ?? null;
+      : review.entityType === ReviewEntityType.EXCURSION
+        ? review.excursion?.ownerId ?? null
+        : transferOwnerId;
 
   if (!ownerId || ownerId !== session.id) {
     return NextResponse.json({ error: "Недостаточно прав для ответа на отзыв" }, { status: 403 });

@@ -2,11 +2,14 @@ import { TransferStatus } from "@prisma/client";
 import { Car, CircleCheckBig, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DeleteTransferButton } from "@/components/transfers/delete-transfer-button";
+import { TransferStatsButton } from "@/components/transfers/transfer-stats-button";
 import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/db";
 import { buildPublicTransferPath, createTransferDraft } from "@/lib/public-marketplace";
+import { deriveTransferSummaryFromFleet, getTransferFleet } from "@/lib/transfers";
 
 const STATUS_LABELS: Record<TransferStatus, string> = {
   DRAFT: "Черновик",
@@ -32,21 +35,20 @@ function getFirstPhoto(photoUrls: string[]): string | null {
 
 function getCompletedStages(item: {
   title: string | null;
-  shortDescription: string | null;
+  description: string | null;
   transferType: string | null;
   vehicleModel: string | null;
   photoUrls: string[];
   locationName: string | null;
-  serviceArea: string | null;
   priceFrom: unknown;
   phone: string | null;
   contactName: string | null;
 }): number {
   const stages = [
-    Boolean(item.title?.trim()) && Boolean(item.shortDescription?.trim()),
+    Boolean(item.title?.trim()) && Boolean(item.description?.trim()),
     Boolean(item.transferType?.trim()) && Boolean(item.vehicleModel?.trim()),
     item.photoUrls.length > 0,
-    Boolean(item.locationName?.trim()) || Boolean(item.serviceArea?.trim()),
+    Boolean(item.locationName?.trim()),
     Boolean(item.priceFrom) && Boolean(item.phone?.trim()) && Boolean(item.contactName?.trim()),
   ];
 
@@ -106,11 +108,6 @@ export default async function DashboardTransfersPage() {
         </div>
 
         <form action={createTransfer} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            name="title"
-            placeholder="Например: Трансфер из аэропорта"
-            className="h-11 rounded-xl border border-olive/15 bg-white px-3 text-sm text-olive outline-none focus:border-primary/30 focus:ring-4 focus:ring-primary/10"
-          />
           <button
             type="submit"
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover"
@@ -130,8 +127,10 @@ export default async function DashboardTransfersPage() {
         <div className="grid gap-3">
           {transfers.map((item, index) => {
             const title = getTransferTitle(item.title);
-            const firstPhoto = getFirstPhoto(item.photoUrls);
+            const summary = deriveTransferSummaryFromFleet(item);
+            const firstPhoto = summary.primaryVehicle?.photoUrl ?? getFirstPhoto(item.photoUrls);
             const completedStages = getCompletedStages(item);
+            const fleet = getTransferFleet(item);
             const publicPath =
               item.status === TransferStatus.PUBLISHED
                 ? buildPublicTransferPath({ id: item.id, title: item.title })
@@ -178,9 +177,14 @@ export default async function DashboardTransfersPage() {
                             {item.transferType}
                           </span>
                         ) : null}
+                        {fleet.length > 1 ? (
+                          <span className="rounded-full bg-cream px-2.5 py-1 font-semibold text-olive">
+                            Автопарк: {fleet.length}
+                          </span>
+                        ) : null}
                         <span className="rounded-full border border-olive/12 px-2.5 py-1 font-semibold">
-                          {item.priceFrom
-                            ? `от ${Number(item.priceFrom).toLocaleString("ru-RU")} ₽`
+                          {(item.priceFrom ?? summary.priceFrom)
+                            ? `от ${Number(item.priceFrom ?? summary.priceFrom).toLocaleString("ru-RU")} ₽`
                             : "Цена не указана"}
                         </span>
                       </div>
@@ -189,7 +193,9 @@ export default async function DashboardTransfersPage() {
 
                   <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
                     <span className="rounded-xl border border-dashed border-olive/18 px-2.5 py-1.5 text-xs font-semibold text-olive/45">
-                      Без рейтинга
+                      {item.reviewsCount > 0 && Number(item.avgRating) > 0
+                        ? `${Number(item.avgRating).toFixed(1)} • ${item.reviewsCount} отзывов`
+                        : "Пока без рейтинга"}
                     </span>
                     <span className="rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
                       #{index + 1}
@@ -243,14 +249,28 @@ export default async function DashboardTransfersPage() {
                     >
                       Карточка
                     </Link>
+                    <Link
+                      href={`/dashboard/transfers/${item.id}?step=publish`}
+                      className="rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+                    >
+                      Оплата
+                    </Link>
                     {publicPath ? (
-                      <Link
-                        href={publicPath}
-                        className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
-                      >
-                        Публичная страница
-                      </Link>
+                      <>
+                        <Link
+                          href={publicPath}
+                          className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
+                        >
+                          Публичная страница
+                        </Link>
+                        <TransferStatsButton transferId={item.id} transferTitle={title} />
+                      </>
                     ) : null}
+                    <DeleteTransferButton
+                      transferId={item.id}
+                      transferTitle={title}
+                      transferStatus={item.status}
+                    />
                   </div>
                 </div>
               </article>

@@ -8,13 +8,15 @@ type AttractionsPageProps = {
 };
 
 export const metadata: Metadata = {
-  title: "Достопримечательности Крыма — Крым Вокруг",
+  title: "Досуг и достопримечательности Крыма - Крым Вокруг",
   description:
-    "Каталог достопримечательностей Крыма с поиском по названию, городу и расстоянию от выбранной локации.",
+    "Статический каталог достопримечательностей Крыма: дворцы, парки, смотровые точки, маршруты, фото, карта и практическая информация.",
   alternates: {
     canonical: buildCanonicalPath("/attractions"),
   },
 };
+
+export const dynamic = "force-dynamic";
 
 function pick(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -30,18 +32,35 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
       ? sortRaw
       : "relevance";
 
-  const [result, directory] = await Promise.all([
+  const catalogQuery = {
+    query: pick(params.q) || pick(params.query),
+    location: pick(params.location),
+    category: pick(params.category),
+    radiusKm: Number.isFinite(radiusKm) ? radiusKm : undefined,
+    sort,
+  } as const;
+
+  const [result, mapResult, directory] = await Promise.all([
     getPublicAttractionCatalog({
-      query: pick(params.q) || pick(params.query),
-      location: pick(params.location),
-      category: pick(params.category),
-      radiusKm: Number.isFinite(radiusKm) ? radiusKm : undefined,
-      sort,
+      ...catalogQuery,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
+    }),
+    getPublicAttractionCatalog({
+      ...catalogQuery,
+      page: 1,
+      pageSize: 5000,
+      allowLargePageSize: true,
     }),
     getMarketplaceDirectoryData(),
   ]);
 
-  return <AttractionCatalog result={result} categories={directory.attractionCategories} />;
+  return (
+    <AttractionCatalog
+      result={result}
+      mapItems={mapResult.items}
+      categories={directory.attractionCategories}
+      locationSuggestions={directory.attractionLocationSuggestions}
+    />
+  );
 }

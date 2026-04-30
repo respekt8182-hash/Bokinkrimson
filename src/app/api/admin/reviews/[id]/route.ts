@@ -1,5 +1,5 @@
 // API route handler for /api/admin/reviews/[id].
-import { Prisma, ReviewEntityType, ReviewStatus } from "@prisma/client";
+import { ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
@@ -16,7 +16,12 @@ const moderateReviewSchema = z.object({
 
 async function refreshSummaryForReview(
   tx: DbTransactionClient,
-  review: { entityType: ReviewEntityType; propertyId: string | null; excursionId: string | null },
+  review: {
+    entityType: ReviewEntityType;
+    propertyId: string | null;
+    excursionId: string | null;
+    transferId: string | null;
+  },
 ) {
   return review.entityType === ReviewEntityType.PROPERTY && review.propertyId
     ? refreshEntityReviewStats(tx, {
@@ -28,6 +33,11 @@ async function refreshSummaryForReview(
           entityType: ReviewEntityType.EXCURSION,
           excursionId: review.excursionId,
         })
+      : review.entityType === ReviewEntityType.TRANSFER && review.transferId
+        ? refreshEntityReviewStats(tx, {
+            entityType: ReviewEntityType.TRANSFER,
+            transferId: review.transferId,
+          })
       : { avgRating: 0, reviewsCount: 0 };
 }
 
@@ -88,6 +98,7 @@ async function moderateReviewByAction(input: {
         details: {
           propertyId: existing.propertyId,
           excursionId: existing.excursionId,
+          transferId: existing.transferId,
           entityType: existing.entityType,
           userId: existing.userId,
           rating: Number(existing.rating),

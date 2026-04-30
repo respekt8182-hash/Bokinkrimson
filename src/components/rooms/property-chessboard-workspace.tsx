@@ -35,6 +35,7 @@ type PropertyChessboardWorkspaceProps = {
   initialPropertyId: string | null;
   returnHref?: string | null;
   returnLabel?: string;
+  avoidDashboardBottomNav?: boolean;
 };
 
 type ChessboardDay = {
@@ -631,6 +632,7 @@ function OverlayPickerField({
 export function PropertyChessboardWorkspace({
   properties,
   initialPropertyId,
+  avoidDashboardBottomNav = false,
 }: PropertyChessboardWorkspaceProps) {
   const initialTodayIso = useMemo(() => getLocalTodayIso(), []);
   // UI state (menus/modals), dataset state (rooms/occupancies), and edit forms live together
@@ -721,6 +723,21 @@ export function PropertyChessboardWorkspace({
       window.removeEventListener("orientationchange", syncViewportContext);
     };
   }, []);
+
+  useEffect(() => {
+    if (!avoidDashboardBottomNav || typeof document === "undefined") {
+      return;
+    }
+
+    const hasOpenInteraction =
+      isBookingModalOpen || isPriceModalOpen || isOccupancyActionsOpen;
+
+    document.body.classList.toggle("dashboard-interaction-open", hasOpenInteraction);
+
+    return () => {
+      document.body.classList.remove("dashboard-interaction-open");
+    };
+  }, [avoidDashboardBottomNav, isBookingModalOpen, isOccupancyActionsOpen, isPriceModalOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2698,7 +2715,10 @@ export function PropertyChessboardWorkspace({
         <button
           type="button"
           className={cn(
-            "fixed bottom-3 right-3 z-40 inline-flex items-center justify-center gap-2 transition active:scale-[0.97]",
+            "fixed right-3 z-40 inline-flex items-center justify-center gap-2 transition active:scale-[0.97]",
+            avoidDashboardBottomNav
+              ? "bottom-[calc(env(safe-area-inset-bottom,0px)+6.25rem)] lg:bottom-3"
+              : "bottom-3",
             isMobilePortrait
               ? "sticky-bottom-enter h-14 rounded-[24px] bg-[linear-gradient(135deg,#0f766e_0%,#0e7490_100%)] px-4 text-sm font-semibold text-white shadow-[0_20px_40px_-18px_rgba(15,118,110,0.75)]"
               : "h-12 w-12 rounded-full bg-primary text-white shadow-lg shadow-primary/30",

@@ -12,6 +12,7 @@ export type SerializedReview = {
   entityType: ReviewEntityType;
   propertyId: string | null;
   excursionId: string | null;
+  transferId: string | null;
   userId: string;
   userName: string;
   userAvatarUrl: string | null;
@@ -33,6 +34,7 @@ export function serializeReview(review: {
   entityType: ReviewEntityType;
   propertyId: string | null;
   excursionId: string | null;
+  transferId?: string | null;
   userId: string;
   rating: Prisma.Decimal | number;
   text: string;
@@ -56,6 +58,7 @@ export function serializeReview(review: {
     entityType: review.entityType,
     propertyId: review.propertyId,
     excursionId: review.excursionId,
+    transferId: review.transferId ?? null,
     userId: review.userId,
     userName: review.user ? `${review.user.firstName} ${review.user.lastName}` : "Пользователь",
     userAvatarUrl: review.user?.avatarUrl ?? null,
@@ -77,7 +80,8 @@ export async function refreshEntityReviewStats(
   tx: DbTransactionClient,
   input:
     | { entityType: "PROPERTY"; propertyId: string }
-    | { entityType: "EXCURSION"; excursionId: string },
+    | { entityType: "EXCURSION"; excursionId: string }
+    | { entityType: "TRANSFER"; transferId: string },
 ): Promise<{ avgRating: number; reviewsCount: number }> {
   const where: Prisma.ReviewWhereInput =
     input.entityType === ReviewEntityType.PROPERTY
@@ -86,9 +90,15 @@ export async function refreshEntityReviewStats(
           propertyId: input.propertyId,
           status: ReviewStatus.ACTIVE,
         }
+      : input.entityType === ReviewEntityType.EXCURSION
+        ? {
+            entityType: ReviewEntityType.EXCURSION,
+            excursionId: input.excursionId,
+            status: ReviewStatus.ACTIVE,
+          }
       : {
-          entityType: ReviewEntityType.EXCURSION,
-          excursionId: input.excursionId,
+          entityType: ReviewEntityType.TRANSFER,
+          transferId: input.transferId,
           status: ReviewStatus.ACTIVE,
         };
 
@@ -109,9 +119,17 @@ export async function refreshEntityReviewStats(
         reviewsCount,
       },
     });
-  } else {
+  } else if (input.entityType === ReviewEntityType.EXCURSION) {
     await tx.excursion.update({
       where: { id: input.excursionId },
+      data: {
+        avgRating,
+        reviewsCount,
+      },
+    });
+  } else {
+    await tx.transfer.update({
+      where: { id: input.transferId },
       data: {
         avgRating,
         reviewsCount,

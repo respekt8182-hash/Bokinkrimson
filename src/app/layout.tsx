@@ -45,7 +45,7 @@ const headingFont = Yeseva_One({
 });
 
 const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
-const faviconVersion = "20260426";
+const faviconVersion = "20260428";
 const versionedFavicon = (path: string) => `${path}?v=${faviconVersion}`;
 
 export const metadata: Metadata = {
@@ -84,6 +84,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: versionedFavicon("/favicon.svg"), type: "image/svg+xml", sizes: "any" },
       {
         url: versionedFavicon("/favicon.ico"),
         type: "image/x-icon",
@@ -133,7 +134,7 @@ export default function RootLayout({
         </Script>
       </head>
       <body
-        className={`${bodyFont.variable} ${headingFont.variable} min-h-screen overflow-x-hidden bg-cream text-olive antialiased`}
+        className={`${bodyFont.variable} ${headingFont.variable} min-h-screen overflow-x-clip bg-cream text-olive antialiased`}
       >
         <noscript>
           <div>

@@ -9,10 +9,12 @@ import {
 import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
+  buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
+import { getStaticAttractions, type StaticAttraction } from "@/lib/static-attractions";
 
-export type SearchSuggestionDirection = "housing" | "excursions";
-export type SearchSuggestionType = "location" | "hotel";
+export type SearchSuggestionDirection = "housing" | "excursions" | "attractions" | "transfers";
+export type SearchSuggestionType = "location" | "hotel" | "listing";
 
 export type SearchSuggestionItem = {
   type: SearchSuggestionType;
@@ -41,6 +43,12 @@ type ExcursionSuggestionRow = {
   mainLocation: { slug: string; name: string } | null;
 };
 
+type TransferSuggestionRow = {
+  locationId: string | null;
+  locationName: string | null;
+  location: { slug: string; name: string } | null;
+};
+
 type LocationAggregate = {
   id: string;
   name: string;
@@ -48,40 +56,28 @@ type LocationAggregate = {
   subtitle: string;
 };
 
-const popularLocationsLimit = 5;
+const popularLocationsLimit = 8;
 const popularSuggestionsRevalidateSeconds = 5 * 60;
-
-function pluralize(value: number, variants: [string, string, string]): string {
-  const abs = Math.abs(value) % 100;
-  const mod = abs % 10;
-  if (abs > 10 && abs < 20) {
-    return variants[2];
-  }
-  if (mod > 1 && mod < 5) {
-    return variants[1];
-  }
-  if (mod === 1) {
-    return variants[0];
-  }
-  return variants[2];
-}
+const crimeaLocationSubtitle = "Крым, Россия";
 
 export function buildHousingLocationSubtitle(activeListingsCount: number): string {
-  const label = pluralize(activeListingsCount, [
-    "активный объект",
-    "активных объекта",
-    "активных объектов",
-  ]);
-  return `Крым, Россия · ${activeListingsCount} ${label}`;
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
 }
 
 export function buildExcursionLocationSubtitle(activeListingsCount: number): string {
-  const label = pluralize(activeListingsCount, [
-    "активная экскурсия",
-    "активные экскурсии",
-    "активных экскурсий",
-  ]);
-  return `Крым, Россия · ${activeListingsCount} ${label}`;
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
+}
+
+export function buildAttractionLocationSubtitle(activeListingsCount: number): string {
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
+}
+
+export function buildTransferLocationSubtitle(activeListingsCount: number): string {
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
 }
 
 function toLocationSuggestion(item: LocationAggregate): SearchSuggestionItem {
@@ -177,6 +173,74 @@ function buildExcursionLocationAggregates(rows: ExcursionSuggestionRow[]): Locat
   const items = Array.from(byLocationId.values()).map((item) => ({
     ...item,
     subtitle: buildExcursionLocationSubtitle(item.activeListingsCount),
+  }));
+  items.sort(sortLocationAggregates);
+  return items;
+}
+
+function buildAttractionLocationAggregates(rows: StaticAttraction[]): LocationAggregate[] {
+  const byLocationName = new Map<string, LocationAggregate>();
+
+  for (const row of rows) {
+    const displayName = row.locationName?.trim();
+    if (!displayName) {
+      continue;
+    }
+
+    const locationId = displayName.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, "-");
+    const existing = byLocationName.get(locationId);
+    if (!existing) {
+      byLocationName.set(locationId, {
+        id: locationId,
+        name: displayName,
+        activeListingsCount: 1,
+        subtitle: "",
+      });
+      continue;
+    }
+
+    existing.activeListingsCount += 1;
+  }
+
+  const items = Array.from(byLocationName.values()).map((item) => ({
+    ...item,
+    subtitle: buildAttractionLocationSubtitle(item.activeListingsCount),
+  }));
+  items.sort(sortLocationAggregates);
+  return items;
+}
+
+function buildTransferLocationAggregates(rows: TransferSuggestionRow[]): LocationAggregate[] {
+  const byLocationId = new Map<string, LocationAggregate>();
+
+  for (const row of rows) {
+    const displayName = row.location?.name?.trim() || row.locationName?.trim() || "";
+    const locationId =
+      row.location?.slug?.trim() ||
+      row.locationId?.trim() ||
+      displayName.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, "-");
+
+    if (!displayName || !locationId) {
+      continue;
+    }
+
+    const existing = byLocationId.get(locationId);
+    if (!existing) {
+      byLocationId.set(locationId, {
+        id: locationId,
+        name: displayName,
+        activeListingsCount: 1,
+        subtitle: "",
+      });
+      continue;
+    }
+
+    existing.activeListingsCount += 1;
+  }
+
+  const items = Array.from(byLocationId.values()).map((item) => ({
+    ...item,
+    subtitle: buildTransferLocationSubtitle(item.activeListingsCount),
   }));
   items.sort(sortLocationAggregates);
   return items;
@@ -363,7 +427,7 @@ const readCachedPopularHousingSuggestions = unstable_cache(
     rows.sort((left, right) => sortPopularSuggestionItems(left, right, viewRankMap));
     return rows.slice(0, popularLocationsLimit);
   },
-  ["popular-housing-search-suggestions-v1"],
+  ["popular-housing-search-suggestions-v2"],
   { revalidate: popularSuggestionsRevalidateSeconds },
 );
 
@@ -428,9 +492,61 @@ const readCachedPopularExcursionSuggestions = unstable_cache(
 
     return [...popular, ...fallback];
   },
-  ["popular-excursion-search-suggestions-v1"],
+  ["popular-excursion-search-suggestions-v2"],
   { revalidate: popularSuggestionsRevalidateSeconds },
 );
+
+const readCachedPopularAttractionSuggestions = unstable_cache(
+  async (): Promise<SearchSuggestionItem[]> => {
+    const rows = await getStaticAttractions();
+    const locationAggregates = buildAttractionLocationAggregates(rows);
+    return locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
+  },
+  ["popular-attraction-search-suggestions-v2"],
+  { revalidate: popularSuggestionsRevalidateSeconds },
+);
+
+const readCachedPopularTransferSuggestions = unstable_cache(
+  async (): Promise<SearchSuggestionItem[]> => {
+    const rows = await db.transfer.findMany({
+      where: {
+        ...buildPublishedTransferVisibilityWhere(),
+      },
+      select: {
+        locationId: true,
+        locationName: true,
+        location: {
+          select: {
+            slug: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }],
+    });
+
+    const locationAggregates = buildTransferLocationAggregates(rows);
+    return locationAggregates.slice(0, popularLocationsLimit).map(toLocationSuggestion);
+  },
+  ["popular-transfer-search-suggestions-v2"],
+  { revalidate: popularSuggestionsRevalidateSeconds },
+);
+
+function buildFallbackLocationSubtitle(direction: SearchSuggestionDirection): string {
+  if (direction === "housing") {
+    return buildHousingLocationSubtitle(0);
+  }
+
+  if (direction === "attractions") {
+    return buildAttractionLocationSubtitle(0);
+  }
+
+  if (direction === "transfers") {
+    return buildTransferLocationSubtitle(0);
+  }
+
+  return buildExcursionLocationSubtitle(0);
+}
 
 export function getFallbackPopularLocationSuggestions(
   direction: SearchSuggestionDirection,
@@ -440,10 +556,7 @@ export function getFallbackPopularLocationSuggestions(
     type: "location",
     id: item.id,
     name: item.name,
-    subtitle:
-      direction === "housing"
-        ? buildHousingLocationSubtitle(0)
-        : buildExcursionLocationSubtitle(0),
+    subtitle: buildFallbackLocationSubtitle(direction),
     locationId: item.id,
     activeListingsCount: 0,
   }));
@@ -504,5 +617,39 @@ export async function getPopularExcursionSuggestions(): Promise<SearchSuggestion
     );
 
     return getFallbackPopularLocationSuggestions("excursions");
+  }
+}
+
+export async function getPopularAttractionSuggestions(): Promise<SearchSuggestionItem[]> {
+  const suggestions = await readCachedPopularAttractionSuggestions();
+  return suggestions.length > 0 ? suggestions : getFallbackPopularLocationSuggestions("attractions");
+}
+
+export async function getPopularTransferSuggestions(): Promise<SearchSuggestionItem[]> {
+  const canUseFallback = process.env.NODE_ENV !== "production";
+
+  if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
+    logDatabaseFallbackOnce(
+      "popular-transfer-search-suggestions",
+      "Database is unavailable. Using built-in transfer location suggestions.",
+    );
+
+    return getFallbackPopularLocationSuggestions("transfers");
+  }
+
+  try {
+    const suggestions = await readCachedPopularTransferSuggestions();
+    return suggestions.length > 0 ? suggestions : getFallbackPopularLocationSuggestions("transfers");
+  } catch (error) {
+    if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
+      throw error;
+    }
+
+    logDatabaseFallbackOnce(
+      "popular-transfer-search-suggestions",
+      "Database is unavailable or credentials are invalid. Using built-in transfer location suggestions.",
+    );
+
+    return getFallbackPopularLocationSuggestions("transfers");
   }
 }

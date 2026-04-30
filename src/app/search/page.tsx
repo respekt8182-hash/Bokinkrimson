@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { HousingCatalogClient } from "@/components/public/housing-catalog-client";
 import { ExcursionSearchResults } from "@/components/public/excursion-search-results";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { SeoBreadcrumbs } from "@/components/seo/seo-breadcrumbs";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getExcursionSeoDirectoryData, getPublicExcursionCatalog } from "@/lib/public-excursions";
 import { getPublicCatalog } from "@/lib/public-properties";
@@ -10,7 +9,10 @@ import {
   getPopularExcursionSuggestions,
   getPopularHousingSuggestions,
 } from "@/lib/search-suggestions";
-import { buildCollectionPageStructuredData, buildBreadcrumbListStructuredData } from "@/lib/seo/structured-data";
+import {
+  buildCollectionPageStructuredData,
+  buildBreadcrumbListStructuredData,
+} from "@/lib/seo/structured-data";
 import { buildSearchMetadata, getSearchSeoState } from "@/lib/seo/search-metadata";
 
 type SearchPageProps = {
@@ -92,25 +94,15 @@ function toLocationSuggestions(
   subtitle: string;
 }> {
   return items
-    .filter((item): item is (typeof items)[number] & { type: "location" } => item.type === "location")
+    .filter(
+      (item): item is (typeof items)[number] & { type: "location" } => item.type === "location",
+    )
     .map((item) => ({
       type: "location",
       id: item.id,
       name: item.name,
       subtitle: item.subtitle,
     }));
-}
-
-function SearchIntro({
-  breadcrumbs,
-}: {
-  breadcrumbs: Array<{ name: string; path: string }>;
-}) {
-  return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
-      <SeoBreadcrumbs items={breadcrumbs} />
-    </div>
-  );
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
@@ -136,7 +128,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const location = pick(params.location);
   const offerType =
     pick(params.offerType) ||
-    (normalizedDirection === "tours" ? "tour" : "");
+    (normalizedDirection === "tours"
+      ? "tour"
+      : normalizedDirection === "excursions"
+        ? "excursion"
+        : "");
   const propertyType =
     pick(params.propertyType) ||
     (direction === "housing" && normalizedDirection !== "housing" ? normalizedDirection : "");
@@ -231,8 +227,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </>
         ) : null}
 
-        <SearchIntro breadcrumbs={seoState.breadcrumbItems} />
-
         <ExcursionSearchResults
           items={result.items}
           filters={result.filters}
@@ -243,7 +237,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           initialPopularLocationSuggestions={popularExcursionLocationSuggestions}
           catalogDirection={normalizedDirection === "tours" ? "tours" : "excursions"}
         />
-
       </>
     );
   }
@@ -314,8 +307,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </>
       ) : null}
 
-      <SearchIntro breadcrumbs={seoState.breadcrumbItems} />
-
       <HousingCatalogClient
         initialResponse={{
           items: initialItemsWithStayParams,
@@ -347,9 +338,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         }}
         locationNames={locationDirectory.map((item) => item.name)}
         initialPopularLocationSuggestions={popularHousingLocationSuggestions}
-        initialLocationLabel={initialHousingResult.filters.locationName ?? (location || "весь Крым")}
+        initialLocationLabel={
+          initialHousingResult.filters.locationName ?? (location || "весь Крым")
+        }
       />
-
     </>
   );
 }

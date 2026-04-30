@@ -1,18 +1,20 @@
 // UI component for public housing results with map in the public module.
 "use client";
 
-import { Map as MapIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import {
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type UIEvent as ReactUIEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { cn } from "@/lib/cn";
-import { CatalogMapPreviewCard } from "@/components/maps/catalog-map-preview-card";
 import {
   YandexMapMultiViewer,
   type YandexMapPoint,
@@ -25,7 +27,16 @@ import {
 } from "@/components/public/map-property-popup-card";
 import { PublicPropertySearchCard } from "@/components/public/public-property-search-card";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import type { PublicCatalogItem } from "@/lib/public-properties";
+import {
+  setPublicMobileBottomNavForceHidden,
+  setPublicMobileBottomNavProgress,
+} from "@/lib/public-mobile-nav-visibility";
+import {
+  getKnownCrimeaLocationCenter,
+  normalizeCrimeaLocationKey,
+} from "@/lib/crimea-location-coordinates";
 import { housingHubPath } from "@/lib/seo/routes";
 
 type PublicHousingResultsWithMapProps = {
@@ -37,6 +48,7 @@ type PublicHousingResultsWithMapProps = {
   hasMore: boolean;
   loadingMore: boolean;
   loadingInitial?: boolean;
+  totalCount?: number;
   emptyContent?: ReactNode;
   newItemIds?: string[];
   onLoadMore?: () => void;
@@ -58,78 +70,52 @@ type MapState = {
   errorMessage: string;
 };
 
-type LocationViewportPreset = {
-  keys: string[];
-  viewport: YandexMapViewport;
+type LocationCenterResponse = {
+  item?: {
+    latitude?: number | null;
+    longitude?: number | null;
+    zoom?: number | null;
+  } | null;
 };
 
-const LOCATION_VIEWPORT_PRESETS: LocationViewportPreset[] = [
-  {
-    keys: ["ялта", "yalta"],
-    viewport: { center: [44.4952, 34.1663], zoom: 12 },
-  },
-  {
-    keys: ["алушта", "alushta"],
-    viewport: { center: [44.6764, 34.4097], zoom: 12 },
-  },
-  {
-    keys: ["алупка", "alupka"],
-    viewport: { center: [44.418, 34.0453], zoom: 13 },
-  },
-  {
-    keys: ["евпатория", "evpatoria"],
-    viewport: { center: [45.1906, 33.3676], zoom: 12 },
-  },
-  {
-    keys: ["керчь", "kerch"],
-    viewport: { center: [45.3562, 36.4673], zoom: 12 },
-  },
-  {
-    keys: ["севастополь", "sevastopol"],
-    viewport: { center: [44.6167, 33.5254], zoom: 11 },
-  },
-  {
-    keys: ["судак", "sudak"],
-    viewport: { center: [44.8491, 34.9747], zoom: 12 },
-  },
-  {
-    keys: ["феодосия", "feodosiya", "feodosia"],
-    viewport: { center: [45.0319, 35.3824], zoom: 12 },
-  },
-  {
-    keys: ["щелкино", "schelkino", "shchyolkino"],
-    viewport: { center: [45.4287, 35.8223], zoom: 12 },
-  },
-  {
-    keys: ["молочное"],
-    viewport: { center: [45.225, 33.1549], zoom: 13 },
-  },
-];
+type MobileSheetSnap = "expanded" | "preview" | "collapsed";
 
-function normalizeLocationKey(value: string | null | undefined): string {
-  if (!value) {
-    return "";
-  }
+type MobileSheetDragState = {
+  pointerId: number;
+  startY: number;
+  startTop: number;
+  didMove: boolean;
+};
 
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/^(г\.?|город|с\.?|село|пос\.?|поселок|пгт)\s+/i, "")
-    .replace(/\s+/g, " ");
-}
+type MobileSheetSnaps = Record<MobileSheetSnap, number>;
+
+const MOBILE_SHEET_HANDLE_HEIGHT = 76;
+const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
+const MOBILE_STAGE_MIN_HEIGHT = 360;
+const MOBILE_STAGE_MAX_HEIGHT = 820;
+const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
 
 function resolveLocationViewport(value: string | null | undefined): YandexMapViewport | null {
-  const key = normalizeLocationKey(value);
-  if (!key) {
+  const center = getKnownCrimeaLocationCenter(value);
+  if (!center) {
     return null;
   }
 
-  const preset = LOCATION_VIEWPORT_PRESETS.find((item) => item.keys.includes(key));
-  return preset?.viewport ?? null;
+  return { center: [center.latitude, center.longitude], zoom: center.zoom };
 }
 
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const ruPluralRules = new Intl.PluralRules("ru-RU");
+
+function formatRuCount(value: number, one: string, few: string, many: string): string {
+  const label = ruPluralRules.select(Math.abs(value)) === "one"
+    ? one
+    : ruPluralRules.select(Math.abs(value)) === "few"
+      ? few
+      : many;
+
+  return `${ruNumberFormat.format(value)} ${label}`;
+}
 
 function formatMapPrice(value: number, currency: string | null): string {
   const amount = ruNumberFormat.format(value);
@@ -245,6 +231,18 @@ function createInitialMapState(): MapState {
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
+  return (Object.entries(snaps) as Array<[MobileSheetSnap, number]>).reduce(
+    (nearest, entry) =>
+      Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest,
+    ["preview", snaps.preview],
+  )[0];
+}
+
 function SkeletonCard({ view }: { view: "list" | "grid" }) {
   const isGrid = view === "grid";
 
@@ -323,14 +321,20 @@ export function PublicHousingResultsWithMap({
   hasMore,
   loadingMore,
   loadingInitial = false,
+  totalCount,
   emptyContent = null,
   newItemIds = [],
   onLoadMore,
   onWishlistToggle,
 }: PublicHousingResultsWithMapProps) {
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const interactionSourceRef = useRef<"map" | "list" | null>(null);
-  const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mobileStageRef = useRef<HTMLDivElement | null>(null);
+  const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
+  const mobileDragHandledRef = useRef(false);
+  const mobileResultsScrollTopRef = useRef(0);
+  const mobileChromeProgressRef = useRef(0);
+  const mapPlacement = useCatalogMapPlacement();
 
   const selectedLocation = useMemo(() => {
     const byQuery = new URLSearchParams(mapQuery).get("location")?.trim() ?? "";
@@ -355,31 +359,109 @@ export function PublicHousingResultsWithMap({
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchGuests, stayParams.guests]);
 
-  const locationViewport = useMemo(
+  const [remoteLocationViewport, setRemoteLocationViewport] = useState<YandexMapViewport | null>(
+    null,
+  );
+  const knownLocationViewport = useMemo(
     () => resolveLocationViewport(selectedLocation),
     [selectedLocation],
   );
+  const locationViewport = knownLocationViewport ?? remoteLocationViewport;
   const viewportKey = useMemo(() => {
-    const normalized = normalizeLocationKey(selectedLocation);
-    return normalized || "crimea-default";
-  }, [selectedLocation]);
+    const normalized = normalizeCrimeaLocationKey(selectedLocation);
+    if (!locationViewport || !normalized) {
+      return undefined;
+    }
+
+    const center = locationViewport.center;
+    return [
+      "housing",
+      normalized,
+      center?.[0] ?? "",
+      center?.[1] ?? "",
+      locationViewport.zoom ?? "",
+    ].join(":");
+  }, [locationViewport, selectedLocation]);
   const newIdsSet = useMemo(() => new Set(newItemIds), [newItemIds]);
   const eagerImageCount = view === "grid" ? 4 : 2;
   const deferredRenderThreshold = view === "grid" ? 6 : 4;
 
-  const [isMapActivated, setIsMapActivated] = useState(false);
+  const [isMapActivated, setIsMapActivated] = useState(true);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
+  const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
+  const [mobileStageHeight, setMobileStageHeight] = useState(0);
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
-  const [pulseCardId, setPulseCardId] = useState<string | null>(null);
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
 
   const closeMapFully = useCallback(() => {
     setIsMapExpanded(false);
-    setIsMapActivated(false);
+    setIsMapActivated(true);
     setActivePointId(null);
     setHoveredPointId(null);
   }, []);
+
+  useEffect(() => {
+    const normalized = normalizeCrimeaLocationKey(selectedLocation);
+
+    if (!normalized || knownLocationViewport) {
+      setRemoteLocationViewport(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setRemoteLocationViewport(null);
+
+    const fetchLocationCenter = async () => {
+      try {
+        const response = await fetch(
+          `/api/location-center?location=${encodeURIComponent(selectedLocation)}`,
+          {
+            signal: controller.signal,
+            cache: "force-cache",
+          },
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const body = (await response.json()) as LocationCenterResponse;
+        const latitude = body.item?.latitude;
+        const longitude = body.item?.longitude;
+
+        if (
+          typeof latitude !== "number" ||
+          typeof longitude !== "number" ||
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          controller.signal.aborted
+        ) {
+          return;
+        }
+
+        setRemoteLocationViewport({
+          center: [latitude, longitude],
+          zoom:
+            typeof body.item?.zoom === "number" && Number.isFinite(body.item.zoom)
+              ? body.item.zoom
+              : 12,
+        });
+      } catch {
+        if (!controller.signal.aborted) {
+          setRemoteLocationViewport(null);
+        }
+      }
+    };
+
+    void fetchLocationCenter();
+
+    return () => {
+      controller.abort();
+    };
+  }, [knownLocationViewport, selectedLocation]);
 
   const fallbackPoints = useMemo<MapPointResponse[]>(
     () =>
@@ -407,33 +489,19 @@ export function PublicHousingResultsWithMap({
       ),
     [items],
   );
-  const visibleItemIds = useMemo(() => new Set(items.map((item) => item.id)), [items]);
 
   const mapPoints = useMemo(() => {
-    const remotePointsById =
-      mapState.status === "ready"
-        ? new Map(
-            mapState.points
-              .filter((point) => visibleItemIds.has(point.id))
-              .map((point) => [point.id, point] as const),
-          )
-        : null;
+    const sourcePoints =
+      mapState.status === "ready" && mapState.points.length > 0 ? mapState.points : fallbackPoints;
 
-    return fallbackPoints.map((fallbackPoint) => {
-      const mergedPoint = remotePointsById
-        ? sanitizePoint({
-            ...fallbackPoint,
-            ...remotePointsById.get(fallbackPoint.id),
-            id: fallbackPoint.id,
-          })
-        : fallbackPoint;
-
+    return sourcePoints.map((point) => {
+      const mergedPoint = sanitizePoint(point);
       return {
         ...mergedPoint,
         path: appendStayParamsToPath(mergedPoint.path, stayParams),
       };
     });
-  }, [fallbackPoints, mapState.points, mapState.status, stayParams, visibleItemIds]);
+  }, [fallbackPoints, mapState.points, mapState.status, stayParams]);
 
   const pointsWithCoordinates = useMemo(
     () =>
@@ -461,19 +529,60 @@ export function PublicHousingResultsWithMap({
         previewImageUrl: point.photos[0] ?? null,
         rating: point.rating,
         reviewsCount: point.reviewsCount,
+        isViewed: viewedPointIds.has(point.id),
       })),
-    [pointsWithCoordinates],
+    [pointsWithCoordinates, viewedPointIds],
   );
 
   const activePopupItem = activePointId ? (mapPointById.get(activePointId) ?? null) : null;
   const hasMapPoints = mapViewerPoints.length > 0;
+  const foundCount = totalCount ?? items.length;
+  const foundCountLabel = formatRuCount(
+    foundCount,
+    "вариант жилья",
+    "варианта жилья",
+    "вариантов жилья",
+  );
+  const mobileSheetSnaps = useMemo<MobileSheetSnaps>(() => {
+    const height = mobileStageHeight || 640;
+    const collapsed = Math.max(
+      0,
+      height - MOBILE_SHEET_HANDLE_HEIGHT - MOBILE_SHEET_BOTTOM_CLEARANCE,
+    );
+    const preview = clamp(Math.round(height * 0.36), 150, Math.max(150, collapsed - 118));
+
+    return {
+      expanded: 0,
+      preview,
+      collapsed,
+    };
+  }, [mobileStageHeight]);
+  const resolvedMobileSheetTop = mobileSheetTop ?? mobileSheetSnaps.preview;
+  const mobileSheetVisibleHeight = Math.max(
+    MOBILE_SHEET_HANDLE_HEIGHT,
+    (mobileStageHeight || 640) - resolvedMobileSheetTop,
+  );
+  const mobilePopupBottom = clamp(mobileSheetVisibleHeight + 14, 92, 180);
+
+  const setMobileChromeProgress = useCallback((progress: number, force = false) => {
+    const nextProgress = clamp(Math.round(progress * 1000) / 1000, 0, 1);
+
+    if (!force && Math.abs(mobileChromeProgressRef.current - nextProgress) < 0.004) {
+      return;
+    }
+
+    mobileChromeProgressRef.current = nextProgress;
+    setPublicMobileBottomNavProgress(nextProgress);
+  }, []);
 
   useEffect(() => {
-    setIsMapActivated(false);
+    setIsMapActivated(true);
     setIsMapExpanded(false);
+    setMobileSheetSnap("preview");
+    setMobileSheetTop(null);
     setActivePointId(null);
     setHoveredPointId(null);
-    setPulseCardId(null);
+    setViewedPointIds(new Set());
     setMapState(createInitialMapState());
   }, [mapQuery, selectedLocation]);
 
@@ -568,33 +677,110 @@ export function PublicHousingResultsWithMap({
   useBodyScrollLock(isMapExpanded);
 
   useEffect(() => {
+    const shouldControlMobileChrome =
+      mapPlacement === "mobile" && mobileSheetSnap === "expanded" && !isMapExpanded;
+
+    if (shouldControlMobileChrome) {
+      mobileResultsScrollTopRef.current = mobileResultsScrollRef.current?.scrollTop ?? 0;
+    }
+
+    setMobileChromeProgress(0, true);
+  }, [isMapExpanded, mapPlacement, mobileSheetSnap, setMobileChromeProgress]);
+
+  useEffect(() => {
     return () => {
-      if (pulseTimerRef.current !== null) {
-        clearTimeout(pulseTimerRef.current);
-      }
+      setPublicMobileBottomNavProgress(0);
     };
   }, []);
 
-  function focusCardById(pointId: string) {
-    const card = cardRefs.current.get(pointId);
-    if (!card) {
+  useEffect(() => {
+    const shouldHideNav =
+      mapPlacement === "mobile" && (isMapExpanded || mobileSheetSnap === "collapsed");
+
+    setPublicMobileBottomNavForceHidden("housing-catalog-map", shouldHideNav);
+
+    return () => {
+      setPublicMobileBottomNavForceHidden("housing-catalog-map", false);
+    };
+  }, [isMapExpanded, mapPlacement, mobileSheetSnap]);
+
+  useLayoutEffect(() => {
+    if (mapPlacement !== "mobile") {
       return;
     }
 
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-    setPulseCardId(pointId);
-    if (pulseTimerRef.current !== null) {
-      clearTimeout(pulseTimerRef.current);
+    const updateHeight = () => {
+      const stage = mobileStageRef.current;
+      const viewportHeight = window.innerHeight || MOBILE_STAGE_MIN_HEIGHT;
+      const top = stage?.getBoundingClientRect().top ?? 0;
+      const available = viewportHeight - Math.max(0, top);
+      const nextHeight = clamp(
+        Math.round(available),
+        Math.min(MOBILE_STAGE_MIN_HEIGHT, viewportHeight),
+        Math.min(MOBILE_STAGE_MAX_HEIGHT, viewportHeight),
+      );
+
+      setMobileStageHeight(nextHeight);
+    };
+
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    window.addEventListener("orientationchange", updateHeight);
+    window.addEventListener("scroll", updateHeight, { passive: true });
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      updateHeight();
+      secondFrame = window.requestAnimationFrame(updateHeight);
+    });
+    const settleTimer = window.setTimeout(updateHeight, 240);
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("resize", updateHeight);
+      window.removeEventListener("orientationchange", updateHeight);
+      window.removeEventListener("scroll", updateHeight);
+    };
+  }, [mapPlacement]);
+
+  useEffect(() => {
+    if (mapPlacement !== "mobile") {
+      return;
     }
-    pulseTimerRef.current = setTimeout(() => {
-      setPulseCardId((prev) => (prev === pointId ? null : prev));
-    }, 1500);
-  }
+
+    if (mobileSheetDragRef.current) {
+      return;
+    }
+
+    setMobileSheetTop(mobileSheetSnaps[mobileSheetSnap]);
+  }, [mapPlacement, mobileSheetSnap, mobileSheetSnaps]);
+
+  const snapMobileSheet = useCallback(
+    (snap: MobileSheetSnap) => {
+      setMobileSheetSnap(snap);
+      setMobileSheetTop(mobileSheetSnaps[snap]);
+    },
+    [mobileSheetSnaps],
+  );
 
   function handleMapPointClick(pointId: string) {
-    interactionSourceRef.current = "map";
     setActivePointId(pointId);
-    focusCardById(pointId);
+    setHoveredPointId(null);
+    setViewedPointIds((prev) => {
+      if (prev.has(pointId)) {
+        return prev;
+      }
+
+      const next = new Set(prev);
+      next.add(pointId);
+      return next;
+    });
+
+    if (mapPlacement === "mobile") {
+      snapMobileSheet("collapsed");
+    }
   }
 
   function openMapFully() {
@@ -602,236 +788,444 @@ export function PublicHousingResultsWithMap({
     setIsMapExpanded(true);
   }
 
-  const mapStatsLabel = !isMapActivated
-    ? `Предпросмотр: ${ruNumberFormat.format(mapViewerPoints.length)} показанных`
-    : `На карте: ${ruNumberFormat.format(mapViewerPoints.length)}`;
+  function openMobileMapInSearch() {
+    setIsMapActivated(true);
+    setActivePointId(null);
+    setHoveredPointId(null);
+    setMobileChromeProgress(0, true);
+    snapMobileSheet("collapsed");
+  }
+
+  function handleMobileMapPointerDown() {
+    if (mapPlacement !== "mobile") {
+      setActivePointId(null);
+      setHoveredPointId(null);
+      return;
+    }
+
+    if (mobileSheetSnap !== "collapsed") {
+      snapMobileSheet("collapsed");
+    }
+
+    setActivePointId(null);
+    setHoveredPointId(null);
+  }
+
+  function handleMobileSheetPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    mobileSheetDragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startTop: resolvedMobileSheetTop,
+      didMove: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleMobileSheetPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const dragState = mobileSheetDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaY = event.clientY - dragState.startY;
+    const nextTop = clamp(
+      dragState.startTop + deltaY,
+      mobileSheetSnaps.expanded,
+      mobileSheetSnaps.collapsed,
+    );
+
+    if (Math.abs(deltaY) > 3) {
+      dragState.didMove = true;
+      mobileDragHandledRef.current = true;
+    }
+
+    setMobileSheetTop(nextTop);
+    event.preventDefault();
+  }
+
+  function handleMobileSheetPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+    const dragState = mobileSheetDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    mobileSheetDragRef.current = null;
+
+    if (!dragState.didMove) {
+      return;
+    }
+
+    const currentTop = mobileSheetTop ?? mobileSheetSnaps[mobileSheetSnap];
+    const nextSnap = getNearestMobileSheetSnap(currentTop, mobileSheetSnaps);
+    snapMobileSheet(nextSnap);
+  }
+
+  function handleMobileSheetPointerCancel(event: ReactPointerEvent<HTMLButtonElement>) {
+    const dragState = mobileSheetDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    mobileSheetDragRef.current = null;
+    snapMobileSheet(mobileSheetSnap);
+  }
+
+  function handleMobileSheetClick() {
+    if (mobileDragHandledRef.current) {
+      mobileDragHandledRef.current = false;
+      return;
+    }
+
+    if (mobileSheetSnap === "collapsed") {
+      snapMobileSheet("preview");
+      return;
+    }
+
+    if (mobileSheetSnap === "expanded") {
+      snapMobileSheet("preview");
+      return;
+    }
+
+    snapMobileSheet("expanded");
+  }
+
+  const mapStatsLabel = `На карте: ${ruNumberFormat.format(mapViewerPoints.length)}`;
+  function handleMobileResultsScroll(event: ReactUIEvent<HTMLDivElement>) {
+    const currentScrollTop = event.currentTarget.scrollTop;
+    const previousScrollTop = mobileResultsScrollTopRef.current;
+    mobileResultsScrollTopRef.current = currentScrollTop;
+
+    if (mapPlacement !== "mobile" || mobileSheetSnap !== "expanded" || isMapExpanded) {
+      return;
+    }
+
+    if (currentScrollTop < 8) {
+      setMobileChromeProgress(0);
+      return;
+    }
+
+    const delta = currentScrollTop - previousScrollTop;
+    if (Math.abs(delta) < 1) {
+      return;
+    }
+
+    setMobileChromeProgress(
+      mobileChromeProgressRef.current + delta / MOBILE_SHEET_CHROME_SCROLL_RANGE,
+    );
+  }
+
+  const shouldShowMobileMapButton =
+    mapPlacement === "mobile" &&
+    !isMapExpanded &&
+    mobileSheetSnap === "expanded" &&
+    resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
+
+  const resultsSection = (
+    <section
+      id="catalog-results"
+      aria-busy={loadingInitial || loadingMore}
+      className="space-y-4"
+    >
+      <div
+        className={cn(
+          "grid gap-4 transition-all duration-300",
+          view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
+        )}
+      >
+        {loadingInitial && items.length === 0
+          ? Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
+              <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
+            ))
+          : items.length === 0
+            ? emptyContent
+            : items.map((item, index) => {
+                const isHighlighted = item.id === activePointId || item.id === hoveredPointId;
+                const delayBase = index < 10 ? index * 50 : 0;
+                const animationStyle: CSSProperties = {
+                  animationDelay: `${delayBase}ms`,
+                  contentVisibility: index >= deferredRenderThreshold ? "auto" : "visible",
+                  containIntrinsicSize:
+                    index >= deferredRenderThreshold
+                      ? view === "grid"
+                        ? "380px 320px"
+                        : "320px 960px"
+                      : undefined,
+                };
+
+                return (
+                  <div
+                    key={item.id}
+                    ref={(node) => {
+                      if (node) {
+                        cardRefs.current.set(item.id, node);
+                        return;
+                      }
+
+                      cardRefs.current.delete(item.id);
+                    }}
+                    className="catalog-card-enter"
+                    style={animationStyle}
+                  >
+                    <PublicPropertySearchCard
+                      item={item}
+                      initialIsFavorite={false}
+                      view={view}
+                      prioritizeImage={index < eagerImageCount}
+                      searchGuests={searchGuestsCount}
+                      isHighlighted={isHighlighted}
+                      isNew={newIdsSet.has(item.id)}
+                      onWishlistToggle={onWishlistToggle}
+                    />
+                  </div>
+                );
+              })}
+      </div>
+
+      {loadingMore ? (
+        <div
+          className={cn(
+            "grid gap-4",
+            view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
+            <SkeletonCard key={`load-more-skeleton-${index}`} view={view} />
+          ))}
+        </div>
+      ) : null}
+
+      {hasMore ? (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className={cn(
+              "load-more-btn inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
+              loadingMore ? "loading" : "",
+            )}
+          >
+            {loadingMore ? <span className="spinner" aria-hidden="true" /> : null}
+            {loadingMore ? "Загружаем..." : "Показать ещё"}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
 
   return (
     <>
       <section className="space-y-4">
-        <section className="rounded-[30px] border border-olive/10 bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.14),_transparent_58%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(243,247,245,0.94))] p-4 shadow-[0_26px_52px_-36px_rgba(15,74,64,0.54)] md:hidden">
-          <div className="min-w-0">
-            <p className="text-[17px] font-semibold leading-5 text-olive whitespace-nowrap">
-              {
-                "\u0421\u043c\u043e\u0442\u0440\u0435\u0442\u044c \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u044b \u043d\u0430 \u043a\u0430\u0440\u0442\u0435"
-              }
-            </p>
-          </div>
-
-          <CatalogMapPreviewCard
-            title="Карта объектов"
-            subtitle="Карта загружается только после явного открытия, чтобы не тормозить выдачу."
-            actionLabel="Открыть карту"
-            ariaLabel="Открыть карту полностью"
-            onOpen={openMapFully}
-            variant="crimea-preview"
-            className="mt-4 h-[188px] w-full min-[420px]:h-[220px]"
-          />
-        </section>
-
-        <section className="hidden rounded-2xl bg-white/94 p-3 ring-1 ring-olive/10 md:block lg:hidden">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-olive">Смотреть варианты на карте</p>
-              <p className="text-xs text-olive/65">{mapStatsLabel}</p>
-            </div>
-            <button
-              type="button"
-              onClick={openMapFully}
-              className="inline-flex h-9 items-center rounded-xl border border-olive/16 bg-white px-3 text-xs font-semibold text-olive transition hover:bg-cream/70"
-            >
-              Открыть карту
-            </button>
-          </div>
-          <CatalogMapPreviewCard
-            title="Карта объектов"
-            subtitle="Откроется по запросу без лишней загрузки Yandex iframe."
-            actionLabel="Открыть карту"
-            ariaLabel="Открыть карту полностью"
-            onOpen={openMapFully}
-            variant="crimea-preview"
-            className="mt-3 h-[160px] w-full rounded-xl"
-          />
-        </section>
-
-        <div className="catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.22fr)_minmax(320px,360px)] xl:grid-cols-[minmax(0,1.28fr)_minmax(340px,390px)] 2xl:grid-cols-[minmax(0,1fr)_420px]">
-          <section
-            id="catalog-results"
-            aria-busy={loadingInitial || loadingMore}
-            className="space-y-4"
-          >
+        {mapPlacement === "mobile" ? (
+          <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
             <div
-              className={cn(
-                "grid gap-4 transition-all duration-300",
-                view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
-              )}
+              className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
+              style={{
+                height: mobileStageHeight
+                  ? `${mobileStageHeight}px`
+                  : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
+              }}
             >
-              {loadingInitial && items.length === 0 ? (
-                Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
-                  <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
-                ))
-              ) : items.length === 0 ? (
-                emptyContent
-              ) : (
-                items.map((item, index) => {
-                    const isHighlighted =
-                      item.id === activePointId ||
-                      item.id === hoveredPointId ||
-                      item.id === pulseCardId;
-                    const delayBase = index < 10 ? index * 50 : 0;
-                    const animationStyle: CSSProperties = {
-                      animationDelay: `${delayBase}ms`,
-                      contentVisibility: index >= deferredRenderThreshold ? "auto" : "visible",
-                      containIntrinsicSize:
-                        index >= deferredRenderThreshold
-                          ? view === "grid"
-                            ? "380px 320px"
-                            : "320px 960px"
-                          : undefined,
-                    };
-
-                    return (
-                      <div
-                        key={item.id}
-                        ref={(node) => {
-                          if (node) {
-                            cardRefs.current.set(item.id, node);
-                            return;
-                          }
-
-                          cardRefs.current.delete(item.id);
-                        }}
-                        className="catalog-card-enter"
-                        style={animationStyle}
-                      >
-                        <PublicPropertySearchCard
-                          item={item}
-                          initialIsFavorite={false}
-                          view={view}
-                          prioritizeImage={index < eagerImageCount}
-                          searchGuests={searchGuestsCount}
-                          isHighlighted={isHighlighted}
-                          isNew={newIdsSet.has(item.id)}
-                          onWishlistToggle={onWishlistToggle}
-                        />
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-
-            {loadingMore ? (
-              <div
-                className={cn(
-                  "grid gap-4",
-                  view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
-                )}
-              >
-                {Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
-                  <SkeletonCard key={`load-more-skeleton-${index}`} view={view} />
-                ))}
+              <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
+                <YandexMapMultiViewer
+                  points={mapViewerPoints}
+                  activePointId={activePointId}
+                  hoveredPointId={hoveredPointId}
+                  onPointClick={handleMapPointClick}
+                  onPointHoverChange={setHoveredPointId}
+                  initialViewport={locationViewport}
+                  viewportKey={viewportKey}
+                  controls={[]}
+                  showBalloons={false}
+                  frameless
+                  className="h-full w-full"
+                />
               </div>
-            ) : null}
 
-            {hasMore ? (
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={onLoadMore}
-                  disabled={loadingMore}
-                  className={cn(
-                    "load-more-btn inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
-                    loadingMore ? "loading" : "",
-                  )}
+              {activePopupItem && mobileSheetSnap !== "expanded" ? (
+                <div
+                  className="pointer-events-none absolute inset-x-3 z-30 flex justify-center transition-[bottom] duration-200 ease-out"
+                  style={{ bottom: `${mobilePopupBottom}px` }}
                 >
-                  {loadingMore ? <span className="spinner" aria-hidden="true" /> : null}
-                  {loadingMore ? "Загружаем..." : "Показать ещё"}
-                </button>
-              </div>
-            ) : null}
-          </section>
-
-          <aside className="map-column hidden self-start lg:block lg:sticky lg:top-[96px] lg:h-[347.61px]">
-            <section className="flex h-full flex-col rounded-2xl bg-white/94 p-3.5 ring-1 ring-olive/10 md:p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-olive">Смотреть варианты на карте</p>
-                  <p className="text-xs text-olive/65">{mapStatsLabel}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={openMapFully}
-                  className="inline-flex h-9 items-center rounded-xl border border-olive/16 bg-white px-3 text-xs font-semibold text-olive transition hover:bg-cream/70"
-                >
-                  Открыть карту
-                </button>
-              </div>
-
-              {isMapActivated ? (
-                <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-olive/14">
-                  <YandexMapMultiViewer
-                    points={mapViewerPoints}
-                    activePointId={activePointId}
-                    hoveredPointId={hoveredPointId}
-                    onPointClick={handleMapPointClick}
-                    onPointHoverChange={setHoveredPointId}
-                    initialViewport={locationViewport}
-                    viewportKey={viewportKey}
-                    className="h-full w-full"
+                  <MapPropertyPopupCard
+                    key={activePopupItem.id}
+                    item={activePopupItem}
+                    onClose={() => setActivePointId(null)}
+                    variant="compact"
+                    className="pointer-events-auto w-full max-w-[500px]"
                   />
                 </div>
-              ) : (
-                <CatalogMapPreviewCard
-                  title="Карта объектов"
-                  subtitle="Откройте интерактивную карту, когда захотите сравнить расположение."
-                  actionLabel="Открыть карту"
-                  ariaLabel="Открыть карту полностью"
-                  onOpen={openMapFully}
-                  variant="crimea-preview"
-                  className="mt-3 min-h-0 flex-1 rounded-xl"
-                />
-              )}
-              {isMapActivated && mapState.status === "loading" ? (
-                <p className="mt-2 text-xs text-olive/60">Обновляем точки текущей выдачи...</p>
               ) : null}
-            </section>
-          </aside>
-        </div>
-      </section>
 
-      {false ? (
-        <button
-          type="button"
-          onClick={openMapFully}
-          aria-expanded={isMapExpanded}
-          aria-controls="catalog-map-modal"
-          className="float-map-btn hidden z-[70] inline-flex items-center gap-2 rounded-[20px] bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_34px_-24px_rgba(15,118,110,0.7)] lg:hidden"
-        >
-          <AppIcon icon={MapIcon} className="h-4 w-4 shrink-0" />
-          <span>Карта · {mapViewerPoints.length}</span>
-        </button>
-      ) : null}
+              <div
+                className={cn(
+                  "absolute inset-x-0 top-0 z-40 h-full rounded-t-[28px] bg-[#f4f6fb] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] will-change-transform",
+                  mobileSheetDragRef.current
+                    ? "transition-none"
+                    : "transition-transform duration-300 ease-out",
+                )}
+                style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
+              >
+                <div className="md:hidden">
+                  <button
+                    type="button"
+                    onClick={handleMobileSheetClick}
+                    onPointerDown={handleMobileSheetPointerDown}
+                    onPointerMove={handleMobileSheetPointerMove}
+                    onPointerUp={handleMobileSheetPointerUp}
+                    onPointerCancel={handleMobileSheetPointerCancel}
+                    className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
+                    aria-expanded={mobileSheetSnap !== "collapsed"}
+                    aria-controls="catalog-results"
+                  >
+                    <span className="h-1 w-16 rounded-full bg-olive/12" aria-hidden="true" />
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      Найдено {foundCountLabel}
+                      <AppIcon
+                        icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
+                        className="h-4 w-4 text-olive/48"
+                      />
+                    </span>
+                  </button>
+                </div>
+                <div
+                  ref={mobileResultsScrollRef}
+                  onScroll={handleMobileResultsScroll}
+                  className={cn(
+                    "h-[calc(100%-76px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-1 overscroll-contain transition-opacity duration-150",
+                    mobileSheetSnap === "collapsed"
+                      ? "pointer-events-none opacity-0"
+                      : "opacity-100",
+                  )}
+                >
+                  {resultsSection}
+                </div>
+              </div>
+            </div>
+            {shouldShowMobileMapButton ? (
+              <button
+                type="button"
+                onClick={openMobileMapInSearch}
+                className="float-map-btn md:hidden"
+                aria-label="Показать карту"
+              >
+                Карта
+              </button>
+            ) : null}
+          </section>
+        ) : (
+          <>
+            {mapPlacement === "tablet" ? (
+              <section className="hidden overflow-hidden bg-[#e7eef3] md:block lg:hidden">
+                <div className="hidden">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Смотреть варианты на карте</p>
+                    <p className="text-xs text-olive/65">{mapStatsLabel}</p>
+                  </div>
+                </div>
+                <div className="relative h-[320px] overflow-hidden">
+                  <div className="h-full" onPointerDownCapture={handleMobileMapPointerDown}>
+                    <YandexMapMultiViewer
+                      points={mapViewerPoints}
+                      activePointId={activePointId}
+                      hoveredPointId={hoveredPointId}
+                      onPointClick={handleMapPointClick}
+                      onPointHoverChange={setHoveredPointId}
+                      initialViewport={locationViewport}
+                      viewportKey={viewportKey}
+                      showBalloons={false}
+                      frameless
+                      className="h-full w-full"
+                    />
+                  </div>
+                  {activePopupItem ? (
+                    <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center">
+                      <MapPropertyPopupCard
+                        key={activePopupItem.id}
+                        item={activePopupItem}
+                        onClose={() => setActivePointId(null)}
+                        className="pointer-events-auto w-full max-w-md"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
+            <div className="catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]">
+              {resultsSection}
+
+              <aside className="catalog-map-sticky hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[520px]">
+                <section className="relative h-full overflow-hidden bg-[#e7eef3]">
+                  {mapPlacement === "desktop" ? (
+                    <>
+                      <div
+                        className="absolute inset-0"
+                        onPointerDownCapture={handleMobileMapPointerDown}
+                      >
+                        <YandexMapMultiViewer
+                          points={mapViewerPoints}
+                          activePointId={activePointId}
+                          hoveredPointId={hoveredPointId}
+                          onPointClick={handleMapPointClick}
+                          onPointHoverChange={setHoveredPointId}
+                          initialViewport={locationViewport}
+                          viewportKey={viewportKey}
+                          controls={["zoomControl"]}
+                          showBalloons={false}
+                          frameless
+                          className="h-full w-full"
+                        />
+                      </div>
+
+                      <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
+                        <button
+                          type="button"
+                          onClick={openMapFully}
+                          className="pointer-events-auto inline-flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                          aria-label="Раскрыть карту полностью"
+                        >
+                          <AppIcon icon={ExternalLink} className="h-5 w-5" />
+                          Раскрыть карту
+                        </button>
+                      </div>
+
+                      {activePopupItem ? (
+                        <div className="pointer-events-none absolute left-1/2 top-20 z-20 w-[312px] max-w-[calc(100%-24px)] -translate-x-1/2">
+                          <MapPropertyPopupCard
+                            key={activePopupItem.id}
+                            item={activePopupItem}
+                            onClose={() => setActivePointId(null)}
+                            className="pointer-events-auto w-full"
+                          />
+                        </div>
+                      ) : null}
+
+                      {isMapActivated && mapState.status === "loading" ? (
+                        <div className="pointer-events-none absolute bottom-3 left-3 z-20 inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
+                          Обновляем точки
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </section>
+              </aside>
+            </div>
+          </>
+        )}
+      </section>
 
       {isMapExpanded ? (
         <div
           id="catalog-map-modal"
-          className="fixed inset-0 z-[90] bg-midnight/55 p-3 backdrop-blur-[1px] sm:p-5"
+          className="fixed inset-0 z-[90] bg-[#e7eef3]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Карта объектов"
         >
-          <section className="mx-auto flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white/97 p-3 ring-1 ring-olive/10 sm:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-olive">Карта объектов</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeMapFully}
-                className="inline-flex h-9 items-center rounded-xl border border-olive/16 bg-white px-3 text-xs font-semibold text-olive transition hover:bg-cream/70"
-              >
-                × Закрыть карту
-              </button>
-            </div>
-
-            <div className="relative mt-3 min-h-0 flex-1">
+          <section className="relative h-full w-full overflow-hidden">
+            <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
               <YandexMapMultiViewer
                 points={mapViewerPoints}
                 activePointId={activePointId}
@@ -840,32 +1234,49 @@ export function PublicHousingResultsWithMap({
                 onPointHoverChange={setHoveredPointId}
                 initialViewport={locationViewport}
                 viewportKey={viewportKey}
-                className="h-[calc(100dvh-190px)] min-h-[360px] w-full"
+                controls={["zoomControl"]}
+                showBalloons={false}
+                frameless
+                className="h-full min-h-[100dvh] w-full"
               />
-
-              {mapState.status === "loading" && !hasMapPoints ? (
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/55 backdrop-blur-[1px]">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-olive/16 bg-white/92 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
-                    Загружаем точки
-                  </div>
-                </div>
-              ) : null}
-
-              {activePopupItem ? (
-                <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center lg:justify-start">
-                  <MapPropertyPopupCard
-                    key={activePopupItem.id}
-                    item={activePopupItem}
-                    onClose={() => setActivePointId(null)}
-                    className="pointer-events-auto w-full max-w-md"
-                  />
-                </div>
-              ) : null}
             </div>
 
+            <div className="pointer-events-none absolute right-3 top-3 z-30 sm:right-5 sm:top-5">
+              <button
+                type="button"
+                onClick={closeMapFully}
+                className="pointer-events-auto inline-flex h-12 items-center gap-2 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                aria-label="Закрыть карту"
+              >
+                <AppIcon icon={X} className="h-5 w-5" />
+                Закрыть карту
+              </button>
+            </div>
+
+            {mapState.status === "loading" && !hasMapPoints ? (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/30 backdrop-blur-[1px]">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
+                  Загружаем точки
+                </div>
+              </div>
+            ) : null}
+
+            {activePopupItem ? (
+              <div className="pointer-events-none absolute left-1/2 top-20 z-20 w-[312px] max-w-[calc(100%-24px)] -translate-x-1/2 sm:top-24">
+                <MapPropertyPopupCard
+                  key={activePopupItem.id}
+                  item={activePopupItem}
+                  onClose={() => setActivePointId(null)}
+                  className="pointer-events-auto w-full"
+                />
+              </div>
+            ) : null}
+
             {mapState.errorMessage ? (
-              <p className="mt-2 text-xs text-amber-700">{mapState.errorMessage}</p>
+              <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-20 rounded-2xl bg-white/94 px-3 py-2 text-xs font-medium text-amber-700 shadow-sm ring-1 ring-black/5 sm:left-auto sm:right-5 sm:max-w-sm">
+                {mapState.errorMessage}
+              </div>
             ) : null}
           </section>
         </div>

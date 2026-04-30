@@ -12,7 +12,7 @@ type PropertyReviewsSectionProps = {
   submitUrl: string;
   loadMoreUrl: string;
   entityPath: string;
-  entityLabel: "объекта" | "экскурсии";
+  entityLabel: "объекта" | "экскурсии" | "трансфера";
   avgRating: number;
   reviewsCount: number;
   initialReviews: SerializedReview[];
@@ -20,6 +20,11 @@ type PropertyReviewsSectionProps = {
   isAuthenticated: boolean;
   currentUserId?: string | null;
   ownerUserId?: string | null;
+  title?: string;
+  promptTitle?: string;
+  promptText?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
 type ReviewsListResponse = {
@@ -106,6 +111,11 @@ export function PropertyReviewsSection({
   isAuthenticated,
   currentUserId = null,
   ownerUserId = null,
+  title = "Отзывы гостей",
+  promptTitle = "Отдыхали здесь? Поделитесь впечатлениями!",
+  promptText = "Короткий честный отзыв помогает другим гостям быстрее понять, подходит ли им это предложение.",
+  emptyTitle = "Пока нет отзывов",
+  emptyDescription = "Когда гости начнут делиться впечатлениями, здесь появятся рейтинг и подробные комментарии.",
 }: PropertyReviewsSectionProps) {
   const [items, setItems] = useState(initialReviews);
   const [summary, setSummary] = useState({
@@ -164,7 +174,7 @@ export function PropertyReviewsSection({
     setSuccess("");
 
     if (isOwnerViewer) {
-      setError("Владелец не может оставлять отзыв о своем объекте.");
+      setError("Владелец не может оставлять отзыв о своей карточке.");
       return;
     }
 
@@ -349,7 +359,7 @@ export function PropertyReviewsSection({
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-2xl text-olive md:text-[1.85rem]">Отзывы гостей</h2>
+          <h2 className="text-2xl text-olive md:text-[1.85rem]">{title}</h2>
           {hasPublishedReviews ? (
             <div className="mt-3 flex items-center gap-3 text-sm text-olive/68">
               <span className="inline-flex min-w-10 items-center justify-center rounded-full bg-emerald-600 px-3 py-1.5 font-semibold text-white">
@@ -369,13 +379,11 @@ export function PropertyReviewsSection({
 
       <div className="mt-5 flex flex-col gap-3 rounded-[24px] bg-[#f4f6f7] px-4 py-4 ring-1 ring-olive/8 md:flex-row md:items-center md:justify-between md:px-5">
         <div>
-          <p className="text-base font-semibold text-olive">
-            Отдыхали здесь? Поделитесь впечатлениями!
-          </p>
+          <p className="text-base font-semibold text-olive">{promptTitle}</p>
           <p className="mt-1 text-sm text-olive/60">
             {isOwnerViewer
               ? `Вы владелец ${entityLabel}. Оставлять отзыв нельзя, но можно отвечать на отзывы гостей ниже.`
-              : "Короткий честный отзыв помогает другим гостям быстрее понять, подходит ли им это жилье."}
+              : promptText}
           </p>
         </div>
 
@@ -495,11 +503,8 @@ export function PropertyReviewsSection({
               <AppIcon icon={MessageSquareText} className="h-6 w-6" />
             </span>
             <div>
-              <p className="text-base font-semibold text-olive">Пока нет отзывов</p>
-              <p className="mt-1 text-sm leading-6 text-olive/70">
-                Когда гости начнут делиться впечатлениями, здесь появятся рейтинг и подробные
-                комментарии.
-              </p>
+              <p className="text-base font-semibold text-olive">{emptyTitle}</p>
+              <p className="mt-1 text-sm leading-6 text-olive/70">{emptyDescription}</p>
             </div>
           </div>
         </div>

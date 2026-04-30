@@ -5,10 +5,14 @@ import { z } from "zod";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
 import { getAdminSession } from "@/lib/admin-auth";
 import { resolveAdminRelationUserId } from "@/lib/admin-user-reference";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
-import { getPlacementValidUntil } from "@/lib/payments";
+import { getPlacementValidUntil, getTransferPaymentReference } from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import {
+  autoSubmitTransferAfterSuccessfulPayment,
+  submitTransferToModerationIfReady,
+} from "@/lib/transfers";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -27,11 +31,15 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
+  const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
   const payment = await db.payment.findUnique({
     where: { id },
     include: {
       property: { select: { id: true, name: true, status: true } },
       excursion: { select: { id: true, title: true, status: true } },
+      ...(transferPaymentsSupported
+        ? { transfer: { select: { id: true, title: true, status: true } } }
+        : {}),
       owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
     },
   });
@@ -72,6 +80,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (action === "confirm") {
     const now = new Date();
+    const transferReference = getTransferPaymentReference({
+      transferId: payment.transferId,
+      tariffCode: payment.tariffCode,
+      providerPayload: payment.providerPayload,
+    });
+    const paymentTransferId = transferReference?.transferId ?? null;
     const updated = await db.$transaction(async (tx) => {
       const result = await tx.payment.update({
         where: { id: payment.id },
@@ -92,6 +106,13 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       if (payment.excursionId) {
         await autoSubmitExcursionAfterSuccessfulPayment(tx, payment.excursionId);
+      }
+      if (paymentTransferId) {
+        if (payment.transferId) {
+          await autoSubmitTransferAfterSuccessfulPayment(tx, payment.transferId);
+        } else {
+          await submitTransferToModerationIfReady(tx, paymentTransferId);
+        }
       }
 
       await writeAdminAuditLog(tx, {

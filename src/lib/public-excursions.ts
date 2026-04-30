@@ -23,6 +23,7 @@ import {
   resolveExcursionLocation,
   type ExcursionLocationDirectoryItem,
 } from "@/lib/excursion-directory";
+import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { serializeReview } from "@/lib/reviews";
 import { extractPropertyId, slugify } from "@/lib/public-properties";
@@ -69,6 +70,7 @@ export type PublicExcursionCatalogQuery = {
   query?: string;
   page?: number;
   pageSize?: number;
+  allowLargePageSize?: boolean;
   dateFrom?: string;
   dateTo?: string;
   people?: number;
@@ -588,6 +590,21 @@ export function getPrimaryExcursionSearchScore(
   return 0;
 }
 
+function containsExcursionLocationQuery(
+  query: string,
+  candidates: Array<string | null | undefined>,
+): boolean {
+  const normalizedQuery = normalizeExcursionSearchText(query);
+  if (normalizedQuery.length < 2) {
+    return false;
+  }
+
+  return candidates.some((candidate) => {
+    const normalizedCandidate = normalizeExcursionSearchText(candidate ?? "");
+    return normalizedCandidate.includes(normalizedQuery);
+  });
+}
+
 function getSearchScoreMap<T extends { id: string }>(
   query: string,
   rows: T[],
@@ -652,7 +669,8 @@ export async function getPublicExcursionCatalog(
 ): Promise<PublicExcursionCatalogResult> {
   // Normalize request once so DB fetch and in-memory ranking use the same source of truth.
   const page = Math.max(1, query.page ?? 1);
-  const pageSize = Math.min(30, Math.max(1, query.pageSize ?? 30));
+  const pageSizeCap = query.allowLargePageSize ? 5000 : 30;
+  const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
   const rawLocationQuery = query.location?.trim() ?? "";
   const searchQuery = query.query?.trim() ?? "";
   const normalizedSearchQuery = normalizeExcursionSearchText(searchQuery);
@@ -692,6 +710,21 @@ export async function getPublicExcursionCatalog(
       category: query.category,
     }),
   ]);
+  const locationCenterQuery =
+    resolvedLocation?.name ?? (rawLocationQuery || query.locationId?.trim() || "");
+  const resolvedLocationCenter =
+    resolvedLocation?.latitude !== null &&
+    resolvedLocation?.latitude !== undefined &&
+    resolvedLocation?.longitude !== null &&
+    resolvedLocation?.longitude !== undefined
+      ? {
+          name: resolvedLocation.name,
+          latitude: Number(resolvedLocation.latitude),
+          longitude: Number(resolvedLocation.longitude),
+        }
+      : await resolveCrimeaLocationCenter(locationCenterQuery);
+  const hasLocationFilter = Boolean(rawLocationQuery || query.locationId);
+  const locationTextQuery = rawLocationQuery || resolvedLocation?.name || query.locationId || "";
 
   const formatFilter =
     query.format?.toLowerCase() === "group"
@@ -860,22 +893,24 @@ export async function getPublicExcursionCatalog(
     let distanceKm: number | null = null;
     let locationMatched = false;
 
-    if (resolvedLocation) {
+    if (hasLocationFilter) {
       // Location relevance is intentionally broad: anchor city, pickup city,
       // map radius, and legacy locationId all count as a location match.
-      const locationPoint = {
-        latitude: resolvedLocation.latitude,
-        longitude: resolvedLocation.longitude,
-      };
-      anchorMatch =
-        item.anchorLocationId === resolvedLocation.id || item.locationId === resolvedLocation.slug;
-      pickupMatch = item.pickupLocations.some(
-        (pickup) => pickup.locationId === resolvedLocation.id,
-      );
+      const locationPoint = resolvedLocationCenter
+        ? {
+            latitude: resolvedLocationCenter.latitude,
+            longitude: resolvedLocationCenter.longitude,
+          }
+        : null;
+      anchorMatch = resolvedLocation
+        ? item.anchorLocationId === resolvedLocation.id || item.locationId === resolvedLocation.slug
+        : false;
+      pickupMatch = resolvedLocation
+        ? item.pickupLocations.some((pickup) => pickup.locationId === resolvedLocation.id)
+        : false;
 
       if (
-        locationPoint.latitude !== null &&
-        locationPoint.longitude !== null &&
+        locationPoint &&
         excursionLatitude !== null &&
         excursionLongitude !== null
       ) {
@@ -891,9 +926,19 @@ export async function getPublicExcursionCatalog(
         (distanceKm !== null && distanceKm <= haversineRadiusKm) ||
         // Match by slug (legacy string field) or by ID (CUID stored in locationId)
         Boolean(
-          item.locationId &&
+          resolvedLocation &&
+            item.locationId &&
           (item.locationId === resolvedLocation.slug || item.locationId === resolvedLocation.id),
-        );
+        ) ||
+        containsExcursionLocationQuery(locationTextQuery, [
+          item.locationName,
+          item.mainLocation?.name,
+          item.anchorLocation?.name,
+          item.district?.name,
+          item.startPoint,
+          item.finishPoint,
+          ...item.routeLocations.map((route) => route.location.name),
+        ]);
     } else {
       locationMatched = true;
     }
@@ -1134,15 +1179,9 @@ export async function getPublicExcursionCatalog(
       locationId: resolvedLocation?.id ?? null,
       // Keep user's raw location text in filters when georesolution fails,
       // so sidebar fields stay in sync with the search form input.
-      locationName: resolvedLocation?.name ?? (rawLocationQuery || null),
-      centerLat:
-        resolvedLocation?.latitude !== null && resolvedLocation?.latitude !== undefined
-          ? Number(resolvedLocation.latitude)
-          : null,
-      centerLng:
-        resolvedLocation?.longitude !== null && resolvedLocation?.longitude !== undefined
-          ? Number(resolvedLocation.longitude)
-          : null,
+      locationName: resolvedLocation?.name ?? resolvedLocationCenter?.name ?? (rawLocationQuery || null),
+      centerLat: resolvedLocationCenter?.latitude ?? null,
+      centerLng: resolvedLocationCenter?.longitude ?? null,
       districtId: resolvedDistrict?.id ?? null,
       districtSlug: resolvedDistrict?.slug ?? null,
       districtName: resolvedDistrict?.name ?? null,

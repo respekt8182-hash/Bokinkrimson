@@ -22,6 +22,7 @@ export type SerializedPayment = {
   id: string;
   propertyId: string | null;
   excursionId: string | null;
+  transferId: string | null;
   ownerId: string;
   amount: number;
   tariffCode: string;
@@ -38,7 +39,16 @@ export type SerializedPayment = {
   placementValidUntil: string | null;
   propertyName: string | null;
   excursionName: string | null;
+  transferName: string | null;
 };
+
+export type TransferPaymentPayload = {
+  entityType: "transfer";
+  transferId: string;
+  transferTitle: string;
+};
+
+const TRANSFER_PAYMENT_TARIFF_PREFIX = "transfer_standard:";
 
 export type PlacementCoverageState = {
   hasActivePlacement: boolean;
@@ -93,6 +103,81 @@ export function getProviderLabel(provider: PaymentProvider): string {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function getTransferPaymentTariffCode(transferId: string): string {
+  return `${TRANSFER_PAYMENT_TARIFF_PREFIX}${transferId}`;
+}
+
+export function getTransferPaymentBaseTariffCode(tariffCode: string): string {
+  const trimmed = tariffCode.trim();
+  return trimmed.startsWith(TRANSFER_PAYMENT_TARIFF_PREFIX)
+    ? TRANSFER_PAYMENT_TARIFF_PREFIX.slice(0, -1)
+    : trimmed;
+}
+
+export function getTransferIdFromPaymentTariffCode(tariffCode: string): string | null {
+  const trimmed = tariffCode.trim();
+  if (!trimmed.startsWith(TRANSFER_PAYMENT_TARIFF_PREFIX)) {
+    return null;
+  }
+
+  const transferId = trimmed.slice(TRANSFER_PAYMENT_TARIFF_PREFIX.length).trim();
+  return transferId || null;
+}
+
+export function buildTransferPaymentPayload(input: {
+  transferId: string;
+  transferTitle?: string | null;
+}): Prisma.InputJsonObject {
+  return {
+    entityType: "transfer",
+    transferId: input.transferId,
+    transferTitle: input.transferTitle?.trim() ?? "",
+  };
+}
+
+export function getTransferPaymentPayload(value: unknown): TransferPaymentPayload | null {
+  if (!isRecord(value) || value.entityType !== "transfer") {
+    return null;
+  }
+
+  const transferId = typeof value.transferId === "string" ? value.transferId.trim() : "";
+  if (!transferId) {
+    return null;
+  }
+
+  return {
+    entityType: "transfer",
+    transferId,
+    transferTitle: typeof value.transferTitle === "string" ? value.transferTitle.trim() : "",
+  };
+}
+
+export function getTransferPaymentReference(input: {
+  transferId?: string | null;
+  tariffCode?: string | null;
+  providerPayload?: unknown;
+}): { transferId: string; transferTitle: string | null } | null {
+  const directTransferId = input.transferId?.trim() ?? "";
+  const transferPayload = getTransferPaymentPayload(input.providerPayload);
+  const tariffTransferId = input.tariffCode
+    ? getTransferIdFromPaymentTariffCode(input.tariffCode)
+    : null;
+  const transferId = directTransferId || transferPayload?.transferId || tariffTransferId;
+
+  if (!transferId) {
+    return null;
+  }
+
+  return {
+    transferId,
+    transferTitle: transferPayload?.transferTitle || null,
+  };
+}
+
 export type YookassaStatus = "pending" | "waiting_for_capture" | "succeeded" | "canceled";
 
 export function mapYookassaStatus(status: YookassaStatus): PaymentStatus {
@@ -135,7 +220,10 @@ export function resolvePaymentStatusTransition(
   return nextStatus;
 }
 
-export function getTariffByRoomCount(roomCount: number, propertyType: string | null): PlacementTariff {
+export function getTariffByRoomCount(
+  roomCount: number,
+  propertyType: string | null,
+): PlacementTariff {
   const normalizedRoomCount = Math.max(1, roomCount);
   const pricingGroup = getPlacementPricingGroupByType(propertyType);
   const tariffs = placementTariffsByGroup[pricingGroup];
@@ -151,7 +239,10 @@ export function getTariffByRoomCount(roomCount: number, propertyType: string | n
   return found;
 }
 
-export function getTariffQuote(input: { roomCount: number; propertyType: string | null }): TariffQuote {
+export function getTariffQuote(input: {
+  roomCount: number;
+  propertyType: string | null;
+}): TariffQuote {
   const normalizedRoomCount = Math.max(1, input.roomCount);
   const pricingGroup = getPlacementPricingGroupByType(input.propertyType);
   const tariff = getTariffByRoomCount(normalizedRoomCount, input.propertyType);
@@ -169,6 +260,7 @@ export function serializePayment(payment: {
   id: string;
   propertyId: string | null;
   excursionId?: string | null;
+  transferId?: string | null;
   ownerId: string;
   amount: Prisma.Decimal;
   tariffCode: string;
@@ -184,11 +276,20 @@ export function serializePayment(payment: {
   placementValidUntil?: Date | null;
   property?: { name: string | null } | null;
   excursion?: { title: string | null } | null;
+  transfer?: { title: string | null } | null;
+  providerPayload?: Prisma.JsonValue | null;
 }): SerializedPayment {
+  const transferReference = getTransferPaymentReference({
+    transferId: payment.transferId,
+    tariffCode: payment.tariffCode,
+    providerPayload: payment.providerPayload,
+  });
+
   return {
     id: payment.id,
     propertyId: payment.propertyId,
     excursionId: payment.excursionId ?? null,
+    transferId: transferReference?.transferId ?? null,
     ownerId: payment.ownerId,
     amount: Number(payment.amount),
     tariffCode: payment.tariffCode,
@@ -202,9 +303,12 @@ export function serializePayment(payment: {
     updatedAt: payment.updatedAt.toISOString(),
     paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
     canceledAt: payment.canceledAt ? payment.canceledAt.toISOString() : null,
-    placementValidUntil: payment.placementValidUntil ? payment.placementValidUntil.toISOString() : null,
+    placementValidUntil: payment.placementValidUntil
+      ? payment.placementValidUntil.toISOString()
+      : null,
     propertyName: payment.property?.name ?? null,
     excursionName: payment.excursion?.title ?? null,
+    transferName: payment.transfer?.title ?? transferReference?.transferTitle ?? null,
   };
 }
 
@@ -242,8 +346,7 @@ export function getPlacementCoverageState(input: {
   const now = input.now ?? new Date();
   const succeededPayments = input.payments
     .filter(
-      (item) =>
-        item.status === PaymentStatus.SUCCEEDED && item.provider !== PaymentProvider.MOCK,
+      (item) => item.status === PaymentStatus.SUCCEEDED && item.provider !== PaymentProvider.MOCK,
     )
     .map((item) => ({
       amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
@@ -264,7 +367,9 @@ export function getPlacementCoverageState(input: {
     };
   }
 
-  const latestValidUntilMs = Math.max(...succeededPayments.map((item) => item.validUntil.getTime()));
+  const latestValidUntilMs = Math.max(
+    ...succeededPayments.map((item) => item.validUntil.getTime()),
+  );
   const currentCyclePayments = succeededPayments.filter(
     (item) => item.validUntil.getTime() === latestValidUntilMs,
   );

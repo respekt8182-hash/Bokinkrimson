@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowUpDown,
   Building2,
   CalendarDays,
   MapPin,
@@ -10,7 +9,6 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CatalogFieldGroup,
@@ -36,16 +34,6 @@ const LOCATION_RECENT_STORAGE_KEY = "boking.home_search_recent_v1";
 const LOCATION_RECENT_LIMIT = 4;
 const EMPTY_DATE_LABEL = "Даты";
 const EMPTY_PRICE_LABEL = "Цена";
-const EMPTY_SORT_LABEL = "Сортировка";
-
-const SORT_OPTIONS = [
-  { value: "", label: "Рекомендуемые" },
-  { value: "price_asc", label: "Сначала дешёвые" },
-  { value: "price_desc", label: "Сначала дорогие" },
-  { value: "rating_desc", label: "По рейтингу" },
-  { value: "popular_desc", label: "По отзывам" },
-] as const satisfies ReadonlyArray<{ value: SearchFilters["sort"]; label: string }>;
-
 const RATING_OPTIONS = [
   { value: "", label: "Любой" },
   { value: "3", label: "3+" },
@@ -54,7 +42,7 @@ const RATING_OPTIONS = [
   { value: "4.5", label: "4.5+" },
 ] as const;
 
-type PanelKey = "location" | "dates" | "guests" | "type" | "price" | "rating" | "more" | "sort";
+type PanelKey = "location" | "dates" | "guests" | "type" | "price" | "rating" | "more";
 
 type LocationSuggestionItem = {
   type: "location";
@@ -72,6 +60,7 @@ export type CatalogFilterBarProps = {
   filters: SearchFilters;
   onApplyFilters: (next: SearchFilters, toast?: string) => void;
   onResetFilters: () => void;
+  totalCount: number;
   locationLabel: string;
   locationNames: string[];
   initialPopularSuggestions: LocationSuggestionItem[];
@@ -119,6 +108,14 @@ function formatCurrency(value: number): string {
   return `${ruNumberFormat.format(value)} ₽`;
 }
 
+function formatFoundObjectsLabel(value: number): string {
+  return `Найдено: ${ruNumberFormat.format(value)} ${pluralize(value, [
+    "объект",
+    "объекта",
+    "объектов",
+  ])}`;
+}
+
 function formatGuestsChip(filters: SearchFilters): string {
   const guests = Number.parseInt(filters.guests, 10) || 2;
   return `${guests} ${pluralize(guests, ["гость", "гостя", "гостей"])}`;
@@ -151,14 +148,6 @@ function formatPriceChip(minPrice: string, maxPrice: string): string {
 
 function formatRatingChip(value: string): string {
   return value ? `${value}+` : "Рейтинг";
-}
-
-function getSortLabel(sort: SearchFilters["sort"]): string {
-  if (!sort) {
-    return EMPTY_SORT_LABEL;
-  }
-
-  return SORT_OPTIONS.find((option) => option.value === sort)?.label ?? EMPTY_SORT_LABEL;
 }
 
 function getNightsCount(checkIn: string, checkOut: string): number {
@@ -380,6 +369,7 @@ export function CatalogFilterBar({
   filters,
   onApplyFilters,
   onResetFilters,
+  totalCount,
   locationLabel,
   locationNames,
   initialPopularSuggestions,
@@ -463,7 +453,6 @@ export function CatalogFilterBar({
 
   return (
     <CatalogFilterShell
-      sticky={false}
       chips={
         <>
           <ResponsiveFilterPanel
@@ -817,54 +806,9 @@ export function CatalogFilterBar({
               ))}
             </div>
           </ResponsiveFilterPanel>
-
-          <ResponsiveFilterPanel
-            open={openPanel === "sort"}
-            title="Сортировка"
-            onClose={closePanel}
-            width={360}
-            align="end"
-            trigger={
-              <CatalogFilterChipButton
-                icon={ArrowUpDown as LucideIcon}
-                label={getSortLabel(filters.sort === "relevance" ? "" : filters.sort)}
-                active={Boolean(filters.sort && filters.sort !== "relevance")}
-                open={openPanel === "sort"}
-                onClick={() => openDraftPanel("sort")}
-                onClear={filters.sort && filters.sort !== "relevance" ? () => onApplyFilters({ ...filters, sort: "" }) : undefined}
-              />
-            }
-            footer={
-              <CatalogFilterPanelActions
-                onApply={() => commitPanel()}
-                onClear={() => updateDraft({ sort: "" })}
-                applyLabel="Применить"
-              />
-            }
-          >
-            <div className="space-y-1.5">
-              {SORT_OPTIONS.map((option) => {
-                const isSelected = (draftFilters.sort || "") === option.value;
-                return (
-                  <button
-                    key={option.value || "recommended"}
-                    type="button"
-                    onClick={() => updateDraft({ sort: option.value })}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition",
-                      isSelected ? "bg-primary/10 text-primary" : "text-olive hover:bg-cream/60",
-                    )}
-                  >
-                    <span>{option.label}</span>
-                    {isSelected ? <AppIcon icon={ArrowUpDown} className="h-4 w-4" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </ResponsiveFilterPanel>
         </>
       }
-      totalLabel=""
+      totalLabel={formatFoundObjectsLabel(totalCount)}
       hasActiveFilters={hasActiveFilters}
       onResetAll={onResetFilters}
     />

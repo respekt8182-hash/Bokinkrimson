@@ -1220,7 +1220,7 @@ function parseCatalogSort(
 // Main query used by /search page and /api/public/properties.
 export async function getPublicCatalog(query: PublicCatalogQuery): Promise<PublicCatalogResult> {
   const page = Math.max(1, query.page ?? 1);
-  const pageSizeCap = query.allowLargePageSize ? 480 : 30;
+  const pageSizeCap = query.allowLargePageSize ? 5000 : 30;
   const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
   const searchQuery = query.query?.trim() ?? "";
   const stayRange = resolveCatalogStayRange(query.checkIn, query.checkOut);

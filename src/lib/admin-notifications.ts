@@ -1,5 +1,11 @@
 // Domain/service module for admin notifications.
-import { ExcursionStatus, PaymentProvider, PaymentStatus, PropertyStatus } from "@prisma/client";
+import {
+  ExcursionStatus,
+  PaymentProvider,
+  PaymentStatus,
+  PropertyStatus,
+  TransferStatus,
+} from "@prisma/client";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
@@ -10,6 +16,10 @@ export type AdminModerationSnapshot = {
     latestPendingUpdatedAtMs: number | null;
   };
   excursions: {
+    pendingCount: number;
+    latestPendingUpdatedAtMs: number | null;
+  };
+  transfers: {
     pendingCount: number;
     latestPendingUpdatedAtMs: number | null;
   };
@@ -32,6 +42,10 @@ const emptyAdminModerationSnapshot: AdminModerationSnapshot = {
     latestPendingUpdatedAtMs: null,
   },
   excursions: {
+    pendingCount: 0,
+    latestPendingUpdatedAtMs: null,
+  },
+  transfers: {
     pendingCount: 0,
     latestPendingUpdatedAtMs: null,
   },
@@ -63,6 +77,8 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         latestPropertyPending,
         excursionPendingCount,
         latestExcursionPending,
+        transferPendingCount,
+        latestTransferPending,
         messageCount,
         latestMessage,
         managerPaymentCount,
@@ -80,6 +96,12 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         db.excursion.count({ where: { status: ExcursionStatus.PENDING_MODERATION } }),
         db.excursion.findFirst({
           where: { status: ExcursionStatus.PENDING_MODERATION },
+          orderBy: [{ updatedAt: "desc" }],
+          select: { updatedAt: true },
+        }),
+        db.transfer.count({ where: { status: TransferStatus.PENDING_MODERATION } }),
+        db.transfer.findFirst({
+          where: { status: TransferStatus.PENDING_MODERATION },
           orderBy: [{ updatedAt: "desc" }],
           select: { updatedAt: true },
         }),
@@ -125,6 +147,10 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         excursions: {
           pendingCount: excursionPendingCount,
           latestPendingUpdatedAtMs: latestExcursionPending?.updatedAt.getTime() ?? null,
+        },
+        transfers: {
+          pendingCount: transferPendingCount,
+          latestPendingUpdatedAtMs: latestTransferPending?.updatedAt.getTime() ?? null,
         },
         messages: {
           totalCount: messageCount,

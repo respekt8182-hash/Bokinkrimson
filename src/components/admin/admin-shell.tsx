@@ -36,6 +36,7 @@ type MenuItem = {
 
 const PROPERTY_SEEN_KEY = "boking_admin_property_moderation_seen_at";
 const EXCURSION_SEEN_KEY = "boking_admin_excursion_moderation_seen_at";
+const TRANSFER_SEEN_KEY = "boking_admin_transfer_moderation_seen_at";
 const MESSAGE_SEEN_KEY = "boking_admin_messages_seen_at";
 const MANAGER_PAY_SEEN_KEY = "boking_admin_manager_payments_seen_at";
 
@@ -156,6 +157,7 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
   const isHydrated = useSyncExternalStore(subscribeNoop, getTrue, getFalse);
   const propertySeenAt = isHydrated ? readSeenValue(PROPERTY_SEEN_KEY) : 0;
   const excursionSeenAt = isHydrated ? readSeenValue(EXCURSION_SEEN_KEY) : 0;
+  const transferSeenAt = isHydrated ? readSeenValue(TRANSFER_SEEN_KEY) : 0;
   const messageSeenAt = isHydrated ? readSeenValue(MESSAGE_SEEN_KEY) : 0;
   const managerPaySeenAt = isHydrated ? readSeenValue(MANAGER_PAY_SEEN_KEY) : 0;
 
@@ -184,6 +186,15 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
       return;
     }
 
+    if (pathname.startsWith("/admin/transfers")) {
+      const seen = Math.max(
+        Date.now(),
+        moderationSnapshot.transfers?.latestPendingUpdatedAtMs ?? 0,
+      );
+      writeSeenValue(TRANSFER_SEEN_KEY, seen);
+      return;
+    }
+
     if (pathname.startsWith("/admin/payments")) {
       const seen = Math.max(Date.now(), moderationSnapshot.managerPayments?.latestCreatedAtMs ?? 0);
       writeSeenValue(MANAGER_PAY_SEEN_KEY, seen);
@@ -209,6 +220,11 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
       moderationSnapshot.messages.totalCount > 0 &&
       (moderationSnapshot.messages.latestCreatedAtMs ?? 0) > messageSeenAt
         ? moderationSnapshot.messages.totalCount
+        : 0,
+    "/admin/transfers":
+      (moderationSnapshot.transfers?.pendingCount ?? 0) > 0 &&
+      (moderationSnapshot.transfers?.latestPendingUpdatedAtMs ?? 0) > transferSeenAt
+        ? moderationSnapshot.transfers.pendingCount
         : 0,
     "/admin/support-chat": moderationSnapshot.supportChat?.waitingCount ?? 0,
     "/admin/payments":

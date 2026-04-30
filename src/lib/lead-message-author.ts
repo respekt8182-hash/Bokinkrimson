@@ -29,6 +29,15 @@ type ExcursionLeadMessageParams = {
   message: string;
 };
 
+type TransferLeadMessageParams = {
+  authorGender: LeadMessageAuthorGender;
+  transferTitle: string;
+  locationName: string | null;
+  priceLabel?: string | null;
+  vehicleOption?: string | null;
+  extra?: string | null;
+};
+
 function isLeadMessageAuthorGender(value: unknown): value is LeadMessageAuthorGender {
   return value === "male" || value === "female";
 }
@@ -166,6 +175,46 @@ export function buildExcursionLeadMessage(params: ExcursionLeadMessageParams): s
   lines.push("");
   lines.push("Подскажите, пожалуйста, есть ли свободные места и как лучше оформить бронирование?");
   lines.push(`Буду ${phrases.grateful} за ответ.`);
+
+  return lines.join("\n");
+}
+
+export function buildTransferLeadMessage(params: TransferLeadMessageParams): string {
+  const phrases = getAuthorPhrases(params.authorGender);
+  const transferTitle = params.transferTitle.trim() || "Трансфер";
+  const locationName = params.locationName?.trim() ?? "";
+  const priceLabel = params.priceLabel?.trim() ?? "";
+  const vehicleOption = params.vehicleOption?.trim() ?? "";
+  const extraTrimmed = params.extra?.trim() ?? "";
+  const lines: string[] = [
+    `Добрый день! ${phrases.foundListing} ваше объявление на сайте "Крым Вокруг".`,
+    "",
+    `${phrases.wouldLike} уточнить возможность заказать трансфер:`,
+    `- Трансфер: "${transferTitle}"`,
+  ];
+
+  if (locationName) {
+    lines.push(`- Город: ${locationName}`);
+  }
+
+  if (vehicleOption) {
+    lines.push(`- Транспорт: ${vehicleOption}`);
+  }
+
+  if (priceLabel) {
+    lines.push(`- Стоимость: ${priceLabel}`);
+  }
+
+  lines.push("");
+  lines.push("Прошу подтвердить актуальность цены и возможность поездки.");
+
+  if (extraTrimmed) {
+    lines.push("");
+    lines.push(`(Дополнительно: ${extraTrimmed})`);
+  }
+
+  lines.push("");
+  lines.push(`Буду ${phrases.grateful} за ответ!`);
 
   return lines.join("\n");
 }

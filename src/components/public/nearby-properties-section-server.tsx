@@ -7,6 +7,13 @@ type NearbyPropertiesSectionServerProps = {
   longitude: number | null;
   searchHref: string;
   radiusKm?: number;
+  title?: string;
+  description?: string;
+  emptyDescription?: string;
+  actionLabel?: string;
+  layout?: "grid" | "carousel";
+  className?: string;
+  titleClassName?: string;
 };
 
 export async function NearbyPropertiesSectionServer({
@@ -15,6 +22,13 @@ export async function NearbyPropertiesSectionServer({
   longitude,
   searchHref,
   radiusKm = DEFAULT_NEARBY_RADIUS_KM,
+  title,
+  description,
+  emptyDescription,
+  actionLabel,
+  layout,
+  className,
+  titleClassName,
 }: NearbyPropertiesSectionServerProps) {
   const items = await getNearbyProperties({
     latitude,
@@ -25,5 +39,18 @@ export async function NearbyPropertiesSectionServer({
     randomize: true,
   });
 
-  return <NearbyPropertiesSection items={items} searchHref={searchHref} radiusKm={radiusKm} />;
+  return (
+    <NearbyPropertiesSection
+      items={items}
+      searchHref={searchHref}
+      radiusKm={radiusKm}
+      title={title}
+      description={description}
+      emptyDescription={emptyDescription}
+      actionLabel={actionLabel}
+      layout={layout}
+      className={className}
+      titleClassName={titleClassName}
+    />
+  );
 }

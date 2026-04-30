@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { logger } from "@/lib/logger";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 import {
   getYookassaPayment,
   isTrustedYookassaWebhookSource,
@@ -188,6 +189,9 @@ export async function POST(request: Request) {
     if (nextStatus === PaymentStatus.SUCCEEDED && existing.excursionId) {
       await autoSubmitExcursionAfterSuccessfulPayment(db, existing.excursionId);
     }
+    if (nextStatus === PaymentStatus.SUCCEEDED && existing.transferId) {
+      await autoSubmitTransferAfterSuccessfulPayment(db, existing.transferId);
+    }
 
     await db.webhookReceipt.update({
       where: {
@@ -231,6 +235,9 @@ export async function POST(request: Request) {
     }
     if (updated.status === PaymentStatus.SUCCEEDED && updated.excursionId) {
       await autoSubmitExcursionAfterSuccessfulPayment(tx, updated.excursionId);
+    }
+    if (updated.status === PaymentStatus.SUCCEEDED && updated.transferId) {
+      await autoSubmitTransferAfterSuccessfulPayment(tx, updated.transferId);
     }
 
     await tx.webhookReceipt.update({

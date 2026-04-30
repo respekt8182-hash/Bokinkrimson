@@ -6,14 +6,22 @@ import {
   ArrowUpRight,
   Building2,
   CalendarDays,
+  Car,
   ChevronDown,
+  ChevronLeft,
   Clock3,
+  Compass,
   Globe2,
+  House,
+  Landmark,
   LocateFixed,
   MapPin,
+  PawPrint,
   Phone,
+  Search,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -41,12 +49,14 @@ import {
 
 const directionLabels = {
   housing: "Жильё",
-  attractions: "Достопримечательности",
   excursions: "Экскурсии",
+  attractions: "Досуг",
   transfers: "Трансферы",
 } as const;
 
 type Direction = keyof typeof directionLabels;
+
+type MobileSearchStep = "location" | "date" | "guests" | "review";
 
 type DateRangeState = {
   checkIn: string;
@@ -78,7 +88,7 @@ type HomeSearchShowcaseProps = {
   initialPopularSuggestionsByDirection?: Partial<Record<Direction, HomeSearchSuggestionItem[]>>;
 };
 
-type SearchSuggestionType = "location" | "hotel";
+type SearchSuggestionType = "location" | "hotel" | "listing";
 type SearchSuggestionSection = "recent" | "popular" | "matches";
 
 type HomeSearchSuggestionItem = {
@@ -145,6 +155,23 @@ const monthNamesGenitive = [
   "ноября",
   "декабря",
 ] as const;
+
+const monthNamesShort = [
+  "янв",
+  "фев",
+  "мар",
+  "апр",
+  "май",
+  "июн",
+  "июл",
+  "авг",
+  "сен",
+  "окт",
+  "ноя",
+  "дек",
+] as const;
+
+const weekdayShortLower = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
 
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] as const;
 const calendarMonthCount = 14;
@@ -230,6 +257,50 @@ function pluralize(value: number, variants: [string, string, string]): string {
   return variants[2];
 }
 
+function useTypewriterText(words: string[]): string {
+  const [wordIndex, setWordIndex] = useState(0);
+  const [letterCount, setLetterCount] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (words.length === 0) {
+      return;
+    }
+
+    const currentWord = words[wordIndex % words.length] ?? "";
+    const delay =
+      !isDeleting && letterCount === currentWord.length
+        ? typewriterHoldDelayMs
+        : isDeleting
+          ? typewriterDeleteDelayMs
+          : typewriterTypeDelayMs;
+
+    const timer = window.setTimeout(() => {
+      if (!isDeleting && letterCount < currentWord.length) {
+        setLetterCount((current) => current + 1);
+        return;
+      }
+
+      if (!isDeleting) {
+        setIsDeleting(true);
+        return;
+      }
+
+      if (letterCount > 0) {
+        setLetterCount((current) => Math.max(0, current - 1));
+        return;
+      }
+
+      setIsDeleting(false);
+      setWordIndex((current) => (current + 1) % words.length);
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [isDeleting, letterCount, wordIndex, words]);
+
+  return (words[wordIndex % Math.max(words.length, 1)] ?? "").slice(0, letterCount);
+}
+
 function formatChildAgeOption(age: number): string {
   if (age === 0) {
     return "до 1 года";
@@ -246,6 +317,17 @@ function formatDayMonth(iso: string, includeYear: boolean): string {
 
   const base = `${parsed.day} ${monthNamesGenitive[parsed.month - 1]}`;
   return includeYear ? `${base} ${yearFormatter.format(parsed.year)}` : base;
+}
+
+function formatDayMonthWeekday(iso: string): string {
+  const parsed = parseIsoParts(iso);
+  if (!parsed) {
+    return "";
+  }
+
+  const date = new Date(parsed.year, parsed.month - 1, parsed.day);
+  const weekdayIndex = (date.getDay() + 6) % 7;
+  return `${parsed.day} ${monthNamesShort[parsed.month - 1]}, ${weekdayShortLower[weekdayIndex]}`;
 }
 
 function formatHousingDatesField(range: DateRangeState): string {
@@ -275,6 +357,24 @@ function formatHousingDatesField(range: DateRangeState): string {
   const fromPart = formatDayMonth(range.checkIn, includeYear);
   const toPart = formatDayMonth(range.checkOut, true);
   return `${fromPart} - ${toPart}, ${nightsPart}`;
+}
+
+function formatMobileHousingDatesSummary(range: DateRangeState): string {
+  if (!range.checkIn && !range.checkOut) {
+    return "Выберите даты";
+  }
+
+  if (range.checkIn && !range.checkOut) {
+    return `${formatDayMonthWeekday(range.checkIn)} — выберите выезд`;
+  }
+
+  if (!range.checkIn || !range.checkOut) {
+    return "Выберите даты";
+  }
+
+  const nights = getNightsCount(range.checkIn, range.checkOut);
+  const nightsPart = `${nights} ${pluralize(nights, ["сутки", "суток", "суток"])}`;
+  return `${formatDayMonth(range.checkIn, false)} — ${formatDayMonth(range.checkOut, false)}, ${nightsPart}`;
 }
 
 function formatExcursionDateField(dateIso: string, anyDate: boolean): string {
@@ -367,6 +467,25 @@ const homeSearchSuggestionsListboxId = "home-search-suggestions-listbox";
 const homeSearchRecentLimit = 10;
 const homeSearchSuggestionsDebounceMs = 240;
 const homeSearchSuggestionsCacheTtlMs = 10 * 60_000;
+const typewriterDeleteDelayMs = 72;
+const typewriterTypeDelayMs = 118;
+const typewriterHoldDelayMs = 1800;
+const defaultTypewriterDestinations = [
+  "Ялта",
+  "Алушта",
+  "Алупка",
+  "Гурзуф",
+  "Форос",
+  "Симеиз",
+  "Евпатория",
+  "Судак",
+  "Новый Свет",
+  "Коктебель",
+  "Феодосия",
+  "Балаклава",
+  "Севастополь",
+  "Керчь",
+] as const;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 type PersistedHomeSearchState = {
@@ -380,7 +499,7 @@ type PersistedHomeSearchState = {
 };
 
 function isSuggestionType(value: unknown): value is SearchSuggestionType {
-  return value === "location" || value === "hotel";
+  return value === "location" || value === "hotel" || value === "listing";
 }
 
 function isDirection(value: unknown): value is Direction {
@@ -453,6 +572,20 @@ function parseSuggestionsResponse(value: unknown): HomeSearchSuggestionsResponse
 }
 
 function formatRecentSearchSubtitle(entry: RecentSearchEntry): string {
+  if (entry.type === "listing") {
+    if (entry.direction === "attractions") {
+      return "Место досуга";
+    }
+
+    if (entry.direction === "transfers") {
+      return "Трансфер или маршрут";
+    }
+
+    if (entry.direction === "excursions") {
+      return "Экскурсия или тур";
+    }
+  }
+
   const guestsLabel =
     entry.direction === "excursions"
       ? `${entry.guests} ${pluralize(entry.guests, ["участник", "участника", "участников"])}`
@@ -471,7 +604,7 @@ function formatRecentSearchSubtitle(entry: RecentSearchEntry): string {
   }
 
   if (entry.direction === "attractions") {
-    return "Достопримечательности рядом с локацией";
+    return "Досуг рядом с локацией";
   }
 
   if (entry.direction === "transfers") {
@@ -660,12 +793,73 @@ function getGuestsFieldValue(guests: GuestsState): string {
   return `${total} ${pluralize(total, ["гость", "гостя", "гостей"])}`;
 }
 
+function getDetailedGuestsFieldValue(guests: GuestsState, withPet: boolean): string {
+  const adultsLabel = `${guests.adults} ${pluralize(guests.adults, [
+    "взрослый",
+    "взрослых",
+    "взрослых",
+  ])}`;
+  const childrenCount = guests.childrenAges.length;
+  const childrenLabel =
+    childrenCount > 0
+      ? `${childrenCount} ${pluralize(childrenCount, ["ребенок", "ребенка", "детей"])}`
+      : "без детей";
+  const petLabel = withPet ? "с питомцем" : "без питомцев";
+
+  return `${adultsLabel}, ${childrenLabel} и ${petLabel}`;
+}
+
+function getMobileDirectionTitle(direction: Direction): string {
+  if (direction === "housing") {
+    return "Поиск жилья";
+  }
+
+  if (direction === "excursions") {
+    return "Поиск экскурсий";
+  }
+
+  if (direction === "attractions") {
+    return "Поиск досуга";
+  }
+
+  return "Поиск трансфера";
+}
+
+function getMobileLocationPlaceholder(direction: Direction): string {
+  if (direction === "housing") {
+    return "Курорт, город или адрес";
+  }
+
+  if (direction === "transfers") {
+    return "Город, маршрут или авто";
+  }
+
+  return "Курорт, город или место";
+}
+
+function getNextMobileStepAfterLocation(direction: Direction): MobileSearchStep {
+  return direction === "housing" || direction === "excursions" ? "date" : "review";
+}
+
+function DirectionIcon(props: { direction: Direction; className?: string }) {
+  const Icon =
+    props.direction === "housing"
+      ? House
+      : props.direction === "excursions"
+        ? Compass
+        : props.direction === "attractions"
+          ? Landmark
+          : Car;
+
+  return <AppIcon icon={Icon} className={props.className} />;
+}
+
 function formatCardPrice(value: number, direction: Direction): string {
   const rounded = Math.max(0, Math.round(value));
   const money = `${rubFormatter.format(rounded)} ₽`;
 
   if (direction === "attractions") {
-    return "места рядом с городом";
+    return "досуг рядом с городом";
   }
 
   if (direction === "transfers") {
@@ -719,6 +913,10 @@ function HotelIcon(props: { className?: string }) {
   return <AppIcon icon={Building2} className={props.className} />;
 }
 
+function ListingIcon(props: { className?: string }) {
+  return <AppIcon icon={ArrowUpRight} className={props.className} />;
+}
+
 function renderSuggestionName(name: string, query: string): ReactNode {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -752,6 +950,8 @@ function SuggestionLeadingIcon(props: {
         <ClockIcon className="h-4 w-4" />
       ) : props.type === "hotel" ? (
         <HotelIcon className="h-4 w-4" />
+      ) : props.type === "listing" ? (
+        <ListingIcon className="h-4 w-4" />
       ) : (
         <LocationIcon className="h-4 w-4" />
       )}
@@ -771,15 +971,9 @@ export function HomeSearchShowcase({
   const seededPopularSuggestions = useMemo(
     () => ({
       housing: initialPopularSuggestionsByDirection?.housing ?? [],
-      attractions:
-        initialPopularSuggestionsByDirection?.attractions ??
-        initialPopularSuggestionsByDirection?.excursions ??
-        [],
+      attractions: initialPopularSuggestionsByDirection?.attractions ?? [],
       excursions: initialPopularSuggestionsByDirection?.excursions ?? [],
-      transfers:
-        initialPopularSuggestionsByDirection?.transfers ??
-        initialPopularSuggestionsByDirection?.excursions ??
-        [],
+      transfers: initialPopularSuggestionsByDirection?.transfers ?? [],
     }),
     [initialPopularSuggestionsByDirection],
   );
@@ -811,6 +1005,9 @@ export function HomeSearchShowcase({
   const [isChildAgeSelectExpanded, setIsChildAgeSelectExpanded] = useState(false);
   const [openedChildAgeDropdownKey, setOpenedChildAgeDropdownKey] = useState<string | null>(null);
   const [openedPanel, setOpenedPanel] = useState<null | "date" | "guests">(null);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [mobileStep, setMobileStep] = useState<MobileSearchStep>("location");
+  const [travelsWithPet, setTravelsWithPet] = useState(false);
   const [isDatePanelMounted, setIsDatePanelMounted] = useState(false);
   const [isGuestsPanelMounted, setIsGuestsPanelMounted] = useState(false);
   const [hoverHousingDate, setHoverHousingDate] = useState("");
@@ -826,6 +1023,7 @@ export function HomeSearchShowcase({
 
   const searchFieldRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const dateFieldRef = useRef<HTMLDivElement | null>(null);
   const guestsFieldRef = useRef<HTMLDivElement | null>(null);
   const childAgeSelectRef = useRef<HTMLDivElement | null>(null);
@@ -847,7 +1045,42 @@ export function HomeSearchShowcase({
   const isLocationEmpty = searchValue.trim().length === 0;
   const usesDateGuests = direction === "housing" || direction === "excursions";
   const usesRadius = direction !== "housing";
-  const suggestionDirection = direction === "housing" ? "housing" : "excursions";
+  const suggestionDirection = direction;
+  const typewriterDestinations = useMemo(() => {
+    const source = [
+      ...defaultTypewriterDestinations,
+      ...cities.map((city) => city.locationName),
+      ...locationSuggestions,
+    ];
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    for (const item of source) {
+      const name = item.trim();
+      const key = normalizeLocation(name);
+      if (!name || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      result.push(name);
+      if (result.length >= 14) {
+        break;
+      }
+    }
+
+    return result;
+  }, [cities, locationSuggestions]);
+  const typedDestination = useTypewriterText(typewriterDestinations);
+  const searchDemoDestination =
+    typedDestination || (typewriterDestinations.length === 0 ? "Ялта" : "");
+  const searchDemoLabel = `Куда едем - ${searchDemoDestination}`;
+  const renderSearchDemoLabel = () => (
+    <span className="inline-flex min-w-0 items-center">
+      <span className="truncate">{searchDemoLabel}</span>
+      <span className="ml-0.5 inline-block h-4 w-px shrink-0 animate-pulse bg-primary/70" />
+    </span>
+  );
   const housingStat = useMemo(() => {
     if (publishedPropertiesCount !== null) {
       return {
@@ -998,6 +1231,19 @@ export function HomeSearchShowcase({
         .filter((entry) => entry.item.type === "hotel"),
     [shownMatchSuggestions],
   );
+  const matchListingSuggestionEntries = useMemo(
+    () =>
+      shownMatchSuggestions
+        .map((item, index) => ({ item, index }))
+        .filter((entry) => entry.item.type === "listing"),
+    [shownMatchSuggestions],
+  );
+  const listingSuggestionGroupLabel =
+    direction === "transfers"
+      ? "Трансферы и маршруты"
+      : direction === "attractions"
+        ? "Места"
+        : "Экскурсии и туры";
   const searchDropdownOptionByKey = useMemo(
     () => new Map(searchDropdownOptions.map((option) => [option.key, option])),
     [searchDropdownOptions],
@@ -1016,10 +1262,25 @@ export function HomeSearchShowcase({
 
   const activeGuests = direction === "housing" ? housingGuests : excursionGuests;
   const activeGuestsTotal = activeGuests.adults + activeGuests.childrenAges.length;
+  const activeMobileGuestsValue =
+    direction === "housing"
+      ? getDetailedGuestsFieldValue(activeGuests, travelsWithPet)
+      : getGuestsFieldValue(activeGuests);
   const dateFieldValue =
     direction === "housing"
       ? formatHousingDatesField(housingDates)
       : formatExcursionDateField(excursionDate, isExcursionAnyDate);
+  const mobileDateSummary =
+    direction === "housing"
+      ? formatMobileHousingDatesSummary(housingDates)
+      : formatExcursionDateField(excursionDate, isExcursionAnyDate);
+  const mobileCompactSubtitle =
+    direction === "housing"
+      ? `${mobileDateSummary}, ${getGuestsFieldValue(housingGuests)}`
+      : direction === "excursions"
+        ? `${mobileDateSummary}, ${getGuestsFieldValue(excursionGuests)}`
+        : "Куда едем";
+  const isMobileLocationStep = isMobileSearchOpen && mobileStep === "location";
   const housingPreviewCheckOut = useMemo(() => {
     if (housingDates.checkOut) {
       return housingDates.checkOut;
@@ -1179,6 +1440,117 @@ export function HomeSearchShowcase({
     },
     [commitRecentSuggestion, closeSearchDropdown, direction],
   );
+
+  const openMobileSearch = useCallback(
+    (step: MobileSearchStep = "location") => {
+      closeAllPopovers(null);
+      clearDatePanelCloseTimer();
+      clearGuestsPanelCloseTimer();
+      setIsChildAgeSelectExpanded(false);
+      setOpenedChildAgeDropdownKey(null);
+      setMobileStep(step);
+      setIsMobileSearchOpen(true);
+    },
+    [clearDatePanelCloseTimer, clearGuestsPanelCloseTimer, closeAllPopovers],
+  );
+
+  const closeMobileSearch = useCallback(() => {
+    setIsMobileSearchOpen(false);
+    setMobileStep("location");
+    setIsChildAgeSelectExpanded(false);
+    setOpenedChildAgeDropdownKey(null);
+  }, []);
+
+  const applyMobileSuggestionSelection = useCallback(
+    (option: SearchDropdownOption) => {
+      setSearchValue(option.item.name);
+      setSelectedSuggestion(option.item);
+      commitRecentSuggestion(option.item);
+      closeSearchDropdown();
+      setMobileStep(getNextMobileStepAfterLocation(direction));
+
+      trackSearchAnalytics("search_suggestion_click", {
+        direction,
+        type: option.item.type,
+        id: option.item.id,
+        section: option.section,
+        position: option.position,
+        surface: "mobile_modal",
+      });
+    },
+    [commitRecentSuggestion, closeSearchDropdown, direction],
+  );
+
+  const continueMobileLocationStep = () => {
+    if (isLocationEmpty) {
+      mobileSearchInputRef.current?.focus();
+      return;
+    }
+
+    closeSearchDropdown();
+    setMobileStep(getNextMobileStepAfterLocation(direction));
+  };
+
+  const continueMobileDateStep = () => {
+    if (direction === "housing") {
+      if (!housingDates.checkIn || !housingDates.checkOut) {
+        return;
+      }
+
+      setMobileStep("guests");
+      return;
+    }
+
+    if (direction === "excursions") {
+      if (!isExcursionAnyDate && !excursionDate) {
+        return;
+      }
+
+      setMobileStep("guests");
+    }
+  };
+
+  const resetMobileSearch = () => {
+    setSearchValue("");
+    setSelectedSuggestion(null);
+    setHousingDates({
+      checkIn: "",
+      checkOut: "",
+    });
+    setExcursionDate("");
+    setIsExcursionAnyDate(false);
+    setHousingGuests({
+      adults: 2,
+      childrenAges: [],
+    });
+    setExcursionGuests({
+      adults: 2,
+      childrenAges: [],
+    });
+    setHousingNewChildAge("");
+    setExcursionNewChildAge("");
+    setTravelsWithPet(false);
+    setMobileStep("location");
+  };
+
+  const goBackInMobileSearch = () => {
+    if (mobileStep === "review") {
+      closeMobileSearch();
+      return;
+    }
+
+    if (mobileStep === "guests") {
+      setMobileStep("date");
+      return;
+    }
+
+    if (mobileStep === "date") {
+      setMobileStep("location");
+      return;
+    }
+
+    closeMobileSearch();
+  };
 
   const updateAdults = (targetDirection: Direction, value: number) => {
     const next = clampGuests(value);
@@ -1591,13 +1963,13 @@ export function HomeSearchShowcase({
   }, [isSearchDropdownOpen, closeSearchDropdown]);
 
   useEffect(() => {
-    if (!isSearchDropdownOpen) {
+    if (!isSearchDropdownOpen && !isMobileLocationStep) {
       setIsSuggestionsLoading(false);
       return;
     }
 
     const query = normalizedSearchQuery.slice(0, 120);
-    const include = direction === "housing" ? "locations,hotels" : "locations";
+    const include = direction === "housing" ? "locations,hotels" : "locations,listings";
     const cacheKey = `${direction}|${query.toLowerCase()}`;
     const cached = suggestionsCacheRef.current.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -1632,7 +2004,7 @@ export function HomeSearchShowcase({
             direction: suggestionDirection,
             query,
             include: isEmptyQuery ? "locations" : include,
-            limit: isEmptyQuery ? "5" : "12",
+            limit: isEmptyQuery ? "8" : "12",
           });
           const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
             credentials: "omit",
@@ -1678,6 +2050,7 @@ export function HomeSearchShowcase({
     };
   }, [
     isSearchDropdownOpen,
+    isMobileLocationStep,
     normalizedSearchQuery,
     direction,
     suggestionDirection,
@@ -1743,11 +2116,37 @@ export function HomeSearchShowcase({
     });
     setHousingNewChildAge("");
     setExcursionNewChildAge("");
+    setTravelsWithPet(false);
   }, []);
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  useEffect(() => {
+    if (!isMobileSearchOpen) {
+      return;
+    }
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobileSearchOpen]);
+
+  useEffect(() => {
+    if (!isMobileLocationStep) {
+      return;
+    }
+
+    const raf = window.requestAnimationFrame(() => {
+      mobileSearchInputRef.current?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+    };
+  }, [isMobileLocationStep]);
+
+  const submitSearch = () => {
     const normalizedQuery = searchValue.trim();
 
     if (!normalizedQuery) {
@@ -1787,7 +2186,7 @@ export function HomeSearchShowcase({
     } else {
       params.set("q", normalizedQuery);
       commitRecentSuggestion({
-        type: direction === "housing" ? "hotel" : "location",
+        type: direction === "housing" ? "hotel" : "listing",
         id: `query:${normalizeLocation(normalizedQuery).slice(0, 110)}`,
         name: normalizedQuery,
         subtitle: "",
@@ -1802,6 +2201,9 @@ export function HomeSearchShowcase({
       }
       if (housingDates.checkOut) {
         params.set("checkOut", housingDates.checkOut);
+      }
+      if (travelsWithPet) {
+        params.set("petsAllowed", "1");
       }
     } else if (direction === "excursions") {
       if (!isExcursionAnyDate && excursionDate) {
@@ -1821,7 +2223,13 @@ export function HomeSearchShowcase({
           : direction === "transfers"
             ? transfersHubPath
             : excursionsHubPath;
-    router.push(`${basePath}?${params.toString()}`);
+    const queryString = params.toString();
+    router.push(queryString ? `${basePath}?${queryString}` : basePath);
+  };
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitSearch();
   };
 
   const renderSuggestionButton = (
@@ -1863,6 +2271,729 @@ export function HomeSearchShowcase({
     );
   };
 
+  const renderMobileSuggestionButton = (
+    section: SearchSuggestionSection,
+    item: HomeSearchSuggestionItem,
+    index: number,
+  ) => {
+    const option = getSearchDropdownOption(section, item, index);
+    if (!option) {
+      return null;
+    }
+
+    const nameContent =
+      section === "matches" ? renderSuggestionName(item.name, normalizedSearchQuery) : item.name;
+
+    return (
+      <button
+        key={`mobile-${option.key}`}
+        type="button"
+        onClick={() => applyMobileSuggestionSelection(option)}
+        className="flex min-h-13 w-full items-center gap-3 rounded-2xl px-1 py-2 text-left transition active:bg-cream"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center text-olive">
+          <SuggestionLeadingIcon section={section} type={item.type} />
+        </span>
+        <span className="block min-w-0 border-b border-sand/70 py-2">
+          <span className="block truncate text-base font-semibold text-midnight">
+            {nameContent}
+          </span>
+          <span className="block truncate text-sm text-olive/58">
+            {item.subtitle || (section === "popular" ? "Крым, Россия" : "Без деталей")}
+          </span>
+        </span>
+      </button>
+    );
+  };
+
+  const renderMobileSuggestionSections = () => (
+    <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+      {isSuggestionsLoading ? (
+        <div className="space-y-3 py-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={`mobile-skeleton-${index}`} className="h-14 animate-pulse rounded-2xl bg-cream" />
+          ))}
+        </div>
+      ) : null}
+
+      {!isSuggestionsLoading && !isSuggestionQueryMode && recentSuggestions.length > 0 ? (
+        <div className="pb-2">
+          <p className="px-1 py-2 text-sm text-olive/58">История поиска</p>
+          <div className="space-y-1">
+            {recentSuggestions.map((item, index) =>
+              renderMobileSuggestionButton("recent", item, index),
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {!isSuggestionsLoading && !isSuggestionQueryMode && shownPopularSuggestions.length > 0 ? (
+        <div className="pb-2">
+          <p className="px-1 py-2 text-sm text-olive/58">Популярные направления</p>
+          <div className="space-y-1">
+            {shownPopularSuggestions.map((item, index) =>
+              renderMobileSuggestionButton("popular", item, index),
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {!isSuggestionsLoading && isSuggestionQueryMode && shownMatchSuggestions.length > 0 ? (
+        <div className="pb-2">
+          {matchLocationSuggestionEntries.length > 0 ? (
+            <>
+              <p className="px-1 py-2 text-sm text-olive/58">Локации</p>
+              <div className="space-y-1">
+                {matchLocationSuggestionEntries.map((entry) =>
+                  renderMobileSuggestionButton("matches", entry.item, entry.index),
+                )}
+              </div>
+            </>
+          ) : null}
+
+          {matchHotelSuggestionEntries.length > 0 ? (
+            <>
+              <p className="px-1 py-2 text-sm text-olive/58">Отели</p>
+              <div className="space-y-1">
+                {matchHotelSuggestionEntries.map((entry) =>
+                  renderMobileSuggestionButton("matches", entry.item, entry.index),
+                )}
+              </div>
+            </>
+          ) : null}
+
+          {matchListingSuggestionEntries.length > 0 ? (
+            <>
+              <p className="px-1 py-2 text-sm text-olive/58">{listingSuggestionGroupLabel}</p>
+              <div className="space-y-1">
+                {matchListingSuggestionEntries.map((entry) =>
+                  renderMobileSuggestionButton("matches", entry.item, entry.index),
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!isSuggestionsLoading &&
+      !isSuggestionQueryMode &&
+      recentSuggestions.length === 0 &&
+      shownPopularSuggestions.length === 0 ? (
+        <p className="px-1 py-6 text-base text-olive/65">
+          Начните вводить город, курорт или адрес.
+        </p>
+      ) : null}
+
+      {!isSuggestionsLoading && isSuggestionQueryMode && shownMatchSuggestions.length === 0 ? (
+        <p className="px-1 py-6 text-base text-olive/65">Ничего не найдено.</p>
+      ) : null}
+    </div>
+  );
+
+  const renderMobileDateCalendar = () => {
+    const isDateStepReady =
+      direction === "housing"
+        ? Boolean(housingDates.checkIn && housingDates.checkOut)
+        : Boolean(isExcursionAnyDate || excursionDate);
+
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div
+          className={cn(
+            "mb-4 grid overflow-hidden rounded-2xl border border-sand bg-white",
+            direction === "housing" ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {direction === "housing" ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setHousingDates((prev) => ({
+                    checkIn: "",
+                    checkOut: prev.checkOut && !prev.checkIn ? prev.checkOut : "",
+                  }))
+                }
+                className="min-w-0 border-r border-sand px-4 py-3 text-left"
+              >
+                <span className="block text-sm text-olive/65">Заезд</span>
+                <span className="block truncate text-base font-semibold text-midnight">
+                  {housingDates.checkIn ? formatDayMonthWeekday(housingDates.checkIn) : "Дата"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setHousingDates((prev) => ({
+                    ...prev,
+                    checkOut: "",
+                  }))
+                }
+                className="min-w-0 px-4 py-3 text-left"
+              >
+                <span className="block text-sm text-olive/65">Отъезд</span>
+                <span className="block truncate text-base font-semibold text-midnight">
+                  {housingDates.checkOut ? formatDayMonthWeekday(housingDates.checkOut) : "Дата"}
+                </span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExcursionAnyDate(false);
+                  setExcursionDate("");
+                }}
+                className="min-w-0 text-left"
+              >
+                <span className="block text-sm text-olive/65">Дата</span>
+                <span className="block truncate text-base font-semibold text-midnight">
+                  {isExcursionAnyDate
+                    ? "Любая дата"
+                    : excursionDate
+                      ? formatDayMonthWeekday(excursionDate)
+                      : "Выберите дату"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExcursionAnyDate(true);
+                  setExcursionDate("");
+                }}
+                className={cn(
+                  "rounded-full px-3 py-2 text-sm font-semibold transition",
+                  isExcursionAnyDate
+                    ? "bg-primary text-white"
+                    : "bg-cream text-olive ring-1 ring-sand",
+                )}
+              >
+                Любая
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {calendarMonths.map((month) => (
+            <div
+              key={`mobile-${month.key}`}
+              ref={(node) => {
+                monthSectionRefs.current[month.key] = node;
+              }}
+              className="mb-7 last:mb-4"
+            >
+              <h3 className="px-1 text-lg font-semibold text-midnight">{month.label}</h3>
+              <div className="mt-3 grid grid-cols-7 gap-1 text-center text-sm font-semibold text-olive/75">
+                {weekdayShortLower.map((weekday) => (
+                  <span key={`mobile-${month.key}-${weekday}`}>{weekday}</span>
+                ))}
+              </div>
+
+              <div className="mt-2 grid grid-cols-7 gap-y-2">
+                {month.cells.map((cell, cellIndex) => {
+                  const iso = cell.iso;
+
+                  if (!iso || !cell.day) {
+                    return (
+                      <span
+                        key={`mobile-${month.key}-blank-${cellIndex}`}
+                        className="h-11"
+                        aria-hidden="true"
+                      />
+                    );
+                  }
+
+                  const isDisabled = iso < todayIso;
+                  const isHousingStart = direction === "housing" && iso === housingDates.checkIn;
+                  const isHousingEnd = direction === "housing" && iso === housingPreviewCheckOut;
+                  const hasHousingRange =
+                    direction === "housing" &&
+                    Boolean(
+                      housingDates.checkIn &&
+                        housingPreviewCheckOut &&
+                        housingPreviewCheckOut > housingDates.checkIn,
+                    );
+                  const isHousingMiddle =
+                    direction === "housing" &&
+                    Boolean(
+                      housingDates.checkIn &&
+                        housingPreviewCheckOut &&
+                        iso > housingDates.checkIn &&
+                        iso < housingPreviewCheckOut,
+                    );
+                  const isExcursionSelected =
+                    direction === "excursions" && !isExcursionAnyDate && iso === excursionDate;
+                  const isSelected = isHousingStart || isHousingEnd || isExcursionSelected;
+
+                  return (
+                    <button
+                      key={`mobile-${iso}`}
+                      type="button"
+                      disabled={isDisabled}
+                      onMouseEnter={() => {
+                        if (
+                          direction !== "housing" ||
+                          !housingDates.checkIn ||
+                          housingDates.checkOut ||
+                          isDisabled
+                        ) {
+                          return;
+                        }
+                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
+                      }}
+                      onFocus={() => {
+                        if (
+                          direction !== "housing" ||
+                          !housingDates.checkIn ||
+                          housingDates.checkOut ||
+                          isDisabled
+                        ) {
+                          return;
+                        }
+                        setHoverHousingDate(iso > housingDates.checkIn ? iso : "");
+                      }}
+                      onClick={() =>
+                        direction === "housing"
+                          ? onHousingDateSelect(iso)
+                          : onExcursionDateSelect(iso)
+                      }
+                      className={cn(
+                        "mx-auto flex h-11 w-11 items-center justify-center rounded-full text-base transition",
+                        isSelected
+                          ? "bg-primary font-semibold text-white shadow-[0_8px_18px_-12px_rgba(15,118,110,0.95)]"
+                          : isHousingMiddle
+                            ? "w-full rounded-none bg-foam text-olive"
+                            : isDisabled
+                              ? "cursor-not-allowed text-olive/28"
+                              : "text-midnight hover:bg-cream",
+                        hasHousingRange && isHousingStart ? "rounded-r-[8px]" : "",
+                        hasHousingRange && isHousingEnd ? "rounded-l-[8px]" : "",
+                      )}
+                    >
+                      {cell.day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button
+          type="button"
+          onClick={continueMobileDateStep}
+          disabled={!isDateStepReady}
+          className="mt-3 h-14 w-full shrink-0 rounded-2xl text-base"
+        >
+          Сохранить
+        </Button>
+      </div>
+    );
+  };
+
+  const renderMobileGuestsStep = () => (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-4">
+        <section className="rounded-2xl border border-sand bg-cream/65 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-base font-semibold text-midnight">Взрослые</p>
+              <p className="text-sm text-olive/62">от 18 лет</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => updateAdults(direction, activeGuests.adults - 1)}
+                disabled={activeGuests.adults <= 1}
+                aria-label="Уменьшить количество взрослых"
+                className="h-11 w-11 rounded-full border border-sand bg-white text-xl leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                -
+              </button>
+              <span className="w-8 text-center text-base font-semibold text-midnight">
+                {activeGuests.adults}
+              </span>
+              <button
+                type="button"
+                onClick={() => updateAdults(direction, activeGuests.adults + 1)}
+                disabled={activeGuests.adults + activeGuests.childrenAges.length >= maxGuestsCount}
+                aria-label="Увеличить количество взрослых"
+                className="h-11 w-11 rounded-full border border-sand bg-white text-xl leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-sand bg-cream/65 p-4">
+          <div>
+            <p className="text-base font-semibold text-midnight">Дети</p>
+            <p className="text-sm text-olive/62">Возраст на момент выезда</p>
+          </div>
+
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <div ref={childAgeSelectRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChildAgeSelectExpanded((prev) => !prev);
+                  setOpenedChildAgeDropdownKey(null);
+                }}
+                aria-haspopup="listbox"
+                aria-expanded={isChildAgeSelectExpanded}
+                className="flex h-12 w-full items-center justify-between rounded-2xl border border-sand bg-white px-4 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              >
+                <span className="truncate">{pendingChildAgeLabel}</span>
+                <AppIcon
+                  icon={ChevronDown}
+                  className={cn(
+                    "h-4 w-4 transition-transform duration-200",
+                    isChildAgeSelectExpanded ? "rotate-180" : "",
+                  )}
+                />
+              </button>
+
+              <div
+                role="listbox"
+                className={cn(
+                  "custom-scrollbar absolute left-0 top-[calc(100%+6px)] z-40 h-[190px] w-full overflow-y-auto rounded-2xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
+                  isChildAgeSelectExpanded
+                    ? "visible translate-y-0 opacity-100 pointer-events-auto"
+                    : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
+                )}
+              >
+                <div className="flex flex-col gap-0.5">
+                  {Array.from({ length: 18 }, (_, age) => {
+                    const value = String(age);
+                    const isSelected = value === pendingChildAgeValue;
+
+                    return (
+                      <button
+                        key={`mobile-child-age-${age}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          setPendingChildAge(direction, value);
+                          setIsChildAgeSelectExpanded(false);
+                        }}
+                        className={cn(
+                          "cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-olive transition active:bg-sand/30",
+                          isSelected ? "bg-cream" : "hover:bg-cream",
+                        )}
+                      >
+                        {formatChildAgeOption(age)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => addChild(direction, pendingChildAgeValue)}
+              disabled={
+                !pendingChildAgeValue ||
+                activeGuests.adults + activeGuests.childrenAges.length >= maxGuestsCount
+              }
+              className="h-12 rounded-2xl border border-sand bg-white px-4 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Добавить
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {activeGuests.childrenAges.length === 0 ? (
+              <p className="text-sm text-olive/62">Без детей</p>
+            ) : (
+              <div ref={childAgeRowsRef} className="space-y-2">
+                {activeGuests.childrenAges.map((age, index) => (
+                  <div
+                    key={`mobile-child-${direction}-${index}`}
+                    className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2"
+                  >
+                    <span className="text-sm font-medium text-midnight">
+                      Ребенок {index + 1}, {formatChildAgeOption(age)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeChild(direction, index)}
+                      className="rounded-full px-3 py-1.5 text-sm font-semibold text-terra transition hover:bg-foam"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {direction === "housing" ? (
+          <button
+            type="button"
+            aria-pressed={travelsWithPet}
+            onClick={() => setTravelsWithPet((prev) => !prev)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-2xl border p-4 text-left transition",
+              travelsWithPet
+                ? "border-primary bg-foam text-primary"
+                : "border-sand bg-white text-olive hover:bg-cream",
+            )}
+          >
+            <span>
+              <span className="block text-base font-semibold">Питомец</span>
+              <span className="block text-sm text-olive/62">
+                {travelsWithPet ? "Едете с питомцем" : "Без питомцев"}
+              </span>
+            </span>
+            <AppIcon icon={PawPrint} className="h-5 w-5" />
+          </button>
+        ) : null}
+      </div>
+
+      <Button
+        type="button"
+        onClick={() => setMobileStep("review")}
+        className="mt-3 h-14 w-full shrink-0 rounded-2xl text-base"
+      >
+        Продолжить
+      </Button>
+    </div>
+  );
+
+  const renderMobileReviewStep = () => (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setMobileStep("location")}
+          className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-left transition hover:bg-cream"
+        >
+          <span className="block text-sm text-olive/65">{getMobileLocationPlaceholder(direction)}</span>
+          <span className="block truncate text-base font-semibold text-midnight">
+            {searchValue.trim() || renderSearchDemoLabel()}
+          </span>
+        </button>
+
+        {usesDateGuests ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setMobileStep("date")}
+              className="grid w-full grid-cols-2 overflow-hidden rounded-2xl border border-sand bg-white text-left transition hover:bg-cream"
+            >
+              {direction === "housing" ? (
+                <>
+                  <span className="min-w-0 border-r border-sand px-4 py-3">
+                    <span className="block text-sm text-olive/65">Заезд</span>
+                    <span className="block truncate text-base font-semibold text-midnight">
+                      {housingDates.checkIn ? formatDayMonthWeekday(housingDates.checkIn) : "Дата"}
+                    </span>
+                  </span>
+                  <span className="min-w-0 px-4 py-3">
+                    <span className="block text-sm text-olive/65">Отъезд</span>
+                    <span className="block truncate text-base font-semibold text-midnight">
+                      {housingDates.checkOut
+                        ? formatDayMonthWeekday(housingDates.checkOut)
+                        : "Дата"}
+                    </span>
+                  </span>
+                </>
+              ) : (
+                <span className="col-span-2 px-4 py-3">
+                  <span className="block text-sm text-olive/65">Дата</span>
+                  <span className="block truncate text-base font-semibold text-midnight">
+                    {mobileDateSummary}
+                  </span>
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileStep("guests")}
+              className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-left transition hover:bg-cream"
+            >
+              <span className="block text-sm text-olive/65">
+                {direction === "housing" ? "Гости" : "Участники"}
+              </span>
+              <span className="block truncate text-base font-semibold text-midnight">
+                {activeMobileGuestsValue}
+              </span>
+            </button>
+          </>
+        ) : null}
+
+        {usesRadius ? (
+          <div className="rounded-2xl border border-sand bg-white p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-olive/65">
+              <AppIcon icon={LocateFixed} className="h-4 w-4" />
+              Радиус
+            </div>
+            <div className="grid grid-cols-4 gap-1 min-[420px]:grid-cols-7">
+              {radiusOptions.map((km) => (
+                <button
+                  key={`mobile-radius-${km}`}
+                  type="button"
+                  onClick={() => setExcursionRadius(km)}
+                  className={cn(
+                    "h-10 rounded-xl text-sm font-semibold transition",
+                    excursionRadius === km
+                      ? "bg-primary text-white"
+                      : "bg-cream text-olive hover:bg-foam",
+                  )}
+                >
+                  {km} км
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-auto grid grid-cols-[1fr_1.35fr] gap-3 pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={resetMobileSearch}
+          className="h-14 rounded-2xl bg-white text-base"
+        >
+          Сбросить
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            submitSearch();
+            closeMobileSearch();
+          }}
+          disabled={isLocationEmpty}
+          className="h-14 rounded-2xl text-base"
+        >
+          <AppIcon icon={Search} className="mr-2 h-5 w-5 text-white" />
+          Найти
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderMobileSearchModal = () => {
+    if (!isMobileSearchOpen) {
+      return null;
+    }
+
+    return (
+      <div className="fixed inset-0 z-[90] flex flex-col bg-[#1c1c1c] text-white md:hidden">
+        <div className="flex h-[76px] shrink-0 items-center gap-3 px-4 pt-[env(safe-area-inset-top)]">
+          <button
+            type="button"
+            onClick={goBackInMobileSearch}
+            aria-label={mobileStep === "review" ? "Закрыть поиск" : "Назад"}
+            className="flex h-11 w-11 items-center justify-center border-r border-white/10 pr-3 text-white"
+          >
+            <AppIcon
+              icon={mobileStep === "review" ? X : ChevronLeft}
+              className="h-6 w-6 text-white"
+            />
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <div className="truncate text-base font-semibold">
+              {mobileStep === "location"
+                ? directionLabels[direction]
+                : getMobileDirectionTitle(direction)}
+            </div>
+            {mobileStep !== "location" ? (
+              <div className="mt-0.5 truncate text-sm text-white/72">
+                {searchValue.trim() || searchDemoLabel}
+                {usesDateGuests ? ` · ${mobileCompactSubtitle}` : ""}
+              </div>
+            ) : null}
+          </div>
+          <span className="h-11 w-11" aria-hidden="true" />
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[24px] bg-white px-4 py-4 text-olive">
+          {mobileStep === "location" ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-cream p-1 ring-1 ring-sand min-[420px]:grid-cols-4">
+                {(Object.keys(directionLabels) as Direction[]).map((item) => (
+                  <button
+                    key={`mobile-direction-${item}`}
+                    type="button"
+                    onClick={() => {
+                      setDirection(item);
+                      setSelectedSuggestion(null);
+                      setActiveSuggestionIndex(-1);
+                      setMobileStep("location");
+                    }}
+                    className={cn(
+                      "flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold transition",
+                      direction === item
+                        ? "bg-primary text-white shadow-md shadow-primary/20"
+                        : "text-olive/68 hover:bg-white",
+                    )}
+                  >
+                    <DirectionIcon direction={item} className="h-4 w-4" />
+                    <span className="truncate">{directionLabels[item]}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative mb-2">
+                <input
+                  ref={mobileSearchInputRef}
+                  value={searchValue}
+                  onChange={(event) => {
+                    setSearchValue(event.target.value.slice(0, 120));
+                    setSelectedSuggestion(null);
+                    setActiveSuggestionIndex(-1);
+                  }}
+                  autoComplete="off"
+                  placeholder={searchDemoLabel}
+                  className="h-15 w-full rounded-2xl border border-sand bg-white px-4 pr-12 text-base font-semibold text-midnight outline-none transition placeholder:font-normal placeholder:text-olive/54 focus:ring-2 focus:ring-primary/30"
+                />
+                {searchValue ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchValue("");
+                      setSelectedSuggestion(null);
+                      mobileSearchInputRef.current?.focus();
+                    }}
+                    aria-label="Очистить"
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-cream text-olive"
+                  >
+                    <AppIcon icon={X} className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+
+              {renderMobileSuggestionSections()}
+
+              <Button
+                type="button"
+                onClick={continueMobileLocationStep}
+                disabled={isLocationEmpty}
+                className="h-14 w-full shrink-0 rounded-2xl text-base"
+              >
+                Продолжить
+              </Button>
+            </div>
+          ) : mobileStep === "date" ? (
+            renderMobileDateCalendar()
+          ) : mobileStep === "guests" ? (
+            renderMobileGuestsStep()
+          ) : (
+            renderMobileReviewStep()
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <section className="relative mx-auto max-w-5xl rounded-3xl border border-white/65 bg-[linear-gradient(160deg,rgba(255,255,255,0.97)_0%,rgba(250,248,245,0.98)_44%,rgba(244,237,227,0.94)_100%)] p-4 shadow-[0_30px_70px_-42px_rgba(58,43,35,0.28)] ring-1 ring-olive/8 md:p-8">
@@ -1881,13 +3012,55 @@ export function HomeSearchShowcase({
             Поиск по Крыму
           </h1>
           <p className="mt-2 text-base text-olive/60 md:text-lg">
-            Жильё, маршруты, места и трансферы по всему полуострову
+            Жильё, экскурсии, досуг и трансферы по всему полуострову
           </p>
+        </div>
+
+        <div className="mt-5 md:hidden">
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-foam p-1 ring-1 ring-olive/12">
+            {(Object.keys(directionLabels) as Direction[]).map((item) => (
+              <button
+                key={`mobile-compact-${item}`}
+                type="button"
+                onClick={() => {
+                  setDirection(item);
+                  setSelectedSuggestion(null);
+                  setOpenedPanel(null);
+                  setIsChildAgeSelectExpanded(false);
+                  closeSearchDropdown();
+                }}
+                className={cn(
+                  "flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold transition active:scale-[0.98]",
+                  direction === item
+                    ? "bg-primary text-white shadow-md shadow-primary/25"
+                    : "text-olive/72 hover:bg-white/60",
+                )}
+              >
+                <DirectionIcon direction={item} className="h-4 w-4" />
+                <span className="truncate">{directionLabels[item]}</span>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => openMobileSearch("location")}
+            className="flex w-full items-center gap-3 rounded-[28px] bg-white p-2 text-left shadow-[0_16px_34px_-24px_rgba(58,43,35,0.55)] ring-1 ring-sand transition active:scale-[0.99]"
+          >
+            <span className="min-w-0 flex-1 px-3 py-2">
+              <span className="block truncate text-base font-semibold text-midnight">
+                {searchValue.trim() || renderSearchDemoLabel()}
+              </span>
+            </span>
+            <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.9)]">
+              <AppIcon icon={Search} className="h-6 w-6 text-white" />
+            </span>
+          </button>
         </div>
 
         <form
           onSubmit={onSubmit}
-          className="mt-5 rounded-2xl bg-cream/78 p-3 ring-1 ring-olive/12 md:p-4"
+          className="mt-5 hidden rounded-2xl bg-cream/78 p-3 ring-1 ring-olive/12 md:block md:p-4"
         >
           <div className="relative mx-auto mb-4 grid w-full max-w-3xl grid-cols-2 gap-1 overflow-hidden rounded-xl bg-foam p-1 ring-1 ring-olive/12 sm:grid-cols-4">
             {(Object.keys(directionLabels) as Direction[]).map((item) => (
@@ -1936,13 +3109,7 @@ export function HomeSearchShowcase({
                 ref={searchInputRef}
                 name="search"
                 autoComplete="off"
-                placeholder={
-                  direction === "housing"
-                    ? "Город или отель"
-                    : direction === "transfers"
-                      ? "Город, маршрут или авто"
-                      : "Город или место"
-                }
+                placeholder={searchDemoLabel}
                 aria-label={
                   direction === "housing"
                     ? "Город или отель"
@@ -2106,6 +3273,18 @@ export function HomeSearchShowcase({
                             </p>
                             <div className="space-y-1">
                               {matchHotelSuggestionEntries.map((entry) =>
+                                renderSuggestionButton("matches", entry.item, entry.index),
+                              )}
+                            </div>
+                          </>
+                        ) : null}
+                        {matchListingSuggestionEntries.length > 0 ? (
+                          <>
+                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                              {listingSuggestionGroupLabel}
+                            </p>
+                            <div className="space-y-1">
+                              {matchListingSuggestionEntries.map((entry) =>
                                 renderSuggestionButton("matches", entry.item, entry.index),
                               )}
                             </div>
@@ -2721,14 +3900,20 @@ export function HomeSearchShowcase({
         </form>
       </section>
 
+      {renderMobileSearchModal()}
+
       {/* ── Why choose us ── */}
       <div className="mx-auto mt-6 max-w-5xl">
         <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
           Почему выбирают «Крым Вокруг»?
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className="-mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
+          aria-label="Преимущества"
+        >
+          <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
           {/* Card 1 */}
-          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20">
+          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
               <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
             </div>
@@ -2740,7 +3925,7 @@ export function HomeSearchShowcase({
           </div>
 
           {/* Card 2 */}
-          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20">
+          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
               <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
             </div>
@@ -2752,7 +3937,7 @@ export function HomeSearchShowcase({
           </div>
 
           {/* Card 3 */}
-          <div className="group relative overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 lg:col-span-1">
+          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
               <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
             </div>
@@ -2761,6 +3946,7 @@ export function HomeSearchShowcase({
               {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label} и{" "}
               {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
             </p>
+          </div>
           </div>
         </div>
       </div>

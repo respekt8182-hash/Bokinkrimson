@@ -3,6 +3,10 @@ import { crimeaLocationById, crimeaLocations } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import {
+  getLocationDirectoryItems,
+  type LocationDirectoryItem,
+} from "@/lib/location-directory";
+import {
   isConfiguredDatabaseReachable,
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
@@ -10,16 +14,21 @@ import {
 import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
+  buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
 import { createInMemoryRateLimiter } from "@/lib/rate-limit";
 import {
+  getPopularAttractionSuggestions,
   getPopularExcursionSuggestions,
   getPopularHousingSuggestions,
+  getPopularTransferSuggestions,
   type SearchSuggestionItem,
 } from "@/lib/search-suggestions";
+import { getStaticAttractions, type StaticAttraction } from "@/lib/static-attractions";
+import { normalizeTransferServiceTags } from "@/lib/transfers";
 
-type SuggestionDirection = "housing" | "excursions";
-type SuggestionType = "location" | "hotel";
+type SuggestionDirection = "housing" | "excursions" | "attractions" | "transfers";
+type SuggestionType = "location" | "hotel" | "listing";
 
 type SearchSuggestionsResponse = {
   recent: SearchSuggestionItem[];
@@ -37,10 +46,57 @@ type HousingSuggestionRow = {
 
 type ExcursionSuggestionRow = {
   id: string;
+  offerType: string;
+  title: string | null;
+  subtypeLabel: string | null;
   locationId: string | null;
   locationName: string | null;
+  startPoint: string | null;
+  meetingPointText: string | null;
+  shortDescription: string | null;
+  description: string | null;
+  routeDescription: string | null;
+  finishPoint: string | null;
+  tags: string[];
   anchorLocation: { slug: string; name: string } | null;
   mainLocation: { slug: string; name: string } | null;
+  district: { name: string } | null;
+  category: { name: string } | null;
+  routeLocations: Array<{ location: { slug: string; name: string } }>;
+};
+
+type AttractionSuggestionRow = Pick<
+  StaticAttraction,
+  | "id"
+  | "title"
+  | "h1"
+  | "category"
+  | "tags"
+  | "locationName"
+  | "districtName"
+  | "locationAliases"
+  | "address"
+  | "shortDescription"
+  | "description"
+  | "nearby"
+  | "searchKeywords"
+>;
+
+type TransferSuggestionRow = {
+  id: string;
+  title: string | null;
+  transferType: string | null;
+  vehicleClass: string | null;
+  vehicleModel: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  serviceArea: string | null;
+  routeExamples: string | null;
+  shortDescription: string | null;
+  description: string | null;
+  serviceTags: string[];
+  fleet: unknown;
+  location: { slug: string; name: string } | null;
 };
 
 type LocationAggregate = {
@@ -50,11 +106,18 @@ type LocationAggregate = {
   latinName: string;
   activeListingsCount: number;
   subtitle: string;
+  searchTerms: string[];
 };
 
 type RankedSuggestion = {
   item: SearchSuggestionItem;
   score: number;
+};
+
+type ListingCandidate = {
+  item: SearchSuggestionItem;
+  searchTerms: string[];
+  popularity: number;
 };
 
 type CachedRows<T> = {
@@ -67,7 +130,8 @@ const defaultLimit = 10;
 const minLimit = 5;
 const maxLimit = 20;
 const sourceCacheTtlMs = 60_000;
-const popularLocationsLimit = 5;
+const popularLocationsLimit = 8;
+const crimeaLocationSubtitle = "Крым, Россия";
 
 const addressNormalizationRules: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bул\b/g, "улица"],
@@ -124,6 +188,8 @@ const suggestionsRateLimiter = createInMemoryRateLimiter({
 // Short-lived in-memory caches reduce repeated DB scans under fast typing in search box.
 let housingRowsCache: CachedRows<HousingSuggestionRow> | null = null;
 let excursionRowsCache: CachedRows<ExcursionSuggestionRow> | null = null;
+let attractionRowsCache: CachedRows<AttractionSuggestionRow> | null = null;
+let transferRowsCache: CachedRows<TransferSuggestionRow> | null = null;
 
 function normalizeText(value: string): string {
   return value
@@ -151,23 +217,12 @@ function normalizeAddressText(value: string): string {
   return normalized.replace(/\s+/g, " ").trim();
 }
 
-function pluralize(value: number, variants: [string, string, string]): string {
-  const abs = Math.abs(value) % 100;
-  const mod = abs % 10;
-  if (abs > 10 && abs < 20) {
-    return variants[2];
-  }
-  if (mod > 1 && mod < 5) {
-    return variants[1];
-  }
-  if (mod === 1) {
-    return variants[0];
-  }
-  return variants[2];
-}
-
 function parseDirection(raw: string | null): SuggestionDirection {
-  return raw === "excursions" ? "excursions" : "housing";
+  if (raw === "excursions" || raw === "attractions" || raw === "transfers") {
+    return raw;
+  }
+
+  return "housing";
 }
 
 function parseLimit(raw: string | null): number {
@@ -198,6 +253,11 @@ function parseInclude(raw: string | null, direction: SuggestionDirection): Set<S
   for (const token of tokens) {
     if (token === "locations") {
       include.add("location");
+      continue;
+    }
+
+    if (token === "listings" && direction !== "housing") {
+      include.add("listing");
       continue;
     }
 
@@ -357,21 +417,23 @@ function getWeightedFieldTokenScore(
 }
 
 function buildHousingLocationSubtitle(activeListingsCount: number): string {
-  const label = pluralize(activeListingsCount, [
-    "активный объект",
-    "активных объекта",
-    "активных объектов",
-  ]);
-  return `Крым, Россия · ${activeListingsCount} ${label}`;
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
 }
 
 function buildExcursionLocationSubtitle(activeListingsCount: number): string {
-  const label = pluralize(activeListingsCount, [
-    "активная экскурсия",
-    "активные экскурсии",
-    "активных экскурсий",
-  ]);
-  return `Крым, Россия · ${activeListingsCount} ${label}`;
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
+}
+
+function buildAttractionLocationSubtitle(activeListingsCount: number): string {
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
+}
+
+function buildTransferLocationSubtitle(activeListingsCount: number): string {
+  void activeListingsCount;
+  return crimeaLocationSubtitle;
 }
 
 function trimSubtitle(value: string): string {
@@ -401,6 +463,73 @@ function buildHotelSubtitle(locationName: string | null, address: string | null)
   return `${cleanLocationName}, Крым`;
 }
 
+function compactListingSubtitle(parts: Array<string | null | undefined>): string {
+  const subtitle = parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+
+  return subtitle ? trimSubtitle(subtitle) : "Крым, Россия";
+}
+
+function uniqueSearchTerms(
+  values: Array<string | null | undefined | Array<string | null | undefined>>,
+): string[] {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      const trimmed = item?.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const normalized = normalizeText(trimmed);
+      if (seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      terms.push(trimmed);
+    }
+  }
+
+  return terms;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function collectTransferFleetSearchTerms(fleet: unknown): string[] {
+  if (!Array.isArray(fleet)) {
+    return [];
+  }
+
+  return uniqueSearchTerms(
+    fleet.flatMap((item) => {
+      if (!isPlainObject(item)) {
+        return [];
+      }
+
+      return [
+        item.title,
+        item.transportKind,
+        item.vehicleClass,
+        item.vehicleModel,
+        item.description,
+      ].filter((value): value is string => typeof value === "string");
+    }),
+  );
+}
+
 function toLocationSuggestion(item: LocationAggregate): SearchSuggestionItem {
   return {
     type: "location",
@@ -418,6 +547,41 @@ function sortLocations(left: LocationAggregate, right: LocationAggregate): numbe
   }
 
   return left.name.localeCompare(right.name, "ru");
+}
+
+function mergeDirectoryLocationAggregates(
+  items: LocationAggregate[],
+  directory: LocationDirectoryItem[],
+): LocationAggregate[] {
+  const byNormalizedName = new Map(items.map((item) => [normalizeText(item.name), item]));
+
+  for (const location of directory) {
+    const name = location.name.trim();
+    if (!name) {
+      continue;
+    }
+
+    const normalizedName = normalizeText(name);
+    const existing = byNormalizedName.get(normalizedName);
+    if (existing) {
+      existing.searchTerms = uniqueSearchTerms([existing.searchTerms, location.id, name]);
+      continue;
+    }
+
+    byNormalizedName.set(normalizedName, {
+      id: location.id.trim() || toStableLocationId(name),
+      name,
+      normalizedName,
+      latinName: normalizeText(transliterateToLatin(name)),
+      activeListingsCount: 0,
+      subtitle: crimeaLocationSubtitle,
+      searchTerms: uniqueSearchTerms([name, location.id]),
+    });
+  }
+
+  const merged = Array.from(byNormalizedName.values());
+  merged.sort(sortLocations);
+  return merged;
 }
 
 function buildHousingLocationAggregates(rows: HousingSuggestionRow[]): LocationAggregate[] {
@@ -443,6 +607,7 @@ function buildHousingLocationAggregates(rows: HousingSuggestionRow[]): LocationA
         latinName: normalizeText(transliterateToLatin(displayName)),
         activeListingsCount: 1,
         subtitle: "",
+        searchTerms: [],
       });
       continue;
     }
@@ -494,6 +659,7 @@ function buildExcursionLocationAggregates(rows: ExcursionSuggestionRow[]): Locat
         latinName: normalizeText(transliterateToLatin(displayName)),
         activeListingsCount: 1,
         subtitle: "",
+        searchTerms: [],
       });
       continue;
     }
@@ -509,9 +675,240 @@ function buildExcursionLocationAggregates(rows: ExcursionSuggestionRow[]): Locat
   return items;
 }
 
+function toStableLocationId(value: string): string {
+  return transliterateToLatin(normalizeText(value))
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function buildAttractionLocationAggregates(rows: AttractionSuggestionRow[]): LocationAggregate[] {
+  const byLocationId = new Map<string, LocationAggregate>();
+
+  for (const row of rows) {
+    const displayName = row.locationName?.trim();
+    if (!displayName) {
+      continue;
+    }
+
+    const locationId = toStableLocationId(displayName);
+    const searchTerms = [
+      row.locationName,
+      row.districtName,
+      ...row.locationAliases,
+    ].flatMap((term) => (term?.trim() ? [term.trim()] : []));
+    const existing = byLocationId.get(locationId);
+    if (!existing) {
+      byLocationId.set(locationId, {
+        id: locationId,
+        name: displayName,
+        normalizedName: normalizeText(displayName),
+        latinName: normalizeText(transliterateToLatin(displayName)),
+        activeListingsCount: 1,
+        subtitle: "",
+        searchTerms,
+      });
+      continue;
+    }
+
+    existing.activeListingsCount += 1;
+    for (const term of searchTerms) {
+      if (!existing.searchTerms.some((current) => normalizeText(current) === normalizeText(term))) {
+        existing.searchTerms.push(term);
+      }
+    }
+  }
+
+  const items = Array.from(byLocationId.values()).map((item) => ({
+    ...item,
+    subtitle: buildAttractionLocationSubtitle(item.activeListingsCount),
+  }));
+  items.sort(sortLocations);
+  return items;
+}
+
+function buildTransferLocationAggregates(rows: TransferSuggestionRow[]): LocationAggregate[] {
+  const byLocationId = new Map<string, LocationAggregate>();
+
+  for (const row of rows) {
+    const displayName = row.location?.name?.trim() || row.locationName?.trim() || "";
+    const locationId =
+      row.location?.slug?.trim() || row.locationId?.trim() || toStableLocationId(displayName);
+
+    if (!displayName || !locationId) {
+      continue;
+    }
+
+    const searchTerms = [row.location?.name, row.locationName].flatMap((term) =>
+      term?.trim() ? [term.trim()] : [],
+    );
+    const existing = byLocationId.get(locationId);
+    if (!existing) {
+      byLocationId.set(locationId, {
+        id: locationId,
+        name: displayName,
+        normalizedName: normalizeText(displayName),
+        latinName: normalizeText(transliterateToLatin(displayName)),
+        activeListingsCount: 1,
+        subtitle: "",
+        searchTerms,
+      });
+      continue;
+    }
+
+    existing.activeListingsCount += 1;
+    for (const term of searchTerms) {
+      if (!existing.searchTerms.some((current) => normalizeText(current) === normalizeText(term))) {
+        existing.searchTerms.push(term);
+      }
+    }
+  }
+
+  const items = Array.from(byLocationId.values()).map((item) => ({
+    ...item,
+    subtitle: buildTransferLocationSubtitle(item.activeListingsCount),
+  }));
+  items.sort(sortLocations);
+  return items;
+}
+
+function buildExcursionListingCandidates(rows: ExcursionSuggestionRow[]): ListingCandidate[] {
+  return rows
+    .map((row): ListingCandidate | null => {
+      const title = row.title?.trim();
+      if (!title) {
+        return null;
+      }
+
+      const locationId =
+        row.anchorLocation?.slug?.trim() ||
+        row.mainLocation?.slug?.trim() ||
+        row.locationId?.trim() ||
+        null;
+      const locationName =
+        row.anchorLocation?.name?.trim() ||
+        row.mainLocation?.name?.trim() ||
+        row.locationName?.trim() ||
+        null;
+      const routeLocationNames = row.routeLocations.map((route) => route.location.name);
+      const offerLabel = row.offerType === "TOUR" ? "Тур" : "Экскурсия";
+      const subtitle = compactListingSubtitle([offerLabel, row.category?.name, locationName]);
+
+      return {
+        item: {
+          type: "listing",
+          id: row.id,
+          name: title,
+          subtitle,
+          locationId,
+          activeListingsCount: 1,
+        },
+        searchTerms: uniqueSearchTerms([
+          title,
+          row.subtypeLabel,
+          locationName,
+          row.locationName,
+          row.anchorLocation?.name,
+          row.mainLocation?.name,
+          row.district?.name,
+          row.category?.name,
+          row.startPoint,
+          row.meetingPointText,
+          row.finishPoint,
+          row.shortDescription,
+          row.description,
+          row.routeDescription,
+          row.tags,
+          routeLocationNames,
+        ]),
+        popularity: 1,
+      };
+    })
+    .filter((item): item is ListingCandidate => Boolean(item));
+}
+
+function buildAttractionListingCandidates(rows: AttractionSuggestionRow[]): ListingCandidate[] {
+  return rows
+    .map((row): ListingCandidate | null => {
+      const title = row.title?.trim();
+      if (!title) {
+        return null;
+      }
+
+      return {
+        item: {
+          type: "listing",
+          id: row.id,
+          name: title,
+          subtitle: compactListingSubtitle([row.category ?? "Место", row.locationName]),
+          locationId: row.locationName ? toStableLocationId(row.locationName) : null,
+          activeListingsCount: 1,
+        },
+        searchTerms: uniqueSearchTerms([
+          title,
+          row.h1,
+          row.category,
+          row.locationName,
+          row.districtName,
+          row.address,
+          row.shortDescription,
+          row.description,
+          row.tags,
+          row.locationAliases,
+          row.nearby,
+          row.searchKeywords,
+        ]),
+        popularity: 1,
+      };
+    })
+    .filter((item): item is ListingCandidate => Boolean(item));
+}
+
+function buildTransferListingCandidates(rows: TransferSuggestionRow[]): ListingCandidate[] {
+  return rows
+    .map((row): ListingCandidate | null => {
+      const fleetSearchTerms = collectTransferFleetSearchTerms(row.fleet);
+      const serviceTags = normalizeTransferServiceTags(row.serviceTags);
+      const locationName = row.location?.name?.trim() || row.locationName?.trim() || null;
+      const locationId = row.location?.slug?.trim() || row.locationId?.trim() || null;
+      const name =
+        row.title?.trim() ||
+        row.routeExamples?.trim() ||
+        row.transferType?.trim() ||
+        row.vehicleModel?.trim() ||
+        "Трансфер";
+
+      return {
+        item: {
+          type: "listing",
+          id: row.id,
+          name,
+          subtitle: compactListingSubtitle([row.transferType ?? "Трансфер", locationName]),
+          locationId,
+          activeListingsCount: 1,
+        },
+        searchTerms: uniqueSearchTerms([
+          name,
+          row.transferType,
+          row.vehicleClass,
+          row.vehicleModel,
+          locationName,
+          row.locationName,
+          row.serviceArea,
+          row.routeExamples,
+          row.shortDescription,
+          row.description,
+          serviceTags,
+          fleetSearchTerms,
+        ]),
+        popularity: 1,
+      };
+    })
+    .filter((item): item is ListingCandidate => Boolean(item));
+}
+
 function buildFallbackLocationAggregates(direction: SuggestionDirection): LocationAggregate[] {
-  const subtitle =
-    direction === "housing" ? "Крым, Россия · жильё" : "Крым, Россия · экскурсии";
+  void direction;
 
   return crimeaLocations.map((item) => ({
     id: item.id,
@@ -519,7 +916,8 @@ function buildFallbackLocationAggregates(direction: SuggestionDirection): Locati
     normalizedName: normalizeText(item.name),
     latinName: normalizeText(transliterateToLatin(item.name)),
     activeListingsCount: 0,
-    subtitle,
+    subtitle: crimeaLocationSubtitle,
+    searchTerms: [],
   }));
 }
 
@@ -598,8 +996,18 @@ async function getExcursionSuggestionRows(): Promise<ExcursionSuggestionRow[]> {
     },
     select: {
       id: true,
+      offerType: true,
+      title: true,
+      subtypeLabel: true,
       locationId: true,
       locationName: true,
+      startPoint: true,
+      meetingPointText: true,
+      shortDescription: true,
+      description: true,
+      routeDescription: true,
+      finishPoint: true,
+      tags: true,
       anchorLocation: {
         select: {
           slug: true,
@@ -612,12 +1020,105 @@ async function getExcursionSuggestionRows(): Promise<ExcursionSuggestionRow[]> {
           name: true,
         },
       },
+      district: {
+        select: {
+          name: true,
+        },
+      },
+      category: {
+        select: {
+          name: true,
+        },
+      },
+      routeLocations: {
+        select: {
+          location: {
+            select: {
+              slug: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
     orderBy: [{ updatedAt: "desc" }],
     take: 5000,
   });
 
   excursionRowsCache = {
+    rows,
+    expiresAt: now + sourceCacheTtlMs,
+  };
+
+  return rows;
+}
+
+async function getAttractionSuggestionRows(): Promise<AttractionSuggestionRow[]> {
+  const now = Date.now();
+  if (attractionRowsCache && attractionRowsCache.expiresAt > now) {
+    return attractionRowsCache.rows;
+  }
+
+  const rows = (await getStaticAttractions()).map((item) => ({
+    id: item.id,
+    title: item.title,
+    h1: item.h1,
+    category: item.category,
+    tags: item.tags,
+    locationName: item.locationName,
+    districtName: item.districtName,
+    locationAliases: item.locationAliases,
+    address: item.address,
+    shortDescription: item.shortDescription,
+    description: item.description,
+    nearby: item.nearby,
+    searchKeywords: item.searchKeywords,
+  }));
+
+  attractionRowsCache = {
+    rows,
+    expiresAt: now + sourceCacheTtlMs,
+  };
+
+  return rows;
+}
+
+async function getTransferSuggestionRows(): Promise<TransferSuggestionRow[]> {
+  const now = Date.now();
+  if (transferRowsCache && transferRowsCache.expiresAt > now) {
+    return transferRowsCache.rows;
+  }
+
+  const rows = await db.transfer.findMany({
+    where: {
+      ...buildPublishedTransferVisibilityWhere(),
+    },
+    select: {
+      id: true,
+      title: true,
+      transferType: true,
+      vehicleClass: true,
+      vehicleModel: true,
+      locationId: true,
+      locationName: true,
+      serviceArea: true,
+      routeExamples: true,
+      shortDescription: true,
+      description: true,
+      serviceTags: true,
+      fleet: true,
+      location: {
+        select: {
+          slug: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 5000,
+  });
+
+  transferRowsCache = {
     rows,
     expiresAt: now + sourceCacheTtlMs,
   };
@@ -642,7 +1143,7 @@ function rankLocationMatches(input: {
           rankByTrigramWithScores(
             queryRaw,
             input.items,
-            (item) => [item.name, item.latinName],
+            (item) => [item.name, item.latinName, ...item.searchTerms],
             { limit: input.items.length, minScore: 0.03 },
           ).map((entry) => [entry.item.id, entry.score]),
         )
@@ -652,11 +1153,38 @@ function rankLocationMatches(input: {
 
   return input.items
     .map((item) => {
-      const tokenScore = getTokenMatchScore(queryVariants, [item.normalizedName, item.latinName]);
+      const searchTermVariants = item.searchTerms.flatMap((term) => toCandidateVariants(term));
+      const tokenScore = getTokenMatchScore(queryVariants, [
+        item.normalizedName,
+        item.latinName,
+        ...searchTermVariants,
+      ]);
+      const locationNameBoost = queryVariants.reduce((boost, query) => {
+        if (!query) {
+          return boost;
+        }
+
+        if (item.normalizedName === query || item.latinName === query) {
+          return Math.max(boost, 1);
+        }
+
+        if (item.normalizedName.startsWith(query) || item.latinName.startsWith(query)) {
+          return Math.max(boost, 0.72);
+        }
+
+        if (
+          item.normalizedName.split(" ").some((token) => token.startsWith(query)) ||
+          item.latinName.split(" ").some((token) => token.startsWith(query))
+        ) {
+          return Math.max(boost, 0.48);
+        }
+
+        return boost;
+      }, 0);
       const trigramScore = trigramScoreMap.get(item.id) ?? 0;
       // Popular destinations get a small bias, but text relevance still dominates.
       const popularityBoost = Math.min(0.35, Math.log(item.activeListingsCount + 1) / 7.5);
-      const score = Math.max(tokenScore, trigramScore) + popularityBoost;
+      const score = Math.max(tokenScore, trigramScore) + locationNameBoost + popularityBoost;
 
       return {
         item: toLocationSuggestion(item),
@@ -750,12 +1278,60 @@ function rankHotelMatches(input: {
     .slice(0, input.limit);
 }
 
+function rankListingMatches(input: {
+  query: string;
+  items: ListingCandidate[];
+  limit: number;
+}): RankedSuggestion[] {
+  const queryRaw = input.query.trim();
+  if (!queryRaw) {
+    return [];
+  }
+
+  const queryVariants = toSearchVariants(queryRaw);
+  const trigramScoreMap =
+    queryRaw.length >= 2
+      ? new Map(
+          rankByTrigramWithScores(
+            queryRaw,
+            input.items,
+            (candidate) => [candidate.item.name, candidate.item.subtitle, ...candidate.searchTerms],
+            { limit: input.items.length, minScore: 0.03 },
+          ).map((entry) => [entry.item.item.id, entry.score]),
+        )
+      : new Map<string, number>();
+
+  const minScore = queryRaw.length >= 2 ? 0.28 : 0.9;
+
+  return input.items
+    .map((candidate) => {
+      const weightedFields: WeightedSearchField[] = [
+        { value: candidate.item.name, weight: 1.45 },
+        { value: candidate.item.subtitle, weight: 0.62 },
+        ...candidate.searchTerms.map((term) => ({ value: term, weight: 0.96 })),
+      ];
+      const tokenScore = getWeightedFieldTokenScore(queryVariants, weightedFields);
+      const trigramScore = trigramScoreMap.get(candidate.item.id) ?? 0;
+      const popularityBoost = Math.min(0.16, Math.log(candidate.popularity + 1) / 12);
+      const score = Math.max(tokenScore, trigramScore * 1.14) + popularityBoost;
+
+      return {
+        item: candidate.item,
+        score,
+      };
+    })
+    .filter((entry) => entry.score >= minScore)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, input.limit);
+}
+
 function mergeRankedSuggestions(input: {
   locations: RankedSuggestion[];
-  hotels: RankedSuggestion[];
+  hotels?: RankedSuggestion[];
+  listings?: RankedSuggestion[];
   limit: number;
 }): SearchSuggestionItem[] {
-  return [...input.locations, ...input.hotels]
+  return [...input.locations, ...(input.hotels ?? []), ...(input.listings ?? [])]
     .sort((left, right) => right.score - left.score)
     .slice(0, input.limit)
     .map((entry) => entry.item);
@@ -782,12 +1358,13 @@ export async function GET(request: Request) {
   const include = parseInclude(searchParams.get("include"), direction);
   const query = (searchParams.get("query") ?? "").trim().slice(0, queryMaxLength);
   const canUseFallback = process.env.NODE_ENV !== "production";
+  const requiresDatabase = direction !== "attractions";
   const responseHeaders = {
     "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
     "X-RateLimit-Remaining": String(rate.remaining),
   };
 
-  if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
+  if (canUseFallback && requiresDatabase && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(
       "search-suggestions",
       "Database is unavailable. Returning built-in location suggestions.",
@@ -817,8 +1394,14 @@ export async function GET(request: Request) {
 
       if (query) {
         // Housing can return both locations and specific properties ("hotels").
-        const rows = await getHousingSuggestionRows();
-        const locationAggregates = buildHousingLocationAggregates(rows);
+        const [rows, locationDirectory] = await Promise.all([
+          getHousingSuggestionRows(),
+          getLocationDirectoryItems(),
+        ]);
+        const locationAggregates = mergeDirectoryLocationAggregates(
+          buildHousingLocationAggregates(rows),
+          locationDirectory,
+        );
         const locationCountById = new Map(
           locationAggregates.map((item) => [item.id, item.activeListingsCount]),
         );
@@ -846,20 +1429,110 @@ export async function GET(request: Request) {
           limit,
         });
       }
-    } else {
+    } else if (direction === "excursions") {
       if (!query && include.has("location")) {
         popular = await getPopularExcursionSuggestions();
       }
 
-      if (query && include.has("location")) {
-        // Excursions currently expose location suggestions only.
-        const rows = await getExcursionSuggestionRows();
-        const locationAggregates = buildExcursionLocationAggregates(rows);
-        matches = rankLocationMatches({
-          query,
-          items: locationAggregates,
+      if (query) {
+        const [rows, locationDirectory] = await Promise.all([
+          getExcursionSuggestionRows(),
+          getLocationDirectoryItems(),
+        ]);
+        const locationAggregates = mergeDirectoryLocationAggregates(
+          buildExcursionLocationAggregates(rows),
+          locationDirectory,
+        );
+        const locationMatches = include.has("location")
+          ? rankLocationMatches({
+              query,
+              items: locationAggregates,
+              limit: Math.max(limit, 12),
+            })
+          : [];
+        const listingMatches = include.has("listing")
+          ? rankListingMatches({
+              query,
+              items: buildExcursionListingCandidates(rows),
+              limit: Math.max(limit, 12),
+            })
+          : [];
+
+        matches = mergeRankedSuggestions({
+          locations: locationMatches,
+          listings: listingMatches,
           limit,
-        }).map((entry) => entry.item);
+        });
+      }
+    } else if (direction === "attractions") {
+      if (!query && include.has("location")) {
+        popular = await getPopularAttractionSuggestions();
+      }
+
+      if (query) {
+        const [rows, locationDirectory] = await Promise.all([
+          getAttractionSuggestionRows(),
+          getLocationDirectoryItems(),
+        ]);
+        const locationAggregates = mergeDirectoryLocationAggregates(
+          buildAttractionLocationAggregates(rows),
+          locationDirectory,
+        );
+        const locationMatches = include.has("location")
+          ? rankLocationMatches({
+              query,
+              items: locationAggregates,
+              limit: Math.max(limit, 12),
+            })
+          : [];
+        const listingMatches = include.has("listing")
+          ? rankListingMatches({
+              query,
+              items: buildAttractionListingCandidates(rows),
+              limit: Math.max(limit, 12),
+            })
+          : [];
+
+        matches = mergeRankedSuggestions({
+          locations: locationMatches,
+          listings: listingMatches,
+          limit,
+        });
+      }
+    } else {
+      if (!query && include.has("location")) {
+        popular = await getPopularTransferSuggestions();
+      }
+
+      if (query) {
+        const [rows, locationDirectory] = await Promise.all([
+          getTransferSuggestionRows(),
+          getLocationDirectoryItems(),
+        ]);
+        const locationAggregates = mergeDirectoryLocationAggregates(
+          buildTransferLocationAggregates(rows),
+          locationDirectory,
+        );
+        const locationMatches = include.has("location")
+          ? rankLocationMatches({
+              query,
+              items: locationAggregates,
+              limit: Math.max(limit, 12),
+            })
+          : [];
+        const listingMatches = include.has("listing")
+          ? rankListingMatches({
+              query,
+              items: buildTransferListingCandidates(rows),
+              limit: Math.max(limit, 12),
+            })
+          : [];
+
+        matches = mergeRankedSuggestions({
+          locations: locationMatches,
+          listings: listingMatches,
+          limit,
+        });
       }
     }
 

@@ -25,7 +25,7 @@ import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-
 import { PropertyContactsPanel } from "@/components/contacts/property-contacts-panel";
 import { HousingSearchDateRangeField } from "@/components/public/housing-search-date-range-field";
 import { HousingSearchGuestsField } from "@/components/public/housing-search-guests-field";
-import { ExcursionMapPreview } from "@/components/maps/excursion-map-preview";
+import { StaticMapPreview } from "@/components/maps/static-map-preview";
 import { PropertyMediaGallery } from "@/components/public/property-media-gallery";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
@@ -1664,21 +1664,11 @@ export function PublicPropertyDetails({
 
           {hasMapSection ? (
             <section id="map-panel" className="scroll-mt-[132px] md:scroll-mt-[152px]">
-              <article className="overflow-hidden rounded-[28px] border border-olive/10 bg-white shadow-[0_14px_36px_rgba(58,43,35,0.05)]">
-                <div className="px-5 pb-4 pt-5 md:px-6">
-                  <h3 className="text-2xl text-olive md:text-[1.7rem]">На карте</h3>
-                  <p className="mt-2 flex items-center gap-1.5 text-sm text-olive/62">
-                    <LocationPinIcon className="h-4 w-4 shrink-0 text-terra" />
-                    {item.address ?? "Координаты объекта доступны"}
-                  </p>
-                </div>
-                <ExcursionMapPreview
-                  latitude={item.latitude!}
-                  longitude={item.longitude!}
-                  addressLabel={mapOverlayAddress}
-                  className="h-64 w-full"
-                />
-              </article>
+              <StaticMapPreview
+                latitude={item.latitude!}
+                longitude={item.longitude!}
+                label={mapOverlayAddress}
+              />
             </section>
           ) : null}
 

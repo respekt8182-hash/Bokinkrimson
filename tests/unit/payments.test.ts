@@ -1,12 +1,17 @@
 // Unit tests for payment status transitions and edge cases.
-import { PaymentStatus } from "@prisma/client";
+import { PaymentProvider, PaymentStatus, Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  buildTransferPaymentPayload,
   getPlacementCoverageState,
   getTariffByRoomCount,
   getTariffQuote,
+  getTransferPaymentPayload,
+  getTransferPaymentReference,
+  getTransferPaymentTariffCode,
   mapYookassaStatus,
   resolvePaymentStatusTransition,
+  serializePayment,
 } from "../../src/lib/payments";
 
 describe("payments domain", () => {
@@ -18,9 +23,65 @@ describe("payments domain", () => {
   });
 
   it("keeps terminal success status", () => {
-    expect(
-      resolvePaymentStatusTransition(PaymentStatus.SUCCEEDED, PaymentStatus.CANCELED),
-    ).toBe(PaymentStatus.SUCCEEDED);
+    expect(resolvePaymentStatusTransition(PaymentStatus.SUCCEEDED, PaymentStatus.CANCELED)).toBe(
+      PaymentStatus.SUCCEEDED,
+    );
+  });
+
+  it("stores transfer payment context in provider payload for legacy schemas", () => {
+    const payload = buildTransferPaymentPayload({
+      transferId: "transfer-1",
+      transferTitle: "Airport transfer",
+    });
+
+    expect(getTransferPaymentTariffCode("transfer-1")).toBe("transfer_standard:transfer-1");
+    expect(getTransferPaymentPayload(payload)).toEqual({
+      entityType: "transfer",
+      transferId: "transfer-1",
+      transferTitle: "Airport transfer",
+    });
+  });
+
+  it("serializes transfer context from provider payload when transferId is unavailable", () => {
+    const serialized = serializePayment({
+      id: "payment-1",
+      propertyId: null,
+      excursionId: null,
+      transferId: null,
+      ownerId: "owner-1",
+      amount: new Prisma.Decimal(1490),
+      tariffCode: "transfer_standard:transfer-1",
+      roomCount: 0,
+      status: PaymentStatus.PENDING,
+      provider: PaymentProvider.MANAGER,
+      providerPaymentId: null,
+      confirmationUrl: null,
+      createdAt: new Date("2026-04-27T10:00:00.000Z"),
+      updatedAt: new Date("2026-04-27T10:00:00.000Z"),
+      paidAt: null,
+      canceledAt: null,
+      placementValidUntil: null,
+      providerPayload: buildTransferPaymentPayload({
+        transferId: "transfer-1",
+        transferTitle: "Airport transfer",
+      }) as never,
+    });
+
+    expect(serialized.transferId).toBe("transfer-1");
+    expect(serialized.transferName).toBe("Airport transfer");
+  });
+
+  it("restores legacy transfer payment context from the tariff code", () => {
+    const reference = getTransferPaymentReference({
+      transferId: null,
+      tariffCode: "transfer_standard:transfer-1",
+      providerPayload: null,
+    });
+
+    expect(reference).toEqual({
+      transferId: "transfer-1",
+      transferTitle: null,
+    });
   });
 
   it("selects tariff by room count", () => {

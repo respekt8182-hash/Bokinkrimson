@@ -11,6 +11,8 @@ export type YandexMapPoint = {
   previewImageUrl?: string | null;
   rating?: number | null;
   reviewsCount?: number | null;
+  balloonVariant?: "details" | "title-only";
+  isViewed?: boolean;
 };
 
 export type YandexMapViewport = {
@@ -34,12 +36,18 @@ type YandexMapMultiViewerProps = {
   initialViewport?: YandexMapViewport | null;
   viewportKey?: string;
   radiusCircle?: YandexMapRadiusCircle | null;
+  controls?: string[];
+  showBalloons?: boolean;
+  frameless?: boolean;
 };
 
 type YandexMapInstance = {
   destroy: () => void;
   setCenter: (center: [number, number], zoom?: number, options?: unknown) => void;
   setBounds: (bounds: [[number, number], [number, number]], options?: unknown) => void;
+  container: {
+    fitToViewport: () => void;
+  };
   events: {
     add: (event: string, callback: (event: { get: (name: string) => unknown }) => void) => void;
   };
@@ -57,7 +65,7 @@ type YandexPlacemarkInstance = {
       callback: (event: { get: (name: string) => unknown }) => void,
     ) => void;
   };
-  balloon: {
+  balloon?: {
     open: () => void;
     close: () => void;
     isOpen: () => boolean;
@@ -93,8 +101,14 @@ type YandexApi = {
 
 type PriceLayouts = {
   default: unknown;
+  viewed: unknown;
   hover: unknown;
   active: unknown;
+};
+
+type BalloonContentLayouts = {
+  details: unknown;
+  titleOnly: unknown;
 };
 
 const DEFAULT_CENTER: [number, number] = [44.9482, 34.1003];
@@ -178,6 +192,16 @@ function createBalloonContentLayout(ymaps: YandexApi): unknown {
   </div>`);
 }
 
+function createTitleOnlyBalloonContentLayout(ymaps: YandexApi): unknown {
+  const fontFamily = "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;";
+
+  return ymaps.templateLayoutFactory.createClass(`<div style="pointer-events:none;">
+    <div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
+      <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">$[properties.balloonTitle]</div>
+    </div>
+  </div>`);
+}
+
 function buildBalloonContentFallbackHtml(input: {
   title: string;
   imageUrl: string;
@@ -202,6 +226,14 @@ function buildBalloonContentFallbackHtml(input: {
       </div>
       <div style="${fontFamily}margin-top:7px;font-size:13px;line-height:1.2;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.priceLabel}</div>
     </div>
+  </div>`;
+}
+
+function buildTitleOnlyBalloonContentFallbackHtml(input: { title: string }): string {
+  const fontFamily = "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;";
+
+  return `<div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
+    <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.title}</div>
   </div>`;
 }
 
@@ -244,6 +276,7 @@ function buildPricePlacemarkOptions(input: {
 }): Record<string, unknown> {
   const isActive = input.point.id === input.activePointId;
   const isHovered = input.point.id === input.hoveredPointId && !isActive;
+  const isViewed = input.point.isViewed === true && !isActive && !isHovered;
 
   return {
     iconLayout: "default#imageWithContent",
@@ -254,7 +287,9 @@ function buildPricePlacemarkOptions(input: {
       ? input.layouts.active
       : isHovered
         ? input.layouts.hover
-        : input.layouts.default,
+        : isViewed
+          ? input.layouts.viewed
+          : input.layouts.default,
     iconContentOffset: [-PRICE_MARKER_WIDTH / 2, -PRICE_MARKER_HEIGHT / 2],
     iconContentSize: [PRICE_MARKER_WIDTH, PRICE_MARKER_HEIGHT],
     iconShape: {
@@ -298,18 +333,32 @@ function buildDotPlacemarkOptions(input: {
   pointId: string;
   activePointId: string | null;
   hoveredPointId: string | null;
+  isViewed?: boolean;
 }): Record<string, unknown> {
   const isActive = input.pointId === input.activePointId;
   const isHovered = input.pointId === input.hoveredPointId && !isActive;
+  const isViewed = input.isViewed === true && !isActive && !isHovered;
 
   return {
     preset: isActive
       ? "islands#darkBlueCircleDotIcon"
       : isHovered
         ? "islands#blueCircleDotIcon"
-        : "islands#brownCircleDotIcon",
+        : isViewed
+          ? "islands#grayCircleDotIcon"
+          : "islands#brownCircleDotIcon",
     zIndex: isActive ? 1400 : isHovered ? 1300 : 1000,
   };
+}
+
+function isPlacemarkBalloonOpen(placemark: YandexPlacemarkInstance): boolean {
+  return placemark.balloon?.isOpen?.() === true;
+}
+
+function closePlacemarkBalloon(placemark: YandexPlacemarkInstance): void {
+  if (isPlacemarkBalloonOpen(placemark)) {
+    placemark.balloon?.close();
+  }
 }
 
 function applyViewport(map: YandexMapInstance, viewport?: YandexMapViewport | null) {
@@ -369,6 +418,9 @@ export function YandexMapMultiViewer({
   initialViewport,
   viewportKey,
   radiusCircle = null,
+  controls,
+  showBalloons = true,
+  frameless = false,
 }: YandexMapMultiViewerProps) {
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -381,8 +433,9 @@ export function YandexMapMultiViewer({
   const lastCenteredActiveRef = useRef<string | null>(null);
   const clickHandlerRef = useRef(onPointClick);
   const hoverHandlerRef = useRef(onPointHoverChange);
+  const showBalloonsRef = useRef(showBalloons);
   const priceLayoutsRef = useRef<PriceLayouts | null>(null);
-  const balloonContentLayoutRef = useRef<unknown | null>(null);
+  const balloonContentLayoutsRef = useRef<BalloonContentLayouts | null>(null);
   const closeBalloonTimerByPointIdRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
@@ -391,6 +444,10 @@ export function YandexMapMultiViewer({
   const circleRef = useRef<unknown>(null);
   const [error, setError] = useState("");
   const [mapReadyVersion, setMapReadyVersion] = useState(0);
+  const controlsSignature = useMemo(
+    () => (controls ?? ["zoomControl", "fullscreenControl"]).join("|"),
+    [controls],
+  );
 
   const normalizedPoints = useMemo(() => {
     const seen = new Set<string>();
@@ -443,8 +500,8 @@ export function YandexMapMultiViewer({
     (pointId: string) => {
       clearBalloonCloseTimer(pointId);
       const placemark = placemarkByIdRef.current.get(pointId);
-      if (placemark?.balloon.isOpen()) {
-        placemark.balloon.close();
+      if (placemark) {
+        closePlacemarkBalloon(placemark);
       }
 
       if (openedBalloonPointIdRef.current === pointId) {
@@ -461,13 +518,18 @@ export function YandexMapMultiViewer({
     closeBalloonTimerByPointIdRef.current.clear();
 
     placemarkByIdRef.current.forEach((placemark) => {
-      if (placemark.balloon.isOpen()) {
-        placemark.balloon.close();
-      }
+      closePlacemarkBalloon(placemark);
     });
 
     openedBalloonPointIdRef.current = null;
   }, []);
+
+  useEffect(() => {
+    showBalloonsRef.current = showBalloons;
+    if (!showBalloons) {
+      closeAllBalloons();
+    }
+  }, [closeAllBalloons, showBalloons]);
 
   const openBalloonForPoint = useCallback(
     (pointId: string) => {
@@ -483,8 +545,8 @@ export function YandexMapMultiViewer({
         return;
       }
 
-      if (!placemark.balloon.isOpen()) {
-        placemark.balloon.open();
+      if (!isPlacemarkBalloonOpen(placemark)) {
+        placemark.balloon?.open();
       }
       openedBalloonPointIdRef.current = pointId;
     },
@@ -522,10 +584,17 @@ export function YandexMapMultiViewer({
       if (hasPriceLabel) {
         const isActive = point.id === activePointId;
         const isHovered = point.id === hoveredPointId && !isActive;
+        const isViewed = point.isViewed === true && !isActive && !isHovered;
 
         placemark.options.set(
           "iconContentLayout",
-          isActive ? layouts.active : isHovered ? layouts.hover : layouts.default,
+          isActive
+            ? layouts.active
+            : isHovered
+              ? layouts.hover
+              : isViewed
+                ? layouts.viewed
+                : layouts.default,
         );
         placemark.options.set("zIndex", isActive ? 1400 : isHovered ? 1300 : 1000);
         return;
@@ -535,6 +604,7 @@ export function YandexMapMultiViewer({
         pointId,
         activePointId,
         hoveredPointId,
+        isViewed: point.isViewed,
       });
       placemark.options.set("preset", nextDotOptions.preset);
       placemark.options.set("zIndex", nextDotOptions.zIndex);
@@ -569,7 +639,7 @@ export function YandexMapMultiViewer({
             {
               center: DEFAULT_CENTER,
               zoom: DEFAULT_ZOOM,
-              controls: ["zoomControl", "fullscreenControl"],
+              controls: controlsSignature ? controlsSignature.split("|") : [],
             },
             { suppressMapOpenBlock: true },
           );
@@ -583,23 +653,30 @@ export function YandexMapMultiViewer({
           map.geoObjects.add(clusterer);
 
           const layoutBaseStyle =
-            "display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:32px;padding:0 11px;border-radius:999px;background:#ffffff;box-shadow:0 8px 18px rgba(15,118,110,0.22);font:600 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#3a2b23;white-space:nowrap;";
+            "display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:32px;padding:0 11px;border-radius:999px;background:#ffffff;box-shadow:0 8px 18px rgba(15,23,42,0.16);font:700 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111827;white-space:nowrap;transition:transform .16s ease,box-shadow .16s ease,background .16s ease,color .16s ease;";
 
           priceLayoutsRef.current = {
             default: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}border:1px solid rgba(15,118,110,0.28);`,
+              `${layoutBaseStyle}border:1px solid rgba(17,24,39,0.16);`,
+            ),
+            viewed: createPriceLayout(
+              readyYmaps,
+              `${layoutBaseStyle}background:#e7e9ee;border:1px solid rgba(17,24,39,0.06);color:#707781;box-shadow:0 7px 15px rgba(15,23,42,0.10);`,
             ),
             hover: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}border:1.8px solid rgba(15,118,110,0.52);transform:scale(1.06);`,
+              `${layoutBaseStyle}border:1.8px solid rgba(17,24,39,0.22);transform:scale(1.06);box-shadow:0 12px 24px rgba(15,23,42,0.22);`,
             ),
             active: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}border:2px solid #0f766e;font-weight:700;transform:scale(1.1);box-shadow:0 11px 24px rgba(15,118,110,0.32);`,
+              `${layoutBaseStyle}background:#202124;border:2px solid #202124;color:#ffffff;transform:scale(1.1);box-shadow:0 14px 28px rgba(15,23,42,0.34),0 0 0 8px rgba(32,33,36,0.14);`,
             ),
           };
-          balloonContentLayoutRef.current = createBalloonContentLayout(readyYmaps);
+          balloonContentLayoutsRef.current = {
+            details: createBalloonContentLayout(readyYmaps),
+            titleOnly: createTitleOnlyBalloonContentLayout(readyYmaps),
+          };
           hoverEnabledRef.current = window.matchMedia("(hover: hover)").matches;
 
           map.events.add("click", (event) => {
@@ -640,18 +717,25 @@ export function YandexMapMultiViewer({
       appliedViewportKeyRef.current = null;
       lastCenteredActiveRef.current = null;
       priceLayoutsRef.current = null;
-      balloonContentLayoutRef.current = null;
+      balloonContentLayoutsRef.current = null;
     };
-  }, [apiKey, closeAllBalloons]);
+  }, [apiKey, closeAllBalloons, controlsSignature]);
 
   useEffect(() => {
     const map = mapRef.current;
     const ymaps = getYandexApi();
     const clusterer = clustererRef.current;
     const layouts = priceLayoutsRef.current;
-    const balloonContentLayout = balloonContentLayoutRef.current;
+    const balloonContentLayouts = balloonContentLayoutsRef.current;
 
-    if (!map || !ymaps || !clusterer || !layouts || !balloonContentLayout || !mapCreatedRef.current) {
+    if (
+      !map ||
+      !ymaps ||
+      !clusterer ||
+      !layouts ||
+      !balloonContentLayouts ||
+      !mapCreatedRef.current
+    ) {
       return;
     }
 
@@ -677,13 +761,28 @@ export function YandexMapMultiViewer({
       const safeImageUrl = escapeHtml(resolvePreviewImageUrl(point.previewImageUrl));
       const safeRatingLabel = escapeHtml(rating !== null ? rating.toFixed(1) : "—");
       const safeReviewsLabel = escapeHtml(formatReviewsCount(reviewsCount));
-      const balloonFallbackHtml = buildBalloonContentFallbackHtml({
-        title: safeTitle,
-        imageUrl: safeImageUrl,
-        ratingLabel: safeRatingLabel,
-        reviewsLabel: safeReviewsLabel,
-        priceLabel: safePriceLabel,
-      });
+      const isTitleOnlyBalloon = point.balloonVariant === "title-only";
+      const balloonContentLayout = isTitleOnlyBalloon
+        ? balloonContentLayouts.titleOnly
+        : balloonContentLayouts.details;
+      const balloonOptions = showBalloonsRef.current
+        ? buildBalloonPlacemarkOptions({
+            isPricePlacemark: hasPriceLabel,
+            balloonContentLayout,
+          })
+        : {
+            hasBalloon: false,
+            openEmptyBalloon: false,
+          };
+      const balloonFallbackHtml = isTitleOnlyBalloon
+        ? buildTitleOnlyBalloonContentFallbackHtml({ title: safeTitle })
+        : buildBalloonContentFallbackHtml({
+            title: safeTitle,
+            imageUrl: safeImageUrl,
+            ratingLabel: safeRatingLabel,
+            reviewsLabel: safeReviewsLabel,
+            priceLabel: safePriceLabel,
+          });
 
       const placemark = new ymaps.Placemark(
         [point.latitude, point.longitude],
@@ -705,21 +804,16 @@ export function YandexMapMultiViewer({
                 hoveredPointId: null,
                 layouts,
               }),
-              ...buildBalloonPlacemarkOptions({
-                isPricePlacemark: true,
-                balloonContentLayout,
-              }),
+              ...balloonOptions,
             }
           : {
               ...buildDotPlacemarkOptions({
                 pointId: point.id,
                 activePointId: null,
                 hoveredPointId: null,
+                isViewed: point.isViewed,
               }),
-              ...buildBalloonPlacemarkOptions({
-                isPricePlacemark: false,
-                balloonContentLayout,
-              }),
+              ...balloonOptions,
               cursor: "pointer",
             },
       );
@@ -727,12 +821,17 @@ export function YandexMapMultiViewer({
       placemark.events.add("click", () => {
         clickHandlerRef.current?.(point.id);
 
+        if (!showBalloonsRef.current) {
+          closeAllBalloons();
+          return;
+        }
+
         if (hoverEnabledRef.current) {
           openBalloonForPoint(point.id);
           return;
         }
 
-        if (placemark.balloon.isOpen()) {
+        if (isPlacemarkBalloonOpen(placemark)) {
           closeBalloonForPoint(point.id);
           return;
         }
@@ -744,7 +843,9 @@ export function YandexMapMultiViewer({
           return;
         }
 
-        openBalloonForPoint(point.id);
+        if (showBalloonsRef.current) {
+          openBalloonForPoint(point.id);
+        }
         hoverHandlerRef.current?.(point.id);
       });
       placemark.events.add("mouseleave", () => {
@@ -752,7 +853,9 @@ export function YandexMapMultiViewer({
           return;
         }
 
-        scheduleBalloonClose(point.id);
+        if (showBalloonsRef.current) {
+          scheduleBalloonClose(point.id);
+        }
         hoverHandlerRef.current?.(null);
       });
 
@@ -775,6 +878,7 @@ export function YandexMapMultiViewer({
       Boolean(initialViewport) &&
       Boolean(viewportKey) &&
       appliedViewportKeyRef.current !== viewportKey;
+    const hasPinnedViewport = Boolean(initialViewport) && Boolean(viewportKey);
 
     if (normalizedPoints.length === 0) {
       applyViewport(map, initialViewport);
@@ -790,7 +894,7 @@ export function YandexMapMultiViewer({
       return;
     }
 
-    if (pointsChanged) {
+    if (pointsChanged && !hasPinnedViewport) {
       fitPoints(map, normalizedPoints);
     }
   }, [
@@ -841,6 +945,23 @@ export function YandexMapMultiViewer({
   }, [radiusCircle, mapReadyVersion]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.container.fitToViewport();
+    });
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [mapReadyVersion]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapCreatedRef.current) {
       return;
@@ -875,10 +996,10 @@ export function YandexMapMultiViewer({
   }
 
   return (
-    <div className="yandex-map-multi-viewer space-y-2">
+    <div className="yandex-map-multi-viewer h-full w-full space-y-2">
       <div
         ref={containerRef}
-        className={`${className} overflow-hidden rounded-xl border border-olive/16 bg-cream/45`}
+        className={`${frameless ? "overflow-hidden bg-cream/45" : "overflow-hidden rounded-xl border border-olive/16 bg-cream/45"} ${className}`}
       />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
       <style jsx global>{`

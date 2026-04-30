@@ -2,7 +2,7 @@
 import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import {
   getPlacementValidUntil,
@@ -12,6 +12,7 @@ import {
   serializePayment,
 } from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 import { getYookassaPayment } from "@/lib/yookassa";
 
 type RouteContext = {
@@ -26,6 +27,7 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
+  const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
 
   let payment = await db.payment.findFirst({
     where: {
@@ -45,6 +47,15 @@ export async function GET(_request: Request, context: RouteContext) {
           title: true,
         },
       },
+      ...(transferPaymentsSupported
+        ? {
+            transfer: {
+              select: {
+                title: true,
+              },
+            },
+          }
+        : {}),
     },
   });
 
@@ -106,6 +117,15 @@ export async function GET(_request: Request, context: RouteContext) {
                   title: true,
                 },
               },
+              ...(transferPaymentsSupported
+                ? {
+                    transfer: {
+                      select: {
+                        title: true,
+                      },
+                    },
+                  }
+                : {}),
             },
           });
 
@@ -115,6 +135,9 @@ export async function GET(_request: Request, context: RouteContext) {
           if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.excursionId) {
             await autoSubmitExcursionAfterSuccessfulPayment(tx, currentPayment.excursionId);
           }
+          if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.transferId) {
+            await autoSubmitTransferAfterSuccessfulPayment(tx, currentPayment.transferId);
+          }
 
           return updated;
         });
@@ -122,6 +145,8 @@ export async function GET(_request: Request, context: RouteContext) {
         await autoSubmitPropertyAfterSuccessfulPayment(db, payment.propertyId);
       } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.excursionId) {
         await autoSubmitExcursionAfterSuccessfulPayment(db, payment.excursionId);
+      } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.transferId) {
+        await autoSubmitTransferAfterSuccessfulPayment(db, payment.transferId);
       }
     } catch (error) {
       console.error("Failed to refresh payment status from YooKassa", error);

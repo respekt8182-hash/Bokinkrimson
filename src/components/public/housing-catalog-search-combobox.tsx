@@ -288,7 +288,7 @@ export function HousingCatalogSearchCombobox({
           direction: "housing",
           include: isEmptyQuery ? "locations" : "locations,hotels",
           query,
-          limit: isEmptyQuery ? "5" : "12",
+          limit: isEmptyQuery ? "8" : "12",
         });
         const response = await fetch(`/api/search/suggestions?${params.toString()}`, {
           credentials: "omit",

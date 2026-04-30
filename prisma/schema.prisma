@@ -728,6 +728,8 @@ model Transfer {
   shortDescription   String?
   description        String?
   photoUrls          String[]           @default([])
+  serviceTags        String[]           @default([])
+  fleet              Json               @default("[]")
   contactName        String?
   phone              String?
   phone2             String?
@@ -751,6 +753,7 @@ model Transfer {
   location           ExcursionLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   district           ExcursionDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
   reviews            Review[]
+  payments           Payment[]
 
   @@index([ownerId, updatedAt])
   @@index([status, isPublishedVisible, updatedAt])
@@ -947,6 +950,7 @@ model Payment {
   id                  String          @id @default(cuid())
   propertyId          String?
   excursionId         String?
+  transferId          String?
   ownerId             String
   amount              Decimal         @db.Decimal(10, 2)
   tariffCode          String
@@ -967,11 +971,13 @@ model Payment {
   confirmedBy         User?           @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
   property            Property?       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   excursion           Excursion?      @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  transfer            Transfer?       @relation(fields: [transferId], references: [id], onDelete: Cascade)
   owner               User            @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
   @@index([excursionId, status, createdAt])
+  @@index([transferId, status, createdAt])
   @@index([ownerId, createdAt])
   @@index([providerPaymentId])
   @@index([provider, status])

@@ -154,7 +154,7 @@ export function CatalogFilterShell({
     <div
       className={cn(
         "border-b border-olive/8 bg-cream/95 backdrop-blur-md",
-        sticky && "sticky top-[76px] z-40 md:top-[88px]",
+        sticky && "sticky top-[76px] z-[45] md:top-[88px]",
         className,
       )}
     >
@@ -163,7 +163,7 @@ export function CatalogFilterShell({
           <div className="-mx-1 flex touch-pan-x snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
             {chips}
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-olive/10 pt-3">
+          <div className="mt-3 hidden items-center justify-between gap-3 border-t border-olive/10 pt-3 md:flex">
             <div className="min-w-0">
               {totalLabel ? (
                 <span className="whitespace-nowrap text-sm font-semibold text-olive">

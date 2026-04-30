@@ -90,6 +90,7 @@ export default async function DashboardChessboardPage({
           initialPropertyId={initialPropertyId}
           returnHref={returnHref}
           returnLabel={returnLabel}
+          avoidDashboardBottomNav
         />
       </div>
     </div>

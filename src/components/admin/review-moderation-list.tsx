@@ -9,6 +9,7 @@ type ReviewModerationListProps = {
   initialReviews: SerializedReview[];
   initialAvgRating: number;
   initialReviewsCount: number;
+  title?: string;
 };
 
 function getStarFillPercent(rating: number, starIndex: number): number {
@@ -40,6 +41,7 @@ export function ReviewModerationList({
   initialReviews,
   initialAvgRating,
   initialReviewsCount,
+  title = "Отзывы объекта",
 }: ReviewModerationListProps) {
   const [reviews, setReviews] = useState(initialReviews);
   const [avgRating, setAvgRating] = useState(initialAvgRating);
@@ -93,7 +95,7 @@ export function ReviewModerationList({
 
   return (
     <section className="rounded-2xl border border-olive/10 bg-white p-4">
-      <h2 className="text-xl text-olive">Отзывы объекта</h2>
+      <h2 className="text-xl text-olive">{title}</h2>
       <p className="mt-1 text-sm text-olive/75">
         Активный рейтинг: <span className="font-semibold text-olive">{avgRating.toFixed(1)}</span> (
         {reviewsCount} отзывов)

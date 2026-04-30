@@ -43,6 +43,10 @@ const USER_COMPAT_COLUMNS = [
   "deletionExpiresAt",
 ] as const;
 
+const TRANSFER_COMPAT_COLUMNS = ["serviceTags", "fleet"] as const;
+const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
+const PAYMENT_COMPAT_COLUMNS = ["transferId"] as const;
+
 const SCHEMA_COMPAT_MODELS = {
   User: {
     columns: USER_COMPAT_COLUMNS,
@@ -97,6 +101,31 @@ const SCHEMA_COMPAT_MODELS = {
     },
     logContext: "excursion-schema-compat",
     label: "Excursion",
+  },
+  Transfer: {
+    columns: TRANSFER_COMPAT_COLUMNS,
+    defaults: {
+      serviceTags: [],
+      fleet: [],
+    },
+    logContext: "transfer-schema-compat",
+    label: "Transfer",
+  },
+  Review: {
+    columns: REVIEW_COMPAT_COLUMNS,
+    defaults: {
+      transferId: null,
+    },
+    logContext: "review-schema-compat",
+    label: "Review",
+  },
+  Payment: {
+    columns: PAYMENT_COMPAT_COLUMNS,
+    defaults: {
+      transferId: null,
+    },
+    logContext: "payment-schema-compat",
+    label: "Payment",
   },
 } as const satisfies Record<
   string,
@@ -533,7 +562,15 @@ export async function areDatabaseColumnsAvailable(
   modelName: CompatModelName,
   columns: readonly string[],
 ): Promise<boolean> {
-  const missingColumns = (await getMissingCompatColumns(db)).get(modelName) ?? EMPTY_STRING_SET;
+  let missingColumnsByModel = await getMissingCompatColumns(db);
+  let missingColumns = missingColumnsByModel.get(modelName) ?? EMPTY_STRING_SET;
+  if (columns.every((column) => !missingColumns.has(column))) {
+    return true;
+  }
+
+  missingCompatColumnsPromise = loadMissingCompatColumns(db);
+  missingColumnsByModel = await missingCompatColumnsPromise;
+  missingColumns = missingColumnsByModel.get(modelName) ?? EMPTY_STRING_SET;
   return columns.every((column) => !missingColumns.has(column));
 }
 

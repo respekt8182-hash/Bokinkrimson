@@ -52,8 +52,8 @@ type DrawerLink = {
 
 const primaryLinks: DrawerLink[] = [
   { href: housingHubPath, label: "Жильё", icon: House },
-  { href: attractionsHubPath, label: "Достопримечательности", icon: Landmark },
   { href: excursionsHubPath, label: "Экскурсии", icon: Compass },
+  { href: attractionsHubPath, label: "Досуг", icon: Landmark },
   { href: transfersHubPath, label: "Трансферы", icon: Car },
   { href: toursHubPath, label: "Туры", icon: Compass },
   { href: "/about", label: "О сервисе", icon: Info, exact: true },
@@ -223,7 +223,7 @@ export function SiteHeaderMobileDrawer({
         className="absolute inset-0 bg-[rgba(43,31,25,0.56)] backdrop-blur-[2px]"
       />
 
-      <div className="absolute inset-y-0 left-0 w-[min(88vw,360px)] max-w-[360px]">
+      <div className="absolute inset-y-0 right-0 w-[min(88vw,360px)] max-w-[360px]">
         <aside
           id="site-mobile-drawer"
           ref={drawerRef}
@@ -231,7 +231,7 @@ export function SiteHeaderMobileDrawer({
           aria-modal="true"
           aria-label="Навигация по сайту"
           onKeyDown={onDrawerKeyDown}
-          className="flex h-[100dvh] w-full flex-col overflow-hidden rounded-r-[30px] border-r border-white/40 bg-[#f6f2eb]/98 shadow-[0_24px_70px_rgba(43,31,25,0.28)] backdrop-blur-xl"
+          className="flex h-[100dvh] w-full flex-col overflow-hidden rounded-l-[30px] border-l border-white/40 bg-[#f6f2eb]/98 shadow-[0_24px_70px_rgba(43,31,25,0.28)] backdrop-blur-xl"
         >
           <div className="border-b border-olive/10 px-4 pb-4 pt-[max(1rem,calc(env(safe-area-inset-top)+0.2rem))]">
             <div className="flex items-start justify-between gap-3">

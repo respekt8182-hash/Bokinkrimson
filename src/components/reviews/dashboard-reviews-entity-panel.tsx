@@ -75,7 +75,7 @@ function getInitials(name: string): string {
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type EntityType = "property" | "excursion";
+type EntityType = "property" | "excursion" | "transfer";
 
 type ReviewsApiResponse = {
   items?: SerializedReview[];

@@ -1,7 +1,18 @@
 // Admin component for managing manager payment requests.
 "use client";
 
-import { CircleAlert, CircleCheckBig, Clock3, Phone, User, X } from "lucide-react";
+import {
+  Car,
+  CircleAlert,
+  CircleCheckBig,
+  Clock3,
+  Compass,
+  CreditCard,
+  House,
+  Phone,
+  User,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -31,6 +42,14 @@ type ManagerPayment = {
     title: string | null;
     status: string;
   } | null;
+  transfer: {
+    id: string;
+    title: string | null;
+    status: string | null;
+    transferType: string | null;
+    locationName: string | null;
+    vehicleModel: string | null;
+  } | null;
   owner: {
     id: string;
     firstName: string;
@@ -53,13 +72,27 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU");
 }
 
-function PaymentCard({
-  payment,
-  onAction,
-}: {
-  payment: ManagerPayment;
-  onAction?: () => void;
-}) {
+function getBaseTariffCode(tariffCode: string): string {
+  return tariffCode.startsWith("transfer_standard:") ? "transfer_standard" : tariffCode;
+}
+
+function getTariffLabel(tariffCode: string): string {
+  const baseCode = getBaseTariffCode(tariffCode);
+  const labels: Record<string, string> = {
+    MULTI_ROOM_SMALL: "Гостиничный формат · 1–6 номеров",
+    MULTI_ROOM_MEDIUM: "Гостиничный формат · 7–16 номеров",
+    MULTI_ROOM_LARGE: "Гостиничный формат · 17–25 номеров",
+    MULTI_ROOM_XL: "Гостиничный формат · 26+ номеров",
+    UNIT_SINGLE: "Отдельный объект размещения",
+    excursion_standard: "Публикация карточки экскурсии",
+    tour_standard: "Публикация карточки тура",
+    transfer_standard: "Публикация карточки трансфера",
+  };
+
+  return labels[baseCode] ?? baseCode;
+}
+
+function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?: () => void }) {
   const router = useRouter();
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState<"confirm" | "reject" | null>(null);
@@ -67,16 +100,53 @@ function PaymentCard({
   const [done, setDone] = useState(false);
 
   const isPending = payment.status === "CREATED" || payment.status === "PENDING";
+  const tariffCode = getBaseTariffCode(payment.tariffCode);
   const entityName = payment.property
-    ? payment.property.name ?? "Объект без названия"
+    ? (payment.property.name ?? "Объект без названия")
     : payment.excursion
-      ? payment.excursion.title ?? "Экскурсия без названия"
-      : "—";
+      ? (payment.excursion.title ?? "Экскурсия без названия")
+      : payment.transfer
+        ? (payment.transfer.title ?? "Трансфер без названия")
+        : "—";
   const entityHref = payment.property
     ? `/admin/moderation/${payment.property.id}`
     : payment.excursion
       ? `/admin/moderation/excursions/${payment.excursion.id}`
-      : null;
+      : payment.transfer
+        ? `/admin/transfers/${payment.transfer.id}`
+        : null;
+  const entityType = payment.property
+    ? "Объект размещения"
+    : payment.excursion
+      ? tariffCode === "tour_standard"
+        ? "Тур"
+        : "Экскурсия"
+      : payment.transfer
+        ? "Трансфер"
+        : "Карточка";
+  const entityLabel = payment.transfer
+    ? "Карточка трансфера"
+    : payment.excursion
+      ? tariffCode === "tour_standard"
+        ? "Карточка тура"
+        : "Карточка экскурсии"
+      : payment.property
+        ? "Карточка объекта"
+        : "Карточка";
+  const EntityIcon = payment.transfer
+    ? Car
+    : payment.excursion
+      ? Compass
+      : payment.property
+        ? House
+        : CreditCard;
+  const transferDetails = payment.transfer
+    ? [
+        payment.transfer.transferType,
+        payment.transfer.locationName,
+        payment.transfer.vehicleModel,
+      ].filter(Boolean)
+    : [];
 
   async function handleAction(action: "confirm" | "reject") {
     setLoading(action);
@@ -146,16 +216,17 @@ function PaymentCard({
         </div>
         <div className="text-right text-xs text-olive/55">
           <p>{formatDate(payment.createdAt)}</p>
-          {payment.paidAt && <p className="text-emerald-600">Оплачен: {formatDate(payment.paidAt)}</p>}
+          {payment.paidAt && (
+            <p className="text-emerald-600">Оплачен: {formatDate(payment.paidAt)}</p>
+          )}
         </div>
       </div>
 
       {/* Entity info */}
       <div className="mt-3 rounded-xl bg-cream p-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-olive/50">
-          {payment.property ? "Объект размещения" : "Экскурсия"}
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wide text-olive/50">{entityLabel}</p>
         <div className="mt-1 flex items-center gap-2">
+          <AppIcon icon={EntityIcon} className="h-4 w-4 shrink-0 text-primary" />
           {entityHref ? (
             <Link href={entityHref} className="text-sm font-semibold text-primary hover:underline">
               {entityName}
@@ -164,18 +235,32 @@ function PaymentCard({
             <span className="text-sm font-semibold text-olive">{entityName}</span>
           )}
         </div>
-        {payment.property && (
-          <p className="mt-0.5 text-xs text-olive/55">
-            Тариф: {payment.tariffCode} • Номеров: {payment.roomCount}
-          </p>
-        )}
+        {transferDetails.length > 0 ? (
+          <p className="mt-1 text-xs text-olive/55">{transferDetails.join(" • ")}</p>
+        ) : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl bg-white/65 px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-olive/45">
+              Тип карточки
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-olive">{entityType}</p>
+          </div>
+          <div className="rounded-xl bg-white/65 px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-olive/45">Тариф</p>
+            <p className="mt-0.5 text-sm font-semibold text-olive">
+              {getTariffLabel(payment.tariffCode)}
+            </p>
+            <p className="mt-0.5 text-xs text-olive/48">
+              {tariffCode}
+              {payment.property ? ` • ${payment.roomCount} ном.` : ""}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Owner info */}
       <div className="mt-2 rounded-xl bg-cream p-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-olive/50">
-          Владелец
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wide text-olive/50">Владелец</p>
         <div className="mt-1 space-y-1">
           <div className="flex items-center gap-2 text-sm text-olive">
             <AppIcon icon={User} className="h-3.5 w-3.5 text-olive/40" />
@@ -214,17 +299,14 @@ function PaymentCard({
             rows={2}
           />
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => void handleAction("confirm")}
-              disabled={loading !== null}
-            >
+            <Button onClick={() => void handleAction("confirm")} disabled={loading !== null}>
               {loading === "confirm" ? "Подтверждаем..." : "Подтвердить оплату"}
             </Button>
             <Button
               variant="ghost"
               onClick={() => void handleAction("reject")}
               disabled={loading !== null}
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              className="border border-red-200 bg-red-50 text-red-700 ring-0 hover:bg-red-100 hover:text-red-800"
             >
               {loading === "reject" ? "Отклоняем..." : "Отклонить"}
             </Button>

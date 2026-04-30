@@ -36,6 +36,9 @@ type PropertyContactsPanelProps = {
   text?: PropertyContactsPanelText;
   variant?: "default" | "compact";
   secondaryContactsCompact?: boolean;
+  secondaryContactsNoWrap?: boolean;
+  hideEmptyState?: boolean;
+  hideSecondaryContactsEyebrow?: boolean;
 };
 
 export type PropertyContactsPanelText = {
@@ -217,6 +220,9 @@ export function PropertyContactsPanel({
   text,
   variant = "default",
   secondaryContactsCompact = false,
+  secondaryContactsNoWrap = false,
+  hideEmptyState = false,
+  hideSecondaryContactsEyebrow = false,
 }: PropertyContactsPanelProps) {
   const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
   const isCompact = variant === "compact";
@@ -337,7 +343,9 @@ export function PropertyContactsPanel({
 
   return (
     <div className={cn("space-y-4", isCompact && "space-y-3")}>
-      {!hasAnyContact ? <p className="text-sm text-olive/60">{copy.emptyState}</p> : null}
+      {!hasAnyContact && !hideEmptyState ? (
+        <p className="text-sm text-olive/60">{copy.emptyState}</p>
+      ) : null}
 
       {primaryPhone ? (
         <div
@@ -459,13 +467,17 @@ export function PropertyContactsPanel({
 
       {hasSecondaryContacts ? (
         <div className={cn(isSecondaryContactsCompact ? "space-y-2.5" : "space-y-2")}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
-            {copy.secondaryContactsEyebrow}
-          </p>
+          {!hideSecondaryContactsEyebrow ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/42">
+              {copy.secondaryContactsEyebrow}
+            </p>
+          ) : null}
 
           <div
             className={cn(
-              isSecondaryContactsCompact ? "flex flex-wrap gap-1.5" : "space-y-2",
+              isSecondaryContactsCompact
+                ? cn("flex gap-1.5", secondaryContactsNoWrap ? "flex-nowrap" : "flex-wrap")
+                : "space-y-2",
             )}
           >
             {normalizedWebsiteHref ? (

@@ -39,7 +39,7 @@ import { InlinePhotoGallery } from "@/components/excursions/inline-photo-gallery
 import { ExcursionPhotoGallery } from "@/components/excursions/excursion-photo-gallery";
 import { ExcursionPriceDisplay } from "@/components/excursions/excursion-price-display";
 import { ExcursionTimeline } from "@/components/excursions/excursion-timeline";
-import { ExcursionMapPreview } from "@/components/maps/excursion-map-preview";
+import { StaticMapPreview } from "@/components/maps/static-map-preview";
 import { NearbyPropertiesSection } from "@/components/public/nearby-properties-section";
 import { ExcursionViewTracker } from "@/components/public/excursion-view-tracker";
 import { PropertyReviewsSection } from "@/components/reviews/property-reviews-section";
@@ -1760,20 +1760,12 @@ export default async function PublicExcursionPage({
                   ) : null}
 
                   {hasMap ? (
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-olive/10">
-                      <div className="px-5 pb-4 pt-5">
-                        <h3 className="text-base font-semibold text-olive">
-                          Точка встречи на карте
-                        </h3>
-                        <p className="mt-1 text-sm text-olive/56">{mapOverlayAddress}</p>
-                      </div>
-                      <ExcursionMapPreview
-                        latitude={mapLatitude!}
-                        longitude={mapLongitude!}
-                        addressLabel={mapOverlayAddress}
-                        className="h-72 w-full"
-                      />
-                    </div>
+                    <StaticMapPreview
+                      latitude={mapLatitude!}
+                      longitude={mapLongitude!}
+                      label={mapOverlayAddress}
+                      className="mt-4"
+                    />
                   ) : null}
                 </SectionCard>
               ) : null}
@@ -3070,22 +3062,12 @@ export default async function PublicExcursionPage({
                 ) : null}
 
                 {hasMap ? (
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-olive/10">
-                    <div className="px-5 pb-4 pt-5">
-                      <h3 className="text-base font-semibold text-olive">
-                        {item.offerType === "TOUR"
-                          ? "Карта старта и маршрута"
-                          : "Точка встречи на карте"}
-                      </h3>
-                      <p className="mt-1 text-sm text-olive/56">{mapOverlayAddress}</p>
-                    </div>
-                    <ExcursionMapPreview
-                      latitude={mapLatitude!}
-                      longitude={mapLongitude!}
-                      addressLabel={mapOverlayAddress}
-                      className="h-72 w-full"
-                    />
-                  </div>
+                  <StaticMapPreview
+                    latitude={mapLatitude!}
+                    longitude={mapLongitude!}
+                    label={mapOverlayAddress}
+                    className="mt-4"
+                  />
                 ) : null}
               </SectionCard>
             ) : null}

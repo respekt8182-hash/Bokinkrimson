@@ -12,7 +12,8 @@ import {
   pickFirstListValue,
 } from "@/lib/search-contracts";
 
-const maxCollectedPages = 20;
+const maxCollectedItems = 5000;
+const mapCollectionPageSize = 24;
 
 function normalizeLocationFilterValue(value: string | null | undefined): string {
   if (!value) {
@@ -54,7 +55,6 @@ function pickPointPhotos(item: { imageUrls: string[]; coverImageUrl: string | nu
 }
 
 async function collectCatalogItems(query: PublicCatalogQuery) {
-  const maxCollectedItems = maxCollectedPages * 24;
   const result = await getPublicCatalog({
     ...query,
     page: 1,
@@ -172,7 +172,7 @@ export async function GET(request: Request) {
     meta: {
       totalAvailable: collected.totalAvailable,
       truncated: collected.truncated,
-      collectedPages: Math.min(maxCollectedPages, Math.ceil(collected.items.length / 24)),
+      collectedPages: Math.ceil(collected.items.length / mapCollectionPageSize),
     },
   });
 }

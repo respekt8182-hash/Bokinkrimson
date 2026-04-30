@@ -43,6 +43,7 @@ type DashboardAppShellProps = {
 
 type TopNavItemKey = "home" | "chessboard" | "reviews" | "payments";
 type DrawerItemKey = TopNavItemKey | "profile";
+type DashboardBottomNavKey = DrawerItemKey | "site";
 
 type NavItem = {
   key: TopNavItemKey;
@@ -53,6 +54,13 @@ type NavItem = {
 
 type DrawerItem = {
   key: DrawerItemKey;
+  label: string;
+  href: string;
+  icon: IconName;
+};
+
+type DashboardBottomNavItem = {
+  key: DashboardBottomNavKey;
   label: string;
   href: string;
   icon: IconName;
@@ -84,6 +92,15 @@ const drawerItems: DrawerItem[] = [
   { key: "profile", label: "Настройки профиля", href: "/dashboard/profile", icon: "profile" },
 ];
 
+const bottomNavItems: DashboardBottomNavItem[] = [
+  { key: "site", label: "Сайт", href: "/", icon: "site" },
+  { key: "chessboard", label: "Шахматка", href: "/dashboard/chessboard", icon: "chessboard" },
+  { key: "home", label: "Главная", href: "/dashboard", icon: "home" },
+  { key: "reviews", label: "Отзывы", href: "/dashboard/reviews", icon: "reviews" },
+  { key: "payments", label: "Оплата", href: "/dashboard/payments", icon: "payments" },
+  { key: "profile", label: "Профиль", href: "/dashboard/profile", icon: "profile" },
+];
+
 // Object pages are mapped back to top-level "home" tab, while feature pages keep dedicated tabs.
 function resolveActiveMenuKey(pathname: string): DrawerItemKey | null {
   if (pathname.startsWith("/dashboard/chessboard") || pathname.endsWith("/chessboard")) {
@@ -112,6 +129,16 @@ function resolveActiveMenuKey(pathname: string): DrawerItemKey | null {
   }
 
   return null;
+}
+
+function shouldShowDashboardBottomNav(pathname: string) {
+  return (
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/chessboard") ||
+    pathname.startsWith("/dashboard/reviews") ||
+    pathname.startsWith("/dashboard/payments") ||
+    pathname.startsWith("/dashboard/profile")
+  );
 }
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -169,6 +196,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   const burgerButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
+  const showBottomNav = shouldShowDashboardBottomNav(pathname);
   const displayName =
     [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Пользователь";
 
@@ -294,24 +322,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
     <div className="min-h-screen">
       <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-olive/10 bg-cream/92 text-olive backdrop-blur">
         <div className="mx-auto flex h-full w-full max-w-[1600px] items-center gap-3 px-3 md:px-6">
-          <button
-            ref={burgerButtonRef}
-            type="button"
-            aria-label="Открыть меню личного кабинета"
-            aria-expanded={isDrawerOpen}
-            aria-controls="dashboard-drawer"
-            onClick={() => {
-              if (isDrawerOpen) {
-                closeDrawer();
-              } else {
-                openDrawer();
-              }
-            }}
-            className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px] focus-visible:outline-none lg:hidden"
-          >
-            <Icon name="menu" />
-          </button>
-
           <Link href="/dashboard" className="flex items-center gap-3 min-w-0 lg:flex-none">
             <Image
               src="/favicon.svg"
@@ -410,16 +420,71 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
               <span className="hidden xl:inline">{isLoggingOut ? "Выход..." : "Выход"}</span>
             </button>
           </div>
+
+          <button
+            ref={burgerButtonRef}
+            type="button"
+            aria-label="Открыть меню личного кабинета"
+            aria-expanded={isDrawerOpen}
+            aria-controls="dashboard-drawer"
+            onClick={() => {
+              if (isDrawerOpen) {
+                closeDrawer();
+              } else {
+                openDrawer();
+              }
+            }}
+            className="icon-button-soft ml-auto inline-flex h-11 w-11 items-center justify-center rounded-[15px] focus-visible:outline-none lg:hidden"
+          >
+            <Icon name="menu" />
+          </button>
         </div>
       </header>
 
       <div className="pt-16">
-        <div className="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-6xl px-4 py-5 md:px-6",
+            showBottomNav ? "pb-[calc(env(safe-area-inset-bottom,0px)+6.75rem)] lg:pb-5" : "",
+          )}
+        >
           <section className="rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10 md:p-5">
             {children}
           </section>
         </div>
       </div>
+
+      {showBottomNav ? (
+        <nav
+          aria-label="Навигация личного кабинета"
+          className="dashboard-mobile-bottom-nav fixed inset-x-2 bottom-2 z-50 mx-auto max-w-[620px] rounded-[28px] border border-white/80 bg-white/90 px-1.5 py-2 shadow-[0_18px_46px_rgba(58,43,35,0.18)] backdrop-blur-xl lg:hidden"
+        >
+          <div className="grid grid-cols-6 gap-0.5">
+            {bottomNavItems.map((item) => {
+              const isActive = item.key !== "site" && activeKey === item.key;
+
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-[55px] min-w-0 flex-col items-center justify-center gap-1 rounded-[20px] px-1 text-[10px] font-semibold transition active:scale-[0.97]",
+                    isActive
+                      ? "bg-[linear-gradient(135deg,rgba(15,118,110,0.14),rgba(242,196,77,0.18))] text-olive shadow-[inset_0_1px_0_rgba(255,255,255,0.86)]"
+                      : "text-olive/62 hover:bg-cream/70 hover:text-olive",
+                  )}
+                >
+                  <IconShell active={isActive} compact>
+                    <Icon name={item.icon} className="h-4 w-4" />
+                  </IconShell>
+                  <span className="max-w-full truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
 
       <div
         className={cn(
@@ -445,8 +510,8 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
           aria-label="Меню личного кабинета"
           onKeyDown={onDrawerKeyDown}
           className={cn(
-            "absolute left-0 top-0 h-full w-[88vw] max-w-[340px] overflow-y-auto bg-white shadow-2xl transition-transform",
-            isDrawerOpen ? "translate-x-0" : "-translate-x-full",
+            "absolute right-0 top-0 h-full w-[88vw] max-w-[340px] overflow-y-auto rounded-l-[28px] bg-white shadow-2xl transition-transform",
+            isDrawerOpen ? "translate-x-0" : "translate-x-full",
           )}
         >
           <div className="flex items-center justify-between border-b border-olive/10 px-4 py-3">

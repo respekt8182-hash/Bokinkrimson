@@ -1,4 +1,3 @@
-import { AttractionStatus } from "@prisma/client";
 import { ArrowUpRight, Plus } from "lucide-react";
 import Link from "next/link";
 import {
@@ -8,21 +7,21 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
-import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicAttractionPath } from "@/lib/public-marketplace";
+import { getStaticAttractions, type StaticAttractionStatus } from "@/lib/static-attractions";
 
 type AdminAttractionsPageProps = {
   searchParams: Promise<{ status?: string; q?: string }>;
 };
 
-const STATUS_LABELS: Record<AttractionStatus, string> = {
+const STATUS_LABELS: Record<StaticAttractionStatus, string> = {
   DRAFT: "Черновик",
   PUBLISHED: "Опубликовано",
   HIDDEN: "Скрыто",
 };
 
-const STATUS_COLORS: Record<AttractionStatus, string> = {
+const STATUS_COLORS: Record<StaticAttractionStatus, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
   PUBLISHED: "bg-emerald-100 text-emerald-700",
   HIDDEN: "bg-slate-100 text-slate-700",
@@ -33,24 +32,18 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
   const selectedStatus = filters.status?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
 
-  const rows = await db.attraction.findMany({
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      location: { select: { name: true } },
-      district: { select: { name: true } },
-    },
-  });
+  const rows = await getStaticAttractions({ includeUnpublished: true });
 
   const statusCounts = rows.reduce(
     (acc, item) => {
       acc[item.status] = (acc[item.status] ?? 0) + 1;
       return acc;
     },
-    {} as Record<AttractionStatus, number>,
+    {} as Record<StaticAttractionStatus, number>,
   );
 
   const statusFiltered =
-    selectedStatus && selectedStatus in AttractionStatus
+    selectedStatus && selectedStatus in STATUS_LABELS
       ? rows.filter((item) => item.status === selectedStatus)
       : rows;
   const items =
@@ -60,12 +53,16 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
           statusFiltered,
           (item) => [
             item.title,
+            item.h1,
             item.category,
-            item.location?.name,
             item.locationName,
-            item.district?.name,
+            item.districtName,
+            item.address,
             item.shortDescription,
             item.description,
+            ...item.tags,
+            ...item.locationAliases,
+            ...item.searchKeywords,
           ],
           { limit: statusFiltered.length, minScore: 0.08 },
         )
@@ -85,7 +82,7 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
     <div className="space-y-6">
       <AdminPageHeader
         title="Достопримечательности"
-        description="Ручной каталог мест, которые публикует администратор: природные точки, объекты, общественные места и другие интересные локации."
+        description="Файловый каталог мест: базовые записи лежат в коде, а быстрые правки из админки сохраняются в data/attractions-overrides.json."
         actions={
           <Link
             href="/admin/attractions/new"
@@ -105,7 +102,7 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
               <option value="">Все статусы</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
-                  {label} ({statusCounts[value as AttractionStatus] ?? 0})
+                  {label} ({statusCounts[value as StaticAttractionStatus] ?? 0})
                 </option>
               ))}
             </select>
@@ -140,7 +137,7 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
               href={buildFilterLink({ status: value })}
               active={selectedStatus === value}
             >
-              {label} ({statusCounts[value as AttractionStatus] ?? 0})
+              {label} ({statusCounts[value as StaticAttractionStatus] ?? 0})
             </AdminPillLink>
           ))}
         </div>
@@ -155,8 +152,8 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
         <div className="space-y-3">
           {items.map((item) => {
             const publicPath =
-              item.status === AttractionStatus.PUBLISHED && item.isPublishedVisible
-                ? buildPublicAttractionPath({ id: item.id, title: item.title })
+              item.status === "PUBLISHED" && item.isPublishedVisible
+                ? buildPublicAttractionPath({ id: item.id, title: item.title, slug: item.slug })
                 : null;
 
             return (
@@ -180,11 +177,14 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
                           Скрыта из публикации
                         </span>
                       ) : null}
+                      <span className="rounded-full bg-primary/8 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                        файл
+                      </span>
                     </div>
                     <p className="mt-1 text-sm text-olive/58">
-                      {item.location?.name ?? item.locationName ?? "Локация не указана"}
+                      {item.locationName ?? "Локация не указана"}
                       {item.category ? ` • ${item.category}` : ""}
-                      {item.district?.name ? ` • ${item.district.name}` : ""}
+                      {item.districtName ? ` • ${item.districtName}` : ""}
                     </p>
                     {item.shortDescription ? (
                       <p className="mt-3 max-w-3xl text-sm leading-6 text-olive/68">

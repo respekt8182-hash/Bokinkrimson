@@ -61,3 +61,6 @@ tmp-*.png
 /*.log
 /*.out
 /*.err
+
+# imported attraction source archive
+/Dosto premet krym/

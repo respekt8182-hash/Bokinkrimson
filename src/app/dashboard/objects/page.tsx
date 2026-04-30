@@ -160,7 +160,7 @@ export default async function DashboardObjectsPage() {
         </div>
       ) : (
         <div id="objects-list" className="grid gap-3">
-          {items.map((item, index) => {
+          {items.map((item) => {
             const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
             const completedStages = getCompletedDashboardStages(item.progress);
             const isDone = completedStages >= 5;
@@ -175,8 +175,6 @@ export default async function DashboardObjectsPage() {
               locationId: item.locationId,
               name: item.name,
             });
-            const nextItem = items[index + 1] ?? null;
-
             const stats = reviewStatsByPropertyId.get(item.id) ?? null;
             const avgRating = stats ? Number(stats.avg ?? 0) : 0;
             const reviewCount = stats?.count ?? 0;
@@ -396,17 +394,6 @@ export default async function DashboardObjectsPage() {
                     />
                   </div>
                 </div>
-
-                {nextItem ? (
-                  <div className="mt-2 border-t border-olive/10 pt-2 text-right">
-                    <Link
-                      href={`/dashboard/objects/${nextItem.id}/about`}
-                      className="text-xs font-semibold text-terra hover:underline"
-                    >
-                      Следующий объект: {nextItem.name ?? "Без названия"} →
-                    </Link>
-                  </div>
-                ) : null}
               </article>
             );
           })}

@@ -36,20 +36,37 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
       ? sortRaw
       : "relevance";
 
-  const [result, directory] = await Promise.all([
+  const catalogQuery = {
+    query: pick(params.q) || pick(params.query),
+    location: pick(params.location),
+    transferType: pick(params.transferType),
+    radiusKm: Number.isFinite(radiusKm) ? radiusKm : undefined,
+    minPrice: Number.isFinite(minPrice) ? minPrice : undefined,
+    maxPrice: Number.isFinite(maxPrice) ? maxPrice : undefined,
+    sort,
+  } as const;
+
+  const [result, mapResult, directory] = await Promise.all([
     getPublicTransferCatalog({
-      query: pick(params.q) || pick(params.query),
-      location: pick(params.location),
-      transferType: pick(params.transferType),
-      radiusKm: Number.isFinite(radiusKm) ? radiusKm : undefined,
-      minPrice: Number.isFinite(minPrice) ? minPrice : undefined,
-      maxPrice: Number.isFinite(maxPrice) ? maxPrice : undefined,
-      sort,
+      ...catalogQuery,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
+    }),
+    getPublicTransferCatalog({
+      ...catalogQuery,
+      page: 1,
+      pageSize: 5000,
+      allowLargePageSize: true,
     }),
     getMarketplaceDirectoryData(),
   ]);
 
-  return <TransferCatalog result={result} transferTypes={directory.transferTypes} />;
+  return (
+    <TransferCatalog
+      result={result}
+      mapItems={mapResult.items}
+      transferTypes={directory.transferTypes}
+      locationSuggestions={directory.transferLocationSuggestions}
+    />
+  );
 }

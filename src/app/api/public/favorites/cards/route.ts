@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { isFavoriteEntityType, type FavoriteEntityType } from "@/lib/favorite-entities";
 import { getPublicExcursionByIdentifier, type PublicExcursionCard } from "@/lib/public-excursions";
+import {
+  getPublicAttractionByIdentifier,
+  getPublicTransferByIdentifier,
+  type PublicAttractionCatalogItem,
+  type PublicTransferCatalogItem,
+} from "@/lib/public-marketplace";
 import { getPublicPropertyByIdentifier, type PublicPropertyCard } from "@/lib/public-properties";
 
 type FavoriteLookupItem = {
@@ -18,6 +24,16 @@ type FavoriteCardsResponseItem =
       key: string;
       entityType: "excursion" | "tour";
       item: PublicExcursionCard;
+    }
+  | {
+      key: string;
+      entityType: "attraction";
+      item: PublicAttractionCatalogItem;
+    }
+  | {
+      key: string;
+      entityType: "transfer";
+      item: PublicTransferCatalogItem;
     };
 
 function buildFavoriteKey(item: FavoriteLookupItem) {
@@ -90,6 +106,28 @@ export async function POST(request: Request) {
               key: buildFavoriteKey(item),
               entityType: item.entityType,
               item: property,
+            }
+          : null;
+      }
+
+      if (item.entityType === "transfer") {
+        const transfer = await getPublicTransferByIdentifier(item.id);
+        return transfer
+          ? {
+              key: buildFavoriteKey(item),
+              entityType: item.entityType,
+              item: transfer,
+            }
+          : null;
+      }
+
+      if (item.entityType === "attraction") {
+        const attraction = await getPublicAttractionByIdentifier(item.id);
+        return attraction
+          ? {
+              key: buildFavoriteKey(item),
+              entityType: item.entityType,
+              item: attraction,
             }
           : null;
       }

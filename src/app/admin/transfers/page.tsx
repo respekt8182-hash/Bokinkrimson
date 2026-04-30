@@ -11,6 +11,7 @@ import {
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicTransferPath } from "@/lib/public-marketplace";
+import { deriveTransferSummaryFromFleet, getTransferFleet } from "@/lib/transfers";
 
 type AdminTransfersPageProps = {
   searchParams: Promise<{ status?: string; q?: string }>;
@@ -68,7 +69,6 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
             item.vehicleModel,
             item.location?.name,
             item.locationName,
-            item.serviceArea,
             item.routeExamples,
             `${item.owner.firstName} ${item.owner.lastName}`,
             item.owner.phone,
@@ -155,7 +155,9 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
               item.status === TransferStatus.PUBLISHED && item.isPublishedVisible
                 ? buildPublicTransferPath({ id: item.id, title: item.title })
                 : null;
-            const firstPhoto = item.photoUrls[0] ?? null;
+            const summary = deriveTransferSummaryFromFleet(item);
+            const firstPhoto = summary.primaryVehicle?.photoUrl ?? item.photoUrls[0] ?? null;
+            const fleet = getTransferFleet(item);
 
             return (
               <article
@@ -205,12 +207,19 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-olive/65">
                         <span className="rounded-full border border-olive/12 px-2.5 py-1">
-                          {item.priceFrom
-                            ? `от ${Number(item.priceFrom).toLocaleString("ru-RU")} ₽`
+                          {(item.priceFrom ?? summary.priceFrom)
+                            ? `от ${Number(item.priceFrom ?? summary.priceFrom).toLocaleString("ru-RU")} ₽`
                             : "Цена не указана"}
                         </span>
+                        {fleet.length > 1 ? (
+                          <span className="rounded-full border border-olive/12 px-2.5 py-1">
+                            Автопарк: {fleet.length}
+                          </span>
+                        ) : null}
                         <span className="rounded-full border border-dashed border-olive/12 px-2.5 py-1 text-olive/45">
-                          Без рейтинга
+                          {item.reviewsCount > 0 && Number(item.avgRating) > 0
+                            ? `${Number(item.avgRating).toFixed(1)} • ${item.reviewsCount} отзывов`
+                            : "Пока без рейтинга"}
                         </span>
                       </div>
                     </div>

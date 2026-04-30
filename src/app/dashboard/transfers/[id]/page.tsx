@@ -1,20 +1,40 @@
-import { Prisma, TransferStatus } from "@prisma/client";
-import { Car, CircleCheckBig, ImageIcon, MapPin, Send } from "lucide-react";
-import Link from "next/link";
+import { PaymentProvider, PaymentStatus, Prisma, TransferStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
-import { AppIcon } from "@/components/ui/app-icon";
+import { TransferEditorPage } from "@/components/transfers/transfer-editor-page";
 import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import {
+  normalizeMaxProfileUrl,
+  normalizeOkProfileUrl,
+  normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
+} from "@/lib/contact-links";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
+import {
+  buildTransferPaymentPayload,
+  getTransferPaymentTariffCode,
+  serializePayment,
+} from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
+import { TRANSFER_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import {
+  autoSubmitTransferAfterSuccessfulPayment,
+  deriveTransferSummaryFromFleet,
+  getTransferFleet,
+  isTransferReadyForModeration,
+  normalizeTransferFleet,
+  normalizeTransferServiceTags,
+  submitTransferToModerationIfReady,
+} from "@/lib/transfers";
+import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type DashboardTransferPageProps = {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const inputClass =
-  "w-full rounded-2xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/35 focus:border-primary/30 focus:ring-4 focus:ring-primary/10";
-
-const textareaClass = `${inputClass} min-h-[120px] resize-y`;
+type TransferEditorStep = "info" | "location" | "fleet" | "contacts" | "publish";
 
 const STATUS_LABELS: Record<TransferStatus, string> = {
   DRAFT: "Черновик",
@@ -33,26 +53,6 @@ function formString(formData: FormData, key: string): string | null {
   return trimmed || null;
 }
 
-function formInt(formData: FormData, key: string): number | null {
-  const value = formString(formData, key);
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function formDecimal(formData: FormData, key: string): Prisma.Decimal | null {
-  const value = formString(formData, key)?.replace(",", ".");
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? new Prisma.Decimal(parsed) : null;
-}
-
 function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null {
   const value = formString(formData, key)?.replace(",", ".");
   if (!value) {
@@ -63,43 +63,49 @@ function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null 
   return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
 }
 
-function parsePhotoUrls(value: string | null): string[] {
-  return (value ?? "")
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+function parseJsonField(formData: FormData, key: string): unknown {
+  const value = formString(formData, key);
+  if (!value) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 }
 
-function getFirstPhoto(photoUrls: string[]): string | null {
-  return photoUrls.map((url) => url.trim()).find(Boolean) ?? null;
+function parseTransferPaymentProvider(value: string | null): PaymentProvider {
+  return value === "MANAGER" ? PaymentProvider.MANAGER : PaymentProvider.YOOKASSA;
 }
 
-function isReadyForModeration(transfer: {
-  title: string | null;
-  shortDescription: string | null;
-  transferType: string | null;
-  vehicleModel: string | null;
-  locationName: string | null;
-  serviceArea: string | null;
-  priceFrom: unknown;
-  contactName: string | null;
-  phone: string | null;
-  photoUrls: string[];
-}): boolean {
-  return (
-    Boolean(transfer.title?.trim()) &&
-    Boolean(transfer.shortDescription?.trim()) &&
-    Boolean(transfer.transferType?.trim()) &&
-    Boolean(transfer.vehicleModel?.trim()) &&
-    (Boolean(transfer.locationName?.trim()) || Boolean(transfer.serviceArea?.trim())) &&
-    Boolean(transfer.priceFrom) &&
-    Boolean(transfer.contactName?.trim()) &&
-    Boolean(transfer.phone?.trim()) &&
-    transfer.photoUrls.length > 0
-  );
+function getFirstSearchParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
 }
 
-export default async function DashboardTransferEditPage({ params }: DashboardTransferPageProps) {
+function parseTransferEditorStep(value: string | null): TransferEditorStep | null {
+  if (
+    value === "info" ||
+    value === "location" ||
+    value === "fleet" ||
+    value === "contacts" ||
+    value === "publish"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+export default async function DashboardTransferEditPage({
+  params,
+  searchParams,
+}: DashboardTransferPageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -107,6 +113,9 @@ export default async function DashboardTransferEditPage({ params }: DashboardTra
   }
 
   const { id } = await params;
+  const resolvedSearchParams = searchParams
+    ? await searchParams
+    : ({} as Record<string, string | string[] | undefined>);
   const [transfer, locations] = await Promise.all([
     db.transfer.findUnique({
       where: { id },
@@ -149,379 +158,326 @@ export default async function DashboardTransferEditPage({ params }: DashboardTra
         })
       : null;
     const title = formString(formData, "title") ?? "Новый трансфер";
-    const photoUrls = parsePhotoUrls(formString(formData, "photoUrls"));
+    const fleet = normalizeTransferFleet(parseJsonField(formData, "fleetJson"));
+    const serviceTags = normalizeTransferServiceTags(parseJsonField(formData, "serviceTagsJson"));
+    const fleetSummary = deriveTransferSummaryFromFleet({
+      fleet,
+      photoUrls: [],
+      priceUnitLabel: null,
+    });
     const intent = formString(formData, "intent");
-    const nextStatus = intent === "submit" ? TransferStatus.PENDING_MODERATION : current.status;
+    const paymentProvider = parseTransferPaymentProvider(formString(formData, "paymentProvider"));
+    const previewPath = `${buildPublicTransferPath({ id, title })}?preview=1`;
+    const transferType = formString(formData, "transferType");
+    const locationName = selectedLocation?.name ?? formString(formData, "locationName");
+    const description = formString(formData, "description");
+    const routeExamples = formString(formData, "routeExamples");
+    const contactName = formString(formData, "contactName");
+    const phone = formString(formData, "phone");
+    const phone2 = formString(formData, "phone2");
+    const websiteUrl = formString(formData, "websiteUrl");
+    const whatsappUrl = normalizeWhatsappUrl(formString(formData, "whatsappUrl")) ?? null;
+    const telegramUrl = normalizeTelegramProfileUrl(formString(formData, "telegramUrl")) ?? null;
+    const vkUrl = normalizeVkProfileUrl(formString(formData, "vkUrl")) ?? null;
+    const maxUrl = normalizeMaxProfileUrl(formString(formData, "maxUrl")) ?? null;
+    const okUrl = normalizeOkProfileUrl(formString(formData, "okUrl")) ?? null;
+    const latitude = formCoordinate(formData, "latitude");
+    const longitude = formCoordinate(formData, "longitude");
+    const shouldReturnToModeration = current.status === TransferStatus.PUBLISHED;
+    const nextStatus = shouldReturnToModeration
+      ? TransferStatus.PENDING_MODERATION
+      : current.status === TransferStatus.REJECTED
+        ? TransferStatus.DRAFT
+        : current.status;
 
     await db.transfer.update({
       where: { id },
       data: {
         title,
         slug: buildTransferSlug(title, id),
-        transferType: formString(formData, "transferType"),
-        vehicleClass: formString(formData, "vehicleClass"),
-        vehicleModel: formString(formData, "vehicleModel"),
-        seats: formInt(formData, "seats"),
-        luggage: formInt(formData, "luggage"),
+        transferType,
+        vehicleClass: fleetSummary.vehicleClass,
+        vehicleModel: fleetSummary.vehicleModel,
+        seats: fleetSummary.seats,
+        luggage: fleetSummary.luggage,
         locationId,
-        locationName: selectedLocation?.name ?? formString(formData, "locationName"),
+        locationName,
         districtId: selectedLocation?.districtId ?? null,
-        serviceArea: formString(formData, "serviceArea"),
-        routeExamples: formString(formData, "routeExamples"),
-        latitude: formCoordinate(formData, "latitude"),
-        longitude: formCoordinate(formData, "longitude"),
-        priceFrom: formDecimal(formData, "priceFrom"),
-        priceUnitLabel: formString(formData, "priceUnitLabel"),
-        shortDescription: formString(formData, "shortDescription"),
-        description: formString(formData, "description"),
-        photoUrls,
-        contactName: formString(formData, "contactName"),
-        phone: formString(formData, "phone"),
-        phone2: formString(formData, "phone2"),
-        websiteUrl: formString(formData, "websiteUrl"),
-        whatsappUrl: formString(formData, "whatsappUrl"),
-        telegramUrl: formString(formData, "telegramUrl"),
-        vkUrl: formString(formData, "vkUrl"),
-        maxUrl: formString(formData, "maxUrl"),
-        okUrl: formString(formData, "okUrl"),
+        serviceArea: null,
+        routeExamples,
+        latitude,
+        longitude,
+        priceFrom: fleetSummary.priceFrom ? new Prisma.Decimal(fleetSummary.priceFrom) : null,
+        priceUnitLabel: fleetSummary.priceUnitLabel,
+        shortDescription: null,
+        description,
+        photoUrls: fleetSummary.photoUrls,
+        serviceTags,
+        fleet,
+        contactName,
+        phone,
+        phone2,
+        websiteUrl,
+        whatsappUrl,
+        telegramUrl,
+        vkUrl,
+        maxUrl,
+        okUrl,
+        receiveRequests: false,
         status: nextStatus,
-        moderationNotes: intent === "submit" ? null : undefined,
+        moderationNotes: shouldReturnToModeration ? null : undefined,
       },
     });
+
+    if (intent === "preview") {
+      redirect(previewPath);
+    }
+
+    if (intent === "submit") {
+      const publishReady = isTransferReadyForModeration({
+        title,
+        description,
+        transferType,
+        locationName,
+        priceFrom: fleetSummary.priceFrom,
+        contactName,
+        phone,
+        fleet,
+        photoUrls: fleetSummary.photoUrls,
+        vehicleClass: fleetSummary.vehicleClass,
+        vehicleModel: fleetSummary.vehicleModel,
+        seats: fleetSummary.seats,
+        luggage: fleetSummary.luggage,
+        priceUnitLabel: fleetSummary.priceUnitLabel,
+      });
+
+      if (!publishReady) {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=not-ready`);
+      }
+
+      try {
+        ensurePaymentProviderAllowed(paymentProvider);
+      } catch {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=provider-disabled`);
+      }
+
+      const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", [
+        "transferId",
+      ]);
+
+      const transferPaymentPayload = buildTransferPaymentPayload({
+        transferId: id,
+        transferTitle: title,
+      });
+      const transferPaymentTariffCode = transferPaymentsSupported
+        ? "transfer_standard"
+        : getTransferPaymentTariffCode(id);
+      const transferPaymentWhere = transferPaymentsSupported
+        ? {
+            transferId: id,
+            ownerId: currentSession.id,
+            provider: {
+              in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+            },
+          }
+        : {
+            ownerId: currentSession.id,
+            tariffCode: transferPaymentTariffCode,
+            provider: {
+              in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+            },
+          };
+
+      const payments = await db.payment.findMany({
+        where: transferPaymentWhere,
+        orderBy: [{ createdAt: "desc" }],
+      });
+      const succeededPayment =
+        payments.find((item) => item.status === PaymentStatus.SUCCEEDED) ?? null;
+      if (succeededPayment) {
+        if (transferPaymentsSupported) {
+          await autoSubmitTransferAfterSuccessfulPayment(db, id);
+        } else {
+          await submitTransferToModerationIfReady(db, id);
+        }
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=paid`);
+      }
+
+      const openPayment =
+        payments.find(
+          (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
+        ) ?? null;
+      if (openPayment) {
+        if (openPayment.provider === PaymentProvider.YOOKASSA && openPayment.confirmationUrl) {
+          redirect(openPayment.confirmationUrl);
+        }
+
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=pending`);
+      }
+
+      const idempotenceKey = crypto.randomUUID();
+
+      if (paymentProvider === PaymentProvider.MANAGER) {
+        await db.payment.create({
+          data: {
+            ...(transferPaymentsSupported ? { transferId: id } : {}),
+            ownerId: currentSession.id,
+            amount: TRANSFER_PUBLICATION_FEE_RUB,
+            tariffCode: transferPaymentTariffCode,
+            roomCount: 0,
+            status: PaymentStatus.PENDING,
+            provider: PaymentProvider.MANAGER,
+            idempotenceKey,
+            providerPayload: transferPaymentPayload,
+          },
+        });
+
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=manager`);
+      }
+
+      if (!transferPaymentsSupported) {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-unavailable`);
+      }
+
+      if (!isYookassaConfigured()) {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-unavailable`);
+      }
+
+      const created = await db.payment.create({
+        data: {
+          ...(transferPaymentsSupported ? { transferId: id } : {}),
+          ownerId: currentSession.id,
+          amount: TRANSFER_PUBLICATION_FEE_RUB,
+          tariffCode: transferPaymentTariffCode,
+          roomCount: 0,
+          status: PaymentStatus.CREATED,
+          provider: PaymentProvider.YOOKASSA,
+          idempotenceKey,
+          providerPayload: transferPaymentPayload,
+        },
+      });
+
+      let paymentRedirectUrl: string | null = null;
+
+      try {
+        const yooPayment = await createYookassaPayment({
+          idempotenceKey,
+          amountRub: TRANSFER_PUBLICATION_FEE_RUB,
+          description: `Публикация трансфера «${title}»`,
+          metadata: {
+            paymentId: created.id,
+            transferId: id,
+          },
+        });
+
+        const updated = await db.payment.update({
+          where: { id: created.id },
+          data: {
+            providerPaymentId: yooPayment.id,
+            confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+            providerPayload: yooPayment,
+            status: PaymentStatus.PENDING,
+          },
+        });
+
+        paymentRedirectUrl = updated.confirmationUrl;
+      } catch (error) {
+        await db.payment.update({
+          where: { id: created.id },
+          data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+        });
+
+        console.error("YooKassa transfer payment creation failed", error);
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-error`);
+      }
+
+      if (paymentRedirectUrl) {
+        redirect(paymentRedirectUrl);
+      }
+
+      redirect(`/dashboard/transfers/${id}?saved=1&payment=pending`);
+    }
 
     redirect(`/dashboard/transfers/${id}?saved=1`);
   }
 
-  const title = transfer.title?.trim() || "Новый трансфер";
-  const firstPhoto = getFirstPhoto(transfer.photoUrls);
+  const fleet = getTransferFleet(transfer);
+  const serviceTags = normalizeTransferServiceTags(transfer.serviceTags);
   const publicPath =
     transfer.status === TransferStatus.PUBLISHED
       ? buildPublicTransferPath({ id: transfer.id, title: transfer.title })
       : null;
-  const ready = isReadyForModeration(transfer);
+  const saved = getFirstSearchParam(resolvedSearchParams.saved) === "1";
+  const paymentNotice = getFirstSearchParam(resolvedSearchParams.payment);
+  const initialStep = parseTransferEditorStep(getFirstSearchParam(resolvedSearchParams.step));
+  const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
+  const transferPaymentTariffCode = getTransferPaymentTariffCode(id);
+  const transferPaymentWhere = transferPaymentsSupported
+    ? {
+        ownerId: session.id,
+        provider: {
+          in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+        },
+        OR: [{ transferId: id }, { tariffCode: transferPaymentTariffCode }],
+      }
+    : {
+        ownerId: session.id,
+        tariffCode: transferPaymentTariffCode,
+        provider: {
+          in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+        },
+      };
+  const payments = await db.payment.findMany({
+    where: transferPaymentWhere,
+    orderBy: [{ createdAt: "desc" }],
+    include: transferPaymentsSupported
+      ? {
+          transfer: {
+            select: {
+              title: true,
+            },
+          },
+        }
+      : undefined,
+  });
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <Link
-            href="/dashboard/transfers"
-            className="text-sm font-semibold text-terra hover:underline"
-          >
-            Все трансферы
-          </Link>
-          <h1 className="mt-2 text-3xl text-olive">{title}</h1>
-          <p className="mt-1 text-sm text-olive/64">Статус: {STATUS_LABELS[transfer.status]}</p>
-        </div>
-        {publicPath ? (
-          <Link
-            href={publicPath}
-            className="inline-flex items-center justify-center rounded-xl border border-primary/28 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/7"
-          >
-            Публичная страница
-          </Link>
-        ) : null}
-      </div>
-
-      {transfer.moderationNotes ? (
-        <div className="rounded-2xl bg-terra/10 px-4 py-3 text-sm leading-6 text-olive/85">
-          Комментарий модератора: {transfer.moderationNotes}
-        </div>
-      ) : null}
-
-      <form action={saveTransfer} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="space-y-5">
-          <section className="rounded-[26px] border border-olive/10 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <AppIcon icon={Car} className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold text-olive">Автомобиль и услуга</h2>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Название карточки</span>
-                <input name="title" defaultValue={transfer.title ?? ""} className={inputClass} />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Вид трансфера</span>
-                <input
-                  name="transferType"
-                  defaultValue={transfer.transferType ?? ""}
-                  placeholder="Аэропорт, междугородний, VIP"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Класс автомобиля</span>
-                <input
-                  name="vehicleClass"
-                  defaultValue={transfer.vehicleClass ?? ""}
-                  placeholder="Комфорт, минивэн, бизнес"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Автомобиль</span>
-                <input
-                  name="vehicleModel"
-                  defaultValue={transfer.vehicleModel ?? ""}
-                  placeholder="Hyundai Solaris, Mercedes Vito"
-                  className={inputClass}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Мест</span>
-                  <input
-                    name="seats"
-                    defaultValue={transfer.seats ?? ""}
-                    inputMode="numeric"
-                    className={inputClass}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Багаж</span>
-                  <input
-                    name="luggage"
-                    defaultValue={transfer.luggage ?? ""}
-                    inputMode="numeric"
-                    className={inputClass}
-                  />
-                </label>
-              </div>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Короткое описание</span>
-                <textarea
-                  name="shortDescription"
-                  defaultValue={transfer.shortDescription ?? ""}
-                  placeholder="1-2 предложения, которые будут видны в каталоге"
-                  className={textareaClass}
-                />
-              </label>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Описание</span>
-                <textarea
-                  name="description"
-                  defaultValue={transfer.description ?? ""}
-                  placeholder="Опыт, условия поездки, детское кресло, ожидание, встреча с табличкой"
-                  className={textareaClass}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="rounded-[26px] border border-olive/10 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <AppIcon icon={MapPin} className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold text-olive">География и цена</h2>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Город из справочника</span>
-                <select
-                  name="locationId"
-                  defaultValue={transfer.locationId ?? ""}
-                  className={inputClass}
-                >
-                  <option value="">Не выбран</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Город вручную</span>
-                <input
-                  name="locationName"
-                  defaultValue={transfer.locationName ?? transfer.location?.name ?? ""}
-                  placeholder="Если города нет в справочнике"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Зона работы</span>
-                <input
-                  name="serviceArea"
-                  defaultValue={transfer.serviceArea ?? ""}
-                  placeholder="Симферополь, Ялта, Алушта, весь Крым"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Примеры маршрутов</span>
-                <textarea
-                  name="routeExamples"
-                  defaultValue={transfer.routeExamples ?? ""}
-                  placeholder="Аэропорт Симферополь - Ялта, Севастополь - Форос"
-                  className={textareaClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Цена от, ₽</span>
-                <input
-                  name="priceFrom"
-                  defaultValue={transfer.priceFrom ? Number(transfer.priceFrom).toString() : ""}
-                  inputMode="decimal"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Единица цены</span>
-                <input
-                  name="priceUnitLabel"
-                  defaultValue={transfer.priceUnitLabel ?? "/ поездка"}
-                  placeholder="/ поездка, / км, / час"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Широта метки</span>
-                <input
-                  name="latitude"
-                  defaultValue={transfer.latitude ? Number(transfer.latitude).toString() : ""}
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Долгота метки</span>
-                <input
-                  name="longitude"
-                  defaultValue={transfer.longitude ? Number(transfer.longitude).toString() : ""}
-                  className={inputClass}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="rounded-[26px] border border-olive/10 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <AppIcon icon={ImageIcon} className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold text-olive">Фото и контакты</h2>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Фото автомобиля</span>
-                <textarea
-                  name="photoUrls"
-                  defaultValue={transfer.photoUrls.join("\n")}
-                  placeholder="Ссылки на фото, каждая с новой строки"
-                  className={textareaClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Имя для связи</span>
-                <input
-                  name="contactName"
-                  defaultValue={
-                    transfer.contactName ?? `${session.firstName} ${session.lastName}`.trim()
-                  }
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Телефон</span>
-                <input
-                  name="phone"
-                  defaultValue={transfer.phone ?? session.phone}
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Второй телефон</span>
-                <input name="phone2" defaultValue={transfer.phone2 ?? ""} className={inputClass} />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Сайт</span>
-                <input
-                  name="websiteUrl"
-                  defaultValue={transfer.websiteUrl ?? ""}
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">WhatsApp</span>
-                <input
-                  name="whatsappUrl"
-                  defaultValue={transfer.whatsappUrl ?? ""}
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Telegram</span>
-                <input
-                  name="telegramUrl"
-                  defaultValue={transfer.telegramUrl ?? ""}
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">VK</span>
-                <input name="vkUrl" defaultValue={transfer.vkUrl ?? ""} className={inputClass} />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">MAX</span>
-                <input name="maxUrl" defaultValue={transfer.maxUrl ?? ""} className={inputClass} />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Одноклассники</span>
-                <input name="okUrl" defaultValue={transfer.okUrl ?? ""} className={inputClass} />
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <aside className="space-y-4">
-          <section className="overflow-hidden rounded-[26px] border border-olive/10 bg-white">
-            <div className="aspect-[16/10] bg-cream">
-              {firstPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={firstPhoto} alt={title} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-olive/45">
-                  Фото автомобиля
-                </div>
-              )}
-            </div>
-            <div className="p-4">
-              <p className="text-sm font-semibold text-olive">{title}</p>
-              <p className="mt-1 text-xs leading-5 text-olive/58">
-                Так карточка будет собираться в каталоге: фото, короткое описание, цена и быстрый
-                звонок.
-              </p>
-            </div>
-          </section>
-
-          <section className="rounded-[26px] border border-olive/10 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <AppIcon icon={ready ? CircleCheckBig : Send} className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold text-olive">Публикация</h2>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-olive/62">
-              После отправки администратор проверит карточку. Цена размещения трансфера на сайте:
-              2000 ₽.
-            </p>
-            <div className="mt-4 grid gap-2">
-              <button
-                type="submit"
-                name="intent"
-                value="save"
-                className="rounded-xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/22 hover:text-primary"
-              >
-                Сохранить
-              </button>
-              <button
-                type="submit"
-                name="intent"
-                value="submit"
-                className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
-              >
-                Отправить на модерацию
-              </button>
-            </div>
-          </section>
-        </aside>
-      </form>
-    </div>
+    <TransferEditorPage
+      action={saveTransfer}
+      transfer={{
+        id: transfer.id,
+        status: transfer.status,
+        statusLabel: STATUS_LABELS[transfer.status],
+        title: transfer.title ?? "",
+        transferType: transfer.transferType ?? "",
+        description: transfer.description ?? "",
+        locationId: transfer.locationId ?? "",
+        locationName: transfer.locationName ?? transfer.location?.name ?? "",
+        routeExamples: transfer.routeExamples ?? "",
+        latitude: transfer.latitude ? Number(transfer.latitude).toString() : "",
+        longitude: transfer.longitude ? Number(transfer.longitude).toString() : "",
+        contactName: transfer.contactName ?? `${session.firstName} ${session.lastName}`.trim(),
+        phone: transfer.phone ?? session.phone,
+        phone2: transfer.phone2 ?? "",
+        websiteUrl: transfer.websiteUrl ?? "",
+        whatsappUrl: transfer.whatsappUrl ?? "",
+        telegramUrl: transfer.telegramUrl ?? "",
+        vkUrl: transfer.vkUrl ?? "",
+        maxUrl: transfer.maxUrl ?? "",
+        okUrl: transfer.okUrl ?? "",
+        moderationNotes: transfer.moderationNotes ?? "",
+        reviewsCount: transfer.reviewsCount,
+        avgRating: transfer.avgRating ? Number(transfer.avgRating) : null,
+      }}
+      locations={locations}
+      initialFleet={fleet}
+      initialServiceTags={serviceTags}
+      publicPath={publicPath}
+      publicationFeeRub={TRANSFER_PUBLICATION_FEE_RUB}
+      initialPayments={payments.map(serializePayment)}
+      saved={saved}
+      paymentNotice={paymentNotice}
+      initialStep={initialStep}
+    />
   );
 }

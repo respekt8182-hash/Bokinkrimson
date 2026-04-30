@@ -1,20 +1,39 @@
-import { Prisma, TransferStatus } from "@prisma/client";
-import { ArrowUpRight, Car, Save } from "lucide-react";
+import { PaymentStatus, Prisma, ReviewEntityType, TransferStatus } from "@prisma/client";
+import { ArrowUpRight, Car, Eye, FileText, MapPin, ShieldCheck, Star } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  AdminPageHeader,
-  AdminPanel,
-  adminInputClass,
-  adminTextareaClass,
-} from "@/components/admin/admin-ui";
+import { ReviewModerationList } from "@/components/admin/review-moderation-list";
+import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
+import { AppIcon } from "@/components/ui/app-icon";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
 import { db } from "@/lib/db";
+import {
+  getPaymentStatusLabel,
+  getProviderLabel,
+  getTransferPaymentBaseTariffCode,
+  getTransferPaymentTariffCode,
+  resolvePaymentPlacementValidUntil,
+} from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
+import { serializeReview } from "@/lib/reviews";
+import { TRANSFER_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
+import {
+  deriveTransferSummaryFromFleet,
+  getTransferFleet,
+  normalizeTransferFleet,
+  normalizeTransferServiceTags,
+  transferTypeOptions,
+} from "@/lib/transfers";
 
 type AdminTransferEditPageProps = {
   params: Promise<{ id: string }>;
 };
+
+const inputClass =
+  "w-full rounded-2xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/35 focus:border-primary/30 focus:ring-4 focus:ring-primary/10";
+
+const textareaClass = `${inputClass} min-h-[120px] resize-y`;
 
 const STATUS_LABELS: Record<TransferStatus, string> = {
   DRAFT: "Черновик",
@@ -33,26 +52,6 @@ function formString(formData: FormData, key: string): string | null {
   return trimmed || null;
 }
 
-function formInt(formData: FormData, key: string): number | null {
-  const value = formString(formData, key);
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function formDecimal(formData: FormData, key: string): Prisma.Decimal | null {
-  const value = formString(formData, key)?.replace(",", ".");
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? new Prisma.Decimal(parsed) : null;
-}
-
 function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null {
   const value = formString(formData, key)?.replace(",", ".");
   if (!value) {
@@ -63,11 +62,17 @@ function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null 
   return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
 }
 
-function parsePhotoUrls(value: string | null): string[] {
-  return (value ?? "")
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+function parseJsonField(formData: FormData, key: string): unknown {
+  const value = formString(formData, key);
+  if (!value) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 }
 
 function parseStatus(value: string | null): TransferStatus {
@@ -82,9 +87,19 @@ function parseStatus(value: string | null): TransferStatus {
   return TransferStatus.DRAFT;
 }
 
+function formatRub(value: number | Prisma.Decimal): string {
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(value))} ₽`;
+}
+
+function formatPaymentTariff(tariffCode: string): string {
+  const baseCode = getTransferPaymentBaseTariffCode(tariffCode);
+  return baseCode === "transfer_standard" ? "Публикация карточки трансфера" : baseCode;
+}
+
 export default async function AdminTransferEditPage({ params }: AdminTransferEditPageProps) {
   const { id } = await params;
-  const [transfer, locations] = await Promise.all([
+  const transferReviewsSupported = await hasTransferReviewSupport();
+  const [transfer, locations, reviews, payments] = await Promise.all([
     db.transfer.findUnique({
       where: { id },
       include: {
@@ -95,6 +110,40 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     db.excursionLocation.findMany({
       orderBy: [{ isMajor: "desc" }, { name: "asc" }],
       select: { id: true, name: true, districtId: true },
+    }),
+    transferReviewsSupported
+      ? db.review.findMany({
+          where: {
+            entityType: ReviewEntityType.TRANSFER,
+            transferId: id,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, avatarUrl: true },
+            },
+          },
+          take: 50,
+        })
+      : Promise.resolve([]),
+    db.payment.findMany({
+      where: {
+        OR: [{ transferId: id }, { tariffCode: getTransferPaymentTariffCode(id) }],
+      },
+      orderBy: [{ createdAt: "desc" }],
+      take: 10,
+      select: {
+        id: true,
+        amount: true,
+        tariffCode: true,
+        status: true,
+        provider: true,
+        createdAt: true,
+        paidAt: true,
+        canceledAt: true,
+        placementValidUntil: true,
+        managerNotes: true,
+      },
     }),
   ]);
 
@@ -127,7 +176,21 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         })
       : null;
     const title = formString(formData, "title") ?? "Трансфер";
-    const status = parseStatus(formString(formData, "status"));
+    const fleet = normalizeTransferFleet(parseJsonField(formData, "fleetJson"));
+    const serviceTags = normalizeTransferServiceTags(parseJsonField(formData, "serviceTagsJson"));
+    const fleetSummary = deriveTransferSummaryFromFleet({
+      fleet,
+      photoUrls: [],
+      priceUnitLabel: null,
+    });
+    const intent = formString(formData, "intent");
+    const selectedStatus = parseStatus(formString(formData, "status"));
+    const status =
+      intent === "publish"
+        ? TransferStatus.PUBLISHED
+        : intent === "reject"
+          ? TransferStatus.REJECTED
+          : selectedStatus;
 
     await db.transfer.update({
       where: { id },
@@ -135,22 +198,24 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         title,
         slug: buildTransferSlug(title, id),
         transferType: formString(formData, "transferType"),
-        vehicleClass: formString(formData, "vehicleClass"),
-        vehicleModel: formString(formData, "vehicleModel"),
-        seats: formInt(formData, "seats"),
-        luggage: formInt(formData, "luggage"),
+        vehicleClass: fleetSummary.vehicleClass,
+        vehicleModel: fleetSummary.vehicleModel,
+        seats: fleetSummary.seats,
+        luggage: fleetSummary.luggage,
         locationId,
         locationName: selectedLocation?.name ?? formString(formData, "locationName"),
         districtId: selectedLocation?.districtId ?? null,
-        serviceArea: formString(formData, "serviceArea"),
+        serviceArea: null,
         routeExamples: formString(formData, "routeExamples"),
         latitude: formCoordinate(formData, "latitude"),
         longitude: formCoordinate(formData, "longitude"),
-        priceFrom: formDecimal(formData, "priceFrom"),
-        priceUnitLabel: formString(formData, "priceUnitLabel"),
-        shortDescription: formString(formData, "shortDescription"),
+        priceFrom: fleetSummary.priceFrom ? new Prisma.Decimal(fleetSummary.priceFrom) : null,
+        priceUnitLabel: fleetSummary.priceUnitLabel,
+        shortDescription: null,
         description: formString(formData, "description"),
-        photoUrls: parsePhotoUrls(formString(formData, "photoUrls")),
+        photoUrls: fleetSummary.photoUrls,
+        serviceTags,
+        fleet,
         contactName: formString(formData, "contactName"),
         phone: formString(formData, "phone"),
         phone2: formString(formData, "phone2"),
@@ -160,6 +225,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         vkUrl: formString(formData, "vkUrl"),
         maxUrl: formString(formData, "maxUrl"),
         okUrl: formString(formData, "okUrl"),
+        receiveRequests: false,
         status,
         isPublishedVisible: formData.get("isPublishedVisible") === "on",
         moderationNotes: formString(formData, "moderationNotes"),
@@ -171,54 +237,82 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     redirect(`/admin/transfers/${id}?saved=1`);
   }
 
+  const fleet = getTransferFleet(transfer);
+  const serviceTags = normalizeTransferServiceTags(transfer.serviceTags);
+  const fleetSummary = deriveTransferSummaryFromFleet(transfer);
+  const firstPhoto = fleetSummary.primaryVehicle?.photoUrl ?? fleetSummary.photoUrls[0] ?? null;
   const publicPath =
     transfer.status === TransferStatus.PUBLISHED && transfer.isPublishedVisible
       ? buildPublicTransferPath({ id: transfer.id, title: transfer.title })
       : null;
-  const firstPhoto = transfer.photoUrls[0] ?? null;
+  const contactName =
+    transfer.contactName ?? `${transfer.owner.firstName} ${transfer.owner.lastName}`.trim();
+  const hasReviews = transfer.reviewsCount > 0 && Number(transfer.avgRating) > 0;
+  const latestPayment = payments[0] ?? null;
+  const succeededPayment =
+    payments.find((payment) => payment.status === PaymentStatus.SUCCEEDED) ?? null;
+  const paidUntil = succeededPayment ? resolvePaymentPlacementValidUntil(succeededPayment) : null;
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader
-        eyebrow="Трансферы"
-        title={transfer.title || "Трансфер без названия"}
-        description={`Статус: ${STATUS_LABELS[transfer.status]}. Владелец: ${transfer.owner.firstName} ${transfer.owner.lastName}${transfer.owner.phone ? `, ${transfer.owner.phone}` : ""}.`}
-        actions={
-          <>
-            <Link
-              href="/admin/transfers"
-              className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
-            >
-              К трансферам
-            </Link>
-            {publicPath ? (
-              <Link
-                href={publicPath}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary/8 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/12"
-              >
-                <ArrowUpRight className="h-4 w-4" />
-                Открыть на сайте
-              </Link>
-            ) : null}
-          </>
-        }
-      />
+      <datalist id="transfer-type-options">
+        {transferTypeOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
 
-      <form action={saveTransfer} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/55">
+            Трансферы
+          </p>
+          <h1 className="mt-2 text-3xl text-olive">{transfer.title || "Трансфер без названия"}</h1>
+          <p className="mt-1 text-sm text-olive/64">
+            Статус: {STATUS_LABELS[transfer.status]}. Владелец: {transfer.owner.firstName}{" "}
+            {transfer.owner.lastName}
+            {transfer.owner.phone ? `, ${transfer.owner.phone}` : ""}.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/transfers"
+            className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
+          >
+            К трансферам
+          </Link>
+          {publicPath ? (
+            <Link
+              href={publicPath}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary/8 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/12"
+            >
+              <ArrowUpRight className="h-4 w-4" />
+              Открыть на сайте
+            </Link>
+          ) : null}
+        </div>
+      </div>
+
+      <form action={saveTransfer} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
-          <AdminPanel title="Карточка трансфера">
-            <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_16px_40px_rgba(58,43,35,0.05)]">
+            <div className="flex items-center gap-2">
+              <AppIcon icon={FileText} className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-olive">Карточка трансфера</h2>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5 md:col-span-2">
                 <span className="text-sm font-medium text-olive">Название</span>
                 <input
                   name="title"
                   defaultValue={transfer.title ?? ""}
-                  className={adminInputClass}
+                  placeholder="Название карточки"
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Статус</span>
-                <select name="status" defaultValue={transfer.status} className={adminInputClass}>
+                <select name="status" defaultValue={transfer.status} className={inputClass}>
                   {Object.entries(STATUS_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -227,74 +321,37 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 </select>
               </label>
               <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Вид трансфера</span>
+                <span className="text-sm font-medium text-olive">Тип услуги</span>
                 <input
                   name="transferType"
+                  list="transfer-type-options"
                   defaultValue={transfer.transferType ?? ""}
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Класс автомобиля</span>
-                <input
-                  name="vehicleClass"
-                  defaultValue={transfer.vehicleClass ?? ""}
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Автомобиль</span>
-                <input
-                  name="vehicleModel"
-                  defaultValue={transfer.vehicleModel ?? ""}
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Мест</span>
-                <input
-                  name="seats"
-                  defaultValue={transfer.seats ?? ""}
-                  inputMode="numeric"
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Багаж</span>
-                <input
-                  name="luggage"
-                  defaultValue={transfer.luggage ?? ""}
-                  inputMode="numeric"
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Короткое описание</span>
-                <textarea
-                  name="shortDescription"
-                  defaultValue={transfer.shortDescription ?? ""}
-                  className={adminTextareaClass}
-                />
-              </label>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Описание</span>
+                <span className="text-sm font-medium text-olive">Подробное описание</span>
                 <textarea
                   name="description"
                   defaultValue={transfer.description ?? ""}
-                  className={adminTextareaClass}
+                  className="min-h-[180px] w-full rounded-2xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/35 focus:border-primary/30 focus:ring-4 focus:ring-primary/10"
                 />
               </label>
             </div>
-          </AdminPanel>
+          </section>
 
-          <AdminPanel title="Локация, маршруты и цена">
-            <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_16px_40px_rgba(58,43,35,0.05)]">
+            <div className="flex items-center gap-2">
+              <AppIcon icon={MapPin} className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-olive">География и маршруты</h2>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Город из справочника</span>
                 <select
                   name="locationId"
                   defaultValue={transfer.locationId ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 >
                   <option value="">Не выбран</option>
                   {locations.map((location) => (
@@ -309,40 +366,15 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input
                   name="locationName"
                   defaultValue={transfer.locationName ?? transfer.location?.name ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Зона работы</span>
-                <input
-                  name="serviceArea"
-                  defaultValue={transfer.serviceArea ?? ""}
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Примеры маршрутов</span>
+                <span className="text-sm font-medium text-olive">Маршруты</span>
                 <textarea
                   name="routeExamples"
                   defaultValue={transfer.routeExamples ?? ""}
-                  className={adminTextareaClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Цена от, ₽</span>
-                <input
-                  name="priceFrom"
-                  defaultValue={transfer.priceFrom ? Number(transfer.priceFrom).toString() : ""}
-                  inputMode="decimal"
-                  className={adminInputClass}
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Единица цены</span>
-                <input
-                  name="priceUnitLabel"
-                  defaultValue={transfer.priceUnitLabel ?? ""}
-                  className={adminInputClass}
+                  className={textareaClass}
                 />
               </label>
               <label className="space-y-1.5">
@@ -350,7 +382,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input
                   name="latitude"
                   defaultValue={transfer.latitude ? Number(transfer.latitude).toString() : ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
@@ -358,52 +390,58 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input
                   name="longitude"
                   defaultValue={transfer.longitude ? Number(transfer.longitude).toString() : ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
             </div>
-          </AdminPanel>
+          </section>
 
-          <AdminPanel title="Фото и контакты">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-medium text-olive">Фотографии автомобиля</span>
-                <textarea
-                  name="photoUrls"
-                  defaultValue={transfer.photoUrls.join("\n")}
-                  className={adminTextareaClass}
-                />
-              </label>
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_16px_40px_rgba(58,43,35,0.05)]">
+            <div className="flex items-center gap-2">
+              <AppIcon icon={Car} className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-olive">Автопарк</h2>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-olive/62">
+              Администратор видит тот же состав автопарка, что и владелец: можно поправить модели,
+              цены, фото и порядок транспорта в итоговой карточке.
+            </p>
+            <div className="mt-4">
+              <TransferFleetBuilder
+                transferId={transfer.id}
+                initialFleet={fleet}
+                initialServiceTags={serviceTags}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_16px_40px_rgba(58,43,35,0.05)]">
+            <div className="flex items-center gap-2">
+              <AppIcon icon={ShieldCheck} className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-olive">Контакты и модерация</h2>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Имя для связи</span>
                 <input
                   name="contactName"
                   defaultValue={transfer.contactName ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Телефон</span>
-                <input
-                  name="phone"
-                  defaultValue={transfer.phone ?? ""}
-                  className={adminInputClass}
-                />
+                <input name="phone" defaultValue={transfer.phone ?? ""} className={inputClass} />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Второй телефон</span>
-                <input
-                  name="phone2"
-                  defaultValue={transfer.phone2 ?? ""}
-                  className={adminInputClass}
-                />
+                <input name="phone2" defaultValue={transfer.phone2 ?? ""} className={inputClass} />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Сайт</span>
                 <input
                   name="websiteUrl"
                   defaultValue={transfer.websiteUrl ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
@@ -411,7 +449,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input
                   name="whatsappUrl"
                   defaultValue={transfer.whatsappUrl ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
@@ -419,93 +457,270 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input
                   name="telegramUrl"
                   defaultValue={transfer.telegramUrl ?? ""}
-                  className={adminInputClass}
+                  className={inputClass}
                 />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">VK</span>
-                <input
-                  name="vkUrl"
-                  defaultValue={transfer.vkUrl ?? ""}
-                  className={adminInputClass}
-                />
+                <input name="vkUrl" defaultValue={transfer.vkUrl ?? ""} className={inputClass} />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">MAX</span>
-                <input
-                  name="maxUrl"
-                  defaultValue={transfer.maxUrl ?? ""}
-                  className={adminInputClass}
-                />
+                <input name="maxUrl" defaultValue={transfer.maxUrl ?? ""} className={inputClass} />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Одноклассники</span>
+                <input name="okUrl" defaultValue={transfer.okUrl ?? ""} className={inputClass} />
+              </label>
+              <label className="flex items-start gap-3 rounded-[22px] bg-[#f7f4eb] px-4 py-3 text-sm text-olive/72 md:col-span-2">
                 <input
-                  name="okUrl"
-                  defaultValue={transfer.okUrl ?? ""}
-                  className={adminInputClass}
+                  type="checkbox"
+                  name="isPublishedVisible"
+                  defaultChecked={transfer.isPublishedVisible}
+                  className="mt-1 h-4 w-4 rounded border-olive/25 text-primary focus:ring-primary/20"
+                />
+                <span>
+                  Показывать карточку на сайте, если статус установлен как опубликованный.
+                </span>
+              </label>
+              <label className="space-y-1.5 md:col-span-2">
+                <span className="text-sm font-medium text-olive">Комментарий модератора</span>
+                <textarea
+                  name="moderationNotes"
+                  defaultValue={transfer.moderationNotes ?? ""}
+                  className={textareaClass}
                 />
               </label>
             </div>
-          </AdminPanel>
+          </section>
+
+          {transferReviewsSupported ? (
+            <ReviewModerationList
+              title="Отзывы трансфера"
+              initialReviews={reviews.map(serializeReview)}
+              initialAvgRating={Number(transfer.avgRating)}
+              initialReviewsCount={transfer.reviewsCount}
+            />
+          ) : (
+            <section className="rounded-2xl border border-olive/10 bg-white p-4">
+              <h2 className="text-xl text-olive">Отзывы трансфера</h2>
+              <p className="mt-2 text-sm leading-6 text-olive/68">
+                В этой локальной базе блок отзывов для трансферов будет включён после применения
+                владельцем PostgreSQL полного обновления схемы `Review`.
+              </p>
+            </section>
+          )}
         </div>
 
         <aside className="space-y-4">
-          <AdminPanel>
-            <div className="overflow-hidden rounded-2xl bg-cream">
+          <section className="overflow-hidden rounded-[28px] border border-olive/10 bg-white shadow-[0_18px_48px_rgba(58,43,35,0.06)]">
+            <div className="aspect-[16/10] bg-cream">
               {firstPhoto ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={firstPhoto}
                   alt={transfer.title ?? "Трансфер"}
-                  className="aspect-[16/10] w-full object-cover"
+                  className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex aspect-[16/10] items-center justify-center">
+                <div className="flex h-full items-center justify-center">
                   <Car className="h-8 w-8 text-olive/35" />
                 </div>
               )}
             </div>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div>
-                <dt className="text-olive/45">Владелец</dt>
+            <div className="p-4">
+              <p className="text-base font-semibold text-olive">
+                {transfer.title || "Трансфер без названия"}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-olive/58">
+                На витрине карточка покажет основное фото, тип услуги, цену от минимального
+                предложения и рейтинг после публикации отзывов.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-olive/70">
+                {transfer.transferType ? (
+                  <span className="rounded-full bg-cream px-2.5 py-1">{transfer.transferType}</span>
+                ) : null}
+                {fleetSummary.primaryVehicle?.vehicleModel ? (
+                  <span className="rounded-full bg-cream px-2.5 py-1">
+                    {fleetSummary.primaryVehicle.vehicleModel}
+                  </span>
+                ) : null}
+                {fleet.length > 1 ? (
+                  <span className="rounded-full border border-dashed border-olive/16 px-2.5 py-1">
+                    Автопарк: {fleet.length}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_18px_48px_rgba(58,43,35,0.06)]">
+            <h3 className="text-lg font-semibold text-olive">Оплата размещения</h3>
+            <dl className="mt-4 grid gap-2 text-sm">
+              <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                <dt className="text-olive/50">Тип карточки</dt>
+                <dd className="font-semibold text-olive">Трансфер</dd>
+              </div>
+              <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                <dt className="text-olive/50">Тариф</dt>
                 <dd className="font-semibold text-olive">
+                  {formatPaymentTariff(latestPayment?.tariffCode ?? "transfer_standard")}
+                </dd>
+                <dd className="mt-0.5 text-xs text-olive/50">
+                  {getTransferPaymentBaseTariffCode(
+                    latestPayment?.tariffCode ?? "transfer_standard",
+                  )}
+                </dd>
+              </div>
+              <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                <dt className="text-olive/50">Стоимость</dt>
+                <dd className="font-semibold text-olive">
+                  {formatRub(latestPayment?.amount ?? TRANSFER_PUBLICATION_FEE_RUB)}
+                </dd>
+              </div>
+              <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                <dt className="text-olive/50">Оплачено до</dt>
+                <dd className="font-semibold text-olive">
+                  {paidUntil ? paidUntil.toLocaleDateString("ru-RU") : "Нет активной оплаты"}
+                </dd>
+              </div>
+            </dl>
+
+            {latestPayment ? (
+              <div className="mt-3 rounded-2xl border border-olive/10 bg-white px-3 py-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-olive">
+                      {getPaymentStatusLabel(latestPayment.status, latestPayment.provider)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-olive/55">
+                      {getProviderLabel(latestPayment.provider)} •{" "}
+                      {new Date(latestPayment.createdAt).toLocaleString("ru-RU")}
+                    </p>
+                  </div>
+                  <span
+                    className={
+                      latestPayment.status === PaymentStatus.SUCCEEDED
+                        ? "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                        : latestPayment.status === PaymentStatus.CANCELED
+                          ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700"
+                          : "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700"
+                    }
+                  >
+                    {latestPayment.status === PaymentStatus.SUCCEEDED
+                      ? "Оплачено"
+                      : latestPayment.status === PaymentStatus.CANCELED
+                        ? "Отклонено"
+                        : "Ожидает"}
+                  </span>
+                </div>
+                {latestPayment.managerNotes ? (
+                  <p className="mt-2 rounded-xl bg-cream px-3 py-2 text-xs text-olive/70">
+                    Комментарий: {latestPayment.managerNotes}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                По карточке пока нет платежей. Владелец сможет отправить заявку на оплату из личного
+                кабинета.
+              </p>
+            )}
+
+            {payments.length > 1 ? (
+              <div className="mt-3 space-y-2">
+                {payments.slice(1, 4).map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-cream/70 px-3 py-2 text-xs text-olive/65"
+                  >
+                    <span>{getPaymentStatusLabel(payment.status, payment.provider)}</span>
+                    <span>{formatRub(payment.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <Link
+              href="/admin/payments"
+              className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
+            >
+              Все заявки на оплату
+            </Link>
+          </section>
+
+          <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_18px_48px_rgba(58,43,35,0.06)]">
+            <h3 className="text-lg font-semibold text-olive">Сводка</h3>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-olive/45">Тип карточки</dt>
+                <dd className="text-right font-semibold text-olive">Трансфер</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-olive/45">Владелец</dt>
+                <dd className="text-right font-semibold text-olive">
                   {transfer.owner.firstName} {transfer.owner.lastName}
                 </dd>
               </div>
-              <div>
-                <dt className="text-olive/45">Отзывы</dt>
-                <dd className="font-semibold text-olive">Без рейтинга</dd>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="inline-flex items-center gap-2 text-olive/45">
+                  <AppIcon icon={Star} className="h-4 w-4" />
+                  Рейтинг
+                </dt>
+                <dd className="text-right font-semibold text-olive">
+                  {hasReviews ? Number(transfer.avgRating).toFixed(1) : "Пока без рейтинга"}
+                </dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="inline-flex items-center gap-2 text-olive/45">
+                  <AppIcon icon={Eye} className="h-4 w-4" />
+                  Отзывы
+                </dt>
+                <dd className="text-right font-semibold text-olive">{transfer.reviewsCount}</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-olive/45">Контакт</dt>
+                <dd className="text-right font-semibold text-olive">{contactName}</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-olive/45">Цена от</dt>
+                <dd className="text-right font-semibold text-olive">
+                  {fleetSummary.priceFrom
+                    ? `${fleetSummary.priceFrom.toLocaleString("ru-RU")} ₽`
+                    : "Не указана"}
+                </dd>
               </div>
             </dl>
-          </AdminPanel>
 
-          <AdminPanel title="Модерация">
-            <label className="flex items-start gap-3 rounded-2xl bg-cream/70 p-3 text-sm text-olive/70">
-              <input
-                type="checkbox"
-                name="isPublishedVisible"
-                defaultChecked={transfer.isPublishedVisible}
-                className="mt-1 h-4 w-4 rounded border-olive/25 text-primary focus:ring-primary/20"
-              />
-              Показывать на сайте, если статус опубликован
-            </label>
-            <label className="mt-4 block space-y-1.5">
-              <span className="text-sm font-medium text-olive">Комментарий модератора</span>
-              <textarea
-                name="moderationNotes"
-                defaultValue={transfer.moderationNotes ?? ""}
-                className={adminTextareaClass}
-              />
-            </label>
             <button
               type="submit"
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+              name="intent"
+              value="save"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
             >
-              <Save className="h-4 w-4" />
-              Сохранить
+              Сохранить изменения
             </button>
-          </AdminPanel>
+            {transfer.status !== TransferStatus.PUBLISHED ? (
+              <button
+                type="submit"
+                name="intent"
+                value="publish"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/12"
+              >
+                Сохранить и опубликовать
+              </button>
+            ) : null}
+            {transfer.status === TransferStatus.PENDING_MODERATION ? (
+              <button
+                type="submit"
+                name="intent"
+                value="reject"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+              >
+                Отклонить
+              </button>
+            ) : null}
+          </section>
         </aside>
       </form>
     </div>

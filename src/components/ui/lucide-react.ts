@@ -106,6 +106,7 @@ import {
   IconRoute,
   IconRulerMeasure,
   IconSend2,
+  IconShare2,
   IconShieldCheck,
   IconShip,
   IconShoe,
@@ -262,6 +263,7 @@ export const RulerDimensionLine = asLucideIcon(IconRulerMeasure);
 export const Save = asLucideIcon(IconDeviceFloppy);
 export const Search = asLucideIcon(IconSearch);
 export const SendHorizontal = asLucideIcon(IconSend2);
+export const Share2 = asLucideIcon(IconShare2);
 export const ShieldCheck = asLucideIcon(IconShieldCheck);
 export const Ship = asLucideIcon(IconShip);
 export const Shirt = asLucideIcon(IconShirt);

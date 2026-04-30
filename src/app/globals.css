@@ -97,6 +97,8 @@
   --icon-review: #c99a4e;
   --icon-fill-soft-opacity: 0.18;
   --icon-fill-solid-opacity: 1;
+  --public-mobile-chrome-progress: 0;
+  --public-mobile-map-offset: 0px;
   --icon-stroke-shadow: drop-shadow(0 0.5px 0 rgba(255, 255, 255, 0.7))
     drop-shadow(0 3px 8px rgba(15, 118, 110, 0.08));
 }
@@ -129,13 +131,14 @@ body {
 
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* ═══ Global mobile overflow protection ═══ */
 html,
 body {
   max-width: 100vw;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -231,7 +234,15 @@ h4 {
     .lucide-route,
     .lucide-mountain,
     .lucide-trees,
-    .lucide-waves
+    .lucide-waves,
+    .tabler-icon-map,
+    .tabler-icon-map-pin,
+    .tabler-icon-navigation,
+    .tabler-icon-compass,
+    .tabler-icon-route,
+    .tabler-icon-mountain,
+    .tabler-icon-trees,
+    .tabler-icon-beach
   ) {
   color: var(--icon-auto-color, var(--icon-location)) !important;
 }
@@ -292,7 +303,13 @@ h4 {
     .lucide-calendar-days,
     .lucide-calendar-range,
     .lucide-calendar-fold,
-    .lucide-clock-3
+    .lucide-clock-3,
+    .tabler-icon-calendar,
+    .tabler-icon-calendar-event,
+    .tabler-icon-calendar-days,
+    .tabler-icon-calendar-time,
+    .tabler-icon-clock,
+    .tabler-icon-clock-hour-3
   ) {
   color: var(--icon-auto-color, var(--icon-booking)) !important;
 }
@@ -1942,18 +1959,41 @@ button:focus-visible > .field-adornment-icon {
 }
 
 .float-map-btn {
+  --float-map-shift: var(--public-mobile-map-offset, 0px);
   position: fixed;
-  right: max(16px, env(safe-area-inset-right, 16px));
-  bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 16px));
-  left: auto;
-  transform: none;
-  animation: floatIn 0.4s ease 0.4s both;
-  box-shadow: 0 8px 28px rgba(15, 118, 110, 0.38);
+  left: 50%;
+  right: auto;
+  bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px));
+  z-index: 61;
+  display: inline-flex;
+  min-width: 132px;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 30px;
+  transform: translate3d(-50%, var(--float-map-shift), 0);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  background: rgba(63, 63, 63, 0.96);
+  color: #ffffff;
+  box-shadow:
+    0 16px 34px rgba(15, 23, 42, 0.24),
+    0 6px 14px rgba(58, 43, 35, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
   white-space: nowrap;
+  will-change: transform;
+  transition:
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms ease,
+    filter 240ms ease;
 }
 
 .float-map-btn:active {
-  transform: scale(0.96);
+  transform: translate3d(-50%, var(--float-map-shift), 0) scale(0.97);
+  filter: brightness(0.96);
 }
 
 .catalog-layout {
@@ -1964,6 +2004,17 @@ button:focus-visible > .field-adornment-icon {
 .map-column {
   border-radius: 20px;
   overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .catalog-layout:has(.catalog-map-sticky) {
+    min-height: calc(100dvh + var(--catalog-map-sticky-top, 256px) + 84px);
+  }
+
+  .catalog-map-sticky {
+    top: var(--catalog-map-sticky-top, 256px);
+    height: calc(100dvh - 120px);
+  }
 }
 
 @media (pointer: coarse) {
@@ -2150,6 +2201,18 @@ button:focus-visible > .field-adornment-icon {
 
 .sticky-bottom-enter {
   animation: sticky-bottom-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dashboard-mobile-bottom-nav {
+  transition:
+    transform 220ms ease,
+    opacity 180ms ease;
+}
+
+body.dashboard-interaction-open .dashboard-mobile-bottom-nav {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(100% + env(safe-area-inset-bottom, 0px) + 1rem));
 }
 
 /* ─── Liquid Glass 2026 ─── */

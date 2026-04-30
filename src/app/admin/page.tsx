@@ -1,5 +1,6 @@
-import { ExcursionStatus, PropertyStatus } from "@prisma/client";
+import { ExcursionStatus, PropertyStatus, TransferStatus } from "@prisma/client";
 import {
+  Car,
   Compass,
   FileText,
   House,
@@ -19,15 +20,7 @@ import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
 
-function StatusRow({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: string;
-}) {
+function StatusRow({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/70 bg-white/72 px-4 py-3">
       <span className="text-sm text-olive/70">{label}</span>
@@ -48,6 +41,9 @@ export default async function AdminHomePage() {
     excursionsCount,
     pendingExcursionsCount,
     rejectedExcursionsCount,
+    transfersCount,
+    pendingTransfersCount,
+    rejectedTransfersCount,
     isDatabaseFallback,
   } = await loadDataWithDatabaseFallback(
     {
@@ -69,6 +65,9 @@ export default async function AdminHomePage() {
         excursionsCount,
         pendingExcursionsCount,
         rejectedExcursionsCount,
+        transfersCount,
+        pendingTransfersCount,
+        rejectedTransfersCount,
       ] = await Promise.all([
         db.user.count(),
         db.property.count(),
@@ -87,6 +86,9 @@ export default async function AdminHomePage() {
         db.excursion.count(),
         db.excursion.count({ where: { status: ExcursionStatus.PENDING_MODERATION } }),
         db.excursion.count({ where: { status: ExcursionStatus.REJECTED } }),
+        db.transfer.count(),
+        db.transfer.count({ where: { status: TransferStatus.PENDING_MODERATION } }),
+        db.transfer.count({ where: { status: TransferStatus.REJECTED } }),
       ]);
 
       return {
@@ -100,6 +102,9 @@ export default async function AdminHomePage() {
         excursionsCount,
         pendingExcursionsCount,
         rejectedExcursionsCount,
+        transfersCount,
+        pendingTransfersCount,
+        rejectedTransfersCount,
         isDatabaseFallback: false,
       };
     },
@@ -114,6 +119,9 @@ export default async function AdminHomePage() {
       excursionsCount: 0,
       pendingExcursionsCount: 0,
       rejectedExcursionsCount: 0,
+      transfersCount: 0,
+      pendingTransfersCount: 0,
+      rejectedTransfersCount: 0,
       isDatabaseFallback: true,
     },
   );
@@ -144,7 +152,7 @@ export default async function AdminHomePage() {
         </AdminNotice>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <AdminStatCard
           label="Пользователи"
           value={usersCount}
@@ -162,6 +170,12 @@ export default async function AdminHomePage() {
           value={excursionsCount}
           icon={Compass}
           description="Все экскурсии и туры"
+        />
+        <AdminStatCard
+          label="Трансферы"
+          value={transfersCount}
+          icon={Car}
+          description="Карточки водителей и маршрутов"
         />
         <AdminStatCard
           label="Сообщения"
@@ -192,6 +206,14 @@ export default async function AdminHomePage() {
             >
               <Compass className="h-4 w-4" />
               Модерация экскурсий
+            </AdminLinkButton>
+            <AdminLinkButton
+              href="/admin/transfers?status=PENDING_MODERATION"
+              variant="ghost"
+              className="justify-start rounded-[22px] px-4 py-4"
+            >
+              <Car className="h-4 w-4" />
+              Трансферы на модерации
             </AdminLinkButton>
             <AdminLinkButton
               href="/admin/messages"
@@ -225,6 +247,11 @@ export default async function AdminHomePage() {
               tone="bg-sky-100 text-sky-800"
             />
             <StatusRow
+              label="Трансферы на модерации"
+              value={pendingTransfersCount}
+              tone="bg-cyan-100 text-cyan-800"
+            />
+            <StatusRow
               label="Новые заявки"
               value={applicationsCount}
               tone="bg-emerald-100 text-emerald-800"
@@ -246,11 +273,7 @@ export default async function AdminHomePage() {
               value={publishedCount}
               tone="bg-emerald-100 text-emerald-800"
             />
-            <StatusRow
-              label="Отклонено"
-              value={rejectedCount}
-              tone="bg-red-100 text-red-700"
-            />
+            <StatusRow label="Отклонено" value={rejectedCount} tone="bg-red-100 text-red-700" />
           </div>
         </AdminPanel>
 
@@ -270,6 +293,21 @@ export default async function AdminHomePage() {
               label="Сообщения"
               value={adminMessagesCount}
               tone="bg-rose-100 text-rose-800"
+            />
+          </div>
+        </AdminPanel>
+
+        <AdminPanel title="Трансферы">
+          <div className="space-y-3">
+            <StatusRow
+              label="На модерации"
+              value={pendingTransfersCount}
+              tone="bg-cyan-100 text-cyan-800"
+            />
+            <StatusRow
+              label="Отклонено"
+              value={rejectedTransfersCount}
+              tone="bg-red-100 text-red-700"
             />
           </div>
         </AdminPanel>

@@ -82,20 +82,28 @@ describe("local favorites", () => {
     );
   });
 
-  it("keeps excursion and tour favorites separate even with the same id", async () => {
+  it("keeps excursion, tour, attraction, and transfer favorites separate even with the same id", async () => {
     const favoritesModule = await import("../../src/lib/local-favorites");
 
     favoritesModule.toggleLocalFavorite({ entityType: "excursion", id: "shared-id" });
     favoritesModule.toggleLocalFavorite({ entityType: "tour", id: "shared-id" });
+    favoritesModule.toggleLocalFavorite({ entityType: "attraction", id: "shared-id" });
+    favoritesModule.toggleLocalFavorite({ entityType: "transfer", id: "shared-id" });
 
     expect(favoritesModule.getLocalFavorites()).toEqual([
       { entityType: "excursion", id: "shared-id" },
       { entityType: "tour", id: "shared-id" },
+      { entityType: "attraction", id: "shared-id" },
+      { entityType: "transfer", id: "shared-id" },
     ]);
     expect(favoritesModule.isLocalFavorite({ entityType: "excursion", id: "shared-id" })).toBe(
       true,
     );
     expect(favoritesModule.isLocalFavorite({ entityType: "tour", id: "shared-id" })).toBe(true);
+    expect(favoritesModule.isLocalFavorite({ entityType: "attraction", id: "shared-id" })).toBe(
+      true,
+    );
+    expect(favoritesModule.isLocalFavorite({ entityType: "transfer", id: "shared-id" })).toBe(true);
   });
 
   it("notifies subscribers when favorites change", async () => {

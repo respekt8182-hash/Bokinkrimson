@@ -8,17 +8,22 @@ import { AppIcon } from "@/components/ui/app-icon";
 interface ExcursionPhotoGalleryProps {
   photoUrls: string[];
   title?: string;
+  desktopVariant?: "default" | "object-card";
 }
 
-const DEFAULT_GALLERY_TITLE = "\u0424\u043e\u0442\u043e \u044d\u043a\u0441\u043a\u0443\u0440\u0441\u0438\u0438";
+const DEFAULT_GALLERY_TITLE =
+  "\u0424\u043e\u0442\u043e \u044d\u043a\u0441\u043a\u0443\u0440\u0441\u0438\u0438";
 const GALLERY_PLACEHOLDER_TEXT =
   "\u0424\u043e\u0442\u043e\u0433\u0440\u0430\u0444\u0438\u0438 \u044d\u043a\u0441\u043a\u0443\u0440\u0441\u0438\u0438 \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c \u043f\u043e\u0441\u043b\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438.";
 const LIGHTBOX_ARIA_LABEL =
   "\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0444\u043e\u0442\u043e\u0433\u0440\u0430\u0444\u0438\u0439";
 const CLOSE_LABEL = "\u0417\u0430\u043a\u0440\u044b\u0442\u044c";
-const PREVIOUS_PHOTO_LABEL = "\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0444\u043e\u0442\u043e";
-const NEXT_PHOTO_LABEL = "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0435 \u0444\u043e\u0442\u043e";
+const PREVIOUS_PHOTO_LABEL =
+  "\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0444\u043e\u0442\u043e";
+const NEXT_PHOTO_LABEL =
+  "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0435 \u0444\u043e\u0442\u043e";
 const PHOTO_WORD = "\u0444\u043e\u0442\u043e";
+const OBJECT_CARD_IMAGE_SIZES = "(max-width: 768px) 100vw, 50vw";
 
 function getPhotoLabel(index: number): string {
   return `\u0424\u043e\u0442\u043e ${index + 1}`;
@@ -49,6 +54,7 @@ function GalleryPlaceholder({ className, title }: { className?: string; title: s
 export function ExcursionPhotoGallery({
   photoUrls,
   title = DEFAULT_GALLERY_TITLE,
+  desktopVariant = "default",
 }: ExcursionPhotoGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -155,6 +161,110 @@ export function ExcursionPhotoGallery({
   if (photoUrls.length === 0 || visibleUrls.length === 0) {
     return <GalleryPlaceholder className="h-72 md:h-[560px]" title={title} />;
   }
+
+  const renderObjectCardDesktopGallery = () => {
+    if (count === 1) {
+      return (
+        <div
+          className="gallery-img-wrap hidden cursor-pointer overflow-hidden rounded-3xl md:block"
+          style={{ height: "560px" }}
+          onClick={() => openLightbox(0)}
+        >
+          <Image
+            src={visibleUrls[0]}
+            alt={title}
+            fill
+            loading="eager"
+            sizes={OBJECT_CARD_IMAGE_SIZES}
+            className="gallery-img h-full w-full object-cover"
+            onError={() => handleImageError(visibleUrls[0])}
+          />
+        </div>
+      );
+    }
+
+    if (count === 2) {
+      return (
+        <div
+          className="hidden md:grid md:gap-2.5"
+          style={{ gridTemplateColumns: "1.7fr 1fr", height: "560px" }}
+        >
+          <div
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-l-3xl"
+            onClick={() => openLightbox(0)}
+          >
+            <Image
+              src={visibleUrls[0]}
+              alt={title}
+              fill
+              loading="eager"
+              sizes={OBJECT_CARD_IMAGE_SIZES}
+              className="gallery-img h-full w-full object-cover"
+              onError={() => handleImageError(visibleUrls[0])}
+            />
+          </div>
+          <div
+            className="gallery-img-wrap cursor-pointer overflow-hidden rounded-r-3xl"
+            onClick={() => openLightbox(1)}
+          >
+            <Image
+              src={visibleUrls[1]}
+              alt={getPhotoLabel(1)}
+              fill
+              sizes={OBJECT_CARD_IMAGE_SIZES}
+              className="gallery-img h-full w-full object-cover"
+              onError={() => handleImageError(visibleUrls[1])}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="hidden md:grid md:gap-2.5"
+        style={{
+          gridTemplateColumns: "1.7fr 1fr",
+          gridTemplateRows: "1fr 1fr",
+          height: "560px",
+        }}
+      >
+        <div
+          className="gallery-img-wrap row-span-2 cursor-pointer overflow-hidden rounded-l-3xl"
+          onClick={() => openLightbox(0)}
+        >
+          <Image
+            src={visibleUrls[0]}
+            alt={title}
+            fill
+            loading="eager"
+            sizes={OBJECT_CARD_IMAGE_SIZES}
+            className="gallery-img h-full w-full object-cover"
+            onError={() => handleImageError(visibleUrls[0])}
+          />
+        </div>
+
+        {visibleUrls.slice(1, 3).map((url, index) => (
+          <div
+            key={`object-card-d-${url}`}
+            className={`gallery-img-wrap cursor-pointer overflow-hidden ${
+              index === 0 ? "rounded-tr-3xl" : "rounded-br-3xl"
+            }`}
+            onClick={() => openLightbox(index + 1)}
+          >
+            <Image
+              src={url}
+              alt={getPhotoLabel(index + 1)}
+              fill
+              sizes={OBJECT_CARD_IMAGE_SIZES}
+              className="gallery-img h-full w-full object-cover"
+              onError={() => handleImageError(url)}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const renderMobileGallery = () => {
     if (count === 1) {
@@ -296,7 +406,9 @@ export function ExcursionPhotoGallery({
   return (
     <>
       <div className="excursion-gallery-grid overflow-hidden rounded-3xl">
-        {count === 1 ? (
+        {desktopVariant === "object-card" ? (
+          renderObjectCardDesktopGallery()
+        ) : count === 1 ? (
           <div
             className="gallery-img-wrap hidden cursor-pointer overflow-hidden rounded-3xl md:block"
             style={{ height: "560px" }}

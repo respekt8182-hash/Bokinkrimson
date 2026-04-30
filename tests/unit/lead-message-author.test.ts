@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildExcursionLeadMessage,
   buildPropertyLeadMessage,
+  buildTransferLeadMessage,
   getOfferLabels,
 } from "@/lib/lead-message-author";
 
@@ -49,5 +50,23 @@ describe("lead message author wording", () => {
       badge: "Экскурсия",
       accusative: "экскурсию",
     });
+  });
+
+  it("builds a transfer message with author wording and extra details", () => {
+    const message = buildTransferLeadMessage({
+      authorGender: "female",
+      transferTitle: "Такси по городу - Ялта - Седан",
+      locationName: "Ялта",
+      priceLabel: "от 1 000 ₽ / поездка",
+      vehicleOption: "Быстро и чётко",
+      extra: "Нужно детское кресло.",
+    });
+
+    expect(message).toContain('Добрый день! Нашла ваше объявление на сайте "Крым Вокруг".');
+    expect(message).toContain("Хотела бы уточнить возможность заказать трансфер:");
+    expect(message).toContain('- Трансфер: "Такси по городу - Ялта - Седан"');
+    expect(message).toContain("- Транспорт: Быстро и чётко");
+    expect(message).toContain("(Дополнительно: Нужно детское кресло.)");
+    expect(message).toContain("Буду благодарна за ответ!");
   });
 });

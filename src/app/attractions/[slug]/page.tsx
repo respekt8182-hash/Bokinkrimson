@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 import { AttractionDetails } from "@/components/public/marketplace-catalogs";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { getPublicAttractionByIdentifier } from "@/lib/public-marketplace";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { absoluteUrl } from "@/lib/seo/site";
 
 type AttractionDetailPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: AttractionDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
@@ -16,22 +20,19 @@ export async function generateMetadata({ params }: AttractionDetailPageProps): P
 
   if (!item) {
     return {
-      title: "Достопримечательность не найдена — Крым Вокруг",
+      title: "Место досуга не найдено — Крым Вокруг",
     };
   }
 
   return {
-    title: `${item.title} — достопримечательности Крыма`,
-    description:
-      item.shortDescription ??
-      item.description?.slice(0, 160) ??
-      `Информация о достопримечательности ${item.title} в каталоге Крым Вокруг.`,
+    title: item.seoTitle,
+    description: item.metaDescription,
     alternates: {
       canonical: buildCanonicalPath(item.path),
     },
     openGraph: {
-      title: item.title,
-      description: item.shortDescription ?? item.description ?? undefined,
+      title: item.seoTitle,
+      description: item.metaDescription,
       images: item.coverImageUrl ? [item.coverImageUrl] : undefined,
     },
   };
@@ -59,23 +60,80 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
     Object.entries(nearbySearchParams).filter(([, value]) => value),
     ["location", "radiusKm"],
   );
+  const jsonLdItems: Array<Record<string, unknown>> = [
+    {
+      "@context": "https://schema.org",
+      "@type": "TouristAttraction",
+      name: item.title,
+      description: item.metaDescription,
+      image: item.coverImageUrl ? absoluteUrl(item.coverImageUrl) : undefined,
+      url: absoluteUrl(item.path),
+      address: item.address
+        ? {
+            "@type": "PostalAddress",
+            addressLocality: item.locationName ?? undefined,
+            streetAddress: item.address,
+            addressRegion: "Крым",
+            addressCountry: "RU",
+          }
+        : undefined,
+      geo:
+        item.latitude !== null && item.longitude !== null
+          ? {
+              "@type": "GeoCoordinates",
+              latitude: item.latitude,
+              longitude: item.longitude,
+            }
+          : undefined,
+    },
+  ];
+
+  if (item.faq.length > 0) {
+    jsonLdItems.push({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: item.faq.map((faqItem) => ({
+        "@type": "Question",
+        name: faqItem.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: faqItem.answer,
+        },
+      })),
+    });
+  }
 
   return (
     <>
+      <JsonLd data={jsonLdItems} />
       <AttractionDetails item={item} />
-      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-8 md:px-6 lg:grid-cols-2">
-        <NearbyPropertiesSectionServer
-          latitude={item.latitude}
-          longitude={item.longitude}
-          searchHref={nearbyHousingHref}
-          radiusKm={15}
-        />
-        <NearbyExcursionsSectionServer
-          latitude={item.latitude}
-          longitude={item.longitude}
-          searchHref={nearbyExcursionsHref}
-          radiusKm={15}
-        />
+      <section className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 md:px-6">
+        <div id="nearby-housing">
+          <NearbyPropertiesSectionServer
+            latitude={item.latitude}
+            longitude={item.longitude}
+            searchHref={nearbyHousingHref}
+            radiusKm={15}
+            title="Недвижимость рядом"
+            actionLabel="Открыть жильё рядом"
+            layout="grid"
+            className="excursion-card p-6 md:p-7"
+            titleClassName="font-heading text-2xl"
+          />
+        </div>
+        <div id="nearby-excursions">
+          <NearbyExcursionsSectionServer
+            latitude={item.latitude}
+            longitude={item.longitude}
+            searchHref={nearbyExcursionsHref}
+            radiusKm={15}
+            title="Экскурсии рядом"
+            actionLabel="Открыть экскурсии рядом"
+            layout="grid"
+            className="excursion-card p-6 md:p-7"
+            titleClassName="font-heading text-2xl"
+          />
+        </div>
       </section>
     </>
   );

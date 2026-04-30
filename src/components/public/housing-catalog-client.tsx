@@ -11,8 +11,6 @@ import {
   fetchAccommodationSearch,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
-import { propertyTypes } from "@/lib/constants";
-import { formatLocationInPrepositional } from "@/lib/seo/site";
 import type { SearchFilters, SearchResponse } from "@/types/catalog";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -113,7 +111,7 @@ function ToastContainer({
     <div
       className={cn(
         "pointer-events-none fixed inset-x-0 z-[9999] mx-auto flex w-full max-w-md flex-col gap-2 px-3",
-        hasFloatingMapButton ? "bottom-24" : "bottom-6",
+        hasFloatingMapButton ? "bottom-40 lg:bottom-6" : "bottom-28 lg:bottom-6",
       )}
       role="alert"
       aria-live="assertive"
@@ -181,10 +179,7 @@ export function HousingCatalogClient({
 
   const handleWishlistToggle = useCallback(
     (isFavorite: boolean) => {
-      pushToast(
-        "success",
-        isFavorite ? "Добавлено в избранное" : "Удалено из избранного",
-      );
+      pushToast("success", isFavorite ? "Добавлено в избранное" : "Удалено из избранного");
     },
     [pushToast],
   );
@@ -314,21 +309,6 @@ export function HousingCatalogClient({
     return () => window.removeEventListener("popstate", handlePopState);
   }, [runFilterRequest]);
 
-  const activeLocationName = filters.location ? locationLabel || filters.location : "";
-  const locationPhrase = activeLocationName
-    ? (formatLocationInPrepositional(activeLocationName) ?? `в городе ${activeLocationName}`)
-    : null;
-  const propertyTypeLabel =
-    propertyTypes.find((item) => item.id === filters.propertyType)?.name ?? "";
-  const catalogTitle =
-    activeLocationName && propertyTypeLabel
-      ? `${propertyTypeLabel} ${locationPhrase ?? `в городе ${activeLocationName}`} у моря`
-      : activeLocationName
-        ? `Жильё ${locationPhrase ?? `в городе ${activeLocationName}`} у моря`
-        : "Жильё в Крыму у моря";
-  const catalogSubtitle = activeLocationName
-    ? `Найдено ${total} вариантов${propertyTypeLabel ? ` в категории «${propertyTypeLabel}»` : ""}.`
-    : `Найдено ${total} вариантов жилья по всему Крыму.`;
   const emptyCatalogContent = (
     <div className="space-y-3">
       <section className="rounded-2xl border border-olive/10 bg-white/94 p-5 text-left shadow-[0_14px_34px_-30px_rgba(15,74,64,0.45)]">
@@ -354,19 +334,11 @@ export function HousingCatalogClient({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
-        <div className="mb-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-olive">{catalogTitle}</h1>
-            <p className="mt-0.5 text-sm text-olive/60">{catalogSubtitle}</p>
-          </div>
-        </div>
-      </div>
-
       <CatalogFilterBar
         filters={filters}
         onApplyFilters={(next, toast) => void applyFilters(next, toast)}
         onResetFilters={() => void resetFilters()}
+        totalCount={total}
         locationLabel={locationLabel}
         locationNames={locationNames}
         initialPopularSuggestions={initialPopularLocationSuggestions}
@@ -383,6 +355,7 @@ export function HousingCatalogClient({
             hasMore={hasMore}
             loadingMore={loadingMore}
             loadingInitial={isRefreshing && items.length === 0}
+            totalCount={total}
             emptyContent={emptyCatalogContent}
             newItemIds={newItemIds}
             onLoadMore={handleLoadMore}

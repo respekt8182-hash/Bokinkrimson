@@ -6,8 +6,8 @@ import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 
 const navigationLinks = [
   { href: "/rent", label: "Жильё" },
-  { href: "/attractions", label: "Достопримечательности" },
   { href: "/excursions", label: "Экскурсии" },
+  { href: "/attractions", label: "Досуг" },
   { href: "/transfers", label: "Трансферы" },
   { href: "/tours", label: "Туры" },
   { href: "/about", label: "О сервисе" },

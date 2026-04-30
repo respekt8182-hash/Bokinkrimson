@@ -19,6 +19,7 @@ import {
   transfersHubPath,
 } from "@/lib/seo/routes";
 import { absoluteUrl } from "@/lib/seo/site";
+import { getStaticAttractions } from "@/lib/static-attractions";
 
 type SitemapEntry = MetadataRoute.Sitemap[number];
 type RouteFileEntry = {
@@ -255,29 +256,14 @@ async function buildExcursionEntries(): Promise<MetadataRoute.Sitemap> {
 }
 
 async function buildAttractionEntries(): Promise<MetadataRoute.Sitemap> {
-  try {
-    const attractions = await db.attraction.findMany({
-      where: {
-        status: "PUBLISHED",
-        isPublishedVisible: true,
-      },
-      select: {
-        id: true,
-        title: true,
-        updatedAt: true,
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    });
+  const attractions = await getStaticAttractions();
 
-    return attractions.map((item) => ({
-      url: absoluteUrl(buildPublicAttractionPath(item)),
-      lastModified: item.updatedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    }));
-  } catch {
-    return [];
-  }
+  return attractions.map((item) => ({
+    url: absoluteUrl(buildPublicAttractionPath(item)),
+    lastModified: new Date(item.updatedAt),
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
+  }));
 }
 
 async function buildTransferEntries(): Promise<MetadataRoute.Sitemap> {

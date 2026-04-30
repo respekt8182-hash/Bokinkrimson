@@ -8,26 +8,54 @@ import {
   isPointInsideBounds,
   parseBoundsParam,
   parseIntParam,
+  parseOptionalFloatParam,
   parseOptionalIntParam,
 } from "@/lib/search-contracts";
 
-const maxCollectedPages = 20;
+const maxCollectedItems = 5000;
+const mapCollectionPageSize = 24;
 
 async function collectCatalogItems(query: PublicExcursionCatalogQuery) {
-  const firstPage = await getPublicExcursionCatalog({ ...query, page: 1, pageSize: 24 });
-  const items = [...firstPage.items];
-  const maxPage = Math.min(firstPage.totalPages, maxCollectedPages);
-
-  for (let page = 2; page <= maxPage; page += 1) {
-    const nextPage = await getPublicExcursionCatalog({ ...query, page, pageSize: 24 });
-    items.push(...nextPage.items);
-  }
+  const result = await getPublicExcursionCatalog({
+    ...query,
+    page: 1,
+    pageSize: maxCollectedItems,
+    allowLargePageSize: true,
+  });
 
   return {
-    items,
-    totalAvailable: firstPage.total,
-    truncated: firstPage.totalPages > maxCollectedPages,
+    items: result.items,
+    totalAvailable: result.total,
+    truncated: result.total > maxCollectedItems,
   };
+}
+
+function parseOfferType(value: string | null): PublicExcursionCatalogQuery["offerType"] {
+  return value === "excursion" || value === "tour" ? value : undefined;
+}
+
+function parseDurationBucket(
+  value: string | null,
+): PublicExcursionCatalogQuery["durationBucket"] {
+  return value === "up_to_3h" || value === "between_3h_6h" || value === "more_6h"
+    ? value
+    : undefined;
+}
+
+function parseDifficulty(value: string | null): PublicExcursionCatalogQuery["difficulty"] {
+  return value === "easy" || value === "medium" || value === "hard" ? value : undefined;
+}
+
+function parseSort(value: string | null): PublicExcursionCatalogQuery["sort"] {
+  return value === "relevance" ||
+    value === "price_asc" ||
+    value === "price_desc" ||
+    value === "rating_desc" ||
+    value === "popular_desc" ||
+    value === "distance_asc" ||
+    value === "duration_asc"
+    ? value
+    : undefined;
 }
 
 export async function GET(request: Request) {
@@ -38,6 +66,7 @@ export async function GET(request: Request) {
   const query: PublicExcursionCatalogQuery = {
     page,
     pageSize: 24,
+    offerType: parseOfferType(searchParams.get("offerType")),
     locationId:
       searchParams.get("location_id") ??
       searchParams.get("locationId") ??
@@ -67,7 +96,7 @@ export async function GET(request: Request) {
       searchParams.get("dateTo") ??
       undefined,
     people: parseOptionalIntParam(
-      searchParams.get("participants") ?? searchParams.get("people"),
+      searchParams.get("participants") ?? searchParams.get("people") ?? searchParams.get("guests"),
       { min: 1, max: 40 },
     ),
     format: searchParams.get("format") ?? undefined,
@@ -81,24 +110,24 @@ export async function GET(request: Request) {
       const value = Number.parseFloat(searchParams.get("radiusKm") ?? "");
       return Number.isFinite(value) ? value : undefined;
     })(),
+    minPrice: parseOptionalFloatParam(searchParams.get("minPrice"), {
+      min: 0,
+      max: 1_000_000_000,
+    }),
+    maxPrice: parseOptionalFloatParam(searchParams.get("maxPrice"), {
+      min: 0,
+      max: 1_000_000_000,
+    }),
+    durationBucket: parseDurationBucket(searchParams.get("durationBucket")),
+    language: searchParams.get("language") ?? undefined,
+    difficulty: parseDifficulty(searchParams.get("difficulty")),
+    sort: parseSort(searchParams.get("sort")),
   };
 
   const collected = await collectCatalogItems(query);
   const points = collected.items
     .filter((item) => isPointInsideBounds(item.latitude, item.longitude, bounds))
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      path: item.path,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      priceFrom: item.priceFrom,
-      priceTo: item.priceTo,
-      currency: item.currency,
-      avgRating: item.avgRating,
-      reviewsCount: item.reviewsCount,
-      categoryName: item.categoryName,
-    }));
+    .map((item) => item);
 
   return NextResponse.json({
     total: points.length,
@@ -106,7 +135,7 @@ export async function GET(request: Request) {
     meta: {
       totalAvailable: collected.totalAvailable,
       truncated: collected.truncated,
-      collectedPages: Math.min(maxCollectedPages, Math.ceil(collected.items.length / 24)),
+      collectedPages: Math.ceil(collected.items.length / mapCollectionPageSize),
     },
   });
 }
