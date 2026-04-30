@@ -4,18 +4,29 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
 
 type FirstListingPromoProps = {
-  kind: "housing" | "excursions";
+  kind: "housing" | "excursions" | "transfers";
   className?: string;
 };
 
 export function FirstListingPromo({ kind, className }: FirstListingPromoProps) {
-  const isHousing = kind === "housing";
-  const title = isHousing
-    ? "Станьте первым, кто разместит объект на сайте"
-    : "Станьте первым, кто разместит экскурсию или тур";
-  const description = isHousing
-    ? "Добавьте жильё в каталог Крым Вокруг и получите скидку на первое размещение от нашей команды."
-    : "Добавьте программу в каталог Крым Вокруг и получите скидку на первое размещение от нашей команды.";
+  const content =
+    kind === "housing"
+      ? {
+          title: "Станьте первым, кто разместит объект на сайте",
+          description:
+            "Добавьте жильё в каталог Крым Вокруг и получите скидку на первое размещение от нашей команды.",
+        }
+      : kind === "transfers"
+        ? {
+            title: "Станьте первым, кто разместит трансфер",
+            description:
+              "Добавьте трансфер в каталог Крым Вокруг и получите скидку на первое размещение от нашей команды.",
+          }
+        : {
+            title: "Станьте первым, кто разместит экскурсию или тур",
+            description:
+              "Добавьте программу в каталог Крым Вокруг и получите скидку на первое размещение от нашей команды.",
+          };
 
   return (
     <section
@@ -30,8 +41,8 @@ export function FirstListingPromo({ kind, className }: FirstListingPromoProps) {
             <AppIcon icon={BadgeCheck} className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-base font-semibold leading-snug text-olive">{title}</p>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-olive/70">{description}</p>
+            <p className="text-base font-semibold leading-snug text-olive">{content.title}</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-olive/70">{content.description}</p>
           </div>
         </div>
 

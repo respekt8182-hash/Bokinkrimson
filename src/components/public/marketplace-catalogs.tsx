@@ -19,6 +19,7 @@ import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
+import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import {
   PropertyContactsPanel,
   type PropertyContactsPanelText,
@@ -538,6 +539,26 @@ function EmptyState({
         Сбросить фильтры
       </Link>
     </section>
+  );
+}
+
+function TransferEmptyCatalogContent() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
+        <p className="text-sm text-olive/60">По вашим параметрам трансферы не найдены.</p>
+        <p className="mt-1 text-xs text-olive/45">
+          Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
+        </p>
+        <Link
+          href="/transfers"
+          className="mt-4 inline-flex rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+        >
+          Сбросить все фильтры
+        </Link>
+      </div>
+      <FirstListingPromo kind="transfers" />
+    </div>
   );
 }
 
@@ -1062,26 +1083,24 @@ export function TransferCatalog({
         locationSuggestions={locationSuggestions}
       />
 
-      {result.items.length === 0 ? (
-        <EmptyState
-          title="Трансферы не найдены"
-          description="Попробуйте изменить город, цену, радиус или тип трансфера."
-          resetHref="/transfers"
-        />
-      ) : (
-        <MarketplaceCatalogMap
-          kind="transfers"
-          items={mapItems ?? result.items}
-          filters={result.filters}
-          mapTitle="Карта водителей"
-        >
-          <section className="min-w-0 space-y-4 lg:w-full" id="catalog-results">
-            {result.items.map((item, index) => (
-              <TransferCard key={item.id} item={item} eagerImage={index < 2} />
-            ))}
-          </section>
-        </MarketplaceCatalogMap>
-      )}
+      <MarketplaceCatalogMap
+        kind="transfers"
+        items={mapItems ?? result.items}
+        filters={result.filters}
+        mapTitle="Карта трансферов"
+      >
+        <section className="min-w-0 flex-1 lg:w-full" id="catalog-results">
+          {result.items.length === 0 ? (
+            <TransferEmptyCatalogContent />
+          ) : (
+            <div className="space-y-4">
+              {result.items.map((item, index) => (
+                <TransferCard key={item.id} item={item} eagerImage={index < 2} />
+              ))}
+            </div>
+          )}
+        </section>
+      </MarketplaceCatalogMap>
 
       <Pagination
         basePath="/transfers"
