@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import SearchPage from "@/app/search/page";
 import { getLocationDirectoryItems, normalizeLocationName } from "@/lib/location-directory";
-import { getPublicCatalog } from "@/lib/public-properties";
 import { buildSearchMetadata } from "@/lib/seo/search-metadata";
 
 type HousingLocationPageProps = {
@@ -50,16 +49,6 @@ export default async function HousingLocationPage({
   const resolvedLocation = await resolveHousingLocation(location);
 
   if (!resolvedLocation) {
-    notFound();
-  }
-
-  const preview = await getPublicCatalog({
-    location: resolvedLocation.name,
-    pageSize: 1,
-    trackSearchImpressions: false,
-  });
-
-  if (preview.total === 0) {
     notFound();
   }
 
