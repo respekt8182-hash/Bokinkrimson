@@ -24,8 +24,6 @@ type NavItem = {
   isActive: (pathname: string) => boolean;
 };
 
-type SearchParamsLike = Pick<URLSearchParams, "get"> | null | undefined;
-
 const MOBILE_CHROME_TOP_RESET = 72;
 const MOBILE_CHROME_SCROLL_RANGE = 140;
 const MOBILE_CHROME_NAV_TRAVEL = 130;
@@ -57,49 +55,6 @@ export function isPublicDetailRoute(pathname: string) {
   return false;
 }
 
-function isHousingCatalogRoute(pathname: string) {
-  const segments = getPathSegments(pathname);
-
-  return (
-    pathname === "/rent" ||
-    pathname === "/crimea" ||
-    (segments[0] === "crimea" && segments.length === 2 && segments[1] !== "excursions")
-  );
-}
-
-function isExcursionCatalogRoute(pathname: string) {
-  const segments = getPathSegments(pathname);
-
-  return (
-    pathname === "/excursions" ||
-    (segments[0] === "excursions" && segments.length <= 3) ||
-    pathname === "/tours" ||
-    (segments[0] === "tours" && segments.length <= 2)
-  );
-}
-
-function isMarketplaceCatalogRoute(pathname: string) {
-  return pathname === "/transfers" || pathname === "/attractions";
-}
-
-function isLegacyCatalogRoute(pathname: string, searchParams: SearchParamsLike) {
-  if (pathname !== "/search") {
-    return false;
-  }
-
-  const direction = searchParams?.get("direction");
-  return !direction || ["housing", "excursions", "tours"].includes(direction);
-}
-
-function shouldHideOnScroll(pathname: string, searchParams: SearchParamsLike) {
-  return (
-    isHousingCatalogRoute(pathname) ||
-    isExcursionCatalogRoute(pathname) ||
-    isMarketplaceCatalogRoute(pathname) ||
-    isLegacyCatalogRoute(pathname, searchParams)
-  );
-}
-
 export function shouldShowPublicMobileBottomNav(pathname: string) {
   return (
     !pathname.startsWith("/auth") &&
@@ -121,7 +76,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
   const [forceHidden, setForceHidden] = useState(false);
 
   const showNav = shouldShowPublicMobileBottomNav(pathname);
-  const hideOnScroll = showNav && shouldHideOnScroll(pathname, searchParams);
+  const hideOnScroll = showNav;
   const chromeProgress = chromeState.key === visibilityKey ? chromeState.progress : 0;
   const chromeProgressRef = useRef(chromeProgress);
 

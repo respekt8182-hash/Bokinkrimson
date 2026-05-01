@@ -419,6 +419,7 @@ export function MarketplaceCatalogMap({
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
+  const mobileSheetTopRef = useRef<number | null>(null);
   const mobileDragHandledRef = useRef(false);
   const mobileResultsScrollTopRef = useRef(0);
   const mobileChromeProgressRef = useRef(0);
@@ -584,6 +585,7 @@ export function MarketplaceCatalogMap({
 
   const snapMobileSheet = useCallback(
     (snap: MobileSheetSnap) => {
+      mobileSheetTopRef.current = mobileSheetSnaps[snap];
       setMobileSheetSnap(snap);
       setMobileSheetTop(mobileSheetSnaps[snap]);
     },
@@ -592,6 +594,7 @@ export function MarketplaceCatalogMap({
 
   const handleMobileSheetPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
+      mobileSheetTopRef.current = resolvedMobileSheetTop;
       mobileSheetDragRef.current = {
         pointerId: event.pointerId,
         startY: event.clientY,
@@ -623,6 +626,7 @@ export function MarketplaceCatalogMap({
         mobileDragHandledRef.current = true;
       }
 
+      mobileSheetTopRef.current = nextTop;
       setMobileSheetTop(nextTop);
       event.preventDefault();
     },
@@ -643,7 +647,8 @@ export function MarketplaceCatalogMap({
         return;
       }
 
-      const currentTop = mobileSheetTop ?? mobileSheetSnaps[mobileSheetSnap];
+      const currentTop =
+        mobileSheetTopRef.current ?? mobileSheetTop ?? mobileSheetSnaps[mobileSheetSnap];
       const nextSnap = getNearestMobileSheetSnap(currentTop, mobileSheetSnaps);
       snapMobileSheet(nextSnap);
     },
@@ -957,8 +962,8 @@ export function MarketplaceCatalogMap({
                 onMouseOver={handleCatalogCardMouseOver}
                 onMouseOut={handleCatalogCardMouseOut}
                 className={cn(
-                  "overflow-y-auto rounded-t-[28px] bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
-                  isMobileSheetExpanded ? "h-full pt-0" : "h-[calc(100%-76px)] pt-4",
+                  "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
+                  isMobileSheetExpanded ? "h-full pt-0" : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >

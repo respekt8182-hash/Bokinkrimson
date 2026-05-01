@@ -984,6 +984,15 @@ export function AttractionCatalog({
     radiusKm: String(result.filters.radiusKm),
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
   };
+  const pagination = (
+    <Pagination
+      basePath="/attractions"
+      page={result.page}
+      totalPages={result.totalPages}
+      params={params}
+    />
+  );
+
   return (
     <CatalogShell
       breadcrumbs={[
@@ -1024,20 +1033,16 @@ export function AttractionCatalog({
           filters={result.filters}
           mapTitle="Карта мест"
         >
-          <section className="min-w-0 space-y-4 lg:w-full" id="catalog-results">
-            {result.items.map((item, index) => (
-              <AttractionCard key={item.id} item={item} eagerImage={index < 2} />
-            ))}
+          <section className="min-w-0 lg:w-full" id="catalog-results">
+            <div className="space-y-4">
+              {result.items.map((item, index) => (
+                <AttractionCard key={item.id} item={item} eagerImage={index < 2} />
+              ))}
+            </div>
+            {pagination}
           </section>
         </MarketplaceCatalogMap>
       )}
-
-      <Pagination
-        basePath="/attractions"
-        page={result.page}
-        totalPages={result.totalPages}
-        params={params}
-      />
     </CatalogShell>
   );
 }
@@ -1057,6 +1062,15 @@ export function TransferCatalog({
     maxPrice: result.filters.maxPrice ? String(result.filters.maxPrice) : "",
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
   };
+  const pagination = (
+    <Pagination
+      basePath="/transfers"
+      page={result.page}
+      totalPages={result.totalPages}
+      params={params}
+    />
+  );
+
   return (
     <CatalogShell
       breadcrumbs={[
@@ -1102,15 +1116,9 @@ export function TransferCatalog({
               ))}
             </div>
           )}
+          {pagination}
         </section>
       </MarketplaceCatalogMap>
-
-      <Pagination
-        basePath="/transfers"
-        page={result.page}
-        totalPages={result.totalPages}
-        params={params}
-      />
     </CatalogShell>
   );
 }
