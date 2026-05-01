@@ -153,14 +153,14 @@ export function CatalogFilterShell({
   return (
     <div
       className={cn(
-        "border-b border-olive/8 bg-cream/95 backdrop-blur-md",
+        "relative isolate overflow-visible border-b border-transparent bg-transparent before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-0 before:h-full before:bg-[linear-gradient(180deg,rgba(250,248,245,0.97)_0%,rgba(250,248,245,0.86)_38%,rgba(250,248,245,0.42)_68%,rgba(250,248,245,0)_100%)] before:backdrop-blur-md before:content-[''] md:border-olive/8 md:bg-cream/95 md:backdrop-blur-md md:before:hidden",
         sticky && "sticky top-[76px] z-[45] md:top-[88px]",
         className,
       )}
     >
-      <div className="mx-auto w-full max-w-[1680px] px-4 py-3 md:px-6">
-        <div className="rounded-[30px] border border-olive/10 bg-white/88 p-3 shadow-[0_18px_40px_-30px_rgba(15,74,64,0.34)] backdrop-blur-xl">
-          <div className="-mx-1 flex touch-pan-x snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
+      <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 py-0 md:px-6 md:py-3">
+        <div className="rounded-[30px] border border-transparent bg-transparent p-0 shadow-none md:border-olive/10 md:bg-white/88 md:p-3 md:shadow-[0_18px_40px_-30px_rgba(15,74,64,0.34)] md:backdrop-blur-xl">
+          <div className="flex touch-pan-x snap-x snap-mandatory gap-2 overflow-x-auto rounded-[28px] border border-transparent bg-white/75 px-2 py-2 shadow-[0_16px_34px_-28px_rgba(15,74,64,0.48)] backdrop-blur-xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:overflow-visible md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none">
             {chips}
           </div>
           <div className="mt-3 hidden items-center justify-between gap-3 border-t border-olive/10 pt-3 md:flex">

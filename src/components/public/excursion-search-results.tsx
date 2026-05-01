@@ -2136,9 +2136,7 @@ export function ExcursionSearchResults({
                   onClick={() =>
                     setOpenFilterPanel((current) => (current === "program" ? null : "program"))
                   }
-                  onClear={
-                    programFiltersCount > 0 ? resetProgramFilters : undefined
-                  }
+                  onClear={programFiltersCount > 0 ? resetProgramFilters : undefined}
                 />
               }
               footer={
@@ -2748,7 +2746,7 @@ export function ExcursionSearchResults({
 
             <div
               className={cn(
-                "absolute inset-x-0 top-0 z-40 h-full rounded-t-[28px] bg-[#f4f6fb] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] will-change-transform",
+                "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
                 isMobileSheetDragging
                   ? "transition-none"
                   : "transition-transform duration-300 ease-out",
@@ -2767,8 +2765,11 @@ export function ExcursionSearchResults({
                   aria-expanded={mobileSheetSnap !== "collapsed"}
                   aria-controls="catalog-results"
                 >
-                  <span className="h-1 w-16 rounded-full bg-olive/12" aria-hidden="true" />
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <span
+                    className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
+                    aria-hidden="true"
+                  />
+                  <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
                     Найдено: {foundProgramsLabel}
                     <AppIcon
                       icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
@@ -2781,7 +2782,7 @@ export function ExcursionSearchResults({
                 ref={mobileResultsScrollRef}
                 onScroll={handleCatalogMobileResultsScroll}
                 className={cn(
-                  "h-[calc(100%-76px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-1 overscroll-contain transition-opacity duration-150",
+                  "h-[calc(100%-76px)] overflow-y-auto rounded-t-[28px] bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-4 shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >

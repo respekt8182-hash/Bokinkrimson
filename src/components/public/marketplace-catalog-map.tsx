@@ -551,7 +551,14 @@ export function MarketplaceCatalogMap({
       filters.centerLng,
       filters.radiusKm,
     ].join(":");
-  }, [filters.centerLat, filters.centerLng, filters.locationName, filters.radiusKm, kind, mapViewport]);
+  }, [
+    filters.centerLat,
+    filters.centerLng,
+    filters.locationName,
+    filters.radiusKm,
+    kind,
+    mapViewport,
+  ]);
 
   const openMapFully = useCallback(() => {
     setMapExpanded(true);
@@ -777,6 +784,25 @@ export function MarketplaceCatalogMap({
     };
   }, []);
 
+  useEffect(() => {
+    if (mapPlacement !== "mobile" || mapExpanded || mobileSheetSnap !== "expanded") {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const results = mobileResultsScrollRef.current;
+      if (!results) {
+        return;
+      }
+
+      results.scrollTop = MOBILE_SHEET_HANDLE_HEIGHT;
+      mobileResultsScrollTopRef.current = results.scrollTop;
+      setMobileChromeProgress(0, true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [mapExpanded, mapPlacement, mobileSheetSnap, setMobileChromeProgress]);
+
   useLayoutEffect(() => {
     if (mapPlacement !== "mobile") {
       return;
@@ -848,6 +874,29 @@ export function MarketplaceCatalogMap({
     mobileSheetSnap === "expanded" &&
     resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
   const isMobileMapCollapsed = mobileSheetSnap === "collapsed";
+  const isMobileSheetExpanded = mobileSheetSnap === "expanded";
+  const mobileSheetHandle = (
+    <button
+      type="button"
+      onClick={handleMobileSheetClick}
+      onPointerDown={handleMobileSheetPointerDown}
+      onPointerMove={handleMobileSheetPointerMove}
+      onPointerUp={handleMobileSheetPointerUp}
+      onPointerCancel={handleMobileSheetPointerCancel}
+      className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
+      aria-expanded={mobileSheetSnap !== "collapsed"}
+      aria-controls="catalog-results"
+    >
+      <span className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80" aria-hidden="true" />
+      <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
+        Найдено {foundCountLabel}
+        <AppIcon
+          icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
+          className="h-4 w-4 text-olive/48"
+        />
+      </span>
+    </button>
+  );
 
   return (
     <>
@@ -894,46 +943,33 @@ export function MarketplaceCatalogMap({
 
             <div
               className={cn(
-                "absolute inset-x-0 top-0 z-40 h-full rounded-t-[28px] bg-[#f4f6fb] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] will-change-transform",
+                "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
                 isMobileSheetDragging
                   ? "transition-none"
                   : "transition-transform duration-300 ease-out",
               )}
               style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
             >
-              <div className="md:hidden">
-                <button
-                  type="button"
-                  onClick={handleMobileSheetClick}
-                  onPointerDown={handleMobileSheetPointerDown}
-                  onPointerMove={handleMobileSheetPointerMove}
-                  onPointerUp={handleMobileSheetPointerUp}
-                  onPointerCancel={handleMobileSheetPointerCancel}
-                  className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
-                  aria-expanded={mobileSheetSnap !== "collapsed"}
-                  aria-controls="catalog-results"
-                >
-                  <span className="h-1 w-16 rounded-full bg-olive/12" aria-hidden="true" />
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                    Найдено {foundCountLabel}
-                    <AppIcon
-                      icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
-                      className="h-4 w-4 text-olive/48"
-                    />
-                  </span>
-                </button>
-              </div>
+              {!isMobileSheetExpanded ? <div className="md:hidden">{mobileSheetHandle}</div> : null}
               <div
                 ref={mobileResultsScrollRef}
                 onScroll={handleMobileResultsScroll}
                 onMouseOver={handleCatalogCardMouseOver}
                 onMouseOut={handleCatalogCardMouseOut}
                 className={cn(
-                  "h-[calc(100%-76px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-1 overscroll-contain transition-opacity duration-150",
+                  "overflow-y-auto rounded-t-[28px] bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
+                  isMobileSheetExpanded ? "h-full pt-0" : "h-[calc(100%-76px)] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >
-                {children}
+                {isMobileSheetExpanded ? (
+                  <>
+                    <div className="-mx-4">{mobileSheetHandle}</div>
+                    <div className="pt-4">{children}</div>
+                  </>
+                ) : (
+                  children
+                )}
               </div>
             </div>
           </div>

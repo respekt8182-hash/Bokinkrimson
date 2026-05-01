@@ -4,6 +4,7 @@ import { ArrowUpDown, Car, Landmark, MapPin, Route, Search, WalletCards } from "
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CatalogFilterShell,
   CatalogFieldGroup,
   CatalogFilterChipButton,
   CatalogFilterPanelActions,
@@ -379,33 +380,13 @@ function MarketplaceFilterFrame({
   totalLabel: string;
 }) {
   return (
-    <div className="sticky top-[76px] z-[45] -mx-4 mb-6 border-b border-olive/8 bg-cream/95 backdrop-blur-md md:-mx-6 md:top-[88px] md:mb-8">
-      <div className="mx-auto w-full max-w-[1680px] px-4 py-3 md:px-6">
-        <div className="rounded-[30px] border border-olive/10 bg-white/88 p-3 shadow-[0_18px_40px_-30px_rgba(15,74,64,0.34)] backdrop-blur-xl">
-          <div className="-mx-1 flex touch-pan-x snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-            {children}
-          </div>
-          <div className="mt-3 hidden items-center justify-between gap-3 border-t border-olive/10 pt-3 md:flex">
-            <div className="min-w-0">
-              <span className="whitespace-nowrap text-sm font-semibold text-olive">
-                {totalLabel}
-              </span>
-            </div>
-            <div className="hidden shrink-0 items-center gap-3 md:flex">
-              {hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={onResetAll}
-                  className="whitespace-nowrap text-sm font-semibold text-primary transition hover:text-primary/70"
-                >
-                  Сбросить
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <CatalogFilterShell
+      className="-mx-4 md:-mx-6 md:mb-8"
+      chips={children}
+      totalLabel={totalLabel}
+      hasActiveFilters={hasActiveFilters}
+      onResetAll={onResetAll}
+    />
   );
 }
 

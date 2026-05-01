@@ -108,11 +108,12 @@ const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0
 const ruPluralRules = new Intl.PluralRules("ru-RU");
 
 function formatRuCount(value: number, one: string, few: string, many: string): string {
-  const label = ruPluralRules.select(Math.abs(value)) === "one"
-    ? one
-    : ruPluralRules.select(Math.abs(value)) === "few"
-      ? few
-      : many;
+  const label =
+    ruPluralRules.select(Math.abs(value)) === "one"
+      ? one
+      : ruPluralRules.select(Math.abs(value)) === "few"
+        ? few
+        : many;
 
   return `${ruNumberFormat.format(value)} ${label}`;
 }
@@ -237,8 +238,7 @@ function clamp(value: number, min: number, max: number): number {
 
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
   return (Object.entries(snaps) as Array<[MobileSheetSnap, number]>).reduce(
-    (nearest, entry) =>
-      Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest,
+    (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
     ["preview", snaps.preview],
   )[0];
 }
@@ -698,6 +698,25 @@ export function PublicHousingResultsWithMap({
   }, []);
 
   useEffect(() => {
+    if (mapPlacement !== "mobile" || isMapExpanded || mobileSheetSnap !== "expanded") {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const results = mobileResultsScrollRef.current;
+      if (!results) {
+        return;
+      }
+
+      results.scrollTop = MOBILE_SHEET_HANDLE_HEIGHT;
+      mobileResultsScrollTopRef.current = results.scrollTop;
+      setMobileChromeProgress(0, true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMapExpanded, mapPlacement, mobileSheetSnap, setMobileChromeProgress]);
+
+  useEffect(() => {
     const shouldHideNav =
       mapPlacement === "mobile" && (isMapExpanded || mobileSheetSnap === "collapsed");
 
@@ -927,13 +946,32 @@ export function PublicHousingResultsWithMap({
     !isMapExpanded &&
     mobileSheetSnap === "expanded" &&
     resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
+  const isMobileSheetExpanded = mobileSheetSnap === "expanded";
+  const mobileSheetHandle = (
+    <button
+      type="button"
+      onClick={handleMobileSheetClick}
+      onPointerDown={handleMobileSheetPointerDown}
+      onPointerMove={handleMobileSheetPointerMove}
+      onPointerUp={handleMobileSheetPointerUp}
+      onPointerCancel={handleMobileSheetPointerCancel}
+      className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
+      aria-expanded={mobileSheetSnap !== "collapsed"}
+      aria-controls="catalog-results"
+    >
+      <span className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80" aria-hidden="true" />
+      <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
+        Найдено {foundCountLabel}
+        <AppIcon
+          icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
+          className="h-4 w-4 text-olive/48"
+        />
+      </span>
+    </button>
+  );
 
   const resultsSection = (
-    <section
-      id="catalog-results"
-      aria-busy={loadingInitial || loadingMore}
-      className="space-y-4"
-    >
+    <section id="catalog-results" aria-busy={loadingInitial || loadingMore} className="space-y-4">
       <div
         className={cn(
           "grid gap-4 transition-all duration-300",
@@ -1079,14 +1117,14 @@ export function PublicHousingResultsWithMap({
 
               <div
                 className={cn(
-                  "absolute inset-x-0 top-0 z-40 h-full rounded-t-[28px] bg-[#f4f6fb] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] will-change-transform",
+                  "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
                   mobileSheetDragRef.current
                     ? "transition-none"
                     : "transition-transform duration-300 ease-out",
                 )}
                 style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
               >
-                <div className="md:hidden">
+                <div className={cn("md:hidden", isMobileSheetExpanded && "hidden")}>
                   <button
                     type="button"
                     onClick={handleMobileSheetClick}
@@ -1098,8 +1136,11 @@ export function PublicHousingResultsWithMap({
                     aria-expanded={mobileSheetSnap !== "collapsed"}
                     aria-controls="catalog-results"
                   >
-                    <span className="h-1 w-16 rounded-full bg-olive/12" aria-hidden="true" />
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <span
+                      className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
+                      aria-hidden="true"
+                    />
+                    <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
                       Найдено {foundCountLabel}
                       <AppIcon
                         icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
@@ -1112,13 +1153,23 @@ export function PublicHousingResultsWithMap({
                   ref={mobileResultsScrollRef}
                   onScroll={handleMobileResultsScroll}
                   className={cn(
-                    "h-[calc(100%-76px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-1 overscroll-contain transition-opacity duration-150",
+                    "overflow-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
+                    isMobileSheetExpanded
+                      ? "h-full pt-0"
+                      : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
                     mobileSheetSnap === "collapsed"
                       ? "pointer-events-none opacity-0"
                       : "opacity-100",
                   )}
                 >
-                  {resultsSection}
+                  {isMobileSheetExpanded ? (
+                    <>
+                      <div className="-mx-4">{mobileSheetHandle}</div>
+                      <div className="pt-4">{resultsSection}</div>
+                    </>
+                  ) : (
+                    resultsSection
+                  )}
                 </div>
               </div>
             </div>
