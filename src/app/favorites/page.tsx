@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function FavoritesPage() {
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:py-10">
       <LocalFavoritesPage />
     </div>
   );
