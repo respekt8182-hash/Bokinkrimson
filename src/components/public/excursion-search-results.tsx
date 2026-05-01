@@ -1813,6 +1813,7 @@ export function ExcursionSearchResults({
     !mapExpanded &&
     mobileSheetSnap === "expanded" &&
     resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
+  const isCatalogMobileSheetExpanded = mobileSheetSnap === "expanded";
 
   const mapStatsLabel = `На карте: ${mapPoints.length}`;
   const renderMapStatusOverlay = () => {
@@ -2124,6 +2125,7 @@ export function ExcursionSearchResults({
           <>
             <ResponsiveFilterPanel
               open={openFilterPanel === "program"}
+              className="order-3 md:order-1"
               title="Программа"
               onClose={() => setOpenFilterPanel(null)}
               width={520}
@@ -2209,6 +2211,7 @@ export function ExcursionSearchResults({
 
             <ResponsiveFilterPanel
               open={openFilterPanel === "location"}
+              className="order-1 md:order-2"
               title="Локация"
               onClose={() => {
                 setOpenFilterPanel(null);
@@ -2392,6 +2395,7 @@ export function ExcursionSearchResults({
 
             <ResponsiveFilterPanel
               open={openFilterPanel === "date"}
+              className="order-2 md:order-3"
               title="Даты"
               onClose={() => setOpenFilterPanel(null)}
               width={DATE_PANEL_WIDTH}
@@ -2450,6 +2454,7 @@ export function ExcursionSearchResults({
 
             <ResponsiveFilterPanel
               open={openFilterPanel === "guests"}
+              className="order-4"
               title="Гости"
               onClose={() => setOpenFilterPanel(null)}
               width={412}
@@ -2493,6 +2498,7 @@ export function ExcursionSearchResults({
 
             <ResponsiveFilterPanel
               open={openFilterPanel === "price"}
+              className="order-5"
               title="Цена"
               onClose={() => setOpenFilterPanel(null)}
               width={420}
@@ -2607,6 +2613,7 @@ export function ExcursionSearchResults({
 
             <ResponsiveFilterPanel
               open={openFilterPanel === "more"}
+              className="order-6"
               title="Еще параметры"
               onClose={() => setOpenFilterPanel(null)}
               width={440}
@@ -2753,7 +2760,7 @@ export function ExcursionSearchResults({
               )}
               style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
             >
-              <div className="md:hidden">
+              <div className={cn("md:hidden", isCatalogMobileSheetExpanded && "hidden")}>
                 <button
                   type="button"
                   onClick={handleCatalogMobileSheetClick}
@@ -2770,7 +2777,7 @@ export function ExcursionSearchResults({
                     aria-hidden="true"
                   />
                   <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
-                    Найдено: {foundProgramsLabel}
+                    Найдено {foundProgramsLabel}
                     <AppIcon
                       icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
                       className="h-4 w-4 text-olive/48"
@@ -2782,11 +2789,20 @@ export function ExcursionSearchResults({
                 ref={mobileResultsScrollRef}
                 onScroll={handleCatalogMobileResultsScroll}
                 className={cn(
-                  "h-[calc(100%-76px)] overflow-y-auto rounded-t-[28px] bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-4 shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
+                  "overflow-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] overscroll-contain transition-opacity duration-150",
+                  isCatalogMobileSheetExpanded
+                    ? "h-full pt-0"
+                    : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >
-                <section id="catalog-results" className="min-w-0 flex-1 space-y-4 lg:w-full">
+                <section
+                  id="catalog-results"
+                  className={cn(
+                    "min-w-0 flex-1 space-y-4 lg:w-full",
+                    isCatalogMobileSheetExpanded && "pt-4",
+                  )}
+                >
                   {displayItems.length === 0 ? (
                     <div className="space-y-3">
                       <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">

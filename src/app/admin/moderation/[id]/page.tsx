@@ -107,6 +107,11 @@ function formatMappedList(values: string[], labelsById: Record<string, string>):
   return values.map((item) => labelsById[item] ?? item).join(", ");
 }
 
+function optionalText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export default async function AdminModerationObjectPage({
   params,
 }: AdminModerationObjectPageProps) {
@@ -152,6 +157,11 @@ export default async function AdminModerationObjectPage({
     locationId: property.locationId,
     name: property.name,
   });
+  const ownerEmail = optionalText(property.owner.email);
+  const contactPersonName = optionalText(property.contactPersonName);
+  const contactPersonRole = optionalText(property.contactPersonRole);
+  const listingChannels = optionalText(property.listingChannels);
+  const hasContactPerson = Boolean(contactPersonName || contactPersonRole);
 
   return (
     <div className="space-y-4">
@@ -200,7 +210,7 @@ export default async function AdminModerationObjectPage({
             <dd className="font-medium text-olive">
               {property.owner.firstName} {property.owner.lastName}
             </dd>
-            <dd className="text-olive/75">{property.owner.email}</dd>
+            {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Населенный пункт</dt>
@@ -213,17 +223,21 @@ export default async function AdminModerationObjectPage({
         </dl>
 
         <dl className="mt-2 grid gap-2 text-sm md:grid-cols-3">
-          <div className="rounded-xl bg-cream px-3 py-2">
-            <dt className="text-olive/60">Контактное лицо</dt>
-            <dd className="font-medium text-olive">
-              {property.contactPersonName ?? "Не указано"}
-            </dd>
-            <dd className="text-olive/75">{property.contactPersonRole ?? "Должность не указана"}</dd>
-          </div>
-          <div className="rounded-xl bg-cream px-3 py-2">
-            <dt className="text-olive/60">Где еще размещается</dt>
-            <dd className="font-medium text-olive">{property.listingChannels ?? "Не указано"}</dd>
-          </div>
+          {hasContactPerson ? (
+            <div className="rounded-xl bg-cream px-3 py-2">
+              <dt className="text-olive/60">Контактное лицо</dt>
+              {contactPersonName ? (
+                <dd className="font-medium text-olive">{contactPersonName}</dd>
+              ) : null}
+              {contactPersonRole ? <dd className="text-olive/75">{contactPersonRole}</dd> : null}
+            </div>
+          ) : null}
+          {listingChannels ? (
+            <div className="rounded-xl bg-cream px-3 py-2">
+              <dt className="text-olive/60">Где еще размещается</dt>
+              <dd className="font-medium text-olive">{listingChannels}</dd>
+            </div>
+          ) : null}
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Реестр КСР</dt>
             <dd className="font-medium text-olive">
@@ -257,7 +271,7 @@ export default async function AdminModerationObjectPage({
           </p>
         ) : null}
 
-        {(property.amenities.length > 0 || property.customAmenities.length > 0) ? (
+        {property.amenities.length > 0 || property.customAmenities.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {property.amenities.map((item) => (
               <span
@@ -268,10 +282,7 @@ export default async function AdminModerationObjectPage({
               </span>
             ))}
             {property.customAmenities.map((item) => (
-              <span
-                key={item.id}
-                className="rounded-full bg-terra/15 px-3 py-1 text-xs text-olive"
-              >
+              <span key={item.id} className="rounded-full bg-terra/15 px-3 py-1 text-xs text-olive">
                 {item.name}
               </span>
             ))}
@@ -293,7 +304,11 @@ export default async function AdminModerationObjectPage({
                     fallbackLabel="Фото недоступно"
                   />
                 ) : (
-                  <video src={media.url} controls className="h-44 w-full object-cover bg-black/80" />
+                  <video
+                    src={media.url}
+                    controls
+                    className="h-44 w-full object-cover bg-black/80"
+                  />
                 )}
               </div>
             ))}
@@ -317,7 +332,8 @@ export default async function AdminModerationObjectPage({
                     </p>
                   </div>
                   <p className="text-sm text-olive/70">
-                    Санузел: <span className="font-semibold text-olive">{room.bathroomTypeLabel}</span>
+                    Санузел:{" "}
+                    <span className="font-semibold text-olive">{room.bathroomTypeLabel}</span>
                   </p>
                 </div>
                 {room.meta ? (
@@ -356,7 +372,10 @@ export default async function AdminModerationObjectPage({
                         {room.meta.bedSets.length <= 1
                           ? "Один вариант"
                           : room.meta.bedSets
-                              .map((bedSet, index) => `Вариант ${index + 1}: ${formatBedConfiguration(bedSet)}`)
+                              .map(
+                                (bedSet, index) =>
+                                  `Вариант ${index + 1}: ${formatBedConfiguration(bedSet)}`,
+                              )
                               .join(" | ")}
                       </dd>
                     </div>
@@ -364,7 +383,10 @@ export default async function AdminModerationObjectPage({
                       <dt className="text-olive/60">Дополнительные места</dt>
                       <dd className="font-medium text-olive">
                         {room.meta.hasAdditionalPlaces
-                          ? formatMappedList(room.meta.additionalPlaceTypes, additionalPlaceTypeLabelById)
+                          ? formatMappedList(
+                              room.meta.additionalPlaceTypes,
+                              additionalPlaceTypeLabelById,
+                            )
                           : "Нет"}
                       </dd>
                     </div>
@@ -393,7 +415,8 @@ export default async function AdminModerationObjectPage({
                   ? room.beds > calculateBedCapacity(room.meta.bedConfiguration)
                   : false) ? (
                   <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                    Проверьте вместимость: значения выглядят подозрительно для этой категории номера.
+                    Проверьте вместимость: значения выглядят подозрительно для этой категории
+                    номера.
                   </p>
                 ) : null}
 
@@ -438,7 +461,11 @@ export default async function AdminModerationObjectPage({
                               fallbackLabel="Фото номера недоступно"
                             />
                           ) : (
-                            <video src={media.url} controls className="h-36 w-full object-cover bg-black/80" />
+                            <video
+                              src={media.url}
+                              controls
+                              className="h-36 w-full object-cover bg-black/80"
+                            />
                           )}
                         </div>
                       ))}
@@ -501,7 +528,9 @@ export default async function AdminModerationObjectPage({
               <tbody>
                 {payments.map((payment) => (
                   <tr key={payment.id} className="border-t border-olive/10">
-                    <td className="py-1 pr-4 font-mono text-xs text-olive">{payment.id.slice(0, 10)}...</td>
+                    <td className="py-1 pr-4 font-mono text-xs text-olive">
+                      {payment.id.slice(0, 10)}...
+                    </td>
                     <td className="py-1 pr-4 text-olive">{formatMoney(payment.amount, "RUB")}</td>
                     <td className="py-1 pr-4 text-olive">{payment.tariffCode}</td>
                     <td className="py-1 pr-4 text-olive">{payment.statusLabel}</td>

@@ -101,7 +101,7 @@ export function TransferLeadForm({
             type="button"
             aria-label="Закрыть"
             onClick={closeModal}
-            className="fixed inset-0 z-50 bg-midnight/55 backdrop-blur-[2px]"
+            className="fixed inset-x-0 -top-8 z-50 h-[calc(100dvh_+_160px)] min-h-[calc(100svh_+_160px)] bg-[linear-gradient(180deg,rgba(58,43,35,0.92)_0%,rgba(43,31,25,0.96)_100%)] backdrop-blur-[2px]"
           />
           <div
             role="dialog"

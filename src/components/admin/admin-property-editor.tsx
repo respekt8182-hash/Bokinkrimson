@@ -65,7 +65,7 @@ const PROPERTY_TYPES = [
   { value: "hostel", label: "Хостел" },
   { value: "camp", label: "Турбаза / Кемпинг" },
   { value: "sanatorium", label: "Санаторий" },
-  { value: "villa", label: "Р’РёР»Р»Р°" },
+  { value: "villa", label: "Вилла" },
 ];
 
 export function AdminPropertyEditor({ property, users, locations }: Props) {
@@ -134,7 +134,7 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-olive">
           <UserCheck className="h-5 w-5 text-primary" />
-          Р’Р»Р°РґРµР»РµС†
+          Владелец
         </h2>
         <Field label="Назначить владельца">
           <select name="ownerId" defaultValue={property.ownerId} className={select}>
@@ -172,7 +172,12 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             </select>
           </Field>
           <Field label="Расстояние до моря">
-            <input type="text" name="seaDistance" defaultValue={property.seaDistance ?? ""} className={input} />
+            <input
+              type="text"
+              name="seaDistance"
+              defaultValue={property.seaDistance ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>
@@ -191,13 +196,28 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             </select>
           </Field>
           <Field label="Адрес">
-            <input type="text" name="address" defaultValue={property.address ?? ""} className={input} />
+            <input
+              type="text"
+              name="address"
+              defaultValue={property.address ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Широта">
-            <input type="text" name="latitude" defaultValue={property.latitude ?? ""} className={input} />
+            <input
+              type="text"
+              name="latitude"
+              defaultValue={property.latitude ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Долгота">
-            <input type="text" name="longitude" defaultValue={property.longitude ?? ""} className={input} />
+            <input
+              type="text"
+              name="longitude"
+              defaultValue={property.longitude ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>
@@ -221,19 +241,44 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             <input type="text" name="phone" defaultValue={property.phone ?? ""} className={input} />
           </Field>
           <Field label="Email">
-            <input type="email" name="contactEmail" defaultValue={property.contactEmail ?? ""} className={input} />
+            <input
+              type="email"
+              name="contactEmail"
+              defaultValue={property.contactEmail ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Контактное лицо">
-            <input type="text" name="contactPersonName" defaultValue={property.contactPersonName ?? ""} className={input} />
+            <input
+              type="text"
+              name="contactPersonName"
+              defaultValue={property.contactPersonName ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Сайт">
-            <input type="text" name="websiteUrl" defaultValue={property.websiteUrl ?? ""} className={input} />
+            <input
+              type="text"
+              name="websiteUrl"
+              defaultValue={property.websiteUrl ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="WhatsApp">
-            <input type="text" name="whatsappUrl" defaultValue={property.whatsappUrl ?? ""} className={input} />
+            <input
+              type="text"
+              name="whatsappUrl"
+              defaultValue={property.whatsappUrl ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Telegram">
-            <input type="text" name="telegramUrl" defaultValue={property.telegramUrl ?? ""} className={input} />
+            <input
+              type="text"
+              name="telegramUrl"
+              defaultValue={property.telegramUrl ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>
@@ -242,13 +287,29 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
         <h2 className="mb-4 text-lg font-semibold text-olive">Правила и услуги</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Заезд с">
-            <input type="time" name="checkInFrom" defaultValue={property.checkInFrom ?? ""} className={input} />
+            <input
+              type="time"
+              name="checkInFrom"
+              defaultValue={property.checkInFrom ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Выезд до">
-            <input type="time" name="checkOutUntil" defaultValue={property.checkOutUntil ?? ""} className={input} />
+            <input
+              type="time"
+              name="checkOutUntil"
+              defaultValue={property.checkOutUntil ?? ""}
+              className={input}
+            />
           </Field>
-          <Field label="Р”РµС‚Рё">
-            <select name="childrenAllowed" defaultValue={property.childrenAllowed === null ? "" : String(property.childrenAllowed)} className={select}>
+          <Field label="Дети">
+            <select
+              name="childrenAllowed"
+              defaultValue={
+                property.childrenAllowed === null ? "" : String(property.childrenAllowed)
+              }
+              className={select}
+            >
               <option value="">Не указано</option>
               <option value="true">Разрешены</option>
               <option value="false">Не разрешены</option>
@@ -263,7 +324,11 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             </select>
           </Field>
           <Field label="Курение">
-            <select name="smokingPolicy" defaultValue={property.smokingPolicy ?? ""} className={select}>
+            <select
+              name="smokingPolicy"
+              defaultValue={property.smokingPolicy ?? ""}
+              className={select}
+            >
               <option value="">Не указано</option>
               <option value="FORBIDDEN">Запрещено</option>
               <option value="ON_REQUEST">По запросу</option>
@@ -271,10 +336,20 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             </select>
           </Field>
           <Field label="Парковка">
-            <input type="text" name="parkingInfo" defaultValue={property.parkingInfo ?? ""} className={input} />
+            <input
+              type="text"
+              name="parkingInfo"
+              defaultValue={property.parkingInfo ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="Питание">
-            <input type="text" name="mealOptions" defaultValue={property.mealOptions ?? ""} className={input} />
+            <input
+              type="text"
+              name="mealOptions"
+              defaultValue={property.mealOptions ?? ""}
+              className={input}
+            />
           </Field>
         </div>
       </section>

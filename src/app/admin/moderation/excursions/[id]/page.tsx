@@ -39,6 +39,11 @@ function formatDuration(minutes: number | null): string {
   return `${hours} ч ${restMinutes} мин`;
 }
 
+function optionalText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export default async function AdminModerationExcursionPage({
   params,
 }: AdminModerationExcursionPageProps) {
@@ -102,6 +107,23 @@ export default async function AdminModerationExcursionPage({
     locationId: excursion.locationId,
     title: excursion.title,
   });
+  const ownerEmail = optionalText(excursion.owner.email);
+  const contactName = [
+    optionalText(excursion.contactFirstName) ?? optionalText(excursion.owner.firstName),
+    optionalText(excursion.contactLastName) ?? optionalText(excursion.owner.lastName),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const contactRows = [
+    { label: "Имя", value: contactName || null },
+    { label: "Телефон", value: optionalText(excursion.contactPhone) },
+    { label: "Телефон 2", value: optionalText(excursion.contactPhone2) },
+    { label: "Email", value: optionalText(excursion.contactEmail) ?? ownerEmail },
+    { label: "Сайт", value: optionalText(excursion.websiteUrl) },
+    { label: "Telegram", value: optionalText(excursion.telegramUrl) },
+    { label: "Max", value: optionalText(excursion.maxUrl) },
+    { label: "OK", value: optionalText(excursion.okUrl) },
+  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
 
   return (
     <div className="space-y-4">
@@ -146,7 +168,7 @@ export default async function AdminModerationExcursionPage({
             <dd className="font-medium text-olive">
               {excursion.owner.firstName} {excursion.owner.lastName}
             </dd>
-            <dd className="text-olive/75">{excursion.owner.email}</dd>
+            {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Локация</dt>
@@ -169,21 +191,16 @@ export default async function AdminModerationExcursionPage({
           </div>
         </dl>
 
-        <div className="mt-3 rounded-xl bg-cream/70 p-3 text-sm text-olive/85">
-          <p className="font-semibold text-olive">Контакты организатора в карточке экскурсии</p>
-          <p className="mt-1">
-            Имя: {excursion.contactFirstName ?? excursion.owner.firstName}{" "}
-            {excursion.contactLastName ?? excursion.owner.lastName}
-          </p>
-          <p>Телефон: {excursion.contactPhone ?? "Не указан"}</p>
-          <p>Телефон 2: {excursion.contactPhone2 ?? "Не указан"}</p>
-          <p>Email: {excursion.contactEmail ?? excursion.owner.email}</p>
-          <p>Сайт: {excursion.websiteUrl ?? "Не указан"}</p>
-          <p>
-            Telegram: {excursion.telegramUrl ?? "Не указан"} • Max:{" "}
-            {excursion.maxUrl ?? "Не указан"} • OK: {excursion.okUrl ?? "Не указан"}
-          </p>
-        </div>
+        {contactRows.length > 0 ? (
+          <div className="mt-3 rounded-xl bg-cream/70 p-3 text-sm text-olive/85">
+            <p className="font-semibold text-olive">Контакты организатора в карточке экскурсии</p>
+            {contactRows.map((row, index) => (
+              <p key={row.label} className={index === 0 ? "mt-1" : undefined}>
+                {row.label}: {row.value}
+              </p>
+            ))}
+          </div>
+        ) : null}
 
         {excursion.description ? (
           <p className="mt-3 whitespace-pre-line rounded-xl bg-cream/70 p-3 text-sm text-olive/85">

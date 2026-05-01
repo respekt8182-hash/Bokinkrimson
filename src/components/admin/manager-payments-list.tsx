@@ -92,6 +92,27 @@ function getTariffLabel(tariffCode: string): string {
   return labels[baseCode] ?? baseCode;
 }
 
+async function readPaymentActionError(response: Response): Promise<string> {
+  const fallback =
+    response.status >= 500
+      ? "Сервер не смог обработать оплату. Проверьте логи приложения."
+      : "Ошибка при обработке";
+
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const body = (await response.json()) as { error?: unknown };
+      return typeof body.error === "string" && body.error.trim() ? body.error : fallback;
+    }
+
+    await response.text();
+  } catch {
+    return fallback;
+  }
+
+  return `${fallback} (${response.status})`;
+}
+
 function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?: () => void }) {
   const router = useRouter();
   const [notes, setNotes] = useState("");
@@ -160,8 +181,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
       });
 
       if (!response.ok) {
-        const body = (await response.json()) as { error?: string };
-        setError(body.error ?? "Ошибка при обработке");
+        setError(await readPaymentActionError(response));
         return;
       }
 

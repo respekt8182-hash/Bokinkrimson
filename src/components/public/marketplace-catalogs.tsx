@@ -777,9 +777,6 @@ function AttractionCard({
           <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[190px] lg:w-[210px]">
             <div className="text-right">
               <p className="text-[12px] font-semibold text-olive">Самостоятельно</p>
-              <p className="mt-1 text-[11px] leading-4 text-olive/40">
-                прогулка, остановка в маршруте или день отдыха
-              </p>
             </div>
 
             <div className="mt-auto text-right">

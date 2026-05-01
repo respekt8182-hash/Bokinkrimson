@@ -4,12 +4,28 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
+import { TextDecoder } from "node:util";
 
 const ROOTS = ["src"];
 const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".css"]);
 const MAX_REPORT_LINES = 80;
+const cp1251Decoder = new TextDecoder("windows-1251");
+const cp1251ContinuationChars = Array.from({ length: 64 }, (_, index) =>
+  cp1251Decoder.decode(Uint8Array.of(0x80 + index)),
+).join("");
+
+function escapeRegExp(value) {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
 
 const PATTERNS = [
+  {
+    name: "utf8-cp1251-mojibake",
+    regex: new RegExp(
+      `[\\u0420\\u0421][${escapeRegExp(cp1251ContinuationChars)}]|\\u0432\\u0402`,
+      "u",
+    ),
+  },
   {
     name: "cp1251-mojibake",
     regex: /[РС][\u0400\u0402-\u040F\u0450\u0452-\u045F]|в[\u0400\u0402-\u040F\u0450\u0452-\u045F]/u,

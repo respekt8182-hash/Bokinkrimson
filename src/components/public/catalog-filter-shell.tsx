@@ -71,6 +71,7 @@ type ResponsiveFilterPanelProps = {
   width?: number;
   align?: PanelAlign;
   maxHeight?: number;
+  className?: string;
 };
 
 type CatalogFilterPanelActionsProps = {
@@ -396,6 +397,7 @@ export function ResponsiveFilterPanel({
   width = DEFAULT_PANEL_WIDTH,
   align = "start",
   maxHeight = DEFAULT_PANEL_MAX_HEIGHT,
+  className,
 }: ResponsiveFilterPanelProps) {
   const isMobile = useIsMobileViewport();
   const anchorRef = useRef<HTMLDivElement | null>(null);
@@ -669,7 +671,7 @@ export function ResponsiveFilterPanel({
   }, [children, closePanel, footer, isMobile, open, panelId, title, titleId]);
 
   return (
-    <div ref={anchorRef} className="relative shrink-0">
+    <div ref={anchorRef} className={cn("relative shrink-0", className)}>
       {trigger}
       {canPortal ? createPortal(isMobile ? mobileLayer : desktopLayer, document.body) : null}
     </div>

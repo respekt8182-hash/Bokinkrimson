@@ -147,7 +147,7 @@ export function AdminExcursionEditor({
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-olive">
           <UserCheck className="h-5 w-5 text-primary" />
-          Р’Р»Р°РґРµР»РµС†
+          Владелец
         </h2>
         <Field label="Назначить владельца">
           <select name="ownerId" defaultValue={excursion.ownerId} className={select}>

@@ -258,7 +258,7 @@ const weekdayShortLabels: Record<WeekdayId, string> = {
   1: "Пн",
   2: "Вт",
   3: "Ср",
-  4: "Р§С‚",
+  4: "Чт",
   5: "Пт",
   6: "Сб",
 };
@@ -414,7 +414,7 @@ function formatDuration(minutes: number | null): string {
   }
 
   if (restMinutes === 0) {
-    return `${hours} С‡`;
+    return `${hours} ч`;
   }
 
   return `${hours} ч ${restMinutes} мин`;
