@@ -183,6 +183,19 @@ function resolveAmenityIcon(name: string): LucideIcon {
   return CircleCheckBig;
 }
 
+function formatAmenityLabel(name: string): string {
+  const normalized = name.replace(/\s+/g, " ").trim().toLocaleLowerCase("ru-RU");
+  if (
+    /^кухонные принадлежности\s*(?:\/|и)\s*посуда\s*\/\s*(?:приборы|столовые приборы)$/.test(
+      normalized,
+    )
+  ) {
+    return "Кухонные принадлежности";
+  }
+
+  return name;
+}
+
 function getRatingText(rating: number): string {
   if (rating >= 4.8) return "Превосходно";
   if (rating >= 4.5) return "Отлично";
@@ -537,17 +550,21 @@ function PublicPropertySearchCardInner({
   const amenitiesBlock =
     amenityHighlights.length > 0 ? (
       <div className="flex flex-wrap gap-1.5" role="list" aria-label="Ключевые удобства">
-        {amenityHighlights.map((amenity) => (
-          <span
-            key={`${item.id}-amenity-${amenity}`}
-            title={amenity}
-            role="listitem"
-            className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
-          >
-            <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{amenity}</span>
-          </span>
-        ))}
+        {amenityHighlights.map((amenity) => {
+          const label = formatAmenityLabel(amenity);
+
+          return (
+            <span
+              key={`${item.id}-amenity-${amenity}`}
+              title={label}
+              role="listitem"
+              className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
+            >
+              <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{label}</span>
+            </span>
+          );
+        })}
         {remainingAmenitiesCount > 0 && (
           <span className="inline-flex items-center rounded-md border border-dashed border-olive/12 bg-white px-2 py-0.5 text-[11px] font-semibold text-olive/45">
             +{remainingAmenitiesCount}
