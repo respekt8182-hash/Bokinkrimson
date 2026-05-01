@@ -19,10 +19,14 @@ import {
   getResolvedAvailabilityMode,
 } from "@/lib/excursion-offers";
 import {
-  haversineDistanceKm,
   resolveExcursionLocation,
   type ExcursionLocationDirectoryItem,
 } from "@/lib/excursion-directory";
+import {
+  calculateDistanceKm,
+  isWithinRadiusKm,
+  roundDistanceKm,
+} from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { serializeReview } from "@/lib/reviews";
@@ -692,9 +696,6 @@ export async function getPublicExcursionCatalog(
   const radiusKm = Number.isFinite(query.radiusKm)
     ? Math.max(5, Math.min(100, query.radiusKm ?? 30))
     : 30;
-  // Road distance ≈ haversine × 1.3 for Crimea terrain.
-  // To find excursions within radiusKm by road, we filter by haversine ≤ radiusKm / 1.3.
-  const haversineRadiusKm = radiusKm / 1.3;
 
   const [resolvedLocation, resolvedDistrict, resolvedCategory] = await Promise.all([
     resolveExcursionLocation({
@@ -894,8 +895,6 @@ export async function getPublicExcursionCatalog(
     let locationMatched = false;
 
     if (hasLocationFilter) {
-      // Location relevance is intentionally broad: anchor city, pickup city,
-      // map radius, and legacy locationId all count as a location match.
       const locationPoint = resolvedLocationCenter
         ? {
             latitude: resolvedLocationCenter.latitude,
@@ -914,31 +913,34 @@ export async function getPublicExcursionCatalog(
         excursionLatitude !== null &&
         excursionLongitude !== null
       ) {
-        distanceKm = haversineDistanceKm(
-          { latitude: locationPoint.latitude, longitude: locationPoint.longitude },
+        distanceKm = calculateDistanceKm(
+          locationPoint,
           { latitude: excursionLatitude, longitude: excursionLongitude },
         );
       }
 
-      locationMatched =
-        anchorMatch ||
-        pickupMatch ||
-        (distanceKm !== null && distanceKm <= haversineRadiusKm) ||
-        // Match by slug (legacy string field) or by ID (CUID stored in locationId)
-        Boolean(
-          resolvedLocation &&
-            item.locationId &&
-          (item.locationId === resolvedLocation.slug || item.locationId === resolvedLocation.id),
-        ) ||
-        containsExcursionLocationQuery(locationTextQuery, [
-          item.locationName,
-          item.mainLocation?.name,
-          item.anchorLocation?.name,
-          item.district?.name,
-          item.startPoint,
-          item.finishPoint,
-          ...item.routeLocations.map((route) => route.location.name),
-        ]);
+      if (locationPoint) {
+        locationMatched = isWithinRadiusKm(distanceKm, radiusKm);
+      } else {
+        locationMatched =
+          anchorMatch ||
+          pickupMatch ||
+          // Match by slug (legacy string field) or by ID (CUID stored in locationId)
+          Boolean(
+            resolvedLocation &&
+              item.locationId &&
+            (item.locationId === resolvedLocation.slug || item.locationId === resolvedLocation.id),
+          ) ||
+          containsExcursionLocationQuery(locationTextQuery, [
+            item.locationName,
+            item.mainLocation?.name,
+            item.anchorLocation?.name,
+            item.district?.name,
+            item.startPoint,
+            item.finishPoint,
+            ...item.routeLocations.map((route) => route.location.name),
+          ]);
+      }
     } else {
       locationMatched = true;
     }
@@ -1000,7 +1002,7 @@ export async function getPublicExcursionCatalog(
     const distanceScore =
       distanceKm === null
         ? 0
-        : Math.max(0, (1 - distanceKm / Math.max(haversineRadiusKm * 2, 30)) * 20);
+        : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
 
     // ── Location affinity ─────────────────────────────────────────────────────
     const anchorScore = anchorMatch ? 50 : 0;
@@ -1154,7 +1156,7 @@ export async function getPublicExcursionCatalog(
         coverImageUrl: filterExistingPublicAssetUrls(toStringArray(item.photoUrls))[0] ?? null,
         avgRating: Number(item.avgRating),
         reviewsCount: item.reviewsCount,
-        distanceKm: distanceKm === null ? null : Number((distanceKm * 1.3).toFixed(1)),
+        distanceKm: roundDistanceKm(distanceKm),
         hasAvailableSession,
         pickupAvailable: item.pickupAvailable,
         availabilityMode: getResolvedAvailabilityMode(item.availabilityMode, item.scheduleMode),

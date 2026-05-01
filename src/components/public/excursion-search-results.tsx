@@ -3225,7 +3225,7 @@ function ExcursionCard({
         <div
           className={cn(
             "card-img-wrap relative shrink-0 overflow-hidden bg-sand",
-            "aspect-[4/3] w-full rounded-xl sm:aspect-[3/2] md:aspect-[4/3] md:h-auto md:w-[240px] md:rounded-l-xl md:rounded-r-none lg:w-[280px]",
+            "h-40 w-full rounded-xl xs:h-44 sm:h-48 md:aspect-[4/3] md:h-auto md:w-[240px] md:rounded-l-xl md:rounded-r-none lg:w-[280px]",
           )}
         >
           {item.coverImageUrl ? (
@@ -3302,7 +3302,7 @@ function ExcursionCard({
             )}
 
             {/* Info chips row */}
-            <div className="mt-1 flex max-h-[70px] flex-wrap gap-1.5 overflow-hidden">
+            <div className="mt-1 flex flex-wrap gap-1.5">
               {duration ? (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
                   <AppIcon icon={Clock3} className="h-3 w-3 shrink-0 text-primary" />

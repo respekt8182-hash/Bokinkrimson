@@ -8,7 +8,12 @@ import {
 } from "@/lib/contact-links";
 import { db } from "@/lib/db";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
-import { haversineDistanceKm, resolveExcursionLocation } from "@/lib/excursion-directory";
+import { resolveExcursionLocation } from "@/lib/excursion-directory";
+import {
+  calculateDistanceKm,
+  isWithinRadiusKm,
+  roundDistanceKm,
+} from "@/lib/catalog-radius";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import {
   isDatabaseFallbackEligibleError,
@@ -288,11 +293,7 @@ function getTransferPoint(row: TransferRow): Point | null {
 }
 
 function getDistanceKm(center: Point | null, point: Point | null): number | null {
-  if (!center || !point) {
-    return null;
-  }
-
-  return haversineDistanceKm(center, point);
+  return calculateDistanceKm(center, point);
 }
 
 function getSearchScoreMap<T extends { id: string }>(
@@ -428,7 +429,7 @@ function mapAttractionCatalogItem(
     sections: row.sections,
     nearby: row.nearby,
     faq: row.faq,
-    distanceKm: distanceKm === null ? null : Number((distanceKm * 1.3).toFixed(1)),
+    distanceKm: roundDistanceKm(distanceKm),
     websiteUrl: row.websiteUrl,
     mapUrl: row.mapUrl,
     updatedAt: row.updatedAt,
@@ -472,7 +473,7 @@ function mapTransferCatalogItem(
     coverImageUrl: getFirstPhotoUrl(
       row.photoUrls.length > 0 ? row.photoUrls : fleetSummary.photoUrls,
     ),
-    distanceKm: distanceKm === null ? null : Number((distanceKm * 1.3).toFixed(1)),
+    distanceKm: roundDistanceKm(distanceKm),
     contacts: {
       contactName: row.contactName ?? fallbackContactName,
       phone: row.phone ?? row.owner.phone,
@@ -528,7 +529,6 @@ export async function getPublicTransferCatalog(
   const locationQuery = query.location?.trim() ?? "";
   const transferType = query.transferType?.trim() ?? "";
   const radiusKm = parseRadiusKm(query.radiusKm);
-  const haversineRadiusKm = radiusKm / 1.3;
   const sort = parseTransferSort(query.sort);
   const minPrice = parseMoney(query.minPrice);
   const maxPrice = parseMoney(query.maxPrice);
@@ -630,9 +630,11 @@ export async function getPublicTransferCatalog(
         row.serviceArea,
         row.routeExamples,
       ]);
-      const radiusLocationMatch = distanceKm !== null && distanceKm <= haversineRadiusKm;
       const locationMatch =
-        !locationQuery || resolvedLocationMatch || textLocationMatch || radiusLocationMatch;
+        !locationQuery ||
+        (center
+          ? isWithinRadiusKm(distanceKm, radiusKm)
+          : resolvedLocationMatch || textLocationMatch);
 
       if (!locationMatch) {
         return null;
@@ -681,7 +683,7 @@ export async function getPublicTransferCatalog(
       const distanceScore =
         distanceKm === null
           ? 0
-          : Math.max(0, (1 - distanceKm / Math.max(haversineRadiusKm * 2, 30)) * 20);
+          : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
       const exactLocationScore =
         resolvedLocation && row.locationId === resolvedLocation.id ? 35 : 0;
       const relevance = searchScore * 70 + distanceScore + exactLocationScore;

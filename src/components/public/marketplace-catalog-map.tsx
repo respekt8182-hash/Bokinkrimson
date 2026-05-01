@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type UIEvent as ReactUIEvent,
@@ -67,6 +68,7 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
+const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -100,6 +102,22 @@ function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): Mobile
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
     ["preview", snaps.preview],
   )[0];
+}
+
+function getCatalogMapItemElement(
+  target: EventTarget | null,
+  boundary: HTMLElement,
+): HTMLElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const itemElement = target.closest<HTMLElement>(CATALOG_MAP_ITEM_SELECTOR);
+  if (!itemElement || !boundary.contains(itemElement)) {
+    return null;
+  }
+
+  return itemElement;
 }
 
 function formatMoney(value: number): string {
@@ -411,6 +429,7 @@ export function MarketplaceCatalogMap({
   const [mobileStageHeight, setMobileStageHeight] = useState(0);
   const [isMobileSheetDragging, setIsMobileSheetDragging] = useState(false);
   const [activePointId, setActivePointId] = useState<string | null>(null);
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
   useBodyScrollLock(mapExpanded);
 
@@ -461,6 +480,7 @@ export function MarketplaceCatalogMap({
     activePointId && visibleMapPointIds.has(activePointId)
       ? (mapItemById.get(activePointId) ?? null)
       : null;
+  const activeMapPointId = activePointId ?? hoveredCardId;
   const mapStatsLabel = `На карте: ${mapPoints.length}`;
   const foundCountLabel = formatRuCount(items.length, "вариант", "варианта", "вариантов");
   const mapPointCountLabel = formatRuCount(mapPoints.length, "точка", "точки", "точек");
@@ -540,6 +560,7 @@ export function MarketplaceCatalogMap({
   const closeMapFully = useCallback(() => {
     setMapExpanded(false);
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
   }, []);
 
@@ -658,6 +679,7 @@ export function MarketplaceCatalogMap({
   const handlePointClick = useCallback(
     (pointId: string) => {
       setActivePointId(pointId);
+      setHoveredCardId(null);
       setHoveredPointId(pointId);
 
       if (mapPlacement === "mobile") {
@@ -669,6 +691,7 @@ export function MarketplaceCatalogMap({
 
   const openMobileMapInSearch = useCallback(() => {
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
     setMobileChromeProgress(0, true);
     snapMobileSheet("collapsed");
@@ -677,6 +700,7 @@ export function MarketplaceCatalogMap({
   const handleMobileMapPointerDown = useCallback(() => {
     if (mapPlacement !== "mobile") {
       setActivePointId(null);
+      setHoveredCardId(null);
       setHoveredPointId(null);
       return;
     }
@@ -686,8 +710,40 @@ export function MarketplaceCatalogMap({
     }
 
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
   }, [mapPlacement, mobileSheetSnap, snapMobileSheet]);
+
+  const handleCatalogCardMouseOver = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      const itemElement = getCatalogMapItemElement(event.target, event.currentTarget);
+      const pointId = itemElement?.dataset.catalogMapItemId ?? null;
+
+      if (!pointId || !visibleMapPointIds.has(pointId)) {
+        return;
+      }
+
+      setActivePointId(null);
+      setHoveredPointId(null);
+      setHoveredCardId((current) => (current === pointId ? current : pointId));
+    },
+    [visibleMapPointIds],
+  );
+
+  const handleCatalogCardMouseOut = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    const itemElement = getCatalogMapItemElement(event.target, event.currentTarget);
+    if (!itemElement) {
+      return;
+    }
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && itemElement.contains(relatedTarget)) {
+      return;
+    }
+
+    const pointId = itemElement.dataset.catalogMapItemId;
+    setHoveredCardId((current) => (current === pointId ? null : current));
+  }, []);
 
   useEffect(() => {
     if (!mapExpanded) {
@@ -808,7 +864,7 @@ export function MarketplaceCatalogMap({
             <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
               <YandexMapMultiViewer
                 points={mapPoints}
-                activePointId={activePointId}
+                activePointId={activeMapPointId}
                 hoveredPointId={hoveredPointId}
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}
@@ -870,6 +926,8 @@ export function MarketplaceCatalogMap({
               <div
                 ref={mobileResultsScrollRef}
                 onScroll={handleMobileResultsScroll}
+                onMouseOver={handleCatalogCardMouseOver}
+                onMouseOut={handleCatalogCardMouseOut}
                 className={cn(
                   "h-[calc(100%-76px)] overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+24px)] pt-1 overscroll-contain transition-opacity duration-150",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
@@ -902,7 +960,7 @@ export function MarketplaceCatalogMap({
           >
             <YandexMapMultiViewer
               points={mapPoints}
-              activePointId={activePointId}
+              activePointId={activeMapPointId}
               hoveredPointId={hoveredPointId}
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
@@ -944,7 +1002,7 @@ export function MarketplaceCatalogMap({
           <div className="relative h-[320px] overflow-hidden">
             <YandexMapMultiViewer
               points={mapPoints}
-              activePointId={activePointId}
+              activePointId={activeMapPointId}
               hoveredPointId={hoveredPointId}
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
@@ -971,6 +1029,8 @@ export function MarketplaceCatalogMap({
       ) : null}
 
       <div
+        onMouseOver={handleCatalogCardMouseOver}
+        onMouseOut={handleCatalogCardMouseOut}
         className={cn(
           mapPlacement === "mobile"
             ? "hidden"
@@ -1014,7 +1074,7 @@ export function MarketplaceCatalogMap({
               <div className="absolute inset-0">
                 <YandexMapMultiViewer
                   points={mapPoints}
-                  activePointId={activePointId}
+                  activePointId={activeMapPointId}
                   hoveredPointId={hoveredPointId}
                   onPointClick={handlePointClick}
                   onPointHoverChange={setHoveredPointId}
@@ -1067,7 +1127,7 @@ export function MarketplaceCatalogMap({
             <div className="absolute inset-0">
               <YandexMapMultiViewer
                 points={mapPoints}
-                activePointId={activePointId}
+                activePointId={activeMapPointId}
                 hoveredPointId={hoveredPointId}
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}

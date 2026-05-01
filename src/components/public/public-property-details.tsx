@@ -30,6 +30,7 @@ import { PropertyMediaGallery } from "@/components/public/property-media-gallery
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { parseDetailedGuestsValue } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
@@ -1750,19 +1751,15 @@ export function PublicPropertyDetails({
         <aside className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start lg:mt-14">
           <div className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.06)]">
             <div className="flex items-center gap-3">
-              {item.owner.avatarUrl ? (
-                <Image
-                  src={item.owner.avatarUrl}
-                  alt={ownerDisplayName}
-                  width={52}
-                  height={52}
-                  className="h-[52px] w-[52px] shrink-0 rounded-full object-cover ring-1 ring-olive/10"
-                />
-              ) : (
+              <AvatarImage
+                src={item.owner.avatarUrl}
+                alt={ownerDisplayName}
+                className="h-[52px] w-[52px] shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+              >
                 <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
                   <AppIcon icon={User} className="h-5 w-5" />
                 </span>
-              )}
+              </AvatarImage>
               <div className="min-w-0">
                 <p className="truncate text-base font-semibold text-olive">{ownerDisplayName}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-sm text-primary/85">
@@ -1794,19 +1791,15 @@ export function PublicPropertyDetails({
         <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2.5">
-              {item.owner.avatarUrl ? (
-                <Image
-                  src={item.owner.avatarUrl}
-                  alt={ownerDisplayName}
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
-                />
-              ) : (
+              <AvatarImage
+                src={item.owner.avatarUrl}
+                alt={ownerDisplayName}
+                className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+              >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
                   <AppIcon icon={User} className="h-4.5 w-4.5" />
                 </span>
-              )}
+              </AvatarImage>
 
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{ownerDisplayName}</p>

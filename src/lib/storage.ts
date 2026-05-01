@@ -40,6 +40,19 @@ export type StoredObject = StoredObjectMeta & {
 
 const localUploadsPublicDir = path.join(process.cwd(), "public", "uploads");
 const localPrivateStorageDir = path.join(process.cwd(), "storage", "private-uploads");
+const fallbackContentTypeByExtension: Record<string, string> = {
+  avif: "image/avif",
+  gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  mp4: "video/mp4",
+  pdf: "application/pdf",
+  png: "image/png",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+};
 
 function getDefaultVisibility(value: StorageVisibility | undefined): StorageVisibility {
   return value ?? "public";
@@ -62,6 +75,51 @@ function getLocalBaseDir(visibility: StorageVisibility): string {
 
 function getLocalMetaPath(fullPath: string): string {
   return `${fullPath}.meta.json`;
+}
+
+function getFallbackContentType(key: string): string {
+  const extension = path.extname(key).replace(".", "").toLowerCase();
+  return fallbackContentTypeByExtension[extension] ?? "application/octet-stream";
+}
+
+function getFallbackLocalMeta(key: string, visibility: StorageVisibility): StoredObjectMeta {
+  return {
+    contentType: getFallbackContentType(key),
+    contentDisposition: getDefaultContentDisposition(undefined, visibility),
+    visibility,
+  };
+}
+
+function parseLocalMeta(
+  rawMeta: string | null,
+  fallback: StoredObjectMeta,
+): StoredObjectMeta {
+  if (!rawMeta) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(rawMeta) as Partial<StoredObjectMeta>;
+    const visibility =
+      parsed.visibility === "public" || parsed.visibility === "private"
+        ? parsed.visibility
+        : fallback.visibility;
+    const contentDisposition =
+      parsed.contentDisposition === "inline" || parsed.contentDisposition === "attachment"
+        ? parsed.contentDisposition
+        : getDefaultContentDisposition(undefined, visibility);
+
+    return {
+      contentType:
+        typeof parsed.contentType === "string" && parsed.contentType.trim()
+          ? parsed.contentType
+          : fallback.contentType,
+      contentDisposition,
+      visibility,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 export function normalizeStorageKey(key: string): string {
@@ -100,6 +158,23 @@ async function writeLocalObject(
   await writeFile(getLocalMetaPath(fullPath), JSON.stringify(meta));
 }
 
+async function readLocalObject(
+  baseDir: string,
+  key: string,
+  fallbackVisibility: StorageVisibility,
+): Promise<StoredObject> {
+  const fullPath = path.join(baseDir, ...key.split("/"));
+  const body = await readFile(fullPath);
+  const rawMeta = await readFile(getLocalMetaPath(fullPath), "utf8").catch(() => null);
+  const parsedMeta = parseLocalMeta(rawMeta, getFallbackLocalMeta(key, fallbackVisibility));
+
+  return {
+    ...parsedMeta,
+    body,
+    contentLength: body.byteLength,
+  };
+}
+
 async function uploadToLocalStorage(input: UploadInput): Promise<UploadResult> {
   const visibility = getDefaultVisibility(input.visibility);
   const contentDisposition = getDefaultContentDisposition(input.contentDisposition, visibility);
@@ -130,26 +205,25 @@ async function readFromLocalStorage(key: string): Promise<StoredObject> {
   const normalizedKey = normalizeStorageKey(key);
 
   for (const visibility of ["private", "public"] as const) {
-    const fullPath = path.join(getLocalBaseDir(visibility), ...normalizedKey.split("/"));
-
     try {
-      const [body, rawMeta] = await Promise.all([
-        readFile(fullPath),
-        readFile(getLocalMetaPath(fullPath), "utf8"),
-      ]);
-      const parsedMeta = JSON.parse(rawMeta) as StoredObjectMeta;
-
-      return {
-        ...parsedMeta,
-        body,
-        contentLength: body.byteLength,
-      };
+      return await readLocalObject(getLocalBaseDir(visibility), normalizedKey, visibility);
     } catch {
       continue;
     }
   }
 
   throw new Error("STORAGE_OBJECT_NOT_FOUND");
+}
+
+export async function readPublicUploadFromStorage(key: string): Promise<StoredObject> {
+  const normalizedKey = normalizeStorageKey(key);
+  const stored = await readLocalObject(localUploadsPublicDir, normalizedKey, "public");
+
+  if (stored.visibility !== "public") {
+    throw new Error("STORAGE_OBJECT_NOT_FOUND");
+  }
+
+  return stored;
 }
 
 function getConfig() {

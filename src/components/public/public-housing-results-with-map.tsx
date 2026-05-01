@@ -392,6 +392,7 @@ export function PublicHousingResultsWithMap({
   const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
   const [mobileStageHeight, setMobileStageHeight] = useState(0);
   const [activePointId, setActivePointId] = useState<string | null>(null);
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
   const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
@@ -400,6 +401,7 @@ export function PublicHousingResultsWithMap({
     setIsMapExpanded(false);
     setIsMapActivated(true);
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
   }, []);
 
@@ -535,6 +537,7 @@ export function PublicHousingResultsWithMap({
   );
 
   const activePopupItem = activePointId ? (mapPointById.get(activePointId) ?? null) : null;
+  const activeMapPointId = activePointId ?? hoveredCardId;
   const hasMapPoints = mapViewerPoints.length > 0;
   const foundCount = totalCount ?? items.length;
   const foundCountLabel = formatRuCount(
@@ -581,6 +584,7 @@ export function PublicHousingResultsWithMap({
     setMobileSheetSnap("preview");
     setMobileSheetTop(null);
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
     setViewedPointIds(new Set());
     setMapState(createInitialMapState());
@@ -767,6 +771,7 @@ export function PublicHousingResultsWithMap({
 
   function handleMapPointClick(pointId: string) {
     setActivePointId(pointId);
+    setHoveredCardId(null);
     setHoveredPointId(null);
     setViewedPointIds((prev) => {
       if (prev.has(pointId)) {
@@ -791,6 +796,7 @@ export function PublicHousingResultsWithMap({
   function openMobileMapInSearch() {
     setIsMapActivated(true);
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
     setMobileChromeProgress(0, true);
     snapMobileSheet("collapsed");
@@ -799,6 +805,7 @@ export function PublicHousingResultsWithMap({
   function handleMobileMapPointerDown() {
     if (mapPlacement !== "mobile") {
       setActivePointId(null);
+      setHoveredCardId(null);
       setHoveredPointId(null);
       return;
     }
@@ -808,6 +815,7 @@ export function PublicHousingResultsWithMap({
     }
 
     setActivePointId(null);
+    setHoveredCardId(null);
     setHoveredPointId(null);
   }
 
@@ -965,6 +973,18 @@ export function PublicHousingResultsWithMap({
                     }}
                     className="catalog-card-enter"
                     style={animationStyle}
+                    onMouseEnter={() => {
+                      if (!mapPointById.has(item.id)) {
+                        return;
+                      }
+
+                      setActivePointId(null);
+                      setHoveredPointId(null);
+                      setHoveredCardId(item.id);
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredCardId((current) => (current === item.id ? null : current));
+                    }}
                   >
                     <PublicPropertySearchCard
                       item={item}
@@ -1029,7 +1049,7 @@ export function PublicHousingResultsWithMap({
               <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
                 <YandexMapMultiViewer
                   points={mapViewerPoints}
-                  activePointId={activePointId}
+                  activePointId={activeMapPointId}
                   hoveredPointId={hoveredPointId}
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={setHoveredPointId}
@@ -1127,7 +1147,7 @@ export function PublicHousingResultsWithMap({
                   <div className="h-full" onPointerDownCapture={handleMobileMapPointerDown}>
                     <YandexMapMultiViewer
                       points={mapViewerPoints}
-                      activePointId={activePointId}
+                      activePointId={activeMapPointId}
                       hoveredPointId={hoveredPointId}
                       onPointClick={handleMapPointClick}
                       onPointHoverChange={setHoveredPointId}
@@ -1165,7 +1185,7 @@ export function PublicHousingResultsWithMap({
                       >
                         <YandexMapMultiViewer
                           points={mapViewerPoints}
-                          activePointId={activePointId}
+                          activePointId={activeMapPointId}
                           hoveredPointId={hoveredPointId}
                           onPointClick={handleMapPointClick}
                           onPointHoverChange={setHoveredPointId}
@@ -1228,7 +1248,7 @@ export function PublicHousingResultsWithMap({
             <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
               <YandexMapMultiViewer
                 points={mapViewerPoints}
-                activePointId={activePointId}
+                activePointId={activeMapPointId}
                 hoveredPointId={hoveredPointId}
                 onPointClick={handleMapPointClick}
                 onPointHoverChange={setHoveredPointId}

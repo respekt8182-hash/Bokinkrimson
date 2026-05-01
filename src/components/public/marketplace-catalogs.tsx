@@ -692,7 +692,10 @@ function AttractionCard({
   const locationLine = [item.locationName, item.address].filter(Boolean).join(", ") || "Крым";
 
   return (
-    <article className="result-card group relative overflow-hidden rounded-2xl border border-olive/[0.07] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300 hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]">
+    <article
+      data-catalog-map-item-id={item.id}
+      className="result-card group relative overflow-hidden rounded-2xl border border-olive/[0.07] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300 hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]"
+    >
       <Link
         href={item.path}
         aria-label={`Открыть ${item.title}`}
@@ -818,7 +821,10 @@ function TransferCard({
   const priceLabel = formatPrice(item.priceFrom, item.priceUnitLabel);
 
   return (
-    <article className="result-card group relative overflow-hidden rounded-2xl border border-olive/[0.07] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300 hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]">
+    <article
+      data-catalog-map-item-id={item.id}
+      className="result-card group relative overflow-hidden rounded-2xl border border-olive/[0.07] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300 hover:border-primary/15 hover:shadow-[0_8px_30px_-8px_rgba(15,118,110,0.15)]"
+    >
       <Link
         href={item.path}
         aria-label={`Открыть ${item.title}`}

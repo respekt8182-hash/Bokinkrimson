@@ -1,11 +1,11 @@
 "use client";
 
 import { ChevronDown, Heart, House } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
 
 type SiteHeaderUserMenuProps = {
@@ -141,11 +141,13 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
           className="inline-flex h-11 items-center gap-1.5 rounded-[15px] border border-white/70 bg-white/76 px-1.5 text-olive/85 shadow-[0_10px_26px_rgba(15,118,110,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] transition hover:border-primary/16 hover:bg-white/90 hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
         >
           <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(242,196,77,0.36),rgba(255,245,214,0.92))] ring-1 ring-white/75 shadow-[0_6px_16px_rgba(15,118,110,0.08)]">
-            {user.avatarUrl ? (
-              <Image src={user.avatarUrl} alt="Профиль" width={32} height={32} className="h-full w-full object-cover" />
-            ) : (
+            <AvatarImage
+              src={user.avatarUrl}
+              alt="Profile"
+              className="h-full w-full object-cover"
+            >
               <span className="text-xs font-semibold text-olive/80">{user.initials || "?"}</span>
-            )}
+            </AvatarImage>
           </span>
           <AppIcon
             icon={ChevronDown}

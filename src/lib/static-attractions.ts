@@ -3,6 +3,11 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  calculateDistanceKm,
+  isWithinRadiusKm,
+  roundDistanceKm,
+} from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { slugify } from "@/lib/public-properties";
@@ -723,21 +728,7 @@ function getDistanceKm(
   center: { latitude: number; longitude: number } | null,
   point: { latitude: number; longitude: number } | null,
 ): number | null {
-  if (!center || !point) {
-    return null;
-  }
-
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-  const dLat = toRadians(point.latitude - center.latitude);
-  const dLng = toRadians(point.longitude - center.longitude);
-  const lat1 = toRadians(center.latitude);
-  const lat2 = toRadians(point.latitude);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
+  return calculateDistanceKm(center, point);
 }
 
 async function resolveStaticLocationCenter(
@@ -849,7 +840,6 @@ export async function getStaticAttractionCatalog(
   const locationQuery = query.location?.trim() ?? "";
   const category = query.category?.trim() ?? "";
   const radiusKm = parseRadiusKm(query.radiusKm);
-  const haversineRadiusKm = radiusKm / 1.3;
   const sort = parseSort(query.sort);
   const rows = await getStaticAttractions();
   const locationCenter = await resolveStaticLocationCenter(locationQuery, rows);
@@ -895,13 +885,7 @@ export async function getStaticAttractionCatalog(
       const point = getPoint(item);
       const distanceKm = getDistanceKm(center, point);
       const locationMatch = locationCenter
-        ? containsQuery(locationQuery, [
-            item.locationName,
-            item.districtName,
-            item.address,
-            ...item.locationAliases,
-          ]) ||
-          (distanceKm !== null && distanceKm <= haversineRadiusKm)
+        ? isWithinRadiusKm(distanceKm, radiusKm)
         : !locationQuery ||
           containsQuery(locationQuery, [
             item.locationName,
@@ -943,7 +927,7 @@ export async function getStaticAttractionCatalog(
       const distanceScore =
         distanceKm === null
           ? 0
-          : Math.max(0, (1 - distanceKm / Math.max(haversineRadiusKm * 2, 30)) * 20);
+          : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
       const locationAliasScore =
         locationQuery &&
         containsQuery(locationQuery, [
@@ -987,7 +971,7 @@ export async function getStaticAttractionCatalog(
   const safePage = Math.min(page, totalPages);
   const entries = filtered
     .slice((safePage - 1) * pageSize, safePage * pageSize)
-    .map(({ item, distanceKm }) => ({ item, distanceKm }));
+    .map(({ item, distanceKm }) => ({ item, distanceKm: roundDistanceKm(distanceKm) }));
 
   return {
     entries,

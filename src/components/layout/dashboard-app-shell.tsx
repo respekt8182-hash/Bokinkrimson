@@ -5,7 +5,6 @@ import {
   House,
   LayoutGrid,
   LogOut,
-  Menu,
   MessagesSquare,
   UserRound,
   WalletCards,
@@ -23,6 +22,7 @@ import {
   useState,
 } from "react";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
 
 // Global owner-dashboard shell:
@@ -67,7 +67,6 @@ type DashboardBottomNavItem = {
 };
 
 type IconName =
-  | "menu"
   | "home"
   | "chessboard"
   | "reviews"
@@ -143,7 +142,6 @@ function shouldShowDashboardBottomNav(pathname: string) {
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
   const iconByName: Record<IconName, LucideIcon> = {
-    menu: Menu,
     home: House,
     chessboard: LayoutGrid,
     reviews: MessagesSquare,
@@ -193,7 +191,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
-  const burgerButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
@@ -202,10 +199,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
 
   function closeDrawer() {
     setIsDrawerOpen(false);
-  }
-
-  function openDrawer() {
-    setIsDrawerOpen(true);
   }
 
   async function onLogout() {
@@ -255,7 +248,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
     return () => mediaQuery.removeListener(listener);
   }, []);
 
-  // Keep focus trapped inside drawer and return focus back to the burger button when closing.
+  // Keep focus trapped inside the drawer while it is open.
   useEffect(() => {
     if (!isDrawerOpen) {
       return;
@@ -309,12 +302,10 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
 
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleGlobalKeyDown);
-    const returnFocusElement = burgerButtonRef.current;
 
     return () => {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", handleGlobalKeyDown);
-      returnFocusElement?.focus();
     };
   }, [isDrawerOpen]);
 
@@ -390,18 +381,15 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
               )}
             >
               <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(242,196,77,0.36),rgba(255,245,214,0.92))] ring-1 ring-white/75 shadow-[0_6px_16px_rgba(15,118,110,0.08)]">
-                {user.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={user.avatarUrl}
-                    alt="Аватар пользователя"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
+                <AvatarImage
+                  src={user.avatarUrl}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                >
                   <span className="text-xs font-semibold text-olive/80">
                     {user.initials || "?"}
                   </span>
-                )}
+                </AvatarImage>
               </span>
               <span className="hidden max-w-[170px] truncate xl:block">{displayName}</span>
             </Link>
@@ -420,24 +408,6 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
               <span className="hidden xl:inline">{isLoggingOut ? "Выход..." : "Выход"}</span>
             </button>
           </div>
-
-          <button
-            ref={burgerButtonRef}
-            type="button"
-            aria-label="Открыть меню личного кабинета"
-            aria-expanded={isDrawerOpen}
-            aria-controls="dashboard-drawer"
-            onClick={() => {
-              if (isDrawerOpen) {
-                closeDrawer();
-              } else {
-                openDrawer();
-              }
-            }}
-            className="icon-button-soft ml-auto inline-flex h-11 w-11 items-center justify-center rounded-[15px] focus-visible:outline-none lg:hidden"
-          >
-            <Icon name="menu" />
-          </button>
         </div>
       </header>
 
@@ -529,18 +499,15 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
           <div className="border-b border-olive/10 px-4 py-4">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-11 w-11 overflow-hidden rounded-full bg-cream ring-1 ring-olive/20">
-                {user.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={user.avatarUrl}
-                    alt="Аватар пользователя"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
+                <AvatarImage
+                  src={user.avatarUrl}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                >
                   <span className="flex h-full w-full items-center justify-center text-sm font-bold text-olive/75">
                     {user.initials}
                   </span>
-                )}
+                </AvatarImage>
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{displayName}</p>

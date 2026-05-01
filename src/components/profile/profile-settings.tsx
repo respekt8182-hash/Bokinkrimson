@@ -15,6 +15,7 @@ import {
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { imageSizeLimitBytes } from "@/lib/constants";
@@ -568,18 +569,15 @@ export function ProfileSettings({
                   profile.avatarUrl ? "ring-primary/30" : "ring-olive/12"
                 }`}
               >
-                {profile.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profile.avatarUrl}
-                    alt="Аватар профиля"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
+                <AvatarImage
+                  src={profile.avatarUrl}
+                  alt="Profile avatar"
+                  className="h-full w-full object-cover"
+                >
                   <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-olive/40">
                     {initials}
                   </div>
-                )}
+                </AvatarImage>
               </div>
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
