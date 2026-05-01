@@ -385,7 +385,7 @@ function MarketplaceFilterFrame({
           <div className="-mx-1 flex touch-pan-x snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
             {children}
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-olive/10 pt-3">
+          <div className="mt-3 hidden items-center justify-between gap-3 border-t border-olive/10 pt-3 md:flex">
             <div className="min-w-0">
               <span className="whitespace-nowrap text-sm font-semibold text-olive">
                 {totalLabel}
@@ -397,17 +397,6 @@ function MarketplaceFilterFrame({
                   type="button"
                   onClick={onResetAll}
                   className="whitespace-nowrap text-sm font-semibold text-primary transition hover:text-primary/70"
-                >
-                  Сбросить
-                </button>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2 md:hidden">
-              {hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={onResetAll}
-                  className="text-xs font-semibold text-primary transition hover:text-primary/70"
                 >
                   Сбросить
                 </button>
