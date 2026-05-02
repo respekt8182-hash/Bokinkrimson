@@ -55,6 +55,8 @@ type TransferEditorPageProps = {
   transfer: {
     id: string;
     status: TransferStatusValue;
+    pendingEditStatus: TransferStatusValue | null;
+    workflowStatus: TransferStatusValue;
     statusLabel: string;
     title: string;
     transferType: string;
@@ -85,6 +87,7 @@ type TransferEditorPageProps = {
   initialServiceTags: string[];
   publicPath: string | null;
   publicationFeeRub: number;
+  extraVehicleFeeRub: number;
   initialPayments: SerializedPayment[];
   saved: boolean;
   paymentNotice?: string | null;
@@ -153,9 +156,7 @@ function getTransferPaymentValidUntil(payment: SerializedPayment): string | null
 }
 
 function getTransferPaymentTariffLabel(tariffCode: string): string {
-  return tariffCode.startsWith("transfer_standard")
-    ? "Публикация карточки трансфера"
-    : tariffCode;
+  return tariffCode.startsWith("transfer_standard") ? "Публикация карточки трансфера" : tariffCode;
 }
 
 function getPaymentProviderLabel(provider: SerializedPayment["provider"]): string {
@@ -217,6 +218,7 @@ export function TransferEditorPage({
   initialServiceTags,
   publicPath,
   publicationFeeRub,
+  extraVehicleFeeRub,
   initialPayments,
   saved,
   paymentNotice = null,
@@ -398,32 +400,33 @@ export function TransferEditorPage({
       ? "Заявка на оплату отправлена менеджеру. После подтверждения оплаты карточка уйдет на модерацию."
       : paymentNotice === "paid"
         ? "Оплата найдена. Карточка отправлена на модерацию."
-        : paymentNotice === "pending"
-          ? "По этой карточке уже есть незавершенный платеж."
-          : paymentNotice === "yookassa-unavailable"
-            ? "YooKassa сейчас недоступна. Выберите оплату через менеджера."
-            : paymentNotice === "provider-disabled"
-              ? "Выбранный способ оплаты временно недоступен."
-              : paymentNotice === "not-ready"
-                ? "Заполните обязательные поля перед оплатой и модерацией."
-                : paymentNotice === "yookassa-error"
-                  ? "Не удалось создать платеж YooKassa. Попробуйте оплату через менеджера."
-                  : paymentNotice === "schema-missing"
-                    ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
-                    : null;
+        : paymentNotice === "published-edit"
+          ? "Изменения сохранены и отправлены на повторную модерацию. Опубликованная версия остается на сайте."
+          : paymentNotice === "pending"
+            ? "По этой карточке уже есть незавершенный платеж."
+            : paymentNotice === "yookassa-unavailable"
+              ? "YooKassa сейчас недоступна. Выберите оплату через менеджера."
+              : paymentNotice === "provider-disabled"
+                ? "Выбранный способ оплаты временно недоступен."
+                : paymentNotice === "not-ready"
+                  ? "Заполните обязательные поля перед оплатой и модерацией."
+                  : paymentNotice === "yookassa-error"
+                    ? "Не удалось создать платеж YooKassa. Попробуйте оплату через менеджера."
+                    : paymentNotice === "schema-missing"
+                      ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
+                      : null;
   const latestPayment = payments[0] ?? null;
-  const latestSucceededPayment =
-    payments.find((payment) => payment.status === "SUCCEEDED") ?? null;
+  const latestSucceededPayment = payments.find((payment) => payment.status === "SUCCEEDED") ?? null;
   const latestPaymentIsOpen = latestPayment ? isOpenPayment(latestPayment.status) : false;
   const hasSucceededPayment = Boolean(latestSucceededPayment);
-  const managerPaymentPending =
-    latestPaymentIsOpen && latestPayment?.provider === "MANAGER";
+  const managerPaymentPending = latestPaymentIsOpen && latestPayment?.provider === "MANAGER";
   const yookassaPaymentUrl =
     latestPaymentIsOpen && latestPayment?.provider === "YOOKASSA"
       ? latestPayment.confirmationUrl
       : null;
-  const alreadyOnModeration =
-    transfer.status === "PENDING_MODERATION" || transfer.status === "PUBLISHED";
+  const alreadyOnModeration = transfer.workflowStatus === "PENDING_MODERATION";
+  const canSubmitPublishedEdit =
+    publishReady && transfer.status === "PUBLISHED" && !alreadyOnModeration;
   const canSubmitPaidCard =
     publishReady &&
     hasSucceededPayment &&
@@ -433,24 +436,29 @@ export function TransferEditorPage({
     !latestPaymentIsOpen &&
     !hasSucceededPayment &&
     (transfer.status === "DRAFT" || transfer.status === "REJECTED");
-  const canUsePrimaryPaymentSubmit = canSubmitPaidCard || canCreatePayment;
+  const canUsePrimaryPaymentSubmit =
+    canSubmitPublishedEdit || canSubmitPaidCard || canCreatePayment;
   const primaryPaymentLabel = !publishReady
     ? "Заполните обязательные поля"
-    : canSubmitPaidCard
-      ? "Отправить на модерацию"
-      : latestPaymentIsOpen
-        ? latestPayment?.provider === "MANAGER"
-          ? "Заявка уже у менеджера"
-          : "Платеж уже создан"
-        : hasSucceededPayment
-          ? "Оплата подтверждена"
-          : paymentProvider === "MANAGER"
-            ? "Отправить заявку менеджеру"
-            : "Перейти к оплате";
+    : canSubmitPublishedEdit
+      ? "Отправить изменения на модерацию"
+      : canSubmitPaidCard
+        ? "Отправить на модерацию"
+        : latestPaymentIsOpen
+          ? latestPayment?.provider === "MANAGER"
+            ? "Заявка уже у менеджера"
+            : "Платеж уже создан"
+          : hasSucceededPayment
+            ? "Оплата подтверждена"
+            : paymentProvider === "MANAGER"
+              ? "Отправить заявку менеджеру"
+              : "Перейти к оплате";
   const readinessIssues = checklist.filter((item) => !item.done && item.step !== "publish");
   const paidUntil = latestSucceededPayment
     ? getTransferPaymentValidUntil(latestSucceededPayment)
     : null;
+  const extraVehicleCount = Math.max(0, fleet.length - 1);
+  const livePublicationFeeRub = publicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
   const transferStatusMeta: Record<
     TransferStatusValue,
     { label: string; dot: string; bg: string; text: string }
@@ -480,24 +488,24 @@ export function TransferEditorPage({
       text: "text-red-700",
     },
   };
-  const statusMeta = transferStatusMeta[transfer.status] ?? transferStatusMeta.DRAFT;
+  const statusMeta = transferStatusMeta[transfer.workflowStatus] ?? transferStatusMeta.DRAFT;
   const paymentReadinessHint = !publishReady
     ? "Перед оплатой заполните обязательные разделы ниже."
     : alreadyOnModeration
       ? transfer.status === "PUBLISHED"
-        ? "Карточка уже опубликована. Повторная оплата сейчас не требуется."
+        ? "Изменения уже отправлены на модерацию. Публичная версия остается на сайте."
         : "Карточка уже отправлена на модерацию."
-      : hasSucceededPayment
-        ? "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
-        : latestPaymentIsOpen
-          ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
-          : "Карточка готова к оплате и последующей отправке на модерацию.";
+      : transfer.status === "PUBLISHED"
+        ? "Публичная карточка останется на сайте. Новые правки можно отправить на повторную модерацию без повторной оплаты."
+        : hasSucceededPayment
+          ? "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
+          : latestPaymentIsOpen
+            ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
+            : "Карточка готова к оплате и последующей отправке на модерацию.";
 
   function updatePaymentInState(item: SerializedPayment) {
     setPayments((currentPayments) => {
-      const next = currentPayments.map((payment) =>
-        payment.id === item.id ? item : payment,
-      );
+      const next = currentPayments.map((payment) => (payment.id === item.id ? item : payment));
 
       if (!next.some((payment) => payment.id === item.id)) {
         next.unshift(item);
@@ -622,6 +630,13 @@ export function TransferEditorPage({
       <input type="hidden" name="latitude" value={latitude !== null ? String(latitude) : ""} />
       <input type="hidden" name="longitude" value={longitude !== null ? String(longitude) : ""} />
       <input type="hidden" name="paymentProvider" value={paymentProvider} />
+      {!showPhone2 ? <input type="hidden" name="phone2" value={phone2} /> : null}
+      {!showWebsite ? <input type="hidden" name="websiteUrl" value={websiteUrl} /> : null}
+      {!showWhatsapp ? <input type="hidden" name="whatsappUrl" value={whatsappUrl} /> : null}
+      {!showTelegram ? <input type="hidden" name="telegramUrl" value={telegramUrl} /> : null}
+      {!showVk ? <input type="hidden" name="vkUrl" value={vkUrl} /> : null}
+      {!showMax ? <input type="hidden" name="maxUrl" value={maxUrl} /> : null}
+      {!showOk ? <input type="hidden" name="okUrl" value={okUrl} /> : null}
 
       <div className="space-y-4 overflow-hidden rounded-3xl border border-primary/18 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_18px_34px_-26px_rgba(15,118,110,0.95)] sm:p-6">
         <div className="sm:hidden">
@@ -962,7 +977,7 @@ export function TransferEditorPage({
               <div>
                 <p className="text-sm font-semibold text-olive">3. Метка на карте</p>
                 <p className="mt-1 text-xs text-olive/55">
-                  Кликните по карте или перетащите точку. Город обновится автоматически.
+                  Кликните по карте или перетащите точку, затем подтвердите геопозицию.
                 </p>
               </div>
               <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
@@ -1347,9 +1362,7 @@ export function TransferEditorPage({
                 <p className="mt-1.5 text-base font-semibold leading-tight text-olive">
                   {effectiveLocationName || "Не указан"}
                 </p>
-                <p className="mt-1 text-[11px] text-olive/50">
-                  Показывается в каталоге и поиске
-                </p>
+                <p className="mt-1 text-[11px] text-olive/50">Показывается в каталоге и поиске</p>
               </div>
               <div className="rounded-xl bg-cream p-3.5">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
@@ -1363,9 +1376,7 @@ export function TransferEditorPage({
                 >
                   {fleet.length > 0 ? `${fleet.length} вариантов` : "Пока пусто"}
                 </p>
-                <p className="mt-1 text-[11px] text-olive/50">
-                  Фото, транспорт и цены обязательны
-                </p>
+                <p className="mt-1 text-[11px] text-olive/50">Фото, транспорт и цены обязательны</p>
               </div>
               <div className="rounded-xl bg-cream p-3.5">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
@@ -1381,9 +1392,7 @@ export function TransferEditorPage({
                     ? `${Number(fleetSummary.priceFrom).toLocaleString("ru-RU")} ₽${fleetSummary.priceUnitLabel ?? ""}`
                     : "Не указана"}
                 </p>
-                <p className="mt-1 text-[11px] text-olive/50">
-                  Минимальная цена из автопарка
-                </p>
+                <p className="mt-1 text-[11px] text-olive/50">Минимальная цена из автопарка</p>
               </div>
             </div>
 
@@ -1406,10 +1415,27 @@ export function TransferEditorPage({
                   <span className="text-olive/65">Карточка</span>
                   <span className="text-right font-medium text-olive">{displayTitle}</span>
                 </div>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-olive/65">Базовое размещение</span>
+                  <span className="text-right font-medium text-olive">
+                    {formatMoney(publicationFeeRub)}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-olive/65">
+                    Дополнительные автомобили
+                    {extraVehicleCount > 0 ? ` (${extraVehicleCount})` : ""}
+                  </span>
+                  <span className="text-right font-medium text-olive">
+                    {extraVehicleCount > 0
+                      ? `${formatMoney(extraVehicleCount * extraVehicleFeeRub)}`
+                      : `0 ₽, каждый следующий +${formatMoney(extraVehicleFeeRub)}`}
+                  </span>
+                </div>
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
                   <span className="font-semibold text-olive">Итого</span>
                   <span className="text-2xl font-bold tabular-nums text-olive">
-                    {formatMoney(publicationFeeRub)}
+                    {formatMoney(livePublicationFeeRub)}
                   </span>
                 </div>
               </div>
@@ -1639,7 +1665,9 @@ export function TransferEditorPage({
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-olive/55">Способ</span>
-                <span className="text-olive">{getPaymentProviderLabel(latestPayment.provider)}</span>
+                <span className="text-olive">
+                  {getPaymentProviderLabel(latestPayment.provider)}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-olive/55">Дата</span>

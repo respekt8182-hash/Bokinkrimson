@@ -2,22 +2,52 @@
 import { PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db, type DbClientLike } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import {
   getPlacementValidUntil,
+  getTransferPaymentReference,
   isPaymentAwaitingCompletion,
   mapYookassaStatus,
   resolvePaymentStatusTransition,
   serializePayment,
 } from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
-import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
+import {
+  autoSubmitTransferAfterSuccessfulPayment,
+  submitTransferToModerationIfReady,
+} from "@/lib/transfers";
 import { getYookassaPayment } from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+async function autoSubmitTransferForPayment(
+  client: DbClientLike,
+  payment: {
+    transferId?: string | null;
+    tariffCode?: string | null;
+    providerPayload?: unknown;
+  },
+) {
+  const transferReference = getTransferPaymentReference({
+    transferId: payment.transferId,
+    tariffCode: payment.tariffCode,
+    providerPayload: payment.providerPayload,
+  });
+
+  if (!transferReference) {
+    return;
+  }
+
+  if (payment.transferId) {
+    await autoSubmitTransferAfterSuccessfulPayment(client, payment.transferId);
+    return;
+  }
+
+  await submitTransferToModerationIfReady(client, transferReference.transferId);
+}
 
 export async function GET(_request: Request, context: RouteContext) {
   const session = await getSession();
@@ -135,8 +165,8 @@ export async function GET(_request: Request, context: RouteContext) {
           if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.excursionId) {
             await autoSubmitExcursionAfterSuccessfulPayment(tx, currentPayment.excursionId);
           }
-          if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.transferId) {
-            await autoSubmitTransferAfterSuccessfulPayment(tx, currentPayment.transferId);
+          if (updated.status === PaymentStatus.SUCCEEDED) {
+            await autoSubmitTransferForPayment(tx, currentPayment);
           }
 
           return updated;
@@ -145,8 +175,8 @@ export async function GET(_request: Request, context: RouteContext) {
         await autoSubmitPropertyAfterSuccessfulPayment(db, payment.propertyId);
       } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.excursionId) {
         await autoSubmitExcursionAfterSuccessfulPayment(db, payment.excursionId);
-      } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.transferId) {
-        await autoSubmitTransferAfterSuccessfulPayment(db, payment.transferId);
+      } else if (nextStatus === PaymentStatus.SUCCEEDED) {
+        await autoSubmitTransferForPayment(db, payment);
       }
     } catch (error) {
       console.error("Failed to refresh payment status from YooKassa", error);

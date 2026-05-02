@@ -16,11 +16,17 @@ import {
 } from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
 import { serializeReview } from "@/lib/reviews";
-import { TRANSFER_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
+import {
+  applyPublishedTransferSnapshotToRow,
+  refreshPublishedTransferSnapshot,
+} from "@/lib/transfer-public-snapshot";
 import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
 import {
   deriveTransferSummaryFromFleet,
   getTransferFleet,
+  getTransferStatusLabel,
+  getTransferWorkflowStatus,
   normalizeTransferFleet,
   normalizeTransferServiceTags,
   transferTypeOptions,
@@ -161,7 +167,12 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
 
     const current = await db.transfer.findUnique({
       where: { id },
-      select: { id: true, publishedAt: true },
+      select: {
+        id: true,
+        status: true,
+        pendingEditStatus: true,
+        publishedAt: true,
+      },
     });
 
     if (!current) {
@@ -185,12 +196,22 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     });
     const intent = formString(formData, "intent");
     const selectedStatus = parseStatus(formString(formData, "status"));
-    const status =
+    const targetStatus =
       intent === "publish"
         ? TransferStatus.PUBLISHED
         : intent === "reject"
           ? TransferStatus.REJECTED
           : selectedStatus;
+    const isPublishedEdit =
+      current.status === TransferStatus.PUBLISHED && current.pendingEditStatus !== null;
+    const status = isPublishedEdit ? TransferStatus.PUBLISHED : targetStatus;
+    const nextPendingEditStatus = isPublishedEdit
+      ? intent === "publish"
+        ? null
+        : intent === "reject"
+          ? TransferStatus.REJECTED
+          : current.pendingEditStatus
+      : null;
 
     await db.transfer.update({
       where: { id },
@@ -227,12 +248,17 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         okUrl: formString(formData, "okUrl"),
         receiveRequests: false,
         status,
+        pendingEditStatus: nextPendingEditStatus,
         isPublishedVisible: formData.get("isPublishedVisible") === "on",
         moderationNotes: formString(formData, "moderationNotes"),
         publishedAt:
           status === TransferStatus.PUBLISHED ? (current.publishedAt ?? new Date()) : null,
       },
     });
+
+    if (targetStatus === TransferStatus.PUBLISHED) {
+      await refreshPublishedTransferSnapshot(db, id);
+    }
 
     redirect(`/admin/transfers/${id}?saved=1`);
   }
@@ -241,9 +267,14 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
   const serviceTags = normalizeTransferServiceTags(transfer.serviceTags);
   const fleetSummary = deriveTransferSummaryFromFleet(transfer);
   const firstPhoto = fleetSummary.primaryVehicle?.photoUrl ?? fleetSummary.photoUrls[0] ?? null;
+  const workflowStatus = getTransferWorkflowStatus(
+    transfer.status,
+    transfer.pendingEditStatus ?? null,
+  );
+  const publicTransfer = applyPublishedTransferSnapshotToRow(transfer);
   const publicPath =
     transfer.status === TransferStatus.PUBLISHED && transfer.isPublishedVisible
-      ? buildPublicTransferPath({ id: transfer.id, title: transfer.title })
+      ? buildPublicTransferPath({ id: transfer.id, title: publicTransfer.title })
       : null;
   const contactName =
     transfer.contactName ?? `${transfer.owner.firstName} ${transfer.owner.lastName}`.trim();
@@ -252,6 +283,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
   const succeededPayment =
     payments.find((payment) => payment.status === PaymentStatus.SUCCEEDED) ?? null;
   const paidUntil = succeededPayment ? resolvePaymentPlacementValidUntil(succeededPayment) : null;
+  const currentPublicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
 
   return (
     <div className="space-y-6">
@@ -268,8 +300,8 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
           </p>
           <h1 className="mt-2 text-3xl text-olive">{transfer.title || "Трансфер без названия"}</h1>
           <p className="mt-1 text-sm text-olive/64">
-            Статус: {STATUS_LABELS[transfer.status]}. Владелец: {transfer.owner.firstName}{" "}
-            {transfer.owner.lastName}
+            Статус: {getTransferStatusLabel(transfer.status, transfer.pendingEditStatus ?? null)}.
+            Владелец: {transfer.owner.firstName} {transfer.owner.lastName}
             {transfer.owner.phone ? `, ${transfer.owner.phone}` : ""}.
           </p>
         </div>
@@ -312,7 +344,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Статус</span>
-                <select name="status" defaultValue={transfer.status} className={inputClass}>
+                <select name="status" defaultValue={workflowStatus} className={inputClass}>
                   {Object.entries(STATUS_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -575,7 +607,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
               <div className="rounded-2xl bg-cream/80 px-3 py-3">
                 <dt className="text-olive/50">Стоимость</dt>
                 <dd className="font-semibold text-olive">
-                  {formatRub(latestPayment?.amount ?? TRANSFER_PUBLICATION_FEE_RUB)}
+                  {formatRub(latestPayment?.amount ?? currentPublicationFeeRub)}
                 </dd>
               </div>
               <div className="rounded-2xl bg-cream/80 px-3 py-3">
@@ -700,7 +732,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
             >
               Сохранить изменения
             </button>
-            {transfer.status !== TransferStatus.PUBLISHED ? (
+            {workflowStatus !== TransferStatus.PUBLISHED ? (
               <button
                 type="submit"
                 name="intent"
@@ -710,7 +742,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 Сохранить и опубликовать
               </button>
             ) : null}
-            {transfer.status === TransferStatus.PENDING_MODERATION ? (
+            {workflowStatus === TransferStatus.PENDING_MODERATION ? (
               <button
                 type="submit"
                 name="intent"

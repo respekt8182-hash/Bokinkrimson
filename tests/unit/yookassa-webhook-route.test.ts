@@ -25,6 +25,11 @@ const excursionMocks = vi.hoisted(() => ({
   autoSubmitExcursionAfterSuccessfulPayment: vi.fn(),
 }));
 
+const transferMocks = vi.hoisted(() => ({
+  autoSubmitTransferAfterSuccessfulPayment: vi.fn(),
+  submitTransferToModerationIfReady: vi.fn(),
+}));
+
 vi.mock("@/lib/db", () => ({
   db: {
     payment: {
@@ -54,7 +59,13 @@ vi.mock("@/lib/properties", () => ({
 }));
 
 vi.mock("@/lib/excursions", () => ({
-  autoSubmitExcursionAfterSuccessfulPayment: excursionMocks.autoSubmitExcursionAfterSuccessfulPayment,
+  autoSubmitExcursionAfterSuccessfulPayment:
+    excursionMocks.autoSubmitExcursionAfterSuccessfulPayment,
+}));
+
+vi.mock("@/lib/transfers", () => ({
+  autoSubmitTransferAfterSuccessfulPayment: transferMocks.autoSubmitTransferAfterSuccessfulPayment,
+  submitTransferToModerationIfReady: transferMocks.submitTransferToModerationIfReady,
 }));
 
 async function loadWebhookRoute() {
@@ -147,5 +158,60 @@ describe("YooKassa webhook hardening", () => {
       expect.anything(),
       "excursion-1",
     );
+  });
+
+  it("auto-submits a legacy transfer payment using the tariff reference", async () => {
+    yookassaMocks.getYookassaPayment.mockResolvedValue({
+      id: "provider-payment-transfer",
+      status: "succeeded",
+      paid: true,
+      amount: {
+        value: "990.00",
+        currency: "RUB",
+      },
+    });
+    dbMocks.paymentFindFirst.mockResolvedValue({
+      id: "payment-transfer-1",
+      status: PaymentStatus.PENDING,
+      confirmationUrl: null,
+      providerPayload: null,
+      propertyId: null,
+      excursionId: null,
+      transferId: null,
+      tariffCode: "transfer_standard:transfer-1",
+      paidAt: null,
+      canceledAt: null,
+      placementValidUntil: null,
+    });
+    dbMocks.webhookReceiptCreate.mockResolvedValue({ id: "receipt-transfer-1" });
+    dbMocks.paymentUpdate.mockResolvedValue({
+      id: "payment-transfer-1",
+      status: PaymentStatus.SUCCEEDED,
+      propertyId: null,
+      excursionId: null,
+      transferId: null,
+    });
+    dbMocks.webhookReceiptUpdate.mockResolvedValue({ id: "receipt-transfer-1" });
+
+    const { POST } = await loadWebhookRoute();
+    const response = await POST(
+      new Request("http://localhost:3000/api/payments/yookassa/webhook", {
+        method: "POST",
+        body: JSON.stringify({
+          event: "payment.succeeded",
+          object: { id: "provider-payment-transfer" },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(transferMocks.submitTransferToModerationIfReady).toHaveBeenCalledWith(
+      expect.anything(),
+      "transfer-1",
+    );
+    expect(transferMocks.autoSubmitTransferAfterSuccessfulPayment).not.toHaveBeenCalled();
   });
 });

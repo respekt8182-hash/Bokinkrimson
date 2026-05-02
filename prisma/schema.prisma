@@ -745,6 +745,8 @@ model Transfer {
   profileViews       Int                @default(0)
   moderationNotes    String?
   status             TransferStatus     @default(DRAFT)
+  pendingEditStatus  TransferStatus?
+  publishedSnapshot  Json?
   isPublishedVisible Boolean            @default(true)
   publishedAt        DateTime?
   createdAt          DateTime           @default(now())
@@ -757,6 +759,7 @@ model Transfer {
 
   @@index([ownerId, updatedAt])
   @@index([status, isPublishedVisible, updatedAt])
+  @@index([pendingEditStatus, updatedAt])
   @@index([locationId, status, updatedAt])
   @@index([districtId, status, updatedAt])
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, MessageSquareText, Phone } from "lucide-react";
+import { MessageSquareText, Phone } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ExcursionLeadModal } from "./excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -48,6 +48,15 @@ type MobileQuickAction = {
 const DATES_FALLBACK_LABEL =
   "\u0414\u0430\u0442\u044b \u0443\u0442\u043e\u0447\u043d\u044f\u044e\u0442\u0441\u044f";
 
+function getOrganizerInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function ExcursionMobileBar({
   priceLabel,
   availabilityLabel,
@@ -66,6 +75,7 @@ export function ExcursionMobileBar({
   const okUrl = normalizeOkProfileUrl(formProps.okUrl);
   const brandIconClassName = "h-4 w-4 items-center justify-center";
   const statusLabel = availabilityLabel || DATES_FALLBACK_LABEL;
+  const organizerInitials = getOrganizerInitials(formProps.organizerName);
   const quickActions: MobileQuickAction[] = [];
 
   if (normalizedWebsiteUrl) {
@@ -91,8 +101,7 @@ export function ExcursionMobileBar({
       label: "WhatsApp",
       href: whatsappUrl,
       icon: <ContactBrandMark brand="whatsapp" bare className={brandIconClassName} />,
-      className:
-        "border-[#25D366]/22 bg-[#25D366]/10 shadow-[0_8px_18px_rgba(37,211,102,0.16)]",
+      className: "border-[#25D366]/22 bg-[#25D366]/10 shadow-[0_8px_18px_rgba(37,211,102,0.16)]",
     });
   }
 
@@ -102,8 +111,7 @@ export function ExcursionMobileBar({
       label: "Telegram",
       href: telegramUrl,
       icon: <ContactBrandMark brand="telegram" bare className={brandIconClassName} />,
-      className:
-        "border-[#2AABEE]/22 bg-[#2AABEE]/10 shadow-[0_8px_18px_rgba(42,171,238,0.16)]",
+      className: "border-[#2AABEE]/22 bg-[#2AABEE]/10 shadow-[0_8px_18px_rgba(42,171,238,0.16)]",
     });
   }
 
@@ -113,8 +121,7 @@ export function ExcursionMobileBar({
       label: "VK",
       href: vkUrl,
       icon: <ContactBrandMark brand="vk" bare className={brandIconClassName} />,
-      className:
-        "border-[#0077FF]/20 bg-[#0077FF]/9 shadow-[0_8px_18px_rgba(0,119,255,0.14)]",
+      className: "border-[#0077FF]/20 bg-[#0077FF]/9 shadow-[0_8px_18px_rgba(0,119,255,0.14)]",
     });
   }
 
@@ -124,8 +131,7 @@ export function ExcursionMobileBar({
       label: "Max",
       href: maxUrl,
       icon: <ContactBrandMark brand="max" bare className={brandIconClassName} />,
-      className:
-        "border-[#FF7A1A]/22 bg-[#FF7A1A]/10 shadow-[0_8px_18px_rgba(255,122,26,0.15)]",
+      className: "border-[#FF7A1A]/22 bg-[#FF7A1A]/10 shadow-[0_8px_18px_rgba(255,122,26,0.15)]",
     });
   }
 
@@ -135,8 +141,7 @@ export function ExcursionMobileBar({
       label: "OK",
       href: okUrl,
       icon: <ContactBrandMark brand="ok" bare className={brandIconClassName} />,
-      className:
-        "border-[#EE8208]/22 bg-[#EE8208]/10 shadow-[0_8px_18px_rgba(238,130,8,0.15)]",
+      className: "border-[#EE8208]/22 bg-[#EE8208]/10 shadow-[0_8px_18px_rgba(238,130,8,0.15)]",
     });
   }
 
@@ -162,14 +167,12 @@ export function ExcursionMobileBar({
                 alt={formProps.organizerName}
                 className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
-                  <AppIcon icon={CalendarDays} className="h-4.5 w-4.5" />
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-xs font-semibold text-olive/65 ring-1 ring-olive/10">
+                  {organizerInitials || "?"}
                 </span>
               </AvatarImage>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-olive">
-                  {priceLabel}
-                </p>
+                <p className="truncate text-sm font-semibold text-olive">{priceLabel}</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-primary/85">
                   <span className="truncate">{statusLabel}</span>
                 </p>

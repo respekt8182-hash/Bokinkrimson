@@ -11,7 +11,13 @@ import {
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicTransferPath } from "@/lib/public-marketplace";
-import { deriveTransferSummaryFromFleet, getTransferFleet } from "@/lib/transfers";
+import { applyPublishedTransferSnapshotToRow } from "@/lib/transfer-public-snapshot";
+import {
+  deriveTransferSummaryFromFleet,
+  getTransferFleet,
+  getTransferStatusLabel,
+  getTransferWorkflowStatus,
+} from "@/lib/transfers";
 
 type AdminTransfersPageProps = {
   searchParams: Promise<{ status?: string; q?: string }>;
@@ -47,7 +53,8 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
 
   const statusCounts = rows.reduce(
     (acc, item) => {
-      acc[item.status] = (acc[item.status] ?? 0) + 1;
+      const workflowStatus = getTransferWorkflowStatus(item.status, item.pendingEditStatus ?? null);
+      acc[workflowStatus] = (acc[workflowStatus] ?? 0) + 1;
       return acc;
     },
     {} as Record<TransferStatus, number>,
@@ -55,7 +62,11 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
 
   const statusFiltered =
     selectedStatus && selectedStatus in TransferStatus
-      ? rows.filter((item) => item.status === selectedStatus)
+      ? rows.filter(
+          (item) =>
+            getTransferWorkflowStatus(item.status, item.pendingEditStatus ?? null) ===
+            selectedStatus,
+        )
       : rows;
   const items =
     query.length >= 2
@@ -151,9 +162,14 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
+            const workflowStatus = getTransferWorkflowStatus(
+              item.status,
+              item.pendingEditStatus ?? null,
+            );
+            const publicItem = applyPublishedTransferSnapshotToRow(item);
             const publicPath =
               item.status === TransferStatus.PUBLISHED && item.isPublishedVisible
-                ? buildPublicTransferPath({ id: item.id, title: item.title })
+                ? buildPublicTransferPath({ id: item.id, title: publicItem.title })
                 : null;
             const summary = deriveTransferSummaryFromFleet(item);
             const firstPhoto = summary.primaryVehicle?.photoUrl ?? item.photoUrls[0] ?? null;
@@ -186,9 +202,9 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                           {item.title || "Трансфер без названия"}
                         </h2>
                         <span
-                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[item.status]}`}
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[workflowStatus]}`}
                         >
-                          {STATUS_LABELS[item.status]}
+                          {getTransferStatusLabel(item.status, item.pendingEditStatus ?? null)}
                         </span>
                         {!item.isPublishedVisible ? (
                           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">

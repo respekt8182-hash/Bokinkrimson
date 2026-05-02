@@ -3,7 +3,8 @@ import { placementTariffsByGroup } from "@/lib/constants";
 import { PLACEMENT_VALIDITY_DAYS } from "@/lib/payments";
 
 export const EXCURSION_PUBLICATION_FEE_RUB = 1990;
-export const TRANSFER_PUBLICATION_FEE_RUB = 2000;
+export const TRANSFER_PUBLICATION_FEE_RUB = 1900;
+export const TRANSFER_EXTRA_VEHICLE_FEE_RUB = 500;
 export const SERVICES_AND_TARIFFS_PATH = "/uslugi-i-tarify";
 export const OFFER_PATH = "/oferta";
 
@@ -29,6 +30,16 @@ function formatRoomRange(min: number, max: number | null): string {
 }
 
 const placementDurationLabel = `${PLACEMENT_VALIDITY_DAYS} дней с момента оплаты`;
+
+export function calculateTransferPublicationFeeRub(vehicleCount: number): number {
+  const normalizedVehicleCount = Number.isFinite(vehicleCount)
+    ? Math.max(1, Math.round(vehicleCount))
+    : 1;
+  return (
+    TRANSFER_PUBLICATION_FEE_RUB +
+    Math.max(0, normalizedVehicleCount - 1) * TRANSFER_EXTRA_VEHICLE_FEE_RUB
+  );
+}
 
 export const publicServiceTariffRows: PublicServiceTariffRow[] = [
   ...placementTariffsByGroup.MULTI_ROOM.map((tariff) => ({
@@ -66,9 +77,12 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
   {
     id: "transfer_standard",
     serviceName: "Размещение информации о трансфере",
-    serviceNote: "Публикация карточки водителя, автомобиля и маршрутов трансфера",
+    serviceNote:
+      "Публикация карточки трансфера с одним автомобилем. Каждый следующий автомобиль в автопарке добавляет 500 ₽ к стоимости размещения в ленте информации.",
     priceRub: TRANSFER_PUBLICATION_FEE_RUB,
-    conditionsLabel: "Одна карточка трансфера",
+    conditionsLabel: `1 автомобиль включен, каждый следующий +${formatTariffPrice(
+      TRANSFER_EXTRA_VEHICLE_FEE_RUB,
+    )}`,
     durationLabel: placementDurationLabel,
   },
 ];
@@ -110,7 +124,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 export const publicTariffHighlights = [
   "Сервис берет оплату только за размещение карточки и не удерживает комиссию с каждого бронирования.",
   "Для объектов размещения тариф рассчитывается по количеству активных номеров и типу объекта.",
-  "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией.",
+  "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией; в трансферах один автомобиль включен в базовую стоимость, каждый следующий стоит 500 ₽.",
   "Если карточка возвращена на доработку в рамках оплаченного периода, повторная оплата не требуется.",
 ];
 

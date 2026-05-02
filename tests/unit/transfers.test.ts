@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { TransferStatus } from "@prisma/client";
+import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
 import {
   deriveTransferSummaryFromFleet,
+  getTransferStatusLabel,
+  getTransferWorkflowStatus,
   isTransferReadyForModeration,
   normalizeTransferFleet,
 } from "@/lib/transfers";
@@ -55,5 +59,19 @@ describe("transfer fleet normalization", () => {
         ],
       }),
     ).toBe(true);
+  });
+
+  it("calculates transfer placement fee from fleet size", () => {
+    expect(calculateTransferPublicationFeeRub(1)).toBe(1900);
+    expect(calculateTransferPublicationFeeRub(3)).toBe(2900);
+  });
+
+  it("uses pending edit status as transfer workflow status for published cards", () => {
+    expect(
+      getTransferWorkflowStatus(TransferStatus.PUBLISHED, TransferStatus.PENDING_MODERATION),
+    ).toBe(TransferStatus.PENDING_MODERATION);
+    expect(
+      getTransferStatusLabel(TransferStatus.PUBLISHED, TransferStatus.PENDING_MODERATION),
+    ).toBe("Изменения на модерации");
   });
 });

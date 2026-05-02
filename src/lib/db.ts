@@ -43,7 +43,12 @@ const USER_COMPAT_COLUMNS = [
   "deletionExpiresAt",
 ] as const;
 
-const TRANSFER_COMPAT_COLUMNS = ["serviceTags", "fleet"] as const;
+const TRANSFER_COMPAT_COLUMNS = [
+  "serviceTags",
+  "fleet",
+  "pendingEditStatus",
+  "publishedSnapshot",
+] as const;
 const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
 const PAYMENT_COMPAT_COLUMNS = ["transferId"] as const;
 
@@ -107,6 +112,8 @@ const SCHEMA_COMPAT_MODELS = {
     defaults: {
       serviceTags: [],
       fleet: [],
+      pendingEditStatus: null,
+      publishedSnapshot: null,
     },
     logContext: "transfer-schema-compat",
     label: "Transfer",

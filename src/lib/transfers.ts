@@ -1,5 +1,6 @@
 import { PaymentStatus, TransferStatus } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
+import { ensurePublishedTransferSnapshotBeforeOwnerEdit } from "@/lib/transfer-public-snapshot";
 
 type NumericLike = number | string | { toString(): string } | null | undefined;
 
@@ -85,6 +86,62 @@ export const transferPriceUnitOptions = [
 ] as const;
 
 export const maxTransferServiceTags = 5;
+
+export function getTransferWorkflowStatus(
+  status: TransferStatus,
+  pendingEditStatus: TransferStatus | null = null,
+): TransferStatus {
+  if (status === TransferStatus.PUBLISHED && pendingEditStatus) {
+    return pendingEditStatus;
+  }
+
+  return status;
+}
+
+export function getTransferStatusLabel(
+  status: TransferStatus,
+  pendingEditStatus: TransferStatus | null = null,
+): string {
+  const workflowStatus = getTransferWorkflowStatus(status, pendingEditStatus);
+
+  if (
+    status === TransferStatus.PUBLISHED &&
+    pendingEditStatus === TransferStatus.PENDING_MODERATION
+  ) {
+    return "Изменения на модерации";
+  }
+
+  if (status === TransferStatus.PUBLISHED && pendingEditStatus === TransferStatus.DRAFT) {
+    return "Правки сохранены";
+  }
+
+  if (status === TransferStatus.PUBLISHED && pendingEditStatus === TransferStatus.REJECTED) {
+    return "Правки отклонены";
+  }
+
+  switch (workflowStatus) {
+    case TransferStatus.DRAFT:
+      return "Черновик";
+    case TransferStatus.PENDING_MODERATION:
+      return "На модерации";
+    case TransferStatus.PUBLISHED:
+      return "Опубликовано";
+    case TransferStatus.REJECTED:
+      return "Отклонено";
+    default:
+      return workflowStatus;
+  }
+}
+
+export function canSubmitPublishedTransferEdit(
+  pendingEditStatus: TransferStatus | null = null,
+): boolean {
+  return (
+    pendingEditStatus === null ||
+    pendingEditStatus === TransferStatus.DRAFT ||
+    pendingEditStatus === TransferStatus.REJECTED
+  );
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") {
@@ -477,6 +534,8 @@ export async function submitTransferToModerationIfReady(
     select: {
       id: true,
       status: true,
+      pendingEditStatus: true,
+      publishedSnapshot: true,
       title: true,
       description: true,
       transferType: true,
@@ -502,15 +561,29 @@ export async function submitTransferToModerationIfReady(
     return false;
   }
 
-  if (transfer.status === TransferStatus.PENDING_MODERATION) {
+  const workflowStatus = getTransferWorkflowStatus(
+    transfer.status,
+    transfer.pendingEditStatus ?? null,
+  );
+
+  if (workflowStatus === TransferStatus.PENDING_MODERATION) {
     return true;
   }
 
-  if (
-    transfer.status !== TransferStatus.DRAFT &&
-    transfer.status !== TransferStatus.REJECTED &&
-    transfer.status !== TransferStatus.PUBLISHED
-  ) {
+  if (transfer.status === TransferStatus.PUBLISHED) {
+    await ensurePublishedTransferSnapshotBeforeOwnerEdit(client, transfer.id);
+    await client.transfer.update({
+      where: { id: transfer.id },
+      data: {
+        pendingEditStatus: TransferStatus.PENDING_MODERATION,
+        moderationNotes: null,
+      },
+    });
+
+    return true;
+  }
+
+  if (transfer.status !== TransferStatus.DRAFT && transfer.status !== TransferStatus.REJECTED) {
     return false;
   }
 

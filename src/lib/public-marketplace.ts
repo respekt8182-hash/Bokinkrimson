@@ -9,11 +9,7 @@ import {
 import { db } from "@/lib/db";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { resolveExcursionLocation } from "@/lib/excursion-directory";
-import {
-  calculateDistanceKm,
-  isWithinRadiusKm,
-  roundDistanceKm,
-} from "@/lib/catalog-radius";
+import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/catalog-radius";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import {
   isDatabaseFallbackEligibleError,
@@ -30,6 +26,7 @@ import {
   type StaticAttraction,
 } from "@/lib/static-attractions";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import { applyPublishedTransferSnapshotToRow } from "@/lib/transfer-public-snapshot";
 import {
   deriveTransferSummaryFromFleet,
   normalizeTransferServiceTags,
@@ -591,7 +588,9 @@ export async function getPublicTransferCatalog(
     };
   }
 
-  const searchScores = getSearchScoreMap(searchQuery, rows, (item) => [
+  const effectiveRows = rows.map((row) => applyPublishedTransferSnapshotToRow(row));
+
+  const searchScores = getSearchScoreMap(searchQuery, effectiveRows, (item) => [
     item.title,
     item.transferType,
     ...normalizeTransferServiceTags(item.serviceTags),
@@ -612,7 +611,7 @@ export async function getPublicTransferCatalog(
     ]),
   ]);
 
-  const filtered = rows
+  const filtered = effectiveRows
     .map((row) => {
       const fleetSummary = deriveTransferSummaryFromFleet(row);
       const point = getTransferPoint(row);
@@ -681,9 +680,7 @@ export async function getPublicTransferCatalog(
       }
 
       const distanceScore =
-        distanceKm === null
-          ? 0
-          : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
+        distanceKm === null ? 0 : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
       const exactLocationScore =
         resolvedLocation && row.locationId === resolvedLocation.id ? 35 : 0;
       const relevance = searchScore * 70 + distanceScore + exactLocationScore;
@@ -813,7 +810,7 @@ export async function getPublicTransferByIdentifier(
     return null;
   }
 
-  return row ? mapTransferCatalogItem(row, null) : null;
+  return row ? mapTransferCatalogItem(applyPublishedTransferSnapshotToRow(row), null) : null;
 }
 
 export async function getOwnerPreviewTransferByIdentifier(
@@ -858,6 +855,9 @@ export async function getMarketplaceDirectoryData(): Promise<{
     getStaticAttractionCategories(),
   ]);
   let transfers: Array<{
+    status: TransferStatus;
+    pendingEditStatus: TransferStatus | null;
+    publishedSnapshot: Prisma.JsonValue | null;
     transferType: string | null;
     locationName: string | null;
     location: { name: string } | null;
@@ -871,6 +871,9 @@ export async function getMarketplaceDirectoryData(): Promise<{
         owner: { deletedAt: null },
       },
       select: {
+        status: true,
+        pendingEditStatus: true,
+        publishedSnapshot: true,
         transferType: true,
         locationName: true,
         location: { select: { name: true } },
@@ -888,8 +891,14 @@ export async function getMarketplaceDirectoryData(): Promise<{
 
   const transferTypes = new Set<string>();
   const locationNames = new Set<string>();
-  const attractionLocationCounts = new Map<string, { name: string; count: number; searchTerms: Set<string> }>();
-  const transferLocationCounts = new Map<string, { name: string; count: number; searchTerms: Set<string> }>();
+  const attractionLocationCounts = new Map<
+    string,
+    { name: string; count: number; searchTerms: Set<string> }
+  >();
+  const transferLocationCounts = new Map<
+    string,
+    { name: string; count: number; searchTerms: Set<string> }
+  >();
 
   for (const item of staticAttractions) {
     const locationName = item.locationName;
@@ -910,7 +919,8 @@ export async function getMarketplaceDirectoryData(): Promise<{
     }
   }
 
-  for (const item of transfers) {
+  for (const rawItem of transfers) {
+    const item = applyPublishedTransferSnapshotToRow(rawItem);
     if (item.transferType?.trim()) transferTypes.add(item.transferType.trim());
     const locationName = item.location?.name ?? item.locationName;
     if (locationName?.trim()) {

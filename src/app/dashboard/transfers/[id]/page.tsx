@@ -16,12 +16,22 @@ import {
   serializePayment,
 } from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
-import { TRANSFER_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import {
+  TRANSFER_EXTRA_VEHICLE_FEE_RUB,
+  TRANSFER_PUBLICATION_FEE_RUB,
+  calculateTransferPublicationFeeRub,
+} from "@/lib/site-tariffs";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import {
+  applyPublishedTransferSnapshotToRow,
+  ensurePublishedTransferSnapshotBeforeOwnerEdit,
+} from "@/lib/transfer-public-snapshot";
 import {
   autoSubmitTransferAfterSuccessfulPayment,
   deriveTransferSummaryFromFleet,
   getTransferFleet,
+  getTransferStatusLabel,
+  getTransferWorkflowStatus,
   isTransferReadyForModeration,
   normalizeTransferFleet,
   normalizeTransferServiceTags,
@@ -36,13 +46,6 @@ type DashboardTransferPageProps = {
 
 type TransferEditorStep = "info" | "location" | "fleet" | "contacts" | "publish";
 
-const STATUS_LABELS: Record<TransferStatus, string> = {
-  DRAFT: "Черновик",
-  PENDING_MODERATION: "На модерации",
-  PUBLISHED: "Опубликовано",
-  REJECTED: "Отклонено",
-};
-
 function formString(formData: FormData, key: string): string | null {
   const value = formData.get(key);
   if (typeof value !== "string") {
@@ -53,6 +56,14 @@ function formString(formData: FormData, key: string): string | null {
   return trimmed || null;
 }
 
+function formOptionalString(formData: FormData, key: string): string | null | undefined {
+  if (!formData.has(key)) {
+    return undefined;
+  }
+
+  return formString(formData, key);
+}
+
 function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null {
   const value = formString(formData, key)?.replace(",", ".");
   if (!value) {
@@ -61,6 +72,17 @@ function formCoordinate(formData: FormData, key: string): Prisma.Decimal | null 
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
+}
+
+function formOptionalCoordinate(
+  formData: FormData,
+  key: string,
+): Prisma.Decimal | null | undefined {
+  if (!formData.has(key)) {
+    return undefined;
+  }
+
+  return formCoordinate(formData, key);
 }
 
 function parseJsonField(formData: FormData, key: string): unknown {
@@ -74,6 +96,14 @@ function parseJsonField(formData: FormData, key: string): unknown {
   } catch {
     return [];
   }
+}
+
+function parseOptionalJsonField(formData: FormData, key: string): unknown | undefined {
+  if (!formData.has(key)) {
+    return undefined;
+  }
+
+  return parseJsonField(formData, key);
 }
 
 function parseTransferPaymentProvider(value: string | null): PaymentProvider {
@@ -143,52 +173,154 @@ export default async function DashboardTransferEditPage({
 
     const current = await db.transfer.findUnique({
       where: { id },
-      select: { ownerId: true, status: true },
+      select: {
+        ownerId: true,
+        status: true,
+        pendingEditStatus: true,
+        publishedSnapshot: true,
+        moderationNotes: true,
+        title: true,
+        transferType: true,
+        vehicleClass: true,
+        vehicleModel: true,
+        seats: true,
+        luggage: true,
+        locationId: true,
+        locationName: true,
+        districtId: true,
+        routeExamples: true,
+        latitude: true,
+        longitude: true,
+        priceFrom: true,
+        priceUnitLabel: true,
+        description: true,
+        photoUrls: true,
+        serviceTags: true,
+        fleet: true,
+        contactName: true,
+        phone: true,
+        phone2: true,
+        websiteUrl: true,
+        whatsappUrl: true,
+        telegramUrl: true,
+        vkUrl: true,
+        maxUrl: true,
+        okUrl: true,
+      },
     });
 
     if (!current || current.ownerId !== currentSession.id) {
       notFound();
     }
 
-    const locationId = formString(formData, "locationId");
+    const resolveString = (key: string, currentValue: string | null): string | null => {
+      const nextValue = formOptionalString(formData, key);
+      return nextValue === undefined ? currentValue : nextValue;
+    };
+
+    const locationIdInput = formOptionalString(formData, "locationId");
+    const locationId = locationIdInput === undefined ? current.locationId : locationIdInput;
     const selectedLocation = locationId
       ? await db.excursionLocation.findUnique({
           where: { id: locationId },
           select: { name: true, districtId: true },
         })
       : null;
-    const title = formString(formData, "title") ?? "Новый трансфер";
-    const fleet = normalizeTransferFleet(parseJsonField(formData, "fleetJson"));
-    const serviceTags = normalizeTransferServiceTags(parseJsonField(formData, "serviceTagsJson"));
+    const titleInput = formOptionalString(formData, "title");
+    const title =
+      titleInput === undefined
+        ? (current.title ?? "Новый трансфер")
+        : (titleInput ?? "Новый трансфер");
+    const fleetInput = parseOptionalJsonField(formData, "fleetJson");
+    const serviceTagsInput = parseOptionalJsonField(formData, "serviceTagsJson");
+    const fleet =
+      fleetInput === undefined ? getTransferFleet(current) : normalizeTransferFleet(fleetInput);
+    const serviceTags =
+      serviceTagsInput === undefined
+        ? normalizeTransferServiceTags(current.serviceTags)
+        : normalizeTransferServiceTags(serviceTagsInput);
     const fleetSummary = deriveTransferSummaryFromFleet({
       fleet,
-      photoUrls: [],
-      priceUnitLabel: null,
+      photoUrls: fleetInput === undefined ? current.photoUrls : [],
+      priceUnitLabel: current.priceUnitLabel,
     });
     const intent = formString(formData, "intent");
     const paymentProvider = parseTransferPaymentProvider(formString(formData, "paymentProvider"));
     const previewPath = `${buildPublicTransferPath({ id, title })}?preview=1`;
-    const transferType = formString(formData, "transferType");
-    const locationName = selectedLocation?.name ?? formString(formData, "locationName");
-    const description = formString(formData, "description");
-    const routeExamples = formString(formData, "routeExamples");
-    const contactName = formString(formData, "contactName");
-    const phone = formString(formData, "phone");
-    const phone2 = formString(formData, "phone2");
-    const websiteUrl = formString(formData, "websiteUrl");
-    const whatsappUrl = normalizeWhatsappUrl(formString(formData, "whatsappUrl")) ?? null;
-    const telegramUrl = normalizeTelegramProfileUrl(formString(formData, "telegramUrl")) ?? null;
-    const vkUrl = normalizeVkProfileUrl(formString(formData, "vkUrl")) ?? null;
-    const maxUrl = normalizeMaxProfileUrl(formString(formData, "maxUrl")) ?? null;
-    const okUrl = normalizeOkProfileUrl(formString(formData, "okUrl")) ?? null;
-    const latitude = formCoordinate(formData, "latitude");
-    const longitude = formCoordinate(formData, "longitude");
-    const shouldReturnToModeration = current.status === TransferStatus.PUBLISHED;
-    const nextStatus = shouldReturnToModeration
-      ? TransferStatus.PENDING_MODERATION
-      : current.status === TransferStatus.REJECTED
-        ? TransferStatus.DRAFT
-        : current.status;
+    const transferType = resolveString("transferType", current.transferType);
+    const locationName =
+      selectedLocation?.name ??
+      (locationIdInput === undefined
+        ? current.locationName
+        : resolveString("locationName", current.locationName));
+    const description = resolveString("description", current.description);
+    const routeExamples = resolveString("routeExamples", current.routeExamples);
+    const contactName = resolveString("contactName", current.contactName);
+    const phone = resolveString("phone", current.phone);
+    const phone2 = resolveString("phone2", current.phone2);
+    const websiteUrl = resolveString("websiteUrl", current.websiteUrl);
+    const whatsappInput = formOptionalString(formData, "whatsappUrl");
+    const telegramInput = formOptionalString(formData, "telegramUrl");
+    const vkInput = formOptionalString(formData, "vkUrl");
+    const maxInput = formOptionalString(formData, "maxUrl");
+    const okInput = formOptionalString(formData, "okUrl");
+    const whatsappUrl =
+      whatsappInput === undefined
+        ? current.whatsappUrl
+        : (normalizeWhatsappUrl(whatsappInput) ?? null);
+    const telegramUrl =
+      telegramInput === undefined
+        ? current.telegramUrl
+        : (normalizeTelegramProfileUrl(telegramInput) ?? null);
+    const vkUrl = vkInput === undefined ? current.vkUrl : (normalizeVkProfileUrl(vkInput) ?? null);
+    const maxUrl =
+      maxInput === undefined ? current.maxUrl : (normalizeMaxProfileUrl(maxInput) ?? null);
+    const okUrl = okInput === undefined ? current.okUrl : (normalizeOkProfileUrl(okInput) ?? null);
+    const latitudeInput = formOptionalCoordinate(formData, "latitude");
+    const longitudeInput = formOptionalCoordinate(formData, "longitude");
+    const latitude = latitudeInput === undefined ? current.latitude : latitudeInput;
+    const longitude = longitudeInput === undefined ? current.longitude : longitudeInput;
+    const publishReady = isTransferReadyForModeration({
+      title,
+      description,
+      transferType,
+      locationName,
+      priceFrom: fleetSummary.priceFrom,
+      contactName,
+      phone,
+      fleet,
+      photoUrls: fleetSummary.photoUrls,
+      vehicleClass: fleetSummary.vehicleClass,
+      vehicleModel: fleetSummary.vehicleModel,
+      seats: fleetSummary.seats,
+      luggage: fleetSummary.luggage,
+      priceUnitLabel: fleetSummary.priceUnitLabel,
+    });
+    const publishedEditSupported =
+      current.status === TransferStatus.PUBLISHED &&
+      (await areDatabaseColumnsAvailable("Transfer", ["pendingEditStatus", "publishedSnapshot"]));
+
+    if (publishedEditSupported) {
+      await ensurePublishedTransferSnapshotBeforeOwnerEdit(db, id);
+    }
+
+    const nextPendingEditStatus = publishedEditSupported
+      ? intent === "submit" && publishReady
+        ? TransferStatus.PENDING_MODERATION
+        : current.pendingEditStatus === TransferStatus.PENDING_MODERATION
+          ? TransferStatus.PENDING_MODERATION
+          : TransferStatus.DRAFT
+      : undefined;
+    const shouldReturnToModeration =
+      current.status === TransferStatus.PUBLISHED && !publishedEditSupported;
+    const nextStatus = publishedEditSupported
+      ? TransferStatus.PUBLISHED
+      : shouldReturnToModeration
+        ? TransferStatus.PENDING_MODERATION
+        : current.status === TransferStatus.REJECTED
+          ? TransferStatus.DRAFT
+          : current.status;
+    const publicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
 
     await db.transfer.update({
       where: { id },
@@ -202,7 +334,10 @@ export default async function DashboardTransferEditPage({
         luggage: fleetSummary.luggage,
         locationId,
         locationName,
-        districtId: selectedLocation?.districtId ?? null,
+        districtId:
+          locationIdInput === undefined
+            ? current.districtId
+            : (selectedLocation?.districtId ?? null),
         serviceArea: null,
         routeExamples,
         latitude,
@@ -225,7 +360,15 @@ export default async function DashboardTransferEditPage({
         okUrl,
         receiveRequests: false,
         status: nextStatus,
-        moderationNotes: shouldReturnToModeration ? null : undefined,
+        ...(publishedEditSupported
+          ? {
+              pendingEditStatus: nextPendingEditStatus,
+              moderationNotes:
+                nextPendingEditStatus === TransferStatus.PENDING_MODERATION
+                  ? null
+                  : current.moderationNotes,
+            }
+          : { moderationNotes: shouldReturnToModeration ? null : undefined }),
       },
     });
 
@@ -234,25 +377,12 @@ export default async function DashboardTransferEditPage({
     }
 
     if (intent === "submit") {
-      const publishReady = isTransferReadyForModeration({
-        title,
-        description,
-        transferType,
-        locationName,
-        priceFrom: fleetSummary.priceFrom,
-        contactName,
-        phone,
-        fleet,
-        photoUrls: fleetSummary.photoUrls,
-        vehicleClass: fleetSummary.vehicleClass,
-        vehicleModel: fleetSummary.vehicleModel,
-        seats: fleetSummary.seats,
-        luggage: fleetSummary.luggage,
-        priceUnitLabel: fleetSummary.priceUnitLabel,
-      });
-
       if (!publishReady) {
         redirect(`/dashboard/transfers/${id}?saved=1&payment=not-ready`);
+      }
+
+      if (publishedEditSupported) {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=published-edit`);
       }
 
       try {
@@ -322,7 +452,7 @@ export default async function DashboardTransferEditPage({
           data: {
             ...(transferPaymentsSupported ? { transferId: id } : {}),
             ownerId: currentSession.id,
-            amount: TRANSFER_PUBLICATION_FEE_RUB,
+            amount: publicationFeeRub,
             tariffCode: transferPaymentTariffCode,
             roomCount: 0,
             status: PaymentStatus.PENDING,
@@ -347,7 +477,7 @@ export default async function DashboardTransferEditPage({
         data: {
           ...(transferPaymentsSupported ? { transferId: id } : {}),
           ownerId: currentSession.id,
-          amount: TRANSFER_PUBLICATION_FEE_RUB,
+          amount: publicationFeeRub,
           tariffCode: transferPaymentTariffCode,
           roomCount: 0,
           status: PaymentStatus.CREATED,
@@ -362,7 +492,7 @@ export default async function DashboardTransferEditPage({
       try {
         const yooPayment = await createYookassaPayment({
           idempotenceKey,
-          amountRub: TRANSFER_PUBLICATION_FEE_RUB,
+          amountRub: publicationFeeRub,
           description: `Публикация трансфера «${title}»`,
           metadata: {
             paymentId: created.id,
@@ -403,9 +533,14 @@ export default async function DashboardTransferEditPage({
 
   const fleet = getTransferFleet(transfer);
   const serviceTags = normalizeTransferServiceTags(transfer.serviceTags);
+  const workflowStatus = getTransferWorkflowStatus(
+    transfer.status,
+    transfer.pendingEditStatus ?? null,
+  );
+  const effectivePublicTransfer = applyPublishedTransferSnapshotToRow(transfer);
   const publicPath =
     transfer.status === TransferStatus.PUBLISHED
-      ? buildPublicTransferPath({ id: transfer.id, title: transfer.title })
+      ? buildPublicTransferPath({ id: transfer.id, title: effectivePublicTransfer.title })
       : null;
   const saved = getFirstSearchParam(resolvedSearchParams.saved) === "1";
   const paymentNotice = getFirstSearchParam(resolvedSearchParams.payment);
@@ -447,7 +582,9 @@ export default async function DashboardTransferEditPage({
       transfer={{
         id: transfer.id,
         status: transfer.status,
-        statusLabel: STATUS_LABELS[transfer.status],
+        pendingEditStatus: transfer.pendingEditStatus ?? null,
+        workflowStatus,
+        statusLabel: getTransferStatusLabel(transfer.status, transfer.pendingEditStatus ?? null),
         title: transfer.title ?? "",
         transferType: transfer.transferType ?? "",
         description: transfer.description ?? "",
@@ -474,6 +611,7 @@ export default async function DashboardTransferEditPage({
       initialServiceTags={serviceTags}
       publicPath={publicPath}
       publicationFeeRub={TRANSFER_PUBLICATION_FEE_RUB}
+      extraVehicleFeeRub={TRANSFER_EXTRA_VEHICLE_FEE_RUB}
       initialPayments={payments.map(serializePayment)}
       saved={saved}
       paymentNotice={paymentNotice}

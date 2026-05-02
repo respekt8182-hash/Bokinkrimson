@@ -5,15 +5,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   getPlacementValidUntil,
+  getTransferPaymentReference,
   mapYookassaStatus,
   resolvePaymentStatusTransition,
   type YookassaStatus,
 } from "@/lib/payments";
-import { db } from "@/lib/db";
+import { db, type DbClientLike } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { logger } from "@/lib/logger";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
-import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
+import {
+  autoSubmitTransferAfterSuccessfulPayment,
+  submitTransferToModerationIfReady,
+} from "@/lib/transfers";
 import {
   getYookassaPayment,
   isTrustedYookassaWebhookSource,
@@ -61,15 +65,38 @@ async function createWebhookReceipt(input: {
 
     return "created";
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return "duplicate";
     }
 
     throw error;
   }
+}
+
+async function autoSubmitTransferForPayment(
+  client: DbClientLike,
+  payment: {
+    transferId?: string | null;
+    tariffCode?: string | null;
+    providerPayload?: unknown;
+  },
+) {
+  const transferReference = getTransferPaymentReference({
+    transferId: payment.transferId,
+    tariffCode: payment.tariffCode,
+    providerPayload: payment.providerPayload,
+  });
+
+  if (!transferReference) {
+    return;
+  }
+
+  if (payment.transferId) {
+    await autoSubmitTransferAfterSuccessfulPayment(client, payment.transferId);
+    return;
+  }
+
+  await submitTransferToModerationIfReady(client, transferReference.transferId);
 }
 
 export async function POST(request: Request) {
@@ -111,7 +138,10 @@ export async function POST(request: Request) {
       providerEventId,
       error: error instanceof Error ? error.message : "unknown",
     });
-    return NextResponse.json({ error: "Payment verification is temporarily unavailable" }, { status: 503 });
+    return NextResponse.json(
+      { error: "Payment verification is temporarily unavailable" },
+      { status: 503 },
+    );
   }
 
   if (providerSnapshot.id !== providerPaymentId) {
@@ -189,8 +219,8 @@ export async function POST(request: Request) {
     if (nextStatus === PaymentStatus.SUCCEEDED && existing.excursionId) {
       await autoSubmitExcursionAfterSuccessfulPayment(db, existing.excursionId);
     }
-    if (nextStatus === PaymentStatus.SUCCEEDED && existing.transferId) {
-      await autoSubmitTransferAfterSuccessfulPayment(db, existing.transferId);
+    if (nextStatus === PaymentStatus.SUCCEEDED) {
+      await autoSubmitTransferForPayment(db, existing);
     }
 
     await db.webhookReceipt.update({
@@ -236,8 +266,8 @@ export async function POST(request: Request) {
     if (updated.status === PaymentStatus.SUCCEEDED && updated.excursionId) {
       await autoSubmitExcursionAfterSuccessfulPayment(tx, updated.excursionId);
     }
-    if (updated.status === PaymentStatus.SUCCEEDED && updated.transferId) {
-      await autoSubmitTransferAfterSuccessfulPayment(tx, updated.transferId);
+    if (updated.status === PaymentStatus.SUCCEEDED) {
+      await autoSubmitTransferForPayment(tx, existing);
     }
 
     await tx.webhookReceipt.update({
