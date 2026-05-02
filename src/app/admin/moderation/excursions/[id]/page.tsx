@@ -134,7 +134,11 @@ export default async function AdminModerationExcursionPage({
           <p className="mt-1 text-sm text-olive/75">
             Статус:{" "}
             <span className="font-semibold text-olive">
-              {getExcursionStatusLabel(excursion.status)}
+              {getExcursionStatusLabel(
+                excursion.status,
+                excursion.pendingEditStatus,
+                excursion.moderationNotes,
+              )}
             </span>
           </p>
         </div>
@@ -287,7 +291,11 @@ export default async function AdminModerationExcursionPage({
 
       <ExcursionModerationActions
         excursionId={excursion.id}
-        currentStatus={getExcursionStatusLabel(excursion.status)}
+        currentStatus={getExcursionStatusLabel(
+          excursion.status,
+          excursion.pendingEditStatus,
+          excursion.moderationNotes,
+        )}
         initialComment={excursion.moderationNotes ?? ""}
       />
     </div>

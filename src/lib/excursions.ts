@@ -190,6 +190,40 @@ export function getExcursionWorkflowStatus(
   return status;
 }
 
+export function canAdminApproveExcursionModeration(
+  status: ExcursionStatus,
+  pendingEditStatus: ExcursionStatus | null,
+): boolean {
+  const workflowStatus = getExcursionWorkflowStatus(status, pendingEditStatus);
+
+  if (status === ExcursionStatus.PUBLISHED && pendingEditStatus !== null) {
+    return (
+      workflowStatus === ExcursionStatus.PENDING_MODERATION ||
+      workflowStatus === ExcursionStatus.NEEDS_FIX ||
+      workflowStatus === ExcursionStatus.REJECTED
+    );
+  }
+
+  return (
+    workflowStatus === ExcursionStatus.DRAFT ||
+    workflowStatus === ExcursionStatus.PENDING_MODERATION ||
+    workflowStatus === ExcursionStatus.NEEDS_FIX ||
+    workflowStatus === ExcursionStatus.REJECTED
+  );
+}
+
+export function canAdminRequestExcursionChanges(
+  status: ExcursionStatus,
+  pendingEditStatus: ExcursionStatus | null,
+): boolean {
+  const workflowStatus = getExcursionWorkflowStatus(status, pendingEditStatus);
+
+  return (
+    workflowStatus === ExcursionStatus.PENDING_MODERATION ||
+    workflowStatus === ExcursionStatus.NEEDS_FIX
+  );
+}
+
 export function getExcursionStatusLabel(
   status: ExcursionStatus,
   pendingEditStatus: ExcursionStatus | null = null,

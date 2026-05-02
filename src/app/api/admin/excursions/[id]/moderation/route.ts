@@ -3,7 +3,13 @@ import { ExcursionStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
-import { getExcursionStatusLabel } from "@/lib/excursions";
+import { refreshPublishedExcursionSnapshot } from "@/lib/excursion-public-snapshot";
+import {
+  canAdminApproveExcursionModeration,
+  canAdminRequestExcursionChanges,
+  getExcursionStatusLabel,
+  getExcursionWorkflowStatus,
+} from "@/lib/excursions";
 import { moderateExcursionSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -37,6 +43,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     select: {
       id: true,
       status: true,
+      pendingEditStatus: true,
       moderationNotes: true,
     },
   });
@@ -64,19 +71,29 @@ export async function PATCH(request: Request, context: RouteContext) {
   const action = parsed.data.action;
   const targetStatus = resolveModerationAction(action);
   const comment = parsed.data.comment?.trim() || "";
-
-  const canModerateToPublished =
-    existing.status === ExcursionStatus.PENDING_MODERATION ||
-    existing.status === ExcursionStatus.NEEDS_FIX ||
-    existing.status === ExcursionStatus.REJECTED;
-  const canModerateToNeedsFixOrReject =
-    existing.status === ExcursionStatus.PENDING_MODERATION ||
-    existing.status === ExcursionStatus.NEEDS_FIX;
+  const currentStatus = getExcursionWorkflowStatus(
+    existing.status,
+    existing.pendingEditStatus,
+  );
+  const isPublishedEdit =
+    existing.status === ExcursionStatus.PUBLISHED && existing.pendingEditStatus !== null;
+  const canModerateToPublished = canAdminApproveExcursionModeration(
+    existing.status,
+    existing.pendingEditStatus,
+  );
+  const canModerateToNeedsFixOrReject = canAdminRequestExcursionChanges(
+    existing.status,
+    existing.pendingEditStatus,
+  );
 
   if (targetStatus === ExcursionStatus.PUBLISHED && !canModerateToPublished) {
     return NextResponse.json(
       {
-        error: `Нельзя опубликовать экскурсию в текущем статусе: ${getExcursionStatusLabel(existing.status)}`,
+        error: `Нельзя опубликовать экскурсию в текущем статусе: ${getExcursionStatusLabel(
+          existing.status,
+          existing.pendingEditStatus,
+          existing.moderationNotes,
+        )}`,
       },
       { status: 400 },
     );
@@ -88,7 +105,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   ) {
     return NextResponse.json(
       {
-        error: `Нельзя выполнить действие для текущего статуса: ${getExcursionStatusLabel(existing.status)}`,
+        error: `Нельзя выполнить действие для текущего статуса: ${getExcursionStatusLabel(
+          existing.status,
+          existing.pendingEditStatus,
+          existing.moderationNotes,
+        )}`,
       },
       { status: 400 },
     );
@@ -97,15 +118,31 @@ export async function PATCH(request: Request, context: RouteContext) {
   const updated = await db.$transaction(async (tx) => {
     const excursion = await tx.excursion.update({
       where: { id: existing.id },
-      data: {
-        status: targetStatus,
-        moderationNotes: targetStatus === ExcursionStatus.PUBLISHED ? comment || null : comment,
-        moderatedById: admin.id,
-        moderatedAt: new Date(),
-      },
+      data: isPublishedEdit
+        ? targetStatus === ExcursionStatus.PUBLISHED
+          ? {
+              pendingEditStatus: null,
+              moderationNotes: comment || null,
+              moderatedById: admin.id,
+              moderatedAt: new Date(),
+            }
+          : {
+              pendingEditStatus: targetStatus,
+              moderationNotes: comment,
+              moderatedById: admin.id,
+              moderatedAt: new Date(),
+            }
+        : {
+            status: targetStatus,
+            moderationNotes:
+              targetStatus === ExcursionStatus.PUBLISHED ? comment || null : comment,
+            moderatedById: admin.id,
+            moderatedAt: new Date(),
+          },
       select: {
         id: true,
         status: true,
+        pendingEditStatus: true,
         moderationNotes: true,
         moderatedById: true,
         moderatedAt: true,
@@ -120,12 +157,24 @@ export async function PATCH(request: Request, context: RouteContext) {
         targetType: "excursion",
         targetId: existing.id,
         details: {
-          previousStatus: existing.status,
-          nextStatus: targetStatus,
+          previousStatus: currentStatus,
+          previousPrimaryStatus: existing.status,
+          previousPendingEditStatus: existing.pendingEditStatus,
+          nextStatus: getExcursionWorkflowStatus(
+            excursion.status,
+            excursion.pendingEditStatus,
+          ),
+          nextPrimaryStatus: excursion.status,
+          nextPendingEditStatus: excursion.pendingEditStatus,
+          isPublishedEdit,
           comment: comment || null,
         },
       },
     });
+
+    if (targetStatus === ExcursionStatus.PUBLISHED) {
+      await refreshPublishedExcursionSnapshot(tx, existing.id);
+    }
 
     return excursion;
   });
@@ -134,7 +183,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     item: {
       id: updated.id,
       status: updated.status,
-      statusLabel: getExcursionStatusLabel(updated.status),
+      pendingEditStatus: updated.pendingEditStatus,
+      statusLabel: getExcursionStatusLabel(
+        updated.status,
+        updated.pendingEditStatus,
+        updated.moderationNotes,
+      ),
       moderationNotes: updated.moderationNotes,
       moderatedById: updated.moderatedById,
       moderatedAt: updated.moderatedAt ? updated.moderatedAt.toISOString() : null,

@@ -10,7 +10,10 @@ import {
 } from "@/components/admin/admin-ui";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
-import { getExcursionStatusLabel } from "@/lib/excursions";
+import {
+  getExcursionStatusLabel,
+  getExcursionWorkflowStatus,
+} from "@/lib/excursions";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 
@@ -32,7 +35,19 @@ const moderationStatuses = [
   { id: ExcursionStatus.REJECTED, label: "Отклонено" },
   { id: ExcursionStatus.PUBLISHED, label: "Опубликовано" },
   { id: "ALL", label: "Все статусы" },
+  { id: ExcursionStatus.DRAFT, label: "\u0427\u0435\u0440\u043d\u043e\u0432\u0438\u043a" },
 ] as const;
+
+function matchesExcursionWorkflowStatus(
+  item: { status: ExcursionStatus; pendingEditStatus: ExcursionStatus | null },
+  status: ExcursionStatus,
+) {
+  if (status === ExcursionStatus.PUBLISHED) {
+    return item.status === ExcursionStatus.PUBLISHED && item.pendingEditStatus === null;
+  }
+
+  return getExcursionWorkflowStatus(item.status, item.pendingEditStatus) === status;
+}
 
 function toDateStart(value: string | undefined): Date | null {
   if (!value) return null;
@@ -102,7 +117,9 @@ export default async function ExcursionModerationQueuePage({
   );
 
   const filteredRows =
-    selectedStatus === "ALL" ? rows : rows.filter((item) => item.status === selectedStatus);
+    selectedStatus === "ALL"
+      ? rows
+      : rows.filter((item) => matchesExcursionWorkflowStatus(item, selectedStatus));
 
   const items =
     query.length >= 2
@@ -122,12 +139,12 @@ export default async function ExcursionModerationQueuePage({
         )
       : filteredRows;
 
-  const statusCounts = rows.reduce(
-    (accumulator, item) => {
-      accumulator[item.status] = (accumulator[item.status] ?? 0) + 1;
-      return accumulator;
-    },
-    {} as Record<string, number>,
+  const statusCounts = Object.values(ExcursionStatus).reduce(
+    (accumulator, status) => ({
+      ...accumulator,
+      [status]: rows.filter((item) => matchesExcursionWorkflowStatus(item, status)).length,
+    }),
+    {} as Record<ExcursionStatus, number>,
   );
 
   const locationBuckets = items.reduce((accumulator, item) => {
@@ -306,7 +323,11 @@ export default async function ExcursionModerationQueuePage({
                     <p className="mt-1 text-xs text-olive/50">ID: {item.id}</p>
                   </div>
                   <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold text-olive">
-                    {getExcursionStatusLabel(item.status)}
+                    {getExcursionStatusLabel(
+                      item.status,
+                      item.pendingEditStatus,
+                      item.moderationNotes,
+                    )}
                   </span>
                 </div>
 

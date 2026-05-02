@@ -5,6 +5,8 @@ import {
 } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  canAdminApproveExcursionModeration,
+  canAdminRequestExcursionChanges,
   getExcursionAutoModerationUpdate,
   getMissingExcursionPublishFields,
 } from "../../src/lib/excursions";
@@ -96,5 +98,34 @@ describe("excursion payment and publication helpers", () => {
       moderatedById: null,
       moderatedAt: null,
     });
+  });
+
+  it("allows admins to publish primary draft programs from moderation", () => {
+    expect(canAdminApproveExcursionModeration(ExcursionStatus.DRAFT, null)).toBe(true);
+    expect(canAdminApproveExcursionModeration(ExcursionStatus.PENDING_MODERATION, null)).toBe(
+      true,
+    );
+    expect(canAdminApproveExcursionModeration(ExcursionStatus.PUBLISHED, null)).toBe(false);
+  });
+
+  it("keeps published draft edits out of one-click approval", () => {
+    expect(
+      canAdminApproveExcursionModeration(
+        ExcursionStatus.PUBLISHED,
+        ExcursionStatus.DRAFT,
+      ),
+    ).toBe(false);
+    expect(
+      canAdminApproveExcursionModeration(
+        ExcursionStatus.PUBLISHED,
+        ExcursionStatus.PENDING_MODERATION,
+      ),
+    ).toBe(true);
+    expect(
+      canAdminRequestExcursionChanges(
+        ExcursionStatus.PUBLISHED,
+        ExcursionStatus.PENDING_MODERATION,
+      ),
+    ).toBe(true);
   });
 });
