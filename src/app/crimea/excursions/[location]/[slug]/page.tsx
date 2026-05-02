@@ -2401,6 +2401,7 @@ export default async function PublicExcursionPage({
           okUrl={okUrl}
           phone={item.contacts.phone}
           organizerName={organizerName}
+          organizerAvatarUrl={item.owner.avatarUrl}
         />
       </div>
     );
@@ -3606,6 +3607,7 @@ export default async function PublicExcursionPage({
         okUrl={okUrl}
         phone={item.contacts.phone}
         organizerName={organizerName}
+        organizerAvatarUrl={item.owner.avatarUrl}
       />
     </div>
   );

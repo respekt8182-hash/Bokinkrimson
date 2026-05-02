@@ -4,6 +4,7 @@ import { CalendarDays, MessageSquareText, Phone } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ExcursionLeadModal } from "./excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { cn } from "@/lib/cn";
@@ -33,6 +34,7 @@ type ExcursionMobileBarProps = {
   okUrl: string | null;
   phone: string | null;
   organizerName: string;
+  organizerAvatarUrl?: string | null;
 };
 
 type MobileQuickAction = {
@@ -155,9 +157,15 @@ export function ExcursionMobileBar({
         <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
-                <AppIcon icon={CalendarDays} className="h-4.5 w-4.5" />
-              </span>
+              <AvatarImage
+                src={formProps.organizerAvatarUrl}
+                alt={formProps.organizerName}
+                className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
+                  <AppIcon icon={CalendarDays} className="h-4.5 w-4.5" />
+                </span>
+              </AvatarImage>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">
                   {priceLabel}
