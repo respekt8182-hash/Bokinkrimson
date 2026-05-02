@@ -605,7 +605,7 @@ export function LocalFavoritesPage() {
                 style={{ animationDelay: `${Math.min(index, 6) * 0.04}s` }}
               >
                 <div className="grid h-full sm:grid-cols-[210px_minmax(0,1fr)]">
-                  <div className="relative min-h-52 overflow-hidden bg-cream sm:min-h-full">
+                  <div className="relative h-52 overflow-hidden bg-cream sm:h-full sm:min-h-full">
                     <Link
                       href={item.path}
                       aria-label={`Открыть карточку ${item.name}`}
@@ -664,7 +664,7 @@ export function LocalFavoritesPage() {
                         <span
                           key={`${item.key}-${badge}`}
                           className={cn(
-                            "rounded-full px-3 py-1.5 font-medium",
+                            "min-w-0 max-w-full rounded-full px-2.5 py-1.5 font-medium leading-4 [overflow-wrap:anywhere]",
                             badgeIndex === 0
                               ? favoriteEntityToneClass[item.entityType]
                               : "bg-cream text-olive/70",
