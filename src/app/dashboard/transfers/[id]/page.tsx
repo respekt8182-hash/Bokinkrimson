@@ -13,6 +13,7 @@ import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildTransferPaymentPayload,
   getTransferPaymentTariffCode,
+  getTransferPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
@@ -304,15 +305,55 @@ export default async function DashboardTransferEditPage({
       await ensurePublishedTransferSnapshotBeforeOwnerEdit(db, id);
     }
 
+    const publicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
+    const shouldPreparePayment = intent === "submit" && publishReady;
+    const transferPaymentsSupported = shouldPreparePayment
+      ? await areDatabaseColumnsAvailable("Payment", ["transferId"])
+      : false;
+    const legacyTransferPaymentTariffCode = getTransferPaymentTariffCode(id);
+    const transferPaymentTariffCode = transferPaymentsSupported
+      ? "transfer_standard"
+      : legacyTransferPaymentTariffCode;
+    const transferPaymentWhere = transferPaymentsSupported
+      ? {
+          ownerId: currentSession.id,
+          provider: {
+            in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+          },
+          OR: [{ transferId: id }, { tariffCode: legacyTransferPaymentTariffCode }],
+        }
+      : {
+          ownerId: currentSession.id,
+          tariffCode: transferPaymentTariffCode,
+          provider: {
+            in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+          },
+        };
+    const payments = shouldPreparePayment
+      ? await db.payment.findMany({
+          where: transferPaymentWhere,
+          orderBy: [{ createdAt: "desc" }],
+        })
+      : [];
+    const transferPaymentCoverage = getTransferPlacementCoverageState({
+      payments,
+      publicationFeeRub,
+    });
+    const hasFullPaymentCoverage = transferPaymentCoverage.fullyCovered;
+    const shouldSubmitPublishedEdit =
+      publishedEditSupported && shouldPreparePayment && hasFullPaymentCoverage;
     const nextPendingEditStatus = publishedEditSupported
-      ? intent === "submit" && publishReady
+      ? shouldSubmitPublishedEdit
         ? TransferStatus.PENDING_MODERATION
         : current.pendingEditStatus === TransferStatus.PENDING_MODERATION
           ? TransferStatus.PENDING_MODERATION
           : TransferStatus.DRAFT
       : undefined;
     const shouldReturnToModeration =
-      current.status === TransferStatus.PUBLISHED && !publishedEditSupported;
+      current.status === TransferStatus.PUBLISHED &&
+      !publishedEditSupported &&
+      shouldPreparePayment &&
+      hasFullPaymentCoverage;
     const nextStatus = publishedEditSupported
       ? TransferStatus.PUBLISHED
       : shouldReturnToModeration
@@ -320,7 +361,6 @@ export default async function DashboardTransferEditPage({
         : current.status === TransferStatus.REJECTED
           ? TransferStatus.DRAFT
           : current.status;
-    const publicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
 
     await db.transfer.update({
       where: { id },
@@ -381,50 +421,11 @@ export default async function DashboardTransferEditPage({
         redirect(`/dashboard/transfers/${id}?saved=1&payment=not-ready`);
       }
 
-      if (publishedEditSupported) {
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=published-edit`);
-      }
+      if (hasFullPaymentCoverage) {
+        if (publishedEditSupported) {
+          redirect(`/dashboard/transfers/${id}?saved=1&payment=published-edit`);
+        }
 
-      try {
-        ensurePaymentProviderAllowed(paymentProvider);
-      } catch {
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=provider-disabled`);
-      }
-
-      const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", [
-        "transferId",
-      ]);
-
-      const transferPaymentPayload = buildTransferPaymentPayload({
-        transferId: id,
-        transferTitle: title,
-      });
-      const transferPaymentTariffCode = transferPaymentsSupported
-        ? "transfer_standard"
-        : getTransferPaymentTariffCode(id);
-      const transferPaymentWhere = transferPaymentsSupported
-        ? {
-            transferId: id,
-            ownerId: currentSession.id,
-            provider: {
-              in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
-            },
-          }
-        : {
-            ownerId: currentSession.id,
-            tariffCode: transferPaymentTariffCode,
-            provider: {
-              in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
-            },
-          };
-
-      const payments = await db.payment.findMany({
-        where: transferPaymentWhere,
-        orderBy: [{ createdAt: "desc" }],
-      });
-      const succeededPayment =
-        payments.find((item) => item.status === PaymentStatus.SUCCEEDED) ?? null;
-      if (succeededPayment) {
         if (transferPaymentsSupported) {
           await autoSubmitTransferAfterSuccessfulPayment(db, id);
         } else {
@@ -433,11 +434,48 @@ export default async function DashboardTransferEditPage({
         redirect(`/dashboard/transfers/${id}?saved=1&payment=paid`);
       }
 
+      try {
+        ensurePaymentProviderAllowed(paymentProvider);
+      } catch {
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=provider-disabled`);
+      }
+
+      const requiredPaymentAmount = transferPaymentCoverage.requiredPaymentAmount;
+      const paymentReason = transferPaymentCoverage.hasActivePlacement
+        ? "fleet_topup"
+        : "publication";
+      const transferPaymentPayload = buildTransferPaymentPayload({
+        transferId: id,
+        transferTitle: title,
+        paymentReason,
+        vehicleCount: fleet.length,
+        totalAmountRub: publicationFeeRub,
+        coveredAmountRub: transferPaymentCoverage.coveredAmount,
+        requiredAmountRub: requiredPaymentAmount,
+      });
+
       const openPayment =
         payments.find(
           (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
         ) ?? null;
       if (openPayment) {
+        if (openPayment.provider === PaymentProvider.MANAGER) {
+          const openAmount = Number(openPayment.amount);
+          if (openAmount !== requiredPaymentAmount) {
+            await db.payment.update({
+              where: { id: openPayment.id },
+              data: {
+                amount: requiredPaymentAmount,
+                roomCount: fleet.length,
+                providerPayload: transferPaymentPayload,
+                placementValidUntil: transferPaymentCoverage.paidUntil
+                  ? new Date(transferPaymentCoverage.paidUntil)
+                  : null,
+              },
+            });
+          }
+        }
+
         if (openPayment.provider === PaymentProvider.YOOKASSA && openPayment.confirmationUrl) {
           redirect(openPayment.confirmationUrl);
         }
@@ -452,13 +490,16 @@ export default async function DashboardTransferEditPage({
           data: {
             ...(transferPaymentsSupported ? { transferId: id } : {}),
             ownerId: currentSession.id,
-            amount: publicationFeeRub,
+            amount: requiredPaymentAmount,
             tariffCode: transferPaymentTariffCode,
-            roomCount: 0,
+            roomCount: fleet.length,
             status: PaymentStatus.PENDING,
             provider: PaymentProvider.MANAGER,
             idempotenceKey,
             providerPayload: transferPaymentPayload,
+            placementValidUntil: transferPaymentCoverage.paidUntil
+              ? new Date(transferPaymentCoverage.paidUntil)
+              : null,
           },
         });
 
@@ -477,13 +518,16 @@ export default async function DashboardTransferEditPage({
         data: {
           ...(transferPaymentsSupported ? { transferId: id } : {}),
           ownerId: currentSession.id,
-          amount: publicationFeeRub,
+          amount: requiredPaymentAmount,
           tariffCode: transferPaymentTariffCode,
-          roomCount: 0,
+          roomCount: fleet.length,
           status: PaymentStatus.CREATED,
           provider: PaymentProvider.YOOKASSA,
           idempotenceKey,
           providerPayload: transferPaymentPayload,
+          placementValidUntil: transferPaymentCoverage.paidUntil
+            ? new Date(transferPaymentCoverage.paidUntil)
+            : null,
         },
       });
 
@@ -492,8 +536,11 @@ export default async function DashboardTransferEditPage({
       try {
         const yooPayment = await createYookassaPayment({
           idempotenceKey,
-          amountRub: publicationFeeRub,
-          description: `Публикация трансфера «${title}»`,
+          amountRub: requiredPaymentAmount,
+          description:
+            paymentReason === "fleet_topup"
+              ? `Доплата за автопарк трансфера «${title}»`
+              : `Публикация трансфера «${title}»`,
           metadata: {
             paymentId: created.id,
             transferId: id,

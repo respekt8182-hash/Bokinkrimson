@@ -208,10 +208,10 @@ describe("YooKassa webhook hardening", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(transferMocks.submitTransferToModerationIfReady).toHaveBeenCalledWith(
+    expect(transferMocks.autoSubmitTransferAfterSuccessfulPayment).toHaveBeenCalledWith(
       expect.anything(),
       "transfer-1",
     );
-    expect(transferMocks.autoSubmitTransferAfterSuccessfulPayment).not.toHaveBeenCalled();
+    expect(transferMocks.submitTransferToModerationIfReady).not.toHaveBeenCalled();
   });
 });

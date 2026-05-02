@@ -14,10 +14,7 @@ import { db, type DbClientLike } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { logger } from "@/lib/logger";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
-import {
-  autoSubmitTransferAfterSuccessfulPayment,
-  submitTransferToModerationIfReady,
-} from "@/lib/transfers";
+import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 import {
   getYookassaPayment,
   isTrustedYookassaWebhookSource,
@@ -91,12 +88,7 @@ async function autoSubmitTransferForPayment(
     return;
   }
 
-  if (payment.transferId) {
-    await autoSubmitTransferAfterSuccessfulPayment(client, payment.transferId);
-    return;
-  }
-
-  await submitTransferToModerationIfReady(client, transferReference.transferId);
+  await autoSubmitTransferAfterSuccessfulPayment(client, transferReference.transferId);
 }
 
 export async function POST(request: Request) {
@@ -254,7 +246,13 @@ export async function POST(request: Request) {
             ? (existing.canceledAt ?? new Date())
             : existing.canceledAt,
         placementValidUntil:
-          nextStatus === PaymentStatus.SUCCEEDED && existing.propertyId
+          nextStatus === PaymentStatus.SUCCEEDED &&
+          (existing.propertyId ||
+            getTransferPaymentReference({
+              transferId: existing.transferId,
+              tariffCode: existing.tariffCode,
+              providerPayload: existing.providerPayload,
+            }))
             ? (existing.placementValidUntil ?? getPlacementValidUntil(new Date()))
             : existing.placementValidUntil,
       },

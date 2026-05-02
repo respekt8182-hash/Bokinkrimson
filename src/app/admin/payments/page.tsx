@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/admin-ui";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
-import { getTransferPaymentReference } from "@/lib/payments";
+import { getTransferPaymentPayload, getTransferPaymentReference } from "@/lib/payments";
 import { ManagerPaymentsList } from "@/components/admin/manager-payments-list";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +81,7 @@ export default async function AdminPaymentsPage() {
       tariffCode: p.tariffCode,
       providerPayload: p.providerPayload,
     });
+    const transferPayload = getTransferPaymentPayload(p.providerPayload);
     const referencedTransfer = transferReference
       ? transfersById.get(transferReference.transferId)
       : null;
@@ -98,6 +99,15 @@ export default async function AdminPaymentsPage() {
       canceledAt: p.canceledAt?.toISOString() ?? null,
       managerNotes: p.managerNotes,
       confirmedById: p.confirmedById,
+      transferPayment: transferPayload
+        ? {
+            paymentReason: transferPayload.paymentReason ?? null,
+            vehicleCount: transferPayload.vehicleCount ?? null,
+            totalAmountRub: transferPayload.totalAmountRub ?? null,
+            coveredAmountRub: transferPayload.coveredAmountRub ?? null,
+            requiredAmountRub: transferPayload.requiredAmountRub ?? null,
+          }
+        : null,
       property: p.property
         ? {
             id: p.property.id,

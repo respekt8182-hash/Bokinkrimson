@@ -1,5 +1,10 @@
 import { PaymentStatus, TransferStatus } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
+import {
+  getTransferPaymentTariffCode,
+  getTransferPlacementCoverageState,
+} from "@/lib/payments";
+import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
 import { ensurePublishedTransferSnapshotBeforeOwnerEdit } from "@/lib/transfer-public-snapshot";
 
 type NumericLike = number | string | { toString(): string } | null | undefined;
@@ -510,15 +515,48 @@ export async function autoSubmitTransferAfterSuccessfulPayment(
   client: DbClientLike,
   transferId: string,
 ): Promise<boolean> {
-  const succeededPayment = await client.payment.findFirst({
-    where: {
-      transferId,
-      status: PaymentStatus.SUCCEEDED,
-    },
-    select: { id: true },
+  const [transfer, payments] = await Promise.all([
+    client.transfer.findUnique({
+      where: { id: transferId },
+      select: {
+        fleet: true,
+        photoUrls: true,
+        vehicleClass: true,
+        vehicleModel: true,
+        seats: true,
+        luggage: true,
+        priceFrom: true,
+        priceUnitLabel: true,
+      },
+    }),
+    client.payment.findMany({
+      where: {
+        status: PaymentStatus.SUCCEEDED,
+        OR: [{ transferId }, { tariffCode: getTransferPaymentTariffCode(transferId) }],
+      },
+      select: {
+        amount: true,
+        roomCount: true,
+        status: true,
+        provider: true,
+        paidAt: true,
+        createdAt: true,
+        placementValidUntil: true,
+      },
+    }),
+  ]);
+
+  if (!transfer) {
+    return false;
+  }
+
+  const fleet = getTransferFleet(transfer);
+  const coverage = getTransferPlacementCoverageState({
+    payments,
+    publicationFeeRub: calculateTransferPublicationFeeRub(fleet.length),
   });
 
-  if (!succeededPayment) {
+  if (!coverage.fullyCovered) {
     return false;
   }
 

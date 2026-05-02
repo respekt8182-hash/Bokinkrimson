@@ -15,7 +15,6 @@ import {
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
 import {
   autoSubmitTransferAfterSuccessfulPayment,
-  submitTransferToModerationIfReady,
 } from "@/lib/transfers";
 import { getYookassaPayment } from "@/lib/yookassa";
 
@@ -41,12 +40,7 @@ async function autoSubmitTransferForPayment(
     return;
   }
 
-  if (payment.transferId) {
-    await autoSubmitTransferAfterSuccessfulPayment(client, payment.transferId);
-    return;
-  }
-
-  await submitTransferToModerationIfReady(client, transferReference.transferId);
+  await autoSubmitTransferAfterSuccessfulPayment(client, transferReference.transferId);
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -111,9 +105,15 @@ export async function GET(_request: Request, context: RouteContext) {
 
       if (shouldUpdate) {
         const currentPayment = payment;
+        const transferReference = getTransferPaymentReference({
+          transferId: currentPayment.transferId,
+          tariffCode: currentPayment.tariffCode,
+          providerPayload: currentPayment.providerPayload,
+        });
         const placementValidUntil =
           currentPayment.placementValidUntil ??
-          (nextStatus === PaymentStatus.SUCCEEDED && currentPayment.propertyId
+          (nextStatus === PaymentStatus.SUCCEEDED &&
+          (currentPayment.propertyId || transferReference)
             ? getPlacementValidUntil(new Date())
             : null);
 

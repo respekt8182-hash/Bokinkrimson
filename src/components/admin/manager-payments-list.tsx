@@ -31,6 +31,13 @@ type ManagerPayment = {
   canceledAt: string | null;
   managerNotes: string | null;
   confirmedById: string | null;
+  transferPayment: {
+    paymentReason: "publication" | "fleet_topup" | null;
+    vehicleCount: number | null;
+    totalAmountRub: number | null;
+    coveredAmountRub: number | null;
+    requiredAmountRub: number | null;
+  } | null;
   property: {
     id: string;
     name: string | null;
@@ -70,6 +77,62 @@ function formatMoney(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU");
+}
+
+function formatDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getPaymentAccountingDate(payment: ManagerPayment): Date {
+  return new Date(payment.paidAt ?? payment.createdAt);
+}
+
+function groupPaymentsByDay(payments: ManagerPayment[]): Array<{
+  key: string;
+  label: string;
+  total: number;
+  items: ManagerPayment[];
+}> {
+  const groups = new Map<
+    string,
+    { key: string; label: string; total: number; items: ManagerPayment[] }
+  >();
+
+  for (const payment of payments) {
+    const date = getPaymentAccountingDate(payment);
+    const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    const group =
+      groups.get(key) ??
+      ({
+        key,
+        label: formatDay(date.toISOString()),
+        total: 0,
+        items: [],
+      } satisfies { key: string; label: string; total: number; items: ManagerPayment[] });
+
+    if (payment.status === "SUCCEEDED") {
+      group.total += payment.amount;
+    }
+    group.items.push(payment);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values());
+}
+
+function getCurrentMonthConfirmedTotal(payments: ManagerPayment[]): number {
+  const now = new Date();
+  return payments
+    .filter((payment) => payment.status === "SUCCEEDED")
+    .filter((payment) => {
+      const date = getPaymentAccountingDate(payment);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    })
+    .reduce((sum, payment) => sum + payment.amount, 0);
 }
 
 function getBaseTariffCode(tariffCode: string): string {
@@ -168,6 +231,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
         payment.transfer.vehicleModel,
       ].filter(Boolean)
     : [];
+  const isTransferTopUp = payment.transferPayment?.paymentReason === "fleet_topup";
 
   async function handleAction(action: "confirm" | "reject") {
     setLoading(action);
@@ -268,12 +332,21 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
           <div className="rounded-xl bg-white/65 px-3 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-olive/45">Тариф</p>
             <p className="mt-0.5 text-sm font-semibold text-olive">
-              {getTariffLabel(payment.tariffCode)}
+              {isTransferTopUp ? "Доплата за автопарк трансфера" : getTariffLabel(payment.tariffCode)}
             </p>
             <p className="mt-0.5 text-xs text-olive/48">
               {tariffCode}
               {payment.property ? ` • ${payment.roomCount} ном.` : ""}
+              {payment.transferPayment?.vehicleCount
+                ? ` • машин: ${payment.transferPayment.vehicleCount}`
+                : ""}
             </p>
+            {isTransferTopUp ? (
+              <p className="mt-1 text-xs text-amber-700">
+                Уже подтверждено: {formatMoney(payment.transferPayment?.coveredAmountRub ?? 0)}.
+                Всего: {formatMoney(payment.transferPayment?.totalAmountRub ?? payment.amount)}.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -347,8 +420,36 @@ export function ManagerPaymentsList({
   pendingPayments,
   completedPayments,
 }: ManagerPaymentsListProps) {
+  const completedGroups = groupPaymentsByDay(completedPayments);
+  const currentMonthConfirmedTotal = getCurrentMonthConfirmedTotal(completedPayments);
+
   return (
     <div className="space-y-6">
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700/70">
+            Подтверждено за месяц
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-800">
+            {formatMoney(currentMonthConfirmedTotal)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-olive/10 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-olive/45">
+            Ожидают решения
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-olive">
+            {pendingPayments.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-olive/10 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-olive/45">В истории</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-olive">
+            {completedPayments.length}
+          </p>
+        </div>
+      </section>
+
       {/* Pending section */}
       <section>
         <h2 className="text-lg font-semibold text-olive">
@@ -373,12 +474,22 @@ export function ManagerPaymentsList({
       </section>
 
       {/* Completed section */}
-      {completedPayments.length > 0 && (
+      {completedGroups.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-olive">История</h2>
-          <div className="mt-3 space-y-3">
-            {completedPayments.map((payment) => (
-              <PaymentCard key={payment.id} payment={payment} />
+          <h2 className="text-lg font-semibold text-olive">История по дням</h2>
+          <div className="mt-3 space-y-5">
+            {completedGroups.map((group) => (
+              <div key={group.key} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-olive/10 pb-2">
+                  <p className="text-sm font-semibold text-olive">{group.label}</p>
+                  <p className="text-xs font-semibold text-emerald-700">
+                    Подтверждено: {formatMoney(group.total)}
+                  </p>
+                </div>
+                {group.items.map((payment) => (
+                  <PaymentCard key={payment.id} payment={payment} />
+                ))}
+              </div>
             ))}
           </div>
         </section>

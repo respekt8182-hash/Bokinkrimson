@@ -9,10 +9,7 @@ import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { getPlacementValidUntil, getTransferPaymentReference } from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
-import {
-  autoSubmitTransferAfterSuccessfulPayment,
-  submitTransferToModerationIfReady,
-} from "@/lib/transfers";
+import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -93,7 +90,7 @@ export async function PATCH(request: Request, context: RouteContext) {
           status: PaymentStatus.SUCCEEDED,
           paidAt: now,
           placementValidUntil:
-            payment.propertyId && payment.placementValidUntil === null
+            (payment.propertyId || paymentTransferId) && payment.placementValidUntil === null
               ? getPlacementValidUntil(now)
               : payment.placementValidUntil,
           managerNotes: notes || null,
@@ -108,11 +105,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         await autoSubmitExcursionAfterSuccessfulPayment(tx, payment.excursionId);
       }
       if (paymentTransferId) {
-        if (payment.transferId) {
-          await autoSubmitTransferAfterSuccessfulPayment(tx, payment.transferId);
-        } else {
-          await submitTransferToModerationIfReady(tx, paymentTransferId);
-        }
+        await autoSubmitTransferAfterSuccessfulPayment(tx, paymentTransferId);
       }
 
       await writeAdminAuditLog(tx, {

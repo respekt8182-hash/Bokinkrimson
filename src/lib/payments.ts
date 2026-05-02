@@ -46,6 +46,11 @@ export type TransferPaymentPayload = {
   entityType: "transfer";
   transferId: string;
   transferTitle: string;
+  paymentReason?: "publication" | "fleet_topup";
+  vehicleCount?: number;
+  totalAmountRub?: number;
+  coveredAmountRub?: number;
+  requiredAmountRub?: number;
 };
 
 const TRANSFER_PAYMENT_TARIFF_PREFIX = "transfer_standard:";
@@ -55,6 +60,15 @@ export type PlacementCoverageState = {
   paidUntil: string | null;
   coveredAmount: number;
   coveredRoomCount: number;
+  requiredPaymentAmount: number;
+  fullyCovered: boolean;
+};
+
+export type TransferPlacementCoverageState = {
+  hasActivePlacement: boolean;
+  paidUntil: string | null;
+  coveredAmount: number;
+  coveredVehicleCount: number;
   requiredPaymentAmount: number;
   fullyCovered: boolean;
 };
@@ -131,12 +145,40 @@ export function getTransferIdFromPaymentTariffCode(tariffCode: string): string |
 export function buildTransferPaymentPayload(input: {
   transferId: string;
   transferTitle?: string | null;
+  paymentReason?: TransferPaymentPayload["paymentReason"];
+  vehicleCount?: number;
+  totalAmountRub?: number;
+  coveredAmountRub?: number;
+  requiredAmountRub?: number;
 }): Prisma.InputJsonObject {
   return {
     entityType: "transfer",
     transferId: input.transferId,
     transferTitle: input.transferTitle?.trim() ?? "",
+    ...(input.paymentReason ? { paymentReason: input.paymentReason } : {}),
+    ...(input.vehicleCount !== undefined ? { vehicleCount: input.vehicleCount } : {}),
+    ...(input.totalAmountRub !== undefined ? { totalAmountRub: input.totalAmountRub } : {}),
+    ...(input.coveredAmountRub !== undefined ? { coveredAmountRub: input.coveredAmountRub } : {}),
+    ...(input.requiredAmountRub !== undefined
+      ? { requiredAmountRub: input.requiredAmountRub }
+      : {}),
   };
+}
+
+function getOptionalPositiveInteger(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+
+  return Math.round(value);
+}
+
+function getOptionalNonNegativeNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+
+  return value;
 }
 
 export function getTransferPaymentPayload(value: unknown): TransferPaymentPayload | null {
@@ -149,10 +191,24 @@ export function getTransferPaymentPayload(value: unknown): TransferPaymentPayloa
     return null;
   }
 
+  const paymentReason =
+    value.paymentReason === "fleet_topup" || value.paymentReason === "publication"
+      ? value.paymentReason
+      : undefined;
+  const vehicleCount = getOptionalPositiveInteger(value.vehicleCount);
+  const totalAmountRub = getOptionalNonNegativeNumber(value.totalAmountRub);
+  const coveredAmountRub = getOptionalNonNegativeNumber(value.coveredAmountRub);
+  const requiredAmountRub = getOptionalNonNegativeNumber(value.requiredAmountRub);
+
   return {
     entityType: "transfer",
     transferId,
     transferTitle: typeof value.transferTitle === "string" ? value.transferTitle.trim() : "",
+    ...(paymentReason ? { paymentReason } : {}),
+    ...(vehicleCount !== undefined ? { vehicleCount } : {}),
+    ...(totalAmountRub !== undefined ? { totalAmountRub } : {}),
+    ...(coveredAmountRub !== undefined ? { coveredAmountRub } : {}),
+    ...(requiredAmountRub !== undefined ? { requiredAmountRub } : {}),
   };
 }
 
@@ -385,6 +441,66 @@ export function getPlacementCoverageState(input: {
     paidUntil: new Date(latestValidUntilMs).toISOString(),
     coveredAmount,
     coveredRoomCount,
+    requiredPaymentAmount,
+    fullyCovered: requiredPaymentAmount <= 0,
+  };
+}
+
+export function getTransferPlacementCoverageState(input: {
+  payments: Array<{
+    amount: Prisma.Decimal | number;
+    roomCount: number;
+    status: PaymentStatus;
+    provider?: PaymentProvider;
+    paidAt: Date | null;
+    createdAt: Date;
+    placementValidUntil?: Date | null;
+  }>;
+  publicationFeeRub: number;
+  now?: Date;
+}): TransferPlacementCoverageState {
+  const now = input.now ?? new Date();
+  const requiredTotal = Math.max(0, input.publicationFeeRub);
+  const succeededPayments = input.payments
+    .filter(
+      (item) => item.status === PaymentStatus.SUCCEEDED && item.provider !== PaymentProvider.MOCK,
+    )
+    .map((item) => ({
+      amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
+      vehicleCount: item.roomCount,
+      validUntil: resolvePaymentPlacementValidUntil(item),
+    }))
+    .filter((item) => item.validUntil.getTime() > now.getTime());
+
+  if (succeededPayments.length === 0) {
+    return {
+      hasActivePlacement: false,
+      paidUntil: null,
+      coveredAmount: 0,
+      coveredVehicleCount: 0,
+      requiredPaymentAmount: requiredTotal,
+      fullyCovered: requiredTotal <= 0,
+    };
+  }
+
+  const latestValidUntilMs = Math.max(
+    ...succeededPayments.map((item) => item.validUntil.getTime()),
+  );
+  const currentCyclePayments = succeededPayments.filter(
+    (item) => item.validUntil.getTime() === latestValidUntilMs,
+  );
+  const coveredAmount = currentCyclePayments.reduce((sum, item) => sum + item.amount, 0);
+  const coveredVehicleCount = currentCyclePayments.reduce(
+    (max, item) => Math.max(max, item.vehicleCount),
+    0,
+  );
+  const requiredPaymentAmount = Math.max(0, requiredTotal - coveredAmount);
+
+  return {
+    hasActivePlacement: true,
+    paidUntil: new Date(latestValidUntilMs).toISOString(),
+    coveredAmount,
+    coveredVehicleCount,
     requiredPaymentAmount,
     fullyCovered: requiredPaymentAmount <= 0,
   };

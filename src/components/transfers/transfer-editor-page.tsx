@@ -159,6 +159,59 @@ function getTransferPaymentTariffLabel(tariffCode: string): string {
   return tariffCode.startsWith("transfer_standard") ? "Публикация карточки трансфера" : tariffCode;
 }
 
+function getTransferPaymentCoverage(
+  payments: SerializedPayment[],
+  publicationFeeRub: number,
+): {
+  hasActivePlacement: boolean;
+  paidUntil: string | null;
+  coveredAmount: number;
+  requiredPaymentAmount: number;
+  fullyCovered: boolean;
+} {
+  const nowMs = Date.now();
+  const succeededPayments = payments
+    .filter((payment) => payment.status === "SUCCEEDED" && payment.provider !== "MOCK")
+    .map((payment) => ({
+      amount: payment.amount,
+      validUntil: getTransferPaymentValidUntil(payment),
+    }))
+    .filter((payment): payment is { amount: number; validUntil: string } => {
+      if (!payment.validUntil) {
+        return false;
+      }
+
+      return new Date(payment.validUntil).getTime() > nowMs;
+    });
+
+  if (succeededPayments.length === 0) {
+    return {
+      hasActivePlacement: false,
+      paidUntil: null,
+      coveredAmount: 0,
+      requiredPaymentAmount: Math.max(0, publicationFeeRub),
+      fullyCovered: publicationFeeRub <= 0,
+    };
+  }
+
+  const latestValidUntilMs = Math.max(
+    ...succeededPayments.map((payment) => new Date(payment.validUntil).getTime()),
+  );
+  const currentCyclePayments = succeededPayments.filter(
+    (payment) => new Date(payment.validUntil).getTime() === latestValidUntilMs,
+  );
+  const coveredAmount = currentCyclePayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const requiredPaymentAmount = Math.max(0, publicationFeeRub - coveredAmount);
+
+  return {
+    hasActivePlacement: true,
+    paidUntil: new Date(latestValidUntilMs).toISOString(),
+    coveredAmount,
+    requiredPaymentAmount,
+    fullyCovered: requiredPaymentAmount <= 0,
+  };
+}
+
 function getPaymentProviderLabel(provider: SerializedPayment["provider"]): string {
   if (provider === "MANAGER") {
     return "Через менеджера";
@@ -416,9 +469,14 @@ export function TransferEditorPage({
                       ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
                       : null;
   const latestPayment = payments[0] ?? null;
-  const latestSucceededPayment = payments.find((payment) => payment.status === "SUCCEEDED") ?? null;
   const latestPaymentIsOpen = latestPayment ? isOpenPayment(latestPayment.status) : false;
-  const hasSucceededPayment = Boolean(latestSucceededPayment);
+  const extraVehicleCount = Math.max(0, fleet.length - 1);
+  const livePublicationFeeRub = publicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
+  const paymentCoverage = getTransferPaymentCoverage(payments, livePublicationFeeRub);
+  const hasFullPaymentCoverage = paymentCoverage.fullyCovered;
+  const requiredPaymentAmount = paymentCoverage.requiredPaymentAmount;
+  const needsPayment = publishReady && !hasFullPaymentCoverage;
+  const needsTransferTopUp = needsPayment && paymentCoverage.hasActivePlacement;
   const managerPaymentPending = latestPaymentIsOpen && latestPayment?.provider === "MANAGER";
   const yookassaPaymentUrl =
     latestPaymentIsOpen && latestPayment?.provider === "YOOKASSA"
@@ -426,16 +484,21 @@ export function TransferEditorPage({
       : null;
   const alreadyOnModeration = transfer.workflowStatus === "PENDING_MODERATION";
   const canSubmitPublishedEdit =
-    publishReady && transfer.status === "PUBLISHED" && !alreadyOnModeration;
+    publishReady &&
+    transfer.status === "PUBLISHED" &&
+    !alreadyOnModeration &&
+    hasFullPaymentCoverage;
   const canSubmitPaidCard =
     publishReady &&
-    hasSucceededPayment &&
+    hasFullPaymentCoverage &&
     (transfer.status === "DRAFT" || transfer.status === "REJECTED");
   const canCreatePayment =
     publishReady &&
     !latestPaymentIsOpen &&
-    !hasSucceededPayment &&
-    (transfer.status === "DRAFT" || transfer.status === "REJECTED");
+    !hasFullPaymentCoverage &&
+    (transfer.status === "DRAFT" ||
+      transfer.status === "REJECTED" ||
+      (transfer.status === "PUBLISHED" && !alreadyOnModeration));
   const canUsePrimaryPaymentSubmit =
     canSubmitPublishedEdit || canSubmitPaidCard || canCreatePayment;
   const primaryPaymentLabel = !publishReady
@@ -448,17 +511,17 @@ export function TransferEditorPage({
           ? latestPayment?.provider === "MANAGER"
             ? "Заявка уже у менеджера"
             : "Платеж уже создан"
-          : hasSucceededPayment
+          : needsTransferTopUp
+            ? paymentProvider === "MANAGER"
+              ? `Отправить заявку на доплату ${formatMoney(requiredPaymentAmount)}`
+              : `Перейти к доплате ${formatMoney(requiredPaymentAmount)}`
+          : hasFullPaymentCoverage
             ? "Оплата подтверждена"
             : paymentProvider === "MANAGER"
               ? "Отправить заявку менеджеру"
               : "Перейти к оплате";
   const readinessIssues = checklist.filter((item) => !item.done && item.step !== "publish");
-  const paidUntil = latestSucceededPayment
-    ? getTransferPaymentValidUntil(latestSucceededPayment)
-    : null;
-  const extraVehicleCount = Math.max(0, fleet.length - 1);
-  const livePublicationFeeRub = publicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
+  const paidUntil = paymentCoverage.paidUntil;
   const transferStatusMeta: Record<
     TransferStatusValue,
     { label: string; dot: string; bg: string; text: string }
@@ -491,13 +554,15 @@ export function TransferEditorPage({
   const statusMeta = transferStatusMeta[transfer.workflowStatus] ?? transferStatusMeta.DRAFT;
   const paymentReadinessHint = !publishReady
     ? "Перед оплатой заполните обязательные разделы ниже."
-    : alreadyOnModeration
-      ? transfer.status === "PUBLISHED"
-        ? "Изменения уже отправлены на модерацию. Публичная версия остается на сайте."
-        : "Карточка уже отправлена на модерацию."
+      : alreadyOnModeration
+        ? transfer.status === "PUBLISHED"
+          ? "Изменения уже отправлены на модерацию. Публичная версия остается на сайте."
+          : "Карточка уже отправлена на модерацию."
       : transfer.status === "PUBLISHED"
-        ? "Публичная карточка останется на сайте. Новые правки можно отправить на повторную модерацию без повторной оплаты."
-        : hasSucceededPayment
+        ? hasFullPaymentCoverage
+          ? "Публичная карточка останется на сайте. Стоимость правок покрыта, можно отправлять на повторную модерацию."
+          : `Публичная карточка останется на сайте. После правок к доплате ${formatMoney(requiredPaymentAmount)}.`
+        : hasFullPaymentCoverage
           ? "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
           : latestPaymentIsOpen
             ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
@@ -994,6 +1059,14 @@ export function TransferEditorPage({
                   setLongitude(nextLongitude);
                 }}
                 onAddressResolved={handleMapResolved}
+                initialSearchValue={locationName}
+                onLocationSearchResolved={(item) => {
+                  setLocationName(item.name);
+                  const exactMatch =
+                    findLocationSuggestion(item.name, locationSuggestions) ??
+                    findLocationSuggestion(item.name, locations);
+                  setSelectedLocationId(exactMatch?.id ?? "");
+                }}
               />
             </div>
 
@@ -1438,6 +1511,27 @@ export function TransferEditorPage({
                     {formatMoney(livePublicationFeeRub)}
                   </span>
                 </div>
+                {paymentCoverage.hasActivePlacement ? (
+                  <>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">Уже подтверждено</span>
+                      <span className="text-right font-medium text-emerald-700">
+                        {formatMoney(paymentCoverage.coveredAmount)}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">К доплате</span>
+                      <span
+                        className={cn(
+                          "text-right font-semibold",
+                          requiredPaymentAmount > 0 ? "text-amber-700" : "text-emerald-700",
+                        )}
+                      >
+                        {formatMoney(requiredPaymentAmount)}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
 
@@ -1493,11 +1587,20 @@ export function TransferEditorPage({
               </div>
             ) : null}
 
-            {hasSucceededPayment && !alreadyOnModeration ? (
+            {hasFullPaymentCoverage && !alreadyOnModeration ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
                 <p className="font-semibold">Оплата подтверждена</p>
                 <p className="mt-1">
-                  Повторная оплата не нужна. Нажмите «Отправить на модерацию», чтобы продолжить.
+                  Стоимость текущего автопарка покрыта. Нажмите «Отправить на модерацию», чтобы продолжить.
+                </p>
+              </div>
+            ) : null}
+
+            {needsTransferTopUp && !latestPaymentIsOpen && !alreadyOnModeration ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <p className="font-semibold">Нужна доплата {formatMoney(requiredPaymentAmount)}</p>
+                <p className="mt-1 text-amber-700/80">
+                  Вы увеличили стоимость размещения, например добавили машину в автопарк. После подтверждения доплаты карточка уйдет на модерацию автоматически.
                 </p>
               </div>
             ) : null}
