@@ -974,11 +974,6 @@ export async function generateMetadata({
   }
 
   const title = `${item.title ?? getOfferTypeLabel(item.offerType)} — ${item.locationName ?? "Крым"}`;
-  const description = (
-    item.shortDescription?.trim() ||
-    item.description?.trim() ||
-    `${getOfferTypeLabel(item.offerType)} в ${item.locationName ?? "Крыму"}`
-  ).slice(0, 160);
   const metadataDescription = buildSeoDescription({
     preferred: [item.shortDescription, item.description],
     fallbackParts: [
@@ -993,7 +988,8 @@ export async function generateMetadata({
     ],
   });
   const images = item.photoUrls.slice(0, 4);
-  const socialImages = images.length > 0 ? images : [absoluteUrl("/crimea-map-preview-realistic.webp")];
+  const socialImages =
+    images.length > 0 ? images : [absoluteUrl("/crimea-map-preview-realistic.webp")];
 
   return buildWebPageMetadata({
     title,
@@ -1392,8 +1388,7 @@ export default async function PublicExcursionPage({
       ? buildHousingHubPath({ location: item.locationName })
       : buildHousingHubPath();
   const favoriteEntityType = getFavoriteEntityTypeFromOfferType(item.offerType);
-  const listingHubLabel =
-    item.offerType === "TOUR" ? "Туры по Крыму" : "Экскурсии по Крыму";
+  const listingHubLabel = item.offerType === "TOUR" ? "Туры по Крыму" : "Экскурсии по Крыму";
   const breadcrumbItems = [
     { name: "Главная", path: "/" },
     { name: listingHubLabel, path: listingHubHref },
@@ -1432,7 +1427,7 @@ export default async function PublicExcursionPage({
                   Фотографии экскурсии появятся здесь после загрузки
                 </div>
               )}
-              <div className="absolute right-4 top-4 z-20 md:bottom-5 md:right-5 md:top-auto">
+              <div className="absolute right-4 top-4 z-20 hidden md:bottom-5 md:right-5 md:top-auto md:block">
                 <FavoriteToggleButton
                   itemId={item.id}
                   entityType={favoriteEntityType}
@@ -1467,6 +1462,14 @@ export default async function PublicExcursionPage({
                       Новая экскурсия
                     </span>
                   )}
+                </div>
+
+                <div className="flex items-center justify-between md:hidden">
+                  <FavoriteToggleButton
+                    itemId={item.id}
+                    entityType={favoriteEntityType}
+                    initialIsFavorite={false}
+                  />
                 </div>
 
                 <p className="max-w-3xl text-[15px] leading-7 text-olive/68">
@@ -1652,7 +1655,7 @@ export default async function PublicExcursionPage({
 
                   {programFallbackPhotoUrls.length > 0 ? (
                     <SectionPhotoGallery
-                      label="Фото программы"
+                      label="Фото маршрута"
                       photoUrls={programFallbackPhotoUrls}
                       className="mb-4"
                     />
@@ -1730,7 +1733,7 @@ export default async function PublicExcursionPage({
 
                   {logisticsPhotoUrls.length > 0 ? (
                     <SectionPhotoGallery
-                      label="Фото логистики"
+                      label="Фото места встречи и маршрута"
                       photoUrls={logisticsPhotoUrls}
                       className="mt-4"
                     />
@@ -1841,7 +1844,7 @@ export default async function PublicExcursionPage({
                     </div>
 
                     <div className="space-y-4">
-                      <SectionPhotoGallery label="Фото дат" photoUrls={datesPhotoUrls} />
+                      <SectionPhotoGallery label="Фото расписания" photoUrls={datesPhotoUrls} />
 
                       {regularScheduleItems.length > 0 ? (
                         <div className="rounded-2xl border border-olive/10 bg-white px-4 py-4">
@@ -1960,7 +1963,7 @@ export default async function PublicExcursionPage({
 
                   {accommodationPhotoUrls.length > 0 ? (
                     <SectionPhotoGallery
-                      label="Фото проживания"
+                      label={hasAccommodationDetails ? "Фото проживания" : "Фото условий и питания"}
                       photoUrls={accommodationPhotoUrls}
                       className="mt-4"
                     />
@@ -2124,7 +2127,7 @@ export default async function PublicExcursionPage({
 
                 {includedPhotoUrls.length > 0 ? (
                   <SectionPhotoGallery
-                    label="Фото включенных услуг"
+                    label="Фото услуг и деталей"
                     photoUrls={includedPhotoUrls}
                     className="mt-4"
                   />
@@ -2218,7 +2221,7 @@ export default async function PublicExcursionPage({
 
                   {requirementsPhotoUrls.length > 0 ? (
                     <SectionPhotoGallery
-                      label="Фото подготовки"
+                      label="Фото подготовки и требований"
                       photoUrls={requirementsPhotoUrls}
                       className="mt-4"
                     />
@@ -2705,7 +2708,11 @@ export default async function PublicExcursionPage({
                   </div>
                 </div>
 
-                <SectionPhotoGallery label="Фото дат" photoUrls={datesPhotoUrls} className="mt-4" />
+                <SectionPhotoGallery
+                  label={item.offerType === "TOUR" ? "Фото дат и заездов" : "Фото расписания"}
+                  photoUrls={datesPhotoUrls}
+                  className="mt-4"
+                />
 
                 {upcomingSessions.length > 0 ? (
                   <div className="mt-4 grid gap-3 xl:grid-cols-2">
@@ -2816,7 +2823,7 @@ export default async function PublicExcursionPage({
 
                 {programFallbackPhotoUrls.length > 0 ? (
                   <SectionPhotoGallery
-                    label="Фото программы"
+                    label={item.offerType === "TOUR" ? "Фото программы тура" : "Фото маршрута"}
                     photoUrls={programFallbackPhotoUrls}
                     className="mb-4"
                   />
@@ -3029,7 +3036,11 @@ export default async function PublicExcursionPage({
 
                 {logisticsPhotoUrls.length > 0 ? (
                   <SectionPhotoGallery
-                    label="Фото логистики"
+                    label={
+                      item.offerType === "TOUR"
+                        ? "Фото старта и перемещений"
+                        : "Фото места встречи и маршрута"
+                    }
                     photoUrls={logisticsPhotoUrls}
                     className="mt-4"
                   />
@@ -3154,7 +3165,7 @@ export default async function PublicExcursionPage({
 
                 {accommodationPhotoUrls.length > 0 ? (
                   <SectionPhotoGallery
-                    label="Фото проживания"
+                    label={hasAccommodationDetails ? "Фото проживания" : "Фото условий и питания"}
                     photoUrls={accommodationPhotoUrls}
                     className="mt-4"
                   />
@@ -3273,7 +3284,7 @@ export default async function PublicExcursionPage({
 
               {includedPhotoUrls.length > 0 ? (
                 <SectionPhotoGallery
-                  label="Фото включенных услуг"
+                  label="Фото услуг и деталей"
                   photoUrls={includedPhotoUrls}
                   className="mt-4"
                 />
@@ -3402,14 +3413,13 @@ export default async function PublicExcursionPage({
 
                 {requirementsPhotoUrls.length > 0 ? (
                   <SectionPhotoGallery
-                    label="Фото подготовки"
+                    label="Фото подготовки и требований"
                     photoUrls={requirementsPhotoUrls}
                     className="mt-4"
                   />
                 ) : null}
               </SectionCard>
             ) : null}
-
           </div>
 
           <aside className="hidden lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-24 lg:self-start">

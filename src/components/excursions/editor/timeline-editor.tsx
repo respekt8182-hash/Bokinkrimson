@@ -400,7 +400,7 @@ export function TimelineEditor({
 
                   <ContentPhotoManager
                     title="Фото шага"
-                    description="Эти фото показываются рядом с соответствующим шагом маршрута."
+                    description="Показываются рядом с шагом маршрута и учитываются в общей карточке."
                     photoUrls={stepPhotoUrls}
                     limit={EXCURSION_PROGRAM_PHOTO_LIMIT}
                     addLabel="Добавить фото шага"

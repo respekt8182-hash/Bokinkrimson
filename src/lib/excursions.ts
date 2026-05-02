@@ -284,7 +284,10 @@ export function getMissingExcursionPublishFields(
     missing.push("длительность");
   }
 
-  if (payload.availabilityMode === ExcursionAvailabilityMode.REGULAR && !payload.hasRegularSchedule) {
+  if (
+    payload.availabilityMode === ExcursionAvailabilityMode.REGULAR &&
+    !payload.hasRegularSchedule
+  ) {
     missing.push("валидное расписание");
   }
   if (payload.availabilityMode === ExcursionAvailabilityMode.DATED && !payload.hasSessions) {
@@ -441,12 +444,15 @@ function buildExcursionPublishReadinessPayload(
     durationDays: excursion.durationDays,
     durationNights: excursion.durationNights,
     timelineLength: Array.isArray(excursion.timeline) ? excursion.timeline.length : 0,
-    itineraryDaysLength: Array.isArray(excursion.itineraryDays) ? excursion.itineraryDays.length : 0,
+    itineraryDaysLength: Array.isArray(excursion.itineraryDays)
+      ? excursion.itineraryDays.length
+      : 0,
     routeLocationsLength: excursion.routeLocations.length,
     startPoint: excursion.startPoint,
     availabilityMode: excursion.availabilityMode,
     availabilityNote: excursion.availabilityNote,
-    hasRegularSchedule: Boolean(excursion.scheduleText?.trim()) || excursion.scheduleRules.length > 0,
+    hasRegularSchedule:
+      Boolean(excursion.scheduleText?.trim()) || excursion.scheduleRules.length > 0,
     hasSessions: excursion.sessions.length > 0,
     priceFrom: excursion.priceFrom,
     priceUnitLabel: excursion.priceUnitLabel,
@@ -823,6 +829,23 @@ export function collectExcursionProgramPhotoUrls(input: {
     : [];
 
   return Array.from(new Set([...itineraryUrls, ...timelineUrls]));
+}
+
+export function collectExcursionPresentationPhotoUrls(input: {
+  photoUrls?: string[];
+  sectionPhotoGroups?: Prisma.JsonValue | Partial<Record<string, string[] | null | undefined>>;
+  itineraryDays?: Prisma.JsonValue | ItineraryDay[];
+  timeline?: Prisma.JsonValue | TimelineStep[];
+}): string[] {
+  return Array.from(
+    new Set([
+      ...(input.photoUrls ?? []).map((url) => url.trim()).filter(Boolean),
+      ...collectExcursionSectionPhotoUrls(
+        input.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
+      ),
+      ...collectExcursionProgramPhotoUrls(input),
+    ]),
+  );
 }
 
 export async function deleteExcursionStorageEntries(

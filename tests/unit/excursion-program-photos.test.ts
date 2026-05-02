@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { collectExcursionProgramPhotoUrls } from "../../src/lib/excursions";
+import {
+  collectExcursionPresentationPhotoUrls,
+  collectExcursionProgramPhotoUrls,
+} from "../../src/lib/excursions";
 import { getItineraryDayPhotoUrls, getTimelineStepPhotoUrls } from "../../src/types/excursions";
 
 describe("excursion program photo helpers", () => {
@@ -49,5 +52,41 @@ describe("excursion program photo helpers", () => {
         ],
       }),
     ).toEqual(["/uploads/a.webp", "/uploads/b.webp", "/uploads/c.webp"]);
+  });
+
+  it("collects all visible card photos from gallery, sections, days and steps", () => {
+    expect(
+      collectExcursionPresentationPhotoUrls({
+        photoUrls: [" /uploads/gallery.webp ", "/uploads/duplicate.webp"],
+        sectionPhotoGroups: {
+          dates: ["/uploads/dates.webp"],
+          program: ["/uploads/duplicate.webp"],
+        },
+        itineraryDays: [
+          {
+            day: 1,
+            title: "Day 1",
+            description: "desc",
+            locations: [],
+            photoUrls: ["/uploads/day.webp"],
+          },
+        ],
+        timeline: [
+          {
+            step: 1,
+            time: "10:00",
+            duration: "1h",
+            title: "Stop",
+            photoUrls: ["/uploads/step.webp"],
+          },
+        ],
+      }),
+    ).toEqual([
+      "/uploads/gallery.webp",
+      "/uploads/duplicate.webp",
+      "/uploads/dates.webp",
+      "/uploads/day.webp",
+      "/uploads/step.webp",
+    ]);
   });
 });

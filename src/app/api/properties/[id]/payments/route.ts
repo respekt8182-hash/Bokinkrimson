@@ -122,7 +122,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 const createPaymentSchema = z.object({
-  provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("YOOKASSA"),
+  provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("MANAGER"),
 });
 
 export async function POST(request: Request, context: RouteContext) {
@@ -132,7 +132,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
-  let body: z.infer<typeof createPaymentSchema> = { provider: "YOOKASSA" };
+  let body: z.infer<typeof createPaymentSchema> = { provider: "MANAGER" };
   try {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);

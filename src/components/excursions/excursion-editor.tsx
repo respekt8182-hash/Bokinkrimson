@@ -130,57 +130,75 @@ type ReverseGeocodeItem = {
 
 const excursionPhotoLimit = 12;
 const excursionPhotoMinForModeration = 3;
-const sectionPhotoFieldConfigs: Array<{
+
+type SectionPhotoFieldConfig = {
   key: ExcursionSectionPhotoGroupKey;
   title: string;
   description: string;
   addLabel: string;
   emptyText: string;
-}> = [
-  {
-    key: "dates",
-    title: "Фото для дат и доступности",
-    description: "Показываются в разделе с датами, заездами и условиями бронирования.",
-    addLabel: "Добавить фото дат",
-    emptyText: "Фото для раздела дат пока не выбраны.",
-  },
-  {
-    key: "program",
-    title: "Фото программы",
-    description:
-      "Показываются в общей секции программы, если нужно отдельное фото над списком дней или этапов.",
-    addLabel: "Добавить фото программы",
-    emptyText: "Фото для общего блока программы пока не выбраны.",
-  },
-  {
-    key: "logistics",
-    title: "Фото логистики",
-    description: "Показываются рядом со стартом, маршрутом и логистическими деталями.",
-    addLabel: "Добавить фото логистики",
-    emptyText: "Фото для блока логистики пока не выбраны.",
-  },
-  {
-    key: "accommodation",
-    title: "Фото проживания",
-    description: "Показываются в блоке проживания и размещения.",
-    addLabel: "Добавить фото проживания",
-    emptyText: "Фото проживания пока не выбраны.",
-  },
-  {
-    key: "included",
-    title: "Фото для блока «Что включено»",
-    description: "Показываются рядом с включенными услугами, питанием и дополнительными условиями.",
-    addLabel: "Добавить фото включенного",
-    emptyText: "Фото для блока «Что включено» пока не выбраны.",
-  },
-  {
-    key: "requirements",
-    title: "Фото подготовки",
-    description: "Показываются в разделе требований, документов и подготовки к поездке.",
-    addLabel: "Добавить фото подготовки",
-    emptyText: "Фото для блока подготовки пока не выбраны.",
-  },
-];
+};
+
+function getSectionPhotoFieldConfigs(input: {
+  isTour: boolean;
+  showAccommodationBlock: boolean;
+}): SectionPhotoFieldConfig[] {
+  return [
+    {
+      key: "dates",
+      title: input.isTour ? "Фото дат и заездов" : "Фото расписания и бронирования",
+      description: input.isTour
+        ? "Показываются рядом с датами заездов, свободными местами и условиями бронирования."
+        : "Показываются рядом с расписанием, доступностью и условиями бронирования.",
+      addLabel: "Добавить фото",
+      emptyText: input.isTour
+        ? "Фото для дат и заездов пока не выбраны."
+        : "Фото для расписания пока не выбраны.",
+    },
+    {
+      key: "program",
+      title: input.isTour ? "Фото программы тура" : "Фото маршрута экскурсии",
+      description:
+        "Общие кадры для блока программы. Фото конкретного дня или шага лучше добавлять прямо в этот день или шаг.",
+      addLabel: "Добавить фото программы",
+      emptyText: "Фото для программы пока не выбраны.",
+    },
+    {
+      key: "logistics",
+      title: input.isTour ? "Фото старта и перемещений" : "Фото места встречи и маршрута",
+      description: "Подходят кадры точки сбора, транспорта, дороги или ориентиров по пути.",
+      addLabel: "Добавить фото",
+      emptyText: "Фото для старта и маршрута пока не выбраны.",
+    },
+    {
+      key: "accommodation",
+      title: input.showAccommodationBlock ? "Фото проживания" : "Фото условий участия",
+      description: input.showAccommodationBlock
+        ? "Показываются в блоке проживания, размещения и ночёвок."
+        : "Необязательные кадры: пространство, комфорт, питание, снаряжение или другие детали формата.",
+      addLabel: input.showAccommodationBlock ? "Добавить фото проживания" : "Добавить фото условий",
+      emptyText: input.showAccommodationBlock
+        ? "Фото проживания пока не выбраны."
+        : "Фото условий участия пока не выбраны.",
+    },
+    {
+      key: "included",
+      title: "Фото услуг и деталей",
+      description:
+        "Показываются рядом с тем, что входит в стоимость: сервисы, питание, снаряжение или бонусы.",
+      addLabel: "Добавить фото деталей",
+      emptyText: "Фото услуг и деталей пока не выбраны.",
+    },
+    {
+      key: "requirements",
+      title: "Фото подготовки и требований",
+      description:
+        "Подойдут кадры экипировки, документов, уровня нагрузки или других условий участия.",
+      addLabel: "Добавить фото подготовки",
+      emptyText: "Фото подготовки пока не выбраны.",
+    },
+  ];
+}
 type WeekdayId = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 type WeekdaySchedule = {
@@ -821,6 +839,17 @@ export function ExcursionEditor({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const isTour = isTourOffer(offerType);
+  const showAccommodationBlock = requiresAccommodationBlock({
+    offerType,
+    durationNights: durationNights.trim() ? Number(durationNights) : null,
+    accommodationProvided,
+  });
+  const showSafetyBlock = requiresSafetyBlock({ tourKind, transportModes });
+  const showTourLogistics = isTour;
+  const sectionPhotoFieldConfigs = useMemo(
+    () => getSectionPhotoFieldConfigs({ isTour, showAccommodationBlock }),
+    [isTour, showAccommodationBlock],
+  );
   const reusableSectionPhotoLibrary = useMemo(
     () =>
       Array.from(
@@ -833,15 +862,7 @@ export function ExcursionEditor({
       ),
     [normalizedItineraryDays, photoUrls, sectionPhotoGroups, timeline],
   );
-
-  // в”Ђв”Ђ Visibility rules в”Ђв”Ђ
-  const showAccommodationBlock = requiresAccommodationBlock({
-    offerType,
-    durationNights: durationNights.trim() ? Number(durationNights) : null,
-    accommodationProvided,
-  });
-  const showSafetyBlock = requiresSafetyBlock({ tourKind, transportModes });
-  const showTourLogistics = isTour;
+  const publicCardPhotoCount = reusableSectionPhotoLibrary.length;
 
   const activeScheduleDays = useMemo(
     () => weekdayOrder.filter((day) => daySchedule[day].enabled),
@@ -1464,7 +1485,7 @@ export function ExcursionEditor({
   const step5Checks: StepFieldCheck[] = [
     {
       label: `Фотографии (минимум ${excursionPhotoMinForModeration})`,
-      done: photoUrls.length >= excursionPhotoMinForModeration,
+      done: publicCardPhotoCount >= excursionPhotoMinForModeration,
     },
     {
       label: "Контакты (имя, фамилия, телефон)",
@@ -2176,7 +2197,7 @@ export function ExcursionEditor({
   }
 
   async function submitForModerationFromPayment(): Promise<boolean> {
-    if (photoUrls.length < excursionPhotoMinForModeration) {
+    if (publicCardPhotoCount < excursionPhotoMinForModeration) {
       setError(
         `Добавьте минимум ${excursionPhotoMinForModeration} фото перед отправкой на модерацию`,
       );
@@ -4511,7 +4532,7 @@ export function ExcursionEditor({
                   onChange={(e) => setMinAge(e.target.value)}
                   placeholder="0"
                 />
-                <p className="text-xs text-olive/40">0 — ��ез ограничений</p>
+                <p className="text-xs text-olive/40">0 — без ограничений</p>
               </label>
             </div>
 
@@ -5392,10 +5413,10 @@ export function ExcursionEditor({
             <div>
               <h3 className="text-base font-semibold text-olive">Медиа</h3>
               <p className="text-sm text-olive/70">
-                Основные фото используются в верхней галерее карточки. Ниже можно отдельно назначить
-                фото для конкретных разделов страницы. Поддерживаются{" "}
-                {accommodationPhotoUploadFormatsLabel}. Ограничения по размеру:{" "}
-                {accommodationPhotoUploadLimitsLabel}.
+                Основные фото используются в верхней галерее карточки. Фото из программы, шагов и
+                разделов тоже сохраняются в карточке и могут стать обложкой, если верхняя галерея
+                пустая. Поддерживаются {accommodationPhotoUploadFormatsLabel}. Ограничения по
+                размеру: {accommodationPhotoUploadLimitsLabel}.
               </p>
             </div>
 
@@ -5415,13 +5436,14 @@ export function ExcursionEditor({
               />
 
               <p className="text-xs text-olive/65">
-                Сейчас загружено {photoUrls.length}/{excursionPhotoLimit}. Для модерации нужно
-                минимум {excursionPhotoMinForModeration} фото.
+                В верхней галерее {photoUrls.length}/{excursionPhotoLimit}. Всего в карточке
+                учитывается {publicCardPhotoCount} фото. Для модерации нужно минимум{" "}
+                {excursionPhotoMinForModeration}.
               </p>
-              {photoUrls.length < excursionPhotoMinForModeration ? (
+              {publicCardPhotoCount < excursionPhotoMinForModeration ? (
                 <p className="text-xs text-terra">
-                  Добавьте ещё {excursionPhotoMinForModeration - photoUrls.length} фото, чтобы
-                  отправить карточку на модерацию.
+                  Добавьте ещё {excursionPhotoMinForModeration - publicCardPhotoCount} фото в
+                  галерею, программу или разделы, чтобы отправить карточку на модерацию.
                 </p>
               ) : null}
             </div>
@@ -5708,8 +5730,9 @@ export function ExcursionEditor({
         <span>Обновлено {new Date(excursion.updatedAt).toLocaleString("ru-RU")}</span>
         <span className="hidden sm:inline">|</span>
         <span>
-          Фото {photoUrls.length}/{excursionPhotoLimit}
+          Галерея {photoUrls.length}/{excursionPhotoLimit}
         </span>
+        <span>Фото в карточке {publicCardPhotoCount}</span>
         <span>Видео {videoUrls.length}/2</span>
       </div>
     </div>

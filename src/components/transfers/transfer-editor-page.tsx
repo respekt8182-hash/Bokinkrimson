@@ -269,7 +269,7 @@ export function TransferEditorPage({
   const [showOk, setShowOk] = useState(Boolean(transfer.okUrl));
   const [fleet, setFleet] = useState<TransferFleetItem[]>(initialFleet);
   const [serviceTags, setServiceTags] = useState<string[]>(initialServiceTags);
-  const [paymentProvider, setPaymentProvider] = useState<"YOOKASSA" | "MANAGER">("YOOKASSA");
+  const [paymentProvider, setPaymentProvider] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [payments, setPayments] = useState(initialPayments);
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");

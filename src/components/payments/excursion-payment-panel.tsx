@@ -165,7 +165,7 @@ export function ExcursionPaymentPanel({
   const [status, setStatus] = useState<ExcursionStatusValue>(initialStatus);
   const [pendingEditStatus, setPendingEditStatus] = useState<ExcursionStatusValue | null>(null);
   const [payments, setPayments] = useState<SerializedPayment[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("YOOKASSA");
+  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [managerRequested, setManagerRequested] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);

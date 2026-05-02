@@ -77,7 +77,7 @@ function parseJsonField(formData: FormData, key: string): unknown {
 }
 
 function parseTransferPaymentProvider(value: string | null): PaymentProvider {
-  return value === "MANAGER" ? PaymentProvider.MANAGER : PaymentProvider.YOOKASSA;
+  return value === "YOOKASSA" ? PaymentProvider.YOOKASSA : PaymentProvider.MANAGER;
 }
 
 function getFirstSearchParam(value: string | string[] | undefined): string | null {

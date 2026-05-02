@@ -22,11 +22,7 @@ import {
   resolveExcursionLocation,
   type ExcursionLocationDirectoryItem,
 } from "@/lib/excursion-directory";
-import {
-  calculateDistanceKm,
-  isWithinRadiusKm,
-  roundDistanceKm,
-} from "@/lib/catalog-radius";
+import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { serializeReview } from "@/lib/reviews";
@@ -41,6 +37,7 @@ import type {
   TimelineStep,
 } from "@/types/excursions";
 import {
+  collectExcursionSectionPhotoUrls,
   getItineraryDayPhotoUrls,
   getTimelineStepPhotoUrls,
   normalizeExcursionSectionPhotoGroups,
@@ -346,8 +343,12 @@ function toStringArray(value: unknown): string[] {
     : [];
 }
 
+function normalizePublicPhotoUrls(urls: string[]): string[] {
+  return Array.from(new Set(urls.map((url) => url.trim()).filter(Boolean)));
+}
+
 function filterExistingPublicAssetUrls(urls: string[]): string[] {
-  return urls.filter((url) => {
+  return normalizePublicPhotoUrls(urls).filter((url) => {
     const trimmed = url.trim();
     if (!trimmed.startsWith("/uploads/")) {
       return true;
@@ -357,6 +358,48 @@ function filterExistingPublicAssetUrls(urls: string[]): string[] {
     const absolutePath = path.join(process.cwd(), "public", ...relativePath.split("/"));
     return existsSync(absolutePath);
   });
+}
+
+function collectRawPublicExcursionGalleryPhotoUrls(input: {
+  photoUrls?: unknown;
+  sectionPhotoGroups?: unknown;
+  itineraryDays?: Prisma.JsonValue | ItineraryDay[];
+  timeline?: Prisma.JsonValue | TimelineStep[];
+}): string[] {
+  const sectionPhotoUrls = collectExcursionSectionPhotoUrls(
+    input.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
+  );
+  const itineraryPhotoUrls = Array.isArray(input.itineraryDays)
+    ? input.itineraryDays.flatMap((day) => getItineraryDayPhotoUrls(day as ItineraryDay))
+    : [];
+  const timelinePhotoUrls = Array.isArray(input.timeline)
+    ? input.timeline.flatMap((step) => getTimelineStepPhotoUrls(step as TimelineStep))
+    : [];
+
+  return normalizePublicPhotoUrls([
+    ...toStringArray(input.photoUrls),
+    ...sectionPhotoUrls,
+    ...itineraryPhotoUrls,
+    ...timelinePhotoUrls,
+  ]);
+}
+
+function getPublicExcursionGalleryPhotoUrls(input: {
+  photoUrls?: unknown;
+  sectionPhotoGroups?: unknown;
+  itineraryDays?: Prisma.JsonValue | ItineraryDay[];
+  timeline?: Prisma.JsonValue | TimelineStep[];
+}): string[] {
+  return filterExistingPublicAssetUrls(collectRawPublicExcursionGalleryPhotoUrls(input));
+}
+
+function getPublicExcursionCoverImageUrl(input: {
+  photoUrls?: unknown;
+  sectionPhotoGroups?: unknown;
+  itineraryDays?: Prisma.JsonValue | ItineraryDay[];
+  timeline?: Prisma.JsonValue | TimelineStep[];
+}): string | null {
+  return getPublicExcursionGalleryPhotoUrls(input)[0] ?? null;
 }
 
 function filterPublicSectionPhotoGroups(
@@ -908,15 +951,11 @@ export async function getPublicExcursionCatalog(
         ? item.pickupLocations.some((pickup) => pickup.locationId === resolvedLocation.id)
         : false;
 
-      if (
-        locationPoint &&
-        excursionLatitude !== null &&
-        excursionLongitude !== null
-      ) {
-        distanceKm = calculateDistanceKm(
-          locationPoint,
-          { latitude: excursionLatitude, longitude: excursionLongitude },
-        );
+      if (locationPoint && excursionLatitude !== null && excursionLongitude !== null) {
+        distanceKm = calculateDistanceKm(locationPoint, {
+          latitude: excursionLatitude,
+          longitude: excursionLongitude,
+        });
       }
 
       if (locationPoint) {
@@ -928,7 +967,7 @@ export async function getPublicExcursionCatalog(
           // Match by slug (legacy string field) or by ID (CUID stored in locationId)
           Boolean(
             resolvedLocation &&
-              item.locationId &&
+            item.locationId &&
             (item.locationId === resolvedLocation.slug || item.locationId === resolvedLocation.id),
           ) ||
           containsExcursionLocationQuery(locationTextQuery, [
@@ -1000,9 +1039,7 @@ export async function getPublicExcursionCatalog(
     // Linear decay over 2× the haversine radius so excursions just outside
     // the radius aren't penalised too harshly.
     const distanceScore =
-      distanceKm === null
-        ? 0
-        : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
+      distanceKm === null ? 0 : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
 
     // ── Location affinity ─────────────────────────────────────────────────────
     const anchorScore = anchorMatch ? 50 : 0;
@@ -1016,7 +1053,7 @@ export async function getPublicExcursionCatalog(
 
     // ── Profile completeness — rewards creator effort, accessible to newcomers ─
     // Having a well-filled profile is achievable from day one, unlike reviews.
-    const photoCount = item.photoUrls.length;
+    const photoCount = collectRawPublicExcursionGalleryPhotoUrls(item).length;
     const hasTimeline = Array.isArray(item.timeline) && (item.timeline as unknown[]).length > 0;
     const hasFaqItems = Array.isArray(item.faqItems) && (item.faqItems as unknown[]).length > 0;
     const hasPricingTiers =
@@ -1153,7 +1190,7 @@ export async function getPublicExcursionCatalog(
         priceTo: toNumberOrNull(item.priceTo),
         currency: item.currency,
         priceUnitLabel: item.priceUnitLabel,
-        coverImageUrl: filterExistingPublicAssetUrls(toStringArray(item.photoUrls))[0] ?? null,
+        coverImageUrl: getPublicExcursionCoverImageUrl(item),
         avgRating: Number(item.avgRating),
         reviewsCount: item.reviewsCount,
         distanceKm: roundDistanceKm(distanceKm),
@@ -1181,7 +1218,8 @@ export async function getPublicExcursionCatalog(
       locationId: resolvedLocation?.id ?? null,
       // Keep user's raw location text in filters when georesolution fails,
       // so sidebar fields stay in sync with the search form input.
-      locationName: resolvedLocation?.name ?? resolvedLocationCenter?.name ?? (rawLocationQuery || null),
+      locationName:
+        resolvedLocation?.name ?? resolvedLocationCenter?.name ?? (rawLocationQuery || null),
       centerLat: resolvedLocationCenter?.latitude ?? null,
       centerLng: resolvedLocationCenter?.longitude ?? null,
       districtId: resolvedDistrict?.id ?? null,
@@ -1396,7 +1434,7 @@ async function getExcursionCardByIdentifier(input: {
       ? (excursion.pricingTiers as PricingTier[])
       : [],
     faqItems: Array.isArray(excursion.faqItems) ? (excursion.faqItems as FaqItem[]) : [],
-    photoUrls: filterExistingPublicAssetUrls(toStringArray(excursion.photoUrls)),
+    photoUrls: getPublicExcursionGalleryPhotoUrls(excursion),
     sectionPhotoGroups: filterPublicSectionPhotoGroups(
       excursion.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
     ),

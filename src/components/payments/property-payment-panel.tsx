@@ -137,7 +137,7 @@ export function PropertyPaymentPanel({
   const [isCreating, setIsCreating] = useState(false);
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("YOOKASSA");
+  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [managerRequested, setManagerRequested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");

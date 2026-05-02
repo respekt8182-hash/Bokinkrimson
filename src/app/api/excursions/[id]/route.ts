@@ -14,6 +14,7 @@ import {
 } from "@/lib/excursion-directory";
 import { getResolvedAvailabilityMode } from "@/lib/excursion-offers";
 import {
+  collectExcursionPresentationPhotoUrls,
   collectExcursionProgramPhotoUrls,
   deleteExcursionStorageEntries,
   EXCURSION_STORAGE_CLEANUP_SELECT,
@@ -737,13 +738,16 @@ export async function PATCH(request: Request, context: RouteContext) {
         : data.accommodationProvided,
     accommodationType:
       data.accommodationType === undefined ? existing.accommodationType : data.accommodationType,
-    photoUrls: nextPhotoUrls,
+    photoUrls: collectExcursionPresentationPhotoUrls({
+      photoUrls: nextPhotoUrls,
+      sectionPhotoGroups: nextSectionPhotoGroups,
+      itineraryDays: nextItineraryDays,
+      timeline: nextTimeline,
+    }),
   };
 
   const missingPublishFields =
-    data.status === ExcursionStatus.PENDING_MODERATION
-      ? getMissingPublishFields(nextState)
-      : [];
+    data.status === ExcursionStatus.PENDING_MODERATION ? getMissingPublishFields(nextState) : [];
 
   if (data.status === ExcursionStatus.PENDING_MODERATION && missingPublishFields.length > 0) {
     return NextResponse.json(

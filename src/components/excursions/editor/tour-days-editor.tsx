@@ -312,7 +312,7 @@ export function TourDaysEditor({
 
             <ContentPhotoManager
               title={`Фото ${itemNoun}`}
-              description={`Эти фото показываются рядом с описанием ${itemNoun}.`}
+              description={`Показываются рядом с описанием ${itemNoun} и учитываются в общей карточке.`}
               photoUrls={dayPhotoUrls}
               limit={EXCURSION_PROGRAM_PHOTO_LIMIT}
               addLabel={`Добавить фото ${itemNoun}`}
