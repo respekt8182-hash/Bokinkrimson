@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Images, Plus, Trash2 } from "lucide-react";
 import { useRef } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
+import { accommodationPhotoUploadAccept } from "@/lib/photo-upload";
 
 type ContentPhotoManagerProps = {
   title: string;
@@ -18,8 +19,6 @@ type ContentPhotoManagerProps = {
   onMove: (index: number, direction: -1 | 1) => void;
   onRemove: (index: number) => void;
 };
-
-const excursionPhotoAccept = "image/jpeg,image/png,image/heic,image/heif";
 
 export function ContentPhotoManager({
   title,
@@ -69,7 +68,7 @@ export function ContentPhotoManager({
             ref={inputRef}
             type="file"
             multiple
-            accept={excursionPhotoAccept}
+            accept={accommodationPhotoUploadAccept}
             className="sr-only"
             onChange={(event) => {
               onUpload(event.currentTarget.files);

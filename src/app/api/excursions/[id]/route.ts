@@ -6,7 +6,7 @@ import {
 } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import {
   findNearestMajorExcursionLocation,
@@ -444,6 +444,20 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const data = parsed.data;
+
+  if (
+    data.sectionPhotoGroups !== undefined &&
+    !(await areDatabaseColumnsAvailable("Excursion", ["sectionPhotoGroups"]))
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Фото разделов временно недоступны: примените свежие Prisma-миграции на VPS и повторите загрузку.",
+      },
+      { status: 503 },
+    );
+  }
+
   const nextPhotoUrls = data.photoUrls ? dedupeUrls(data.photoUrls) : existing.photoUrls;
   const nextSectionPhotoGroups =
     data.sectionPhotoGroups !== undefined
