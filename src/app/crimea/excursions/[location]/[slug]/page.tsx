@@ -2849,7 +2849,7 @@ export default async function PublicExcursionPage({
                       return (
                         <details
                           key={`day-${day.day}`}
-                          open={day.day === 1}
+                          open={day.day === 1 || dayPhotoUrls.length > 0}
                           className="group rounded-2xl border border-olive/10 bg-gradient-to-br from-white to-cream/45"
                         >
                           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-5 py-4">

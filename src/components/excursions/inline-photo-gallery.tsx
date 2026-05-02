@@ -15,6 +15,23 @@ function joinClassNames(...items: Array<string | undefined | false>) {
   return items.filter(Boolean).join(" ");
 }
 
+const desktopTileBaseClass =
+  "group relative overflow-hidden rounded-2xl bg-cream/50 ring-1 ring-olive/10 shadow-[0_14px_34px_-28px_rgba(58,43,35,0.65)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_42px_-28px_rgba(58,43,35,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45";
+
+function getDesktopImageSizes(count: number, index: number) {
+  if (count === 1) {
+    return "(max-width: 1024px) 100vw, 820px";
+  }
+
+  if (count === 2) {
+    return "(max-width: 1024px) 50vw, 400px";
+  }
+
+  return index === 0
+    ? "(max-width: 1024px) 100vw, 560px"
+    : "(max-width: 1024px) 50vw, 280px";
+}
+
 export function InlinePhotoGallery({ photoUrls, title, className }: InlinePhotoGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -108,15 +125,18 @@ export function InlinePhotoGallery({ photoUrls, title, className }: InlinePhotoG
         {count === 1 ? (
           <button
             type="button"
-            className="relative hidden aspect-[16/9] overflow-hidden rounded-3xl ring-1 ring-olive/10 md:block"
+            className={joinClassNames(
+              desktopTileBaseClass,
+              "hidden aspect-[16/9] w-full md:block",
+            )}
             onClick={() => openLightbox(0)}
           >
             <Image
               src={visibleUrls[0]}
               alt={`${title} — фото 1`}
               fill
-              sizes="(max-width: 1024px) 100vw, 820px"
-              className="object-cover"
+              sizes={getDesktopImageSizes(count, 0)}
+              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               onError={() =>
                 setBrokenUrls((current) =>
                   current.includes(visibleUrls[0]) ? current : [...current, visibleUrls[0]],
@@ -130,15 +150,15 @@ export function InlinePhotoGallery({ photoUrls, title, className }: InlinePhotoG
               <button
                 key={`desktop-${url}-${index}`}
                 type="button"
-                className="relative aspect-[4/3] overflow-hidden rounded-3xl ring-1 ring-olive/10"
+                className={joinClassNames(desktopTileBaseClass, "aspect-[4/3]")}
                 onClick={() => openLightbox(index)}
               >
                 <Image
                   src={url}
                   alt={`${title} — фото ${index + 1}`}
                   fill
-                  sizes="(max-width: 1024px) 100vw, 400px"
-                  className="object-cover"
+                  sizes={getDesktopImageSizes(count, index)}
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                   onError={() =>
                     setBrokenUrls((current) =>
                       current.includes(url) ? current : [...current, url],
@@ -149,55 +169,36 @@ export function InlinePhotoGallery({ photoUrls, title, className }: InlinePhotoG
             ))}
           </div>
         ) : (
-          <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)]">
-            <button
-              type="button"
-              className="relative min-h-[18rem] overflow-hidden rounded-3xl ring-1 ring-olive/10"
-              onClick={() => openLightbox(0)}
-            >
-              <Image
-                src={visibleUrls[0]}
-                alt={`${title} — фото 1`}
-                fill
-                sizes="(max-width: 1024px) 100vw, 520px"
-                className="object-cover"
-                onError={() =>
-                  setBrokenUrls((current) =>
-                    current.includes(visibleUrls[0]) ? current : [...current, visibleUrls[0]],
-                  )
-                }
-              />
-            </button>
-            <div className="grid gap-3">
-              {visibleUrls.slice(1, 3).map((url, index) => (
-                <button
-                  key={`desktop-${url}-${index + 1}`}
-                  type="button"
-                  className="relative min-h-[8.5rem] overflow-hidden rounded-3xl ring-1 ring-olive/10"
-                  onClick={() => openLightbox(index + 1)}
-                >
-                  <Image
-                    src={url}
-                    alt={`${title} — фото ${index + 2}`}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 320px"
-                    className="object-cover"
-                    onError={() =>
-                      setBrokenUrls((current) =>
-                        current.includes(url) ? current : [...current, url],
-                      )
-                    }
-                  />
-                  {index === 1 && count > 3 ? (
-                    <div className="absolute inset-0 flex items-end justify-end bg-gradient-to-t from-midnight/45 via-transparent to-transparent p-4">
-                      <span className="rounded-full bg-white/92 px-3 py-1 text-xs font-semibold text-olive shadow-sm">
-                        +{count - 3} фото
-                      </span>
-                    </div>
-                  ) : null}
-                </button>
-              ))}
-            </div>
+          <div className="hidden gap-3 md:grid md:auto-rows-[8.5rem] md:grid-cols-2 lg:auto-rows-[9rem] xl:grid-cols-3">
+            {visibleUrls.map((url, index) => (
+              <button
+                key={`desktop-${url}-${index}`}
+                type="button"
+                className={joinClassNames(
+                  desktopTileBaseClass,
+                  index === 0
+                    ? "min-h-[17.5rem] md:col-span-2 md:row-span-2"
+                    : "min-h-[8.5rem]",
+                )}
+                onClick={() => openLightbox(index)}
+              >
+                <Image
+                  src={url}
+                  alt={`${title} — фото ${index + 1}`}
+                  fill
+                  sizes={getDesktopImageSizes(count, index)}
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  onError={() =>
+                    setBrokenUrls((current) =>
+                      current.includes(url) ? current : [...current, url],
+                    )
+                  }
+                />
+                <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold leading-none text-olive/70 shadow-sm ring-1 ring-olive/10">
+                  {index + 1}/{count}
+                </span>
+              </button>
+            ))}
           </div>
         )}
       </div>
