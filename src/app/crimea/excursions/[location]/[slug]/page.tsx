@@ -1432,7 +1432,7 @@ export default async function PublicExcursionPage({
                   Фотографии экскурсии появятся здесь после загрузки
                 </div>
               )}
-              <div className="absolute bottom-5 right-5 z-20 hidden md:block">
+              <div className="absolute right-4 top-4 z-20 md:bottom-5 md:right-5 md:top-auto">
                 <FavoriteToggleButton
                   itemId={item.id}
                   entityType={favoriteEntityType}
@@ -2261,8 +2261,6 @@ export default async function PublicExcursionPage({
                       <ExcursionSidebarActions
                         actionLabel={leadRequestActionLabel}
                         actionDisabled={!showLeadForm}
-                        favoriteItemId={item.id}
-                        favoriteEntityType={getFavoriteEntityTypeFromOfferType(item.offerType)}
                         offerType={item.offerType}
                         excursionTitle={item.title ?? getOfferTypeLabel(item.offerType)}
                         priceLabel={priceLabel}
@@ -2387,12 +2385,11 @@ export default async function PublicExcursionPage({
           availabilityLabel={scheduleSummaryValue}
           actionLabel={leadRequestActionLabel}
           actionDisabled={!showLeadForm}
-          favoriteItemId={item.id}
-          favoriteEntityType={getFavoriteEntityTypeFromOfferType(item.offerType)}
           offerType={item.offerType}
           excursionTitle={item.title ?? getOfferTypeLabel(item.offerType)}
           durationLabel={durationLabel}
           locationName={item.locationName}
+          websiteUrl={item.contacts.websiteUrl}
           whatsappUrl={whatsappUrl}
           telegramUrl={telegramUrl}
           vkUrl={vkUrl}
@@ -2434,7 +2431,7 @@ export default async function PublicExcursionPage({
             </div>
           )}
 
-          <div className="absolute bottom-5 right-5 z-20 hidden md:block">
+          <div className="absolute right-4 top-4 z-20 md:bottom-5 md:right-5 md:top-auto">
             <FavoriteToggleButton
               itemId={item.id}
               entityType={favoriteEntityType}
@@ -3459,8 +3456,6 @@ export default async function PublicExcursionPage({
                     <ExcursionSidebarActions
                       actionLabel={leadRequestActionLabel}
                       actionDisabled={!showLeadForm}
-                      favoriteItemId={item.id}
-                      favoriteEntityType={getFavoriteEntityTypeFromOfferType(item.offerType)}
                       offerType={item.offerType}
                       excursionTitle={item.title ?? getOfferTypeLabel(item.offerType)}
                       priceLabel={priceLabel}
@@ -3587,12 +3582,11 @@ export default async function PublicExcursionPage({
         }
         actionLabel={leadRequestActionLabel}
         actionDisabled={!showLeadForm}
-        favoriteItemId={item.id}
-        favoriteEntityType={getFavoriteEntityTypeFromOfferType(item.offerType)}
         offerType={item.offerType}
         excursionTitle={item.title ?? getOfferTypeLabel(item.offerType)}
         durationLabel={durationLabel}
         locationName={item.locationName}
+        websiteUrl={item.contacts.websiteUrl}
         whatsappUrl={whatsappUrl}
         telegramUrl={telegramUrl}
         vkUrl={vkUrl}

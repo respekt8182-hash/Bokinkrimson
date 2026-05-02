@@ -28,6 +28,7 @@ import { HousingSearchGuestsField } from "@/components/public/housing-search-gue
 import { StaticMapPreview } from "@/components/maps/static-map-preview";
 import { PropertyMediaGallery } from "@/components/public/property-media-gallery";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
+import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
 import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
@@ -49,6 +50,7 @@ import {
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import { normalizeWebsiteUrl } from "@/lib/website-favicon";
 import type { PublicPropertyCard } from "@/lib/public-properties";
 import { bedTypeOptions } from "@/lib/room-catalog";
 
@@ -263,7 +265,7 @@ type MobileMessengerLink = {
   key: string;
   href: string;
   label: string;
-  brand: ContactBrand;
+  brand: ContactBrand | "website";
 };
 
 function MediaPreview({ media, alt, className, loading = "lazy" }: MediaPreviewProps) {
@@ -362,12 +364,16 @@ function buildMobilePhoneOption(params: {
 }
 
 function buildMobileMessengerLinks(params: {
+  websiteUrl: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
   maxUrl: string | null;
   okUrl: string | null;
 }): MobileMessengerLink[] {
+  const preparedWebsiteUrl = params.websiteUrl?.trim()
+    ? normalizeWebsiteUrl(params.websiteUrl)
+    : null;
   const preparedWhatsappUrl = normalizeWhatsappUrl(params.whatsappUrl);
   const preparedTelegramUrl = normalizeTelegramProfileUrl(params.telegramUrl);
   const preparedVkUrl = normalizeVkProfileUrl(params.vkUrl);
@@ -375,6 +381,14 @@ function buildMobileMessengerLinks(params: {
   const preparedOkUrl = normalizeOkProfileUrl(params.okUrl);
 
   return [
+    preparedWebsiteUrl
+      ? {
+          key: "website",
+          href: preparedWebsiteUrl,
+          label: "Сайт",
+          brand: "website" as const,
+        }
+      : null,
     preparedWhatsappUrl
       ? {
           key: "whatsapp",
@@ -418,7 +432,11 @@ function buildMobileMessengerLinks(params: {
   ].filter((item): item is MobileMessengerLink => item !== null);
 }
 
-function getMobileMessengerChipClasses(brand: ContactBrand): string {
+function getMobileMessengerChipClasses(brand: ContactBrand | "website"): string {
+  if (brand === "website") {
+    return "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]";
+  }
+
   if (brand === "whatsapp") {
     return "border-[#25D366]/22 bg-[#25D366]/10 shadow-[0_8px_18px_rgba(37,211,102,0.16)]";
   }
@@ -754,6 +772,7 @@ export function PublicPropertyDetails({
   const primaryMobileCallPhone = mobileCallPhones[0] ?? null;
   const hasMultipleMobileCallPhones = mobileCallPhones.length > 1;
   const mobileMessengerLinks = buildMobileMessengerLinks({
+    websiteUrl: item.contacts.websiteUrl,
     whatsappUrl: item.contacts.whatsappUrl,
     telegramUrl: item.contacts.telegramUrl,
     vkUrl: item.contacts.vkUrl,
@@ -1824,7 +1843,15 @@ export function PublicPropertyDetails({
                       getMobileMessengerChipClasses(channel.brand),
                     )}
                   >
-                    <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
+                    {channel.brand === "website" ? (
+                      <ContactWebsiteMark
+                        websiteUrl={channel.href}
+                        className="h-4 w-4"
+                        iconClassName="text-primary"
+                      />
+                    ) : (
+                      <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
+                    )}
                   </a>
                 ))}
               </div>

@@ -2,20 +2,16 @@
 
 import { BadgeCheck } from "lucide-react";
 import { useState } from "react";
-import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import {
   PropertyContactsPanel,
   type PropertyContactsPanelText,
 } from "@/components/contacts/property-contacts-panel";
 import { ExcursionLeadModal } from "@/components/excursions/excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
-import type { FavoriteEntityType } from "@/lib/favorite-entities";
 
 type ExcursionSidebarActionsProps = {
   actionLabel: string;
   actionDisabled: boolean;
-  favoriteItemId: string;
-  favoriteEntityType: FavoriteEntityType;
   offerType?: string | null;
   excursionTitle: string;
   priceLabel: string;
@@ -81,8 +77,6 @@ function formatPhoneLabel(phone: string | null | undefined): string | null {
 export function ExcursionSidebarActions({
   actionLabel,
   actionDisabled,
-  favoriteItemId,
-  favoriteEntityType,
   offerType = null,
   excursionTitle,
   priceLabel,
@@ -133,11 +127,11 @@ export function ExcursionSidebarActions({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-[15px] font-semibold text-olive">{organizerName}</p>
-                <span className="inline-flex items-center rounded-full bg-primary/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/72">
-                  {isInstantConfirmation
-                    ? "\u0411\u044B\u0441\u0442\u0440\u044B\u0439 \u043E\u0442\u0432\u0435\u0442"
-                    : "\u041D\u0430 \u0441\u0432\u044F\u0437\u0438"}
-                </span>
+                {!isInstantConfirmation ? (
+                  <span className="inline-flex items-center rounded-full bg-primary/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/72">
+                    {"\u041D\u0430 \u0441\u0432\u044F\u0437\u0438"}
+                  </span>
+                ) : null}
               </div>
               <p className="mt-1 flex items-start gap-1.5 text-[13px] leading-5 text-primary/85">
                 <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
@@ -185,13 +179,6 @@ export function ExcursionSidebarActions({
         </button>
       )}
 
-      <FavoriteToggleButton
-        itemId={favoriteItemId}
-        entityType={favoriteEntityType}
-        initialIsFavorite={false}
-        className="w-full justify-center"
-      />
-
       <ExcursionLeadModal
         open={open}
         onClose={() => setOpen(false)}
@@ -207,7 +194,6 @@ export function ExcursionSidebarActions({
         telegramUrl={telegramUrl}
         phone={phone}
         organizerName={organizerName}
-        title={actionLabel}
       />
     </>
   );
