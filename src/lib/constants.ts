@@ -221,7 +221,7 @@ export const mediaLimits = {
   },
 } as const;
 
-export const imageSizeLimitBytes = 2 * 1024 * 1024;
+export const imageSizeLimitBytes = 5 * 1024 * 1024;
 
 export const propertyTypeIds = propertyTypes.map((item) => item.id) as readonly string[];
 export const crimeaLocationIds = crimeaLocations.map((item) => item.id) as readonly string[];

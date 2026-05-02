@@ -27,6 +27,7 @@ import {
 import { StaticMapPreview } from "@/components/maps/static-map-preview";
 import { TransferLeadForm } from "@/components/transfers/transfer-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { cn } from "@/lib/cn";
@@ -72,6 +73,37 @@ type MobileMessengerLink = {
   label: string;
   brand: ContactBrand | "website";
 };
+
+type OwnerAvatarProps = {
+  src: string | null | undefined;
+  alt: string;
+  initials: string;
+  className: string;
+  fallbackClassName?: string;
+};
+
+function OwnerAvatar({
+  src,
+  alt,
+  initials,
+  className,
+  fallbackClassName = "text-sm font-semibold text-olive/60",
+}: OwnerAvatarProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-olive/10",
+        className,
+      )}
+    >
+      <AvatarImage src={src} alt={alt} className="h-full w-full object-cover">
+        <span className={cn("flex h-full w-full items-center justify-center", fallbackClassName)}>
+          {initials || "?"}
+        </span>
+      </AvatarImage>
+    </span>
+  );
+}
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -483,11 +515,7 @@ function CatalogShell({
         </div>
       )}
 
-      <div
-        className={cn(
-          "mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8",
-        )}
-      >
+      <div className={cn("mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8")}>
         {children}
       </div>
     </main>
@@ -760,7 +788,9 @@ function AttractionCard({
               <SummaryPill icon={Clock3}>Свободный день</SummaryPill>
             </div>
 
-            {description ? <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p> : null}
+            {description ? (
+              <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p>
+            ) : null}
 
             {tags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 md:hidden">
@@ -873,25 +903,18 @@ function TransferCard({
               {item.title}
             </h2>
 
-            <div className="flex flex-wrap items-center gap-2 md:hidden">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-xl bg-cream/78 py-1 pl-1 pr-2.5 text-xs font-semibold text-olive/70 ring-1 ring-olive/8">
-                <span className="inline-flex h-8 w-8 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
-                  {item.owner.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.owner.avatarUrl}
-                      alt={item.contacts.contactName ?? item.title}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[11px] text-olive/60">
-                      {ownerInitials || "?"}
-                    </span>
-                  )}
-                </span>
+                <OwnerAvatar
+                  src={item.owner.avatarUrl}
+                  alt={item.contacts.contactName ?? item.title}
+                  initials={ownerInitials}
+                  className="h-8 w-8"
+                  fallbackClassName="text-[11px] text-olive/60"
+                />
                 {item.contacts.contactName ?? `${item.owner.firstName} ${item.owner.lastName}`}
               </span>
-              <span className="rounded-lg border border-dashed border-olive/18 px-2.5 py-1.5 text-xs font-semibold text-olive/42">
+              <span className="rounded-lg border border-dashed border-olive/18 px-2.5 py-1.5 text-xs font-semibold text-olive/42 md:hidden">
                 {hasReviews
                   ? `${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
                   : "Новый водитель на площадке"}
@@ -912,7 +935,9 @@ function TransferCard({
               {distance ? <SummaryPill icon={Route}>{distance}</SummaryPill> : null}
             </div>
 
-            {description ? <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p> : null}
+            {description ? (
+              <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p>
+            ) : null}
 
             {item.serviceTags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 md:hidden">
@@ -1683,20 +1708,12 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
             ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-[24px] bg-cream/72 p-4">
-              <span className="inline-flex h-14 w-14 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
-                {item.owner.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.owner.avatarUrl}
-                    alt={contactName}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-olive/60">
-                    {ownerInitials || "?"}
-                  </span>
-                )}
-              </span>
+              <OwnerAvatar
+                src={item.owner.avatarUrl}
+                alt={contactName}
+                initials={ownerInitials}
+                className="h-14 w-14"
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-olive">{contactName}</p>
                 <p className="mt-1 text-xs text-olive/56">
@@ -1951,20 +1968,12 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
             <p className="mt-3 text-sm text-olive/52">Стоимость</p>
             <p className="mt-1 text-3xl font-extrabold leading-tight text-olive">{priceLabel}</p>
             <div className="mt-4 flex items-center gap-3 rounded-[22px] bg-cream/72 p-3">
-              <span className="inline-flex h-12 w-12 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
-                {item.owner.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.owner.avatarUrl}
-                    alt={contactName}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-olive/60">
-                    {ownerInitials || "?"}
-                  </span>
-                )}
-              </span>
+              <OwnerAvatar
+                src={item.owner.avatarUrl}
+                alt={contactName}
+                initials={ownerInitials}
+                className="h-12 w-12"
+              />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{contactName}</p>
                 <p className="mt-0.5 text-xs text-primary/80">
@@ -1999,20 +2008,13 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
         <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-cream text-olive/55 ring-1 ring-olive/10">
-                {item.owner.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.owner.avatarUrl}
-                    alt={contactName}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-xs font-semibold">
-                    {ownerInitials || "?"}
-                  </span>
-                )}
-              </span>
+              <OwnerAvatar
+                src={item.owner.avatarUrl}
+                alt={contactName}
+                initials={ownerInitials}
+                className="h-10 w-10 bg-cream text-olive/55"
+                fallbackClassName="text-xs font-semibold"
+              />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{contactName}</p>
                 <p className="mt-0.5 truncate text-[11px] text-primary/85">Водитель на связи</p>

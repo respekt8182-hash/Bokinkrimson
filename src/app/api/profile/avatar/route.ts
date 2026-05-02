@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { imageSizeLimitBytes } from "@/lib/constants";
 import { convertImageUploadToWebp } from "@/lib/image-convert";
 import {
   createRateLimiter,
@@ -66,7 +67,10 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
       return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
     }
 
@@ -86,7 +90,7 @@ export async function POST(request: Request) {
     validated = await validateUploadFile({
       file,
       allowedKinds: ["image"],
-      maxSizeBytes: 20 * 1024 * 1024,
+      maxSizeBytes: imageSizeLimitBytes,
     });
   } catch (error) {
     return NextResponse.json({ error: getUploadErrorMessage(error) }, { status: 400 });

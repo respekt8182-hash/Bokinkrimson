@@ -2278,6 +2278,7 @@ export default async function PublicExcursionPage({
                         maxUrl={maxUrl}
                         okUrl={okUrl}
                         organizerName={organizerName}
+                        organizerAvatarUrl={item.owner.avatarUrl}
                         isInstantConfirmation={item.instantConfirmation}
                       />
 
@@ -3480,6 +3481,7 @@ export default async function PublicExcursionPage({
                       maxUrl={maxUrl}
                       okUrl={okUrl}
                       organizerName={organizerName}
+                      organizerAvatarUrl={item.owner.avatarUrl}
                       isInstantConfirmation={item.instantConfirmation}
                     />
                   </div>

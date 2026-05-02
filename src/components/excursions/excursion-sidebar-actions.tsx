@@ -8,6 +8,7 @@ import {
 } from "@/components/contacts/property-contacts-panel";
 import { ExcursionLeadModal } from "@/components/excursions/excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 
 type ExcursionSidebarActionsProps = {
   actionLabel: string;
@@ -26,6 +27,7 @@ type ExcursionSidebarActionsProps = {
   maxUrl: string | null;
   okUrl: string | null;
   organizerName: string;
+  organizerAvatarUrl?: string | null;
   isInstantConfirmation?: boolean;
 };
 
@@ -91,6 +93,7 @@ export function ExcursionSidebarActions({
   maxUrl,
   okUrl,
   organizerName,
+  organizerAvatarUrl = null,
   isInstantConfirmation = false,
 }: ExcursionSidebarActionsProps) {
   const [open, setOpen] = useState(false);
@@ -121,9 +124,15 @@ export function ExcursionSidebarActions({
       {hasContacts ? (
         <div className="rounded-[30px] border border-olive/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,247,241,0.86))] p-3.5 shadow-[0_18px_42px_rgba(58,43,35,0.08)]">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream text-sm font-semibold text-primary ring-1 ring-olive/10">
-              {organizerInitial}
-            </span>
+            <AvatarImage
+              src={organizerAvatarUrl}
+              alt={organizerName}
+              className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-olive/10"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream text-sm font-semibold text-primary ring-1 ring-olive/10">
+                {organizerInitial}
+              </span>
+            </AvatarImage>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-[15px] font-semibold text-olive">{organizerName}</p>

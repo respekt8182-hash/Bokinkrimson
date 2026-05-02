@@ -128,6 +128,11 @@ export type PublicExcursionCatalogItem = {
   availabilityMode: ExcursionAvailabilityMode;
   availabilitySummary: string;
   hasAccommodation: boolean;
+  owner: {
+    firstName: string;
+    lastName: string;
+    avatarUrl: string | null;
+  };
 };
 
 export type PublicExcursionCatalogResult = {
@@ -281,6 +286,7 @@ export type PublicExcursionCard = {
     id: string;
     firstName: string;
     lastName: string;
+    avatarUrl: string | null;
   };
   sessions: Array<{
     id: string;
@@ -828,6 +834,13 @@ export async function getPublicExcursionCatalog(
       pickupLocations: {
         select: { locationId: true },
       },
+      owner: {
+        select: {
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+        },
+      },
       sessions: dateRange
         ? {
             where: {
@@ -1207,6 +1220,11 @@ export async function getPublicExcursionCatalog(
         hasAccommodation:
           item.accommodationProvided === true ||
           Boolean(item.accommodationNights && item.accommodationNights > 0),
+        owner: {
+          firstName: item.owner.firstName,
+          lastName: item.owner.lastName,
+          avatarUrl: item.owner.avatarUrl,
+        },
       }),
     ),
     page: safePage,
@@ -1324,6 +1342,7 @@ async function getExcursionCardByIdentifier(input: {
           lastName: true,
           phone: true,
           email: true,
+          avatarUrl: true,
         },
       },
       reviews: {
@@ -1491,6 +1510,7 @@ async function getExcursionCardByIdentifier(input: {
       id: excursion.owner.id,
       firstName: excursion.owner.firstName,
       lastName: excursion.owner.lastName,
+      avatarUrl: excursion.owner.avatarUrl,
     },
     sessions: excursion.sessions.map((session) => ({
       id: session.id,

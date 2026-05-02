@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import Link from "next/link";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
 import { formatProgramDuration, formatProgramPrice } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
@@ -40,17 +41,9 @@ function hasMeaningfulDuration(item: PublicExcursionCatalogItem): boolean {
   );
 }
 
-export function MapExcursionPopupCard({
-  item,
-  className,
-  onClose,
-}: MapExcursionPopupCardProps) {
+export function MapExcursionPopupCard({ item, className, onClose }: MapExcursionPopupCardProps) {
   const locationLabel =
-    item.locationName ||
-    item.mainLocationName ||
-    item.districtName ||
-    item.routeSummary ||
-    "Крым";
+    item.locationName || item.mainLocationName || item.districtName || item.routeSummary || "Крым";
   const metaLabel =
     item.avgRating > 0 && item.reviewsCount > 0
       ? `Рейтинг ${item.avgRating.toFixed(1)} • ${pluralizeReviews(item.reviewsCount)}`
@@ -59,6 +52,11 @@ export function MapExcursionPopupCard({
         : item.hasAvailableSession
           ? "Есть места"
           : "Программа по запросу";
+
+  const ownerName = [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "?";
+  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
+    .trim()
+    .toUpperCase();
 
   return (
     <article
@@ -111,6 +109,20 @@ export function MapExcursionPopupCard({
           {item.title}
         </h3>
         <p className="line-clamp-1 text-xs text-olive/68">{locationLabel}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex h-7 w-7 shrink-0 overflow-hidden rounded-full bg-cream ring-1 ring-olive/10">
+            <AvatarImage
+              src={item.owner.avatarUrl}
+              alt={ownerName}
+              className="h-full w-full object-cover"
+            >
+              <span className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-olive/60">
+                {ownerInitials || "?"}
+              </span>
+            </AvatarImage>
+          </span>
+          <span className="truncate text-xs font-semibold text-olive/70">{ownerName}</span>
+        </div>
 
         <div className="rounded-xl bg-cream/70 px-3 py-2">
           <p className="text-[11px] uppercase tracking-wide text-olive/60">Стоимость</p>

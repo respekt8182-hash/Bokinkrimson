@@ -36,6 +36,7 @@ import { useRouter } from "next/navigation";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { AppIcon } from "@/components/ui/app-icon";
+import { AvatarImage } from "@/components/ui/avatar-image";
 import {
   CatalogFieldGroup,
   CatalogFilterChipButton,
@@ -3247,6 +3248,11 @@ function ExcursionCard({
   const duration = formatProgramDuration(item);
   const priceLabel = formatProgramPrice(item);
   const titleId = `excursion-card-title-${item.id}`;
+  const ownerName =
+    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "Организатор";
+  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
+    .trim()
+    .toUpperCase();
 
   return (
     <article
@@ -3348,6 +3354,23 @@ function ExcursionCard({
                 <span className="line-clamp-2">{item.routeSummary}</span>
               </p>
             )}
+
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="inline-flex max-w-full items-center gap-2 rounded-xl bg-cream/78 py-1 pl-1 pr-2.5 text-xs font-semibold text-olive/70 ring-1 ring-olive/8">
+                <span className="inline-flex h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
+                  <AvatarImage
+                    src={item.owner.avatarUrl}
+                    alt={ownerName}
+                    className="h-full w-full object-cover"
+                  >
+                    <span className="flex h-full w-full items-center justify-center text-[11px] text-olive/60">
+                      {ownerInitials || "?"}
+                    </span>
+                  </AvatarImage>
+                </span>
+                <span className="truncate">{ownerName}</span>
+              </span>
+            </div>
 
             {/* Info chips row */}
             <div className="mt-1 flex flex-wrap gap-1.5">
