@@ -13,6 +13,14 @@ const placeholderPublicPath = path.join(publicAttractionsRoot, "zaglushka.png");
 const placeholderUrl = "/attractions/zaglushka.png";
 const importedAt = "2026-05-03T13:00:00.000Z";
 const dryRun = process.argv.includes("--dry-run");
+const onlyDirs = new Set(
+  process.argv
+    .find((argument) => argument.startsWith("--dirs="))
+    ?.slice("--dirs=".length)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [],
+);
 
 const knownLocations = [
   "Симферополь",
@@ -221,6 +229,112 @@ function normalizeSlug(value, fallbackTitle) {
     .replace(/^attractions\//, "");
   const lastSegment = raw.split("/").filter(Boolean).at(-1) ?? raw;
   return slugify(lastSegment || fallbackTitle) || slugify(fallbackTitle) || "attraction";
+}
+
+function stripSourceNumber(value) {
+  return cleanText(value).replace(/^\d+\.\s*/, "");
+}
+
+function normalizeTitleKey(value) {
+  return stripSourceNumber(value)
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/["«»]/g, "")
+    .replace(/[^a-zа-я0-9]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleKeyMatches(heading, titleKey) {
+  if (heading === titleKey || heading.startsWith(`${titleKey} `) || titleKey.startsWith(`${heading} `)) {
+    return true;
+  }
+
+  const headingTokens = heading.split(" ").filter(Boolean);
+  const titleTokens = titleKey.split(" ").filter(Boolean);
+  if (headingTokens.length === 0 || titleTokens.length === 0) {
+    return false;
+  }
+
+  let headingIndex = 0;
+  for (const titleToken of titleTokens) {
+    while (headingIndex < headingTokens.length && headingTokens[headingIndex] !== titleToken) {
+      headingIndex += 1;
+    }
+
+    if (headingIndex >= headingTokens.length) {
+      return false;
+    }
+
+    headingIndex += 1;
+  }
+
+  return true;
+}
+
+function buildFallbackTextFromDirectoryNames(entries) {
+  return entries
+    .map((entry) => {
+      const title = stripSourceNumber(entry.name);
+      const slug = slugify(title) || `attraction-${entry.name.replace(/\D+/g, "")}`;
+      return `# ${title}
+
+## 1. SEO-блок для страницы
+
+* **SEO Title:** ${title}: как добраться и что посмотреть — Крым Вокруг
+* **Meta Description:** ${title} в Крыму: краткое описание, как добраться, что посмотреть рядом и что проверить перед поездкой.
+* **H1:** ${title}
+* **URL / slug:** \`/attractions/${slug}\`
+* **Основной запрос:** ${title} Крым
+* **Дополнительные запросы:** ${title} как добраться; ${title} фото; ${title} координаты; что посмотреть рядом
+* **Alt-тексты для фото:**
+  * ${title}: общий вид
+
+## 2. Краткое описание достопримечательности
+
+${title} — достопримечательность Крыма для самостоятельной поездки или включения в маршрут по полуострову. Перед посещением стоит сверить точку на карте, состояние подъезда и актуальные правила доступа.
+
+## 3. Основное описание
+
+${title} удобно добавить в маршрут по Крыму, если вы планируете знакомство с историческими местами, природными локациями или городскими прогулками. Для карточки используется базовое описание, потому что подробный текстовый блок для этого объекта в исходной папке не заполнен.
+
+## 6. Как добраться
+
+Точный маршрут зависит от выбранной точки старта. Перед поездкой проверьте навигацию по карте, состояние дороги, парковку и возможность прохода к объекту.
+
+## 13. Практическая информация
+
+* **Тип:** достопримечательность
+* **Важно:** координаты и доступ нужно сверять перед поездкой
+
+## 14. FAQ для SEO
+
+**Как добраться до ${title}?**
+Постройте маршрут по карте от вашей точки старта и заранее проверьте подъезд, парковку и сезонные ограничения.
+`;
+    })
+    .join("\n---\n\n");
+}
+
+function appendFallbackTextForMissingDirectoryNames(text, entries) {
+  const headings = [...text.replace(/\r/g, "").matchAll(/^#\s+(.+)$/gm)]
+    .map((match) => normalizeTitleKey(match[1]))
+    .filter(Boolean);
+  const missing = entries.filter((entry) => {
+    const titleKey = normalizeTitleKey(entry.name);
+    if (!titleKey) {
+      return false;
+    }
+
+    return !headings.some((heading) => titleKeyMatches(heading, titleKey));
+  });
+
+  if (missing.length === 0) {
+    return text;
+  }
+
+  return `${text.trim()}\n\n---\n\n${buildFallbackTextFromDirectoryNames(missing)}`;
 }
 
 function uniqueStrings(values) {
@@ -752,6 +866,7 @@ function uniqueFacts(facts) {
 async function readSourceFiles() {
   const directories = (await readdir(sourceRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+    .filter((entry) => onlyDirs.size === 0 || onlyDirs.has(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => Number(left) - Number(right));
   const files = [];
@@ -759,12 +874,23 @@ async function readSourceFiles() {
   for (const directory of directories) {
     const directoryPath = path.join(sourceRoot, directory);
     const fileNames = (await readdir(directoryPath)).filter((fileName) => fileName.endsWith(".txt"));
+    const childDirectories = (await readdir(directoryPath, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .sort((left, right) => left.name.localeCompare(right.name, "ru", { numeric: true }));
     for (const fileName of fileNames.sort()) {
+      const filePath = path.join(directoryPath, fileName);
+      let text = await readFile(filePath, "utf8");
+      if (!text.trim()) {
+        text = buildFallbackTextFromDirectoryNames(childDirectories);
+      } else {
+        text = appendFallbackTextForMissingDirectoryNames(text, childDirectories);
+      }
+
       files.push({
         directory,
         fileName,
-        path: path.join(directoryPath, fileName),
-        text: await readFile(path.join(directoryPath, fileName), "utf8"),
+        path: filePath,
+        text,
       });
     }
   }
