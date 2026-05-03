@@ -223,11 +223,13 @@ function MapPopupCard({
   item,
   className,
   onClose,
+  variant = "default",
 }: {
   kind: MarketplaceCatalogMapKind;
   item: MarketplaceCatalogMapItem;
   className?: string;
   onClose: () => void;
+  variant?: "default" | "compact";
 }) {
   if (kind === "transfers") {
     return (
@@ -235,6 +237,7 @@ function MapPopupCard({
         item={item as PublicTransferCatalogItem}
         className={className}
         onClose={onClose}
+        variant={variant}
       />
     );
   }
@@ -244,6 +247,7 @@ function MapPopupCard({
       item={item as PublicAttractionCatalogItem}
       className={className}
       onClose={onClose}
+      variant={variant}
     />
   );
 }
@@ -265,13 +269,92 @@ function AttractionMapPopupCard({
   item,
   className,
   onClose,
+  variant = "default",
 }: {
   item: PublicAttractionCatalogItem;
   className?: string;
   onClose: () => void;
+  variant?: "default" | "compact";
 }) {
   const locationLabel =
     [item.locationName, item.address].filter(Boolean).join(", ") || item.districtName || "Крым";
+
+  const categoryLabel = item.category || item.tags[0] || null;
+  const summaryLabel = compactText(item.shortDescription ?? item.description, 78);
+
+  if (variant === "compact") {
+    return (
+      <article
+        data-map-popup-card="true"
+        className={cn(
+          "relative overflow-hidden rounded-[22px] border border-white/80 bg-white shadow-[0_18px_38px_rgba(15,23,42,0.22)]",
+          className,
+        )}
+      >
+        <Link
+          href={item.path}
+          aria-label={`Открыть карточку ${item.title}`}
+          className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
+        />
+
+        <div className="pointer-events-none relative z-10 flex min-h-[128px] gap-3 p-3">
+          <div className="pointer-events-none relative h-[104px] w-[120px] shrink-0 overflow-hidden rounded-2xl bg-cream/65">
+            {item.coverImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.coverImageUrl}
+                alt={item.title}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[11px] text-olive/55">
+                Без фото
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1 py-0.5 pr-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-xs font-medium text-olive/58">
+                {categoryLabel || locationLabel}
+              </span>
+            </div>
+
+            <h3 className="mt-2 line-clamp-2 text-[15px] font-bold leading-snug text-olive">
+              {item.title}
+            </h3>
+            <p className="mt-0.5 line-clamp-1 text-xs text-olive/55">{locationLabel}</p>
+            {summaryLabel ? (
+              <p className="mt-1.5 line-clamp-2 text-xs font-medium leading-snug text-olive/56">
+                {summaryLabel}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="pointer-events-auto absolute left-4 top-4 z-20">
+            <FavoriteToggleButton
+              itemId={item.id}
+              entityType="attraction"
+              initialIsFavorite={false}
+              variant="icon"
+              className="h-8 w-8 shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="pointer-events-auto absolute right-3 top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-olive/70 shadow-sm backdrop-blur transition hover:text-olive"
+            aria-label="Закрыть карточку"
+          >
+            <AppIcon icon={X} className="h-4 w-4" />
+          </button>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <PopupShell className={className}>
@@ -331,10 +414,12 @@ function TransferMapPopupCard({
   item,
   className,
   onClose,
+  variant = "default",
 }: {
   item: PublicTransferCatalogItem;
   className?: string;
   onClose: () => void;
+  variant?: "default" | "compact";
 }) {
   const contactLabel =
     item.contacts.contactName || `${item.owner.firstName} ${item.owner.lastName}`.trim();
@@ -344,6 +429,95 @@ function TransferMapPopupCard({
     item.avgRating > 0 && item.reviewsCount > 0
       ? `Рейтинг ${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
       : compactText(item.routeExamples ?? item.serviceArea, 70) || vehicleLabel;
+  const compactMetaLabel = compactText(item.routeExamples ?? item.serviceArea, 70);
+
+  if (variant === "compact") {
+    return (
+      <article
+        data-map-popup-card="true"
+        className={cn(
+          "relative overflow-hidden rounded-[22px] border border-white/80 bg-white shadow-[0_18px_38px_rgba(15,23,42,0.22)]",
+          className,
+        )}
+      >
+        <Link
+          href={item.path}
+          aria-label={`Открыть карточку ${item.title}`}
+          className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
+        />
+
+        <div className="pointer-events-none relative z-10 flex min-h-[128px] gap-3 p-3">
+          <div className="pointer-events-none relative h-[104px] w-[120px] shrink-0 overflow-hidden rounded-2xl bg-cream/65">
+            {item.coverImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.coverImageUrl}
+                alt={item.title}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[11px] text-olive/55">
+                Без фото
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1 py-0.5 pr-1">
+            <div className="flex min-w-0 items-center gap-2">
+              {item.avgRating > 0 && item.reviewsCount > 0 ? (
+                <>
+                  <span className="inline-flex h-6 items-center rounded-lg bg-[#58a36b] px-2 text-xs font-bold leading-none text-white">
+                    {item.avgRating.toFixed(1).replace(".", ",")}
+                  </span>
+                  <span className="truncate text-xs font-medium text-olive/58">
+                    {formatReviewsLabel(item.reviewsCount)}
+                  </span>
+                </>
+              ) : (
+                <span className="truncate text-xs font-medium text-olive/58">{vehicleLabel}</span>
+              )}
+            </div>
+
+            <h3 className="mt-2 line-clamp-2 text-[15px] font-bold leading-snug text-olive">
+              {item.title}
+            </h3>
+            <p className="mt-0.5 line-clamp-1 text-xs text-olive/55">
+              {[contactLabel, locationLabel].filter(Boolean).join(" • ")}
+            </p>
+            <p className="mt-1.5 text-[15px] font-extrabold leading-tight text-olive">
+              {formatTransferPrice(item.priceFrom, item.priceUnitLabel)}
+              {compactMetaLabel ? (
+                <span className="ml-1 text-[11px] font-medium text-olive/48">
+                  {compactMetaLabel}
+                </span>
+              ) : null}
+            </p>
+          </div>
+
+          <div className="pointer-events-auto absolute left-4 top-4 z-20">
+            <FavoriteToggleButton
+              itemId={item.id}
+              entityType="transfer"
+              initialIsFavorite={false}
+              variant="icon"
+              className="h-8 w-8 shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="pointer-events-auto absolute right-3 top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-olive/70 shadow-sm backdrop-blur transition hover:text-olive"
+            aria-label="Закрыть карточку"
+          >
+            <AppIcon icon={X} className="h-4 w-4" />
+          </button>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <PopupShell className={className}>
@@ -941,6 +1115,7 @@ export function MarketplaceCatalogMap({
                   kind={kind}
                   item={activePopupItem}
                   onClose={() => setActivePointId(null)}
+                  variant="compact"
                   className="pointer-events-auto w-full max-w-[500px]"
                 />
               </div>

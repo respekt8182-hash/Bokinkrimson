@@ -2797,6 +2797,7 @@ export function ExcursionSearchResults({
                   key={activePopupItem.id}
                   item={activePopupItem}
                   onClose={() => setActivePointId(null)}
+                  variant="compact"
                   className="pointer-events-auto w-full max-w-[500px]"
                 />
               </div>

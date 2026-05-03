@@ -131,8 +131,8 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
   if (item.stayPrice) {
     if (hasDates && item.stayPrice.nights > 1) {
       return {
-        primary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
-        secondary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за ночь`,
+        primary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за ночь`,
+        secondary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
         roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
       };
     }
@@ -147,8 +147,8 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
     if (hasDates && nights > 1) {
       const estimatedTotal = item.minNightPrice * nights;
       return {
-        primary: `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
-        secondary: `от ${formatMoney(item.minNightPrice, item.currency)} за ночь`,
+        primary: `от ${formatMoney(item.minNightPrice, item.currency)} за ночь`,
+        secondary: `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
         roomLabel: item.roomSnapshot?.title ? `Номер: ${item.roomSnapshot.title}` : null,
       };
     }

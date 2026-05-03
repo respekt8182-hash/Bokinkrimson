@@ -994,9 +994,6 @@ function TransferCard({
               <p className="text-[18px] font-extrabold leading-tight tracking-tight text-olive">
                 {priceLabel}
               </p>
-              <p className="mt-1 text-[11px] leading-4 text-olive/40">
-                {item.serviceArea ? compactText(item.serviceArea, 58) : "Профиль, контакты и карта"}
-              </p>
               <div className="mt-2.5 flex flex-col gap-2">
                 <Link
                   href={item.path}

@@ -2436,7 +2436,7 @@ export default async function PublicExcursionPage({
             </div>
           )}
 
-          <div className="absolute right-4 top-4 z-20 md:bottom-5 md:right-5 md:top-auto">
+          <div className="absolute right-4 top-4 z-20 hidden md:bottom-5 md:right-5 md:top-auto md:block">
             <FavoriteToggleButton
               itemId={item.id}
               entityType={favoriteEntityType}
@@ -2551,6 +2551,14 @@ export default async function PublicExcursionPage({
                 ? `Ближайший старт ${formatShortDate(nextAvailableSession.startAt)}`
                 : availabilityLabel}
             </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <FavoriteToggleButton
+              itemId={item.id}
+              entityType={favoriteEntityType}
+              initialIsFavorite={false}
+            />
           </div>
 
           {item.tags.length > 0 ? (
