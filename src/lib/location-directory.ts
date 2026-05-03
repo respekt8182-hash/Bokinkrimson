@@ -20,6 +20,12 @@ export type LocationDirectoryItem = {
 };
 
 const builtInLocationIdSet = new Set(crimeaLocationIds);
+const locationTypePrefixPattern =
+  /^(?:г\.?|город|пгт\.?|пос[её]лок\s+городского\s+типа|пос\.?|пос[её]лок|с\.?|село|д\.?|деревня|х\.?|хутор)\s+/i;
+const preciseLocationPrefixPattern =
+  /^(?:пгт\.?|пос[её]лок\s+городского\s+типа|пос\.?|пос[её]лок|с\.?|село|д\.?|деревня|х\.?|хутор)\s+/i;
+const administrativeLocationSegmentPattern =
+  /\b(?:городской\s+округ|муниципальный\s+округ|муниципальное\s+образование|район|республика|область|край|россия)\b/i;
 const cyrillicToLatinMap: Record<string, string> = {
   а: "a",
   б: "b",
@@ -67,6 +73,20 @@ export function normalizeLocationName(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase().replace(/ё/g, "е");
 }
 
+export function normalizeLocationLookupName(value: string): string {
+  return normalizeLocationName(value)
+    .replace(/[«»"']/g, "")
+    .replace(/\b(?:республика\s+крым|крым|россия)\b/g, " ")
+    .replace(
+      /\b(?:городской\s+округ|муниципальный\s+округ|муниципальное\s+образование|район)\b/g,
+      " ",
+    )
+    .replace(/[.,;:()]/g, " ")
+    .replace(locationTypePrefixPattern, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function transliterateToLatin(input: string): string {
   return input
     .toLowerCase()
@@ -86,6 +106,99 @@ function getBuiltInLocationByName(name: string): { id: string; name: string } | 
   const normalized = normalizeLocationName(name);
   const exact = crimeaLocations.find((item) => normalizeLocationName(item.name) === normalized);
   return exact ?? null;
+}
+
+function splitLocationTextCandidates(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  return [
+    trimmed,
+    ...trimmed
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  ];
+}
+
+function getLocationCandidatePriority(
+  candidate: string,
+  item: LocationDirectoryItem,
+  exactMatch: boolean,
+): number {
+  let priority = exactMatch ? 50 : 20;
+
+  if (preciseLocationPrefixPattern.test(candidate)) {
+    priority += 30;
+  } else if (locationTypePrefixPattern.test(candidate)) {
+    priority += 15;
+  }
+
+  if (administrativeLocationSegmentPattern.test(candidate)) {
+    priority -= 25;
+  }
+
+  priority += Math.min(normalizeLocationLookupName(item.name).length, 30);
+  return priority;
+}
+
+export function resolveLocationDirectoryItemFromTexts(
+  items: LocationDirectoryItem[],
+  textValues: Array<string | null | undefined>,
+): LocationDirectoryItem | null {
+  const normalizedItems = items
+    .map((item) => ({ item, normalizedName: normalizeLocationLookupName(item.name) }))
+    .filter((entry) => entry.normalizedName.length > 0);
+  const matches: Array<{
+    item: LocationDirectoryItem;
+    priority: number;
+    sourceIndex: number;
+  }> = [];
+
+  textValues.forEach((textValue, sourceIndex) => {
+    for (const candidate of splitLocationTextCandidates(textValue ?? "")) {
+      const normalizedCandidate = normalizeLocationLookupName(candidate);
+      if (!normalizedCandidate) {
+        continue;
+      }
+
+      for (const entry of normalizedItems) {
+        const exactMatch = normalizedCandidate === entry.normalizedName;
+        const containedMatch =
+          !exactMatch && ` ${normalizedCandidate} `.includes(` ${entry.normalizedName} `);
+
+        if (!exactMatch && !containedMatch) {
+          continue;
+        }
+
+        matches.push({
+          item: entry.item,
+          priority: getLocationCandidatePriority(candidate, entry.item, exactMatch),
+          sourceIndex,
+        });
+      }
+    }
+  });
+
+  return (
+    matches.sort((left, right) => {
+      if (right.priority !== left.priority) {
+        return right.priority - left.priority;
+      }
+
+      return left.sourceIndex - right.sourceIndex;
+    })[0]?.item ?? null
+  );
+}
+
+export async function resolveLocationDirectoryItemFromText(
+  addressValue: string,
+  localityHint?: string | null,
+): Promise<LocationDirectoryItem | null> {
+  const items = await getLocationDirectoryItems();
+  return resolveLocationDirectoryItemFromTexts(items, [localityHint, addressValue]);
 }
 
 export function isBuiltInLocationId(locationId: string | null | undefined): boolean {
@@ -133,25 +246,25 @@ async function readLocationDirectorySourceRows() {
 
 const getCachedLocationDirectoryItems = unstable_cache(
   async (): Promise<LocationDirectoryItem[]> => {
-  const [approvedCustomLocations, excursionLocations] = await readLocationDirectorySourceRows();
-  const officialSettlements = await getCrimeaSettlementDirectoryItems();
+    const [approvedCustomLocations, excursionLocations] = await readLocationDirectorySourceRows();
+    const officialSettlements = await getCrimeaSettlementDirectoryItems();
 
-  const merged = [
-    ...crimeaLocations.map((item) => ({ id: item.id, name: item.name })),
-    ...officialSettlements,
-    ...excursionLocations.map((item) => ({ id: item.slug, name: item.name })),
-    ...approvedCustomLocations.map((item) => ({ id: item.slug, name: item.name })),
-  ];
+    const merged = [
+      ...crimeaLocations.map((item) => ({ id: item.id, name: item.name })),
+      ...officialSettlements,
+      ...excursionLocations.map((item) => ({ id: item.slug, name: item.name })),
+      ...approvedCustomLocations.map((item) => ({ id: item.slug, name: item.name })),
+    ];
 
-  const dedupedByName = new Map<string, LocationDirectoryItem>();
-  for (const item of merged) {
-    const normalized = normalizeLocationName(item.name);
-    if (!dedupedByName.has(normalized)) {
-      dedupedByName.set(normalized, item);
+    const dedupedByName = new Map<string, LocationDirectoryItem>();
+    for (const item of merged) {
+      const normalized = normalizeLocationName(item.name);
+      if (!dedupedByName.has(normalized)) {
+        dedupedByName.set(normalized, item);
+      }
     }
-  }
 
-  return Array.from(dedupedByName.values());
+    return Array.from(dedupedByName.values());
   },
   ["location-directory-v1"],
   { revalidate: 1800 },
@@ -170,12 +283,7 @@ export async function searchLocationDirectory(
     return items.slice(0, limit);
   }
 
-  return rankByTrigram(
-    query,
-    items,
-    (item) => item.name,
-    { limit, minScore: 0.08 },
-  );
+  return rankByTrigram(query, items, (item) => item.name, { limit, minScore: 0.08 });
 }
 
 async function createUniqueCustomLocationSlug(

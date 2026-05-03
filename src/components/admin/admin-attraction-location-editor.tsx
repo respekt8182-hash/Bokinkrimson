@@ -2,10 +2,7 @@
 
 import { ExternalLink, MapPin, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  adminInputClass,
-  adminTextareaClass,
-} from "@/components/admin/admin-ui";
+import { adminInputClass, adminTextareaClass } from "@/components/admin/admin-ui";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 
 type ReverseGeocodeItem = {
@@ -66,7 +63,8 @@ export function AdminAttractionLocationEditor({
 
   const latitude = useMemo(() => parseCoordinate(latitudeValue), [latitudeValue]);
   const longitude = useMemo(() => parseCoordinate(longitudeValue), [longitudeValue]);
-  const pointUrl = latitude !== null && longitude !== null ? buildPointUrl(latitude, longitude) : "";
+  const pointUrl =
+    latitude !== null && longitude !== null ? buildPointUrl(latitude, longitude) : "";
 
   function handleCoordinatesChange(nextLatitude: number, nextLongitude: number) {
     setLatitudeValue(formatCoordinate(nextLatitude));
@@ -80,7 +78,7 @@ export function AdminAttractionLocationEditor({
 
     const resolvedLocality = item.localityDisplayName ?? item.localityName ?? "";
     if (resolvedLocality) {
-      setLocationName((current) => current || resolvedLocality);
+      setLocationName(resolvedLocality);
     }
   }
 

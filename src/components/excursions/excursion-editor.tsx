@@ -1629,11 +1629,11 @@ export function ExcursionEditor({
     const normalizedLocationName = mapDraftLocationName.trim();
     const normalizedLocationId = mapDraftLocationId.trim();
 
-    if (normalizedLocationName && !locationInput.trim()) {
+    if (normalizedLocationName) {
       setLocationInput(normalizedLocationName);
     }
 
-    if (normalizedLocationId && !locationId.trim()) {
+    if (normalizedLocationId) {
       setLocationId(normalizedLocationId);
     }
 
@@ -2054,10 +2054,7 @@ export function ExcursionEditor({
       ? Number.parseInt(durationNights.trim(), 10)
       : null;
 
-    if (
-      parsedDuration !== null &&
-      (!Number.isFinite(parsedDuration) || parsedDuration < 15)
-    ) {
+    if (parsedDuration !== null && (!Number.isFinite(parsedDuration) || parsedDuration < 15)) {
       setError(
         isTour
           ? "Если указываете время тура, оно должно быть минимум 15 минут"

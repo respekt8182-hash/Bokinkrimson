@@ -78,6 +78,7 @@ export const crimeaLocations = [
   { id: "kerch", name: "Керчь" },
   { id: "sevastopol", name: "Севастополь" },
   { id: "sudak", name: "Судак" },
+  { id: "koktebel", name: "Коктебель" },
   { id: "feodosiya", name: "Феодосия" },
   { id: "schelkino", name: "Щёлкино" },
   { id: "yalta", name: "Ялта" },
