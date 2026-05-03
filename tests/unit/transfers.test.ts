@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TransferStatus } from "@prisma/client";
 import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
 import {
+  buildTransferWorkflowStatusWhere,
   deriveTransferSummaryFromFleet,
   getTransferStatusLabel,
   getTransferWorkflowStatus,
@@ -73,5 +74,17 @@ describe("transfer fleet normalization", () => {
     expect(
       getTransferStatusLabel(TransferStatus.PUBLISHED, TransferStatus.PENDING_MODERATION),
     ).toBe("Изменения на модерации");
+  });
+
+  it("builds workflow filters that include published transfer edits", () => {
+    expect(buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION)).toEqual({
+      OR: [
+        { status: TransferStatus.PENDING_MODERATION },
+        {
+          status: TransferStatus.PUBLISHED,
+          pendingEditStatus: TransferStatus.PENDING_MODERATION,
+        },
+      ],
+    });
   });
 });

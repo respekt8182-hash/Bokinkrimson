@@ -467,7 +467,7 @@ export function ObjectAboutPage({
 
   function saveMapSelection() {
     if (mapDraftLatitude === null || mapDraftLongitude === null || !mapDraftAddress.trim()) {
-      setError("Выберите точку на карте и дождитесь определения адреса.");
+      setError("Выберите точку на карте и нажмите «Подтвердить геопозицию».");
       setSuccess("");
       return;
     }
@@ -1243,8 +1243,8 @@ export function ObjectAboutPage({
                 ))}
               </datalist>
               <p className="text-xs text-olive/55">
-                Можно выбрать населённый пункт вручную из списка. Метка на карте по-прежнему
-                подставляет его автоматически.
+                Можно выбрать населённый пункт вручную из списка. Метка на карте подставит его после
+                подтверждения геопозиции.
               </p>
             </div>
 
@@ -1849,8 +1849,8 @@ export function ObjectAboutPage({
               <div>
                 <h3 className="text-xl text-olive">Выбор точки на карте</h3>
                 <p className="text-xs text-olive/70">
-                  Поставьте маркер на объект и нажмите «Сохранить». Закрытие по крестику не сохранит
-                  изменения.
+                  Поставьте маркер на объект, подтвердите геопозицию и нажмите «Сохранить». Закрытие
+                  по крестику не сохранит изменения.
                 </p>
               </div>
               <button
@@ -1870,6 +1870,17 @@ export function ObjectAboutPage({
                 onCoordinatesChange={(nextLat, nextLng) => {
                   setMapDraftLatitude(nextLat);
                   setMapDraftLongitude(nextLng);
+                }}
+                initialSearchValue={mapDraftLocationName || locationInput}
+                onLocationSearchResolved={(item) => {
+                  const exactMatch =
+                    findExactLocationSuggestion(item.name, locationSuggestions) ??
+                    findExactLocationSuggestion(
+                      item.name,
+                      crimeaLocations.map((location) => ({ id: location.id, name: location.name })),
+                    );
+                  setMapDraftLocationName(exactMatch?.name ?? item.name);
+                  setMapDraftLocationId(exactMatch?.id ?? "");
                 }}
                 onAddressResolved={(resolvedItem: ReverseGeocodeItem) => {
                   setMapDraftAddress(resolvedItem.address);

@@ -16,6 +16,7 @@ import {
   isDatabaseSchemaMissingError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
+import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import {
   createStaticAttractionDraft,
@@ -495,33 +496,90 @@ function mapTransferCatalogItem(
 ): PublicTransferCatalogItem {
   const fallbackContactName = `${row.owner.firstName} ${row.owner.lastName}`.trim();
   const fleetSummary = deriveTransferSummaryFromFleet(row);
-  const serviceTags = normalizeTransferServiceTags(row.serviceTags);
+  const serviceTags = cleanPublicTextList(normalizeTransferServiceTags(row.serviceTags), {
+    minLength: 2,
+    maxLength: 60,
+    maxItems: 5,
+  });
+  const fleet = fleetSummary.fleet
+    .map((item) => ({
+      ...item,
+      title: cleanPublicText(item.title, { minLength: 2, maxLength: 80 }) ?? "",
+      transportKind: cleanPublicText(item.transportKind, { minLength: 2, maxLength: 60 }) ?? "",
+      vehicleClass: cleanPublicText(item.vehicleClass, { minLength: 2, maxLength: 60 }) ?? "",
+      vehicleModel: cleanPublicText(item.vehicleModel, { minLength: 2, maxLength: 80 }) ?? "",
+      luggageNote: cleanPublicText(item.luggageNote, { minLength: 2, maxLength: 140 }) ?? "",
+      priceUnitLabel:
+        cleanPublicText(item.priceUnitLabel, { minLength: 2, maxLength: 40 }) ??
+        item.priceUnitLabel,
+      description:
+        cleanPublicText(item.description, {
+          minLength: 8,
+          maxLength: 700,
+          preserveLineBreaks: true,
+        }) ?? "",
+    }))
+    .filter(
+      (item) =>
+        item.title ||
+        item.transportKind ||
+        item.vehicleClass ||
+        item.vehicleModel ||
+        item.seats ||
+        item.luggage ||
+        item.luggageNote ||
+        item.priceFrom ||
+        item.photoUrl ||
+        item.description,
+    );
 
   return {
     id: row.id,
     slug: buildTransferPublicSlug(row.title),
     path: buildPublicTransferPath({ id: row.id, title: row.title }),
     title: row.title ?? "Трансфер без названия",
-    transferType: row.transferType,
+    transferType: cleanPublicText(row.transferType, { minLength: 2, maxLength: 80 }),
     serviceTags,
-    fleet: fleetSummary.fleet,
-    vehicleClass: fleetSummary.vehicleClass ?? row.vehicleClass,
-    vehicleModel: fleetSummary.vehicleModel ?? row.vehicleModel,
+    fleet,
+    vehicleClass: cleanPublicText(fleetSummary.vehicleClass ?? row.vehicleClass, {
+      minLength: 2,
+      maxLength: 80,
+    }),
+    vehicleModel: cleanPublicText(fleetSummary.vehicleModel ?? row.vehicleModel, {
+      minLength: 2,
+      maxLength: 80,
+    }),
     seats: fleetSummary.seats ?? row.seats,
     luggage: fleetSummary.luggage ?? row.luggage,
     locationName: row.location?.name ?? row.locationName,
     districtName: row.district?.name ?? null,
-    serviceArea: row.serviceArea,
-    routeExamples: row.routeExamples,
+    serviceArea: cleanPublicText(row.serviceArea, {
+      minLength: 4,
+      maxLength: 700,
+      preserveLineBreaks: true,
+    }),
+    routeExamples: cleanPublicText(row.routeExamples, {
+      minLength: 4,
+      maxLength: 900,
+      preserveLineBreaks: true,
+    }),
     latitude: toNumberOrNull(row.latitude) ?? toNumberOrNull(row.location?.latitude),
     longitude: toNumberOrNull(row.longitude) ?? toNumberOrNull(row.location?.longitude),
     priceFrom: fleetSummary.priceFrom ?? toNumberOrNull(row.priceFrom),
-    priceUnitLabel: fleetSummary.priceUnitLabel ?? row.priceUnitLabel,
+    priceUnitLabel:
+      cleanPublicText(fleetSummary.priceUnitLabel ?? row.priceUnitLabel, {
+        minLength: 2,
+        maxLength: 40,
+      }) ?? null,
     currency: row.currency,
     avgRating: Number(row.avgRating),
     reviewsCount: row.reviewsCount,
-    shortDescription: row.shortDescription,
-    description: row.description,
+    shortDescription: cleanPublicText(row.shortDescription, { minLength: 10, maxLength: 360 }),
+    description: cleanPublicText(row.description, {
+      minLength: 10,
+      maxLength: 3000,
+      preserveLineBreaks: true,
+    }),
     photoUrls: row.photoUrls.length > 0 ? row.photoUrls : fleetSummary.photoUrls,
     coverImageUrl: getFirstPhotoUrl(
       row.photoUrls.length > 0 ? row.photoUrls : fleetSummary.photoUrls,

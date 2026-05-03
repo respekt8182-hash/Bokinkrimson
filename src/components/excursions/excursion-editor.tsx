@@ -248,6 +248,8 @@ type AddActionButtonProps = {
   disabled?: boolean;
 };
 
+type TourDurationMode = "days" | "time";
+
 type LanguageOption = {
   code: string;
   label: string;
@@ -438,6 +440,52 @@ function formatDuration(minutes: number | null): string {
   return `${hours} ч ${restMinutes} мин`;
 }
 
+function resolveTourDurationMode(input: {
+  durationDays: number | null;
+  durationMinutes: number | null;
+}): TourDurationMode {
+  if (input.durationDays !== null && input.durationDays >= 1) {
+    return "days";
+  }
+
+  return "time";
+}
+
+function splitDurationMinutesForInputs(totalMinutes: number | null): {
+  hours: string;
+  minutes: string;
+} {
+  if (!totalMinutes || totalMinutes <= 0) {
+    return { hours: "", minutes: "" };
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return {
+    hours: hours > 0 ? String(hours) : "",
+    minutes: minutes > 0 ? String(minutes) : "",
+  };
+}
+
+function buildDurationMinutesFromInputs(hoursInput: string, minutesInput: string): string {
+  const hours = hoursInput.trim() ? Number.parseInt(hoursInput.trim(), 10) : 0;
+  const minutes = minutesInput.trim() ? Number.parseInt(minutesInput.trim(), 10) : 0;
+
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return "";
+  }
+
+  const totalMinutes = hours * 60 + minutes;
+  return totalMinutes > 0 ? String(totalMinutes) : "";
+}
+
 function createDefaultDaySchedule(): DayScheduleState {
   return {
     0: { enabled: false, from: "10:00", to: "14:00" },
@@ -610,8 +658,16 @@ export function ExcursionEditor({
   const [description, setDescription] = useState(initialDescriptionValue);
   const [routeDescription, setRouteDescription] = useState(initialExcursion.routeDescription ?? "");
   const [highlights, setHighlights] = useState<string[]>(initialExcursion.highlights ?? []);
+  const initialTourDurationParts = splitDurationMinutesForInputs(initialExcursion.durationMinutes);
+  const [tourDurationMode, setTourDurationMode] = useState<TourDurationMode>(() =>
+    resolveTourDurationMode(initialExcursion),
+  );
   const [durationMinutes, setDurationMinutes] = useState(
     initialExcursion.durationMinutes === null ? "" : String(initialExcursion.durationMinutes),
+  );
+  const [durationHours, setDurationHours] = useState(initialTourDurationParts.hours);
+  const [durationClockMinutes, setDurationClockMinutes] = useState(
+    initialTourDurationParts.minutes,
   );
   const [durationDays, setDurationDays] = useState(
     initialExcursion.durationDays === null ? "" : String(initialExcursion.durationDays),
@@ -841,7 +897,10 @@ export function ExcursionEditor({
   const isTour = isTourOffer(offerType);
   const showAccommodationBlock = requiresAccommodationBlock({
     offerType,
-    durationNights: durationNights.trim() ? Number(durationNights) : null,
+    durationNights:
+      isTour && tourDurationMode === "days" && durationNights.trim()
+        ? Number(durationNights)
+        : null,
     accommodationProvided,
   });
   const showSafetyBlock = requiresSafetyBlock({ tourKind, transportModes });
@@ -1095,6 +1154,16 @@ export function ExcursionEditor({
     });
     const normalizedDescription = normalizeNullableText(description);
     const normalizedShortDescription = buildShortDescription(description);
+    const parsedDurationMinutes = durationMinutes.trim()
+      ? Number.parseInt(durationMinutes.trim(), 10) || null
+      : null;
+    const parsedDurationDays = durationDays.trim()
+      ? Number.parseInt(durationDays.trim(), 10) || null
+      : null;
+    const parsedDurationNights = durationNights.trim()
+      ? Number.parseInt(durationNights.trim(), 10) || null
+      : null;
+    const useTourDayDuration = isTour && tourDurationMode === "days";
 
     return {
       offerType,
@@ -1119,9 +1188,9 @@ export function ExcursionEditor({
       fullDescription: normalizedDescription,
       routeDescription: normalizeNullableText(routeDescription),
       highlights,
-      durationMinutes: durationMinutes.trim() ? Number.parseInt(durationMinutes, 10) || null : null,
-      durationDays: durationDays.trim() ? Number.parseInt(durationDays, 10) || null : null,
-      durationNights: durationNights.trim() ? Number.parseInt(durationNights, 10) || null : null,
+      durationMinutes: useTourDayDuration ? null : parsedDurationMinutes,
+      durationDays: useTourDayDuration ? parsedDurationDays : null,
+      durationNights: useTourDayDuration ? parsedDurationNights : null,
       itineraryDays: normalizedItineraryDays,
       availabilityMode,
       availabilityNote: normalizeNullableText(availabilityNote),
@@ -1224,6 +1293,7 @@ export function ExcursionEditor({
     highlights,
     normalizedItineraryDays,
     routeDescription,
+    isTour,
     isYearRound,
     seasonDateFrom,
     seasonDateTo,
@@ -1286,6 +1356,7 @@ export function ExcursionEditor({
     equipmentProvided,
     safetyInfo,
     routeConditions,
+    tourDurationMode,
   ]);
 
   useEffect(() => {
@@ -1459,8 +1530,12 @@ export function ExcursionEditor({
   // Step 3: Расписание и группа (merged old steps 3+4)
   const step3Checks: StepFieldCheck[] = [
     {
-      label: isTour ? "Длительность в днях" : "Длительность (от 15 минут)",
-      done: isTour ? Number(durationDays || 0) >= 1 : Number(durationMinutes || 0) >= 15,
+      label: isTour ? "Длительность тура (дни или время)" : "Длительность (от 15 минут)",
+      done: isTour
+        ? tourDurationMode === "days"
+          ? Number(durationDays || 0) >= 1
+          : Number(durationMinutes || 0) >= 15
+        : Number(durationMinutes || 0) >= 15,
     },
     { label: "Режим доступности", done: Boolean(availabilityMode) },
     {
@@ -1571,6 +1646,18 @@ export function ExcursionEditor({
     setSuccess("");
   }
 
+  function updateTourDurationHours(value: string) {
+    setTourDurationMode("time");
+    setDurationHours(value);
+    setDurationMinutes(buildDurationMinutesFromInputs(value, durationClockMinutes));
+  }
+
+  function updateTourDurationClockMinutes(value: string) {
+    setTourDurationMode("time");
+    setDurationClockMinutes(value);
+    setDurationMinutes(buildDurationMinutesFromInputs(durationHours, value));
+  }
+
   function applyExcursion(item: SerializedExcursion) {
     setExcursion(item);
     setOfferType(item.offerType);
@@ -1591,7 +1678,11 @@ export function ExcursionEditor({
     setDescription(item.description ?? item.fullDescription ?? item.shortDescription ?? "");
     setRouteDescription(item.routeDescription ?? "");
     setHighlights(item.highlights ?? []);
+    setTourDurationMode(resolveTourDurationMode(item));
     setDurationMinutes(item.durationMinutes === null ? "" : String(item.durationMinutes));
+    const nextDurationParts = splitDurationMinutesForInputs(item.durationMinutes);
+    setDurationHours(nextDurationParts.hours);
+    setDurationClockMinutes(nextDurationParts.minutes);
     setDurationDays(item.durationDays === null ? "" : String(item.durationDays));
     setDurationNights(item.durationNights === null ? "" : String(item.durationNights));
     setItineraryDays(item.itineraryDays ?? []);
@@ -1964,21 +2055,32 @@ export function ExcursionEditor({
       : null;
 
     if (
-      !isTour &&
       parsedDuration !== null &&
       (!Number.isFinite(parsedDuration) || parsedDuration < 15)
     ) {
-      setError("Длительность экскурсии должна быть минимум 15 минут");
+      setError(
+        isTour
+          ? "Если указываете время тура, оно должно быть минимум 15 минут"
+          : "Длительность экскурсии должна быть минимум 15 минут",
+      );
       return null;
     }
 
-    if (isTour) {
+    if (isTour && tourDurationMode === "time" && parsedDuration === null) {
+      setError("Для почасового тура укажите длительность в часах и минутах");
+      return null;
+    }
+
+    if (isTour && tourDurationMode === "days") {
       if (
-        parsedDurationDays === null ||
-        !Number.isFinite(parsedDurationDays) ||
-        parsedDurationDays < 1
+        parsedDurationDays !== null &&
+        (!Number.isFinite(parsedDurationDays) || parsedDurationDays < 1)
       ) {
-        setError("Для тура укажите количество дней");
+        setError("Количество дней тура указано некорректно");
+        return null;
+      }
+      if (parsedDurationDays === null) {
+        setError("Для многодневного тура укажите количество дней");
         return null;
       }
       if (
@@ -1986,6 +2088,14 @@ export function ExcursionEditor({
         (!Number.isFinite(parsedDurationNights) || parsedDurationNights < 0)
       ) {
         setError("Количество ночей указано некорректно");
+        return null;
+      }
+      if (
+        parsedDurationNights !== null &&
+        parsedDurationNights > 0 &&
+        parsedDurationDays === null
+      ) {
+        setError("Если указываете ночи, добавьте количество дней тура");
         return null;
       }
       if (
@@ -2088,6 +2198,11 @@ export function ExcursionEditor({
       return null;
     }
 
+    const useTourDayDuration = isTour && tourDurationMode === "days";
+    const payloadDurationMinutes = useTourDayDuration ? null : parsedDuration;
+    const payloadDurationDays = useTourDayDuration ? parsedDurationDays : null;
+    const payloadDurationNights = useTourDayDuration ? parsedDurationNights : null;
+
     return {
       offerType,
       subtypeLabel: normalizedSubtypeLabel,
@@ -2111,9 +2226,9 @@ export function ExcursionEditor({
       fullDescription: normalizedDescription,
       routeDescription: normalizedRouteDescription,
       highlights,
-      durationMinutes: isTour ? null : parsedDuration,
-      durationDays: isTour ? parsedDurationDays : null,
-      durationNights: isTour ? parsedDurationNights : null,
+      durationMinutes: payloadDurationMinutes,
+      durationDays: payloadDurationDays,
+      durationNights: payloadDurationNights,
       itineraryDays: isTour ? normalizedItineraryDays : [],
       scheduleText:
         availabilityMode === ExcursionAvailabilityMode.REGULAR
@@ -3689,7 +3804,7 @@ export function ExcursionEditor({
             </p>
           </div>
 
-          {/* в”Ђв”Ђ Highlight chips в”Ђв”Ђ */}
+          {/* Highlight chips */}
           <div className="space-y-3 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
             <p className="text-sm font-semibold text-olive">Хайлайты</p>
             <p className="text-xs text-olive/50">Ключевые фишки, которые зацепят туриста (до 6)</p>
@@ -3876,44 +3991,130 @@ export function ExcursionEditor({
             </p>
           </div>
 
-          {/* в”Ђв”Ђ Duration block в”Ђв”Ђ */}
+          {/* Duration block */}
           <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <p className="text-sm font-semibold text-olive">Длительность</p>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <div>
+              <p className="text-sm font-semibold text-olive">Длительность</p>
+              <p className="mt-1 text-xs text-olive/55">
+                {isTour
+                  ? "Для многодневного тура заполните дни и ночи. Для джип-тура, прогулки или короткого выезда можно указать только время в минутах."
+                  : "Укажите общую продолжительность экскурсии в минутах."}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
               {isTour ? (
-                <>
-                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                    <div className="flex items-center gap-1.5">
-                      <AppIcon icon={Clock3} className="h-4 w-4" />
-                      <span className="text-sm font-medium text-olive">
-                        Дней <span className="text-terra">*</span>
-                      </span>
+                <div className="space-y-3 sm:col-span-2 md:col-span-3">
+                  <div
+                    className="inline-grid w-full grid-cols-2 gap-1 rounded-xl border border-olive/15 bg-cream/45 p-1 sm:w-auto"
+                    aria-label="Формат длительности тура"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setTourDurationMode("days")}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        tourDurationMode === "days"
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-olive/65 hover:text-olive"
+                      }`}
+                    >
+                      Дни и ночи
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTourDurationMode("time")}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        tourDurationMode === "time"
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-olive/65 hover:text-olive"
+                      }`}
+                    >
+                      Часы и минуты
+                    </button>
+                  </div>
+
+                  {tourDurationMode === "days" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                        <div className="flex items-center gap-1.5">
+                          <AppIcon icon={Clock3} className="h-4 w-4" />
+                          <span className="text-sm font-medium text-olive">
+                            Дней <span className="text-terra">*</span>
+                          </span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={durationDays}
+                          onChange={(event) => {
+                            setTourDurationMode("days");
+                            setDurationDays(event.target.value);
+                          }}
+                          placeholder="3"
+                        />
+                        <p className="text-xs text-olive/40">для туров с ночёвками</p>
+                      </label>
+                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                        <div className="flex items-center gap-1.5">
+                          <AppIcon icon={Clock3} className="h-4 w-4" />
+                          <span className="text-sm font-medium text-olive">Ночей</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={364}
+                          value={durationNights}
+                          onChange={(event) => {
+                            setTourDurationMode("days");
+                            setDurationNights(event.target.value);
+                          }}
+                          placeholder="2"
+                        />
+                        <p className="text-xs text-olive/40">0 - без ночёвок</p>
+                      </label>
                     </div>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={durationDays}
-                      onChange={(e) => setDurationDays(e.target.value)}
-                      placeholder="3"
-                    />
-                  </label>
-                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                    <div className="flex items-center gap-1.5">
-                      <AppIcon icon={Clock3} className="h-4 w-4" />
-                      <span className="text-sm font-medium text-olive">Ночей</span>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                        <div className="flex items-center gap-1.5">
+                          <AppIcon icon={Clock3} className="h-4 w-4" />
+                          <span className="text-sm font-medium text-olive">
+                            Часов <span className="text-terra">*</span>
+                          </span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={168}
+                          value={durationHours}
+                          onChange={(event) => updateTourDurationHours(event.target.value)}
+                          placeholder="4"
+                        />
+                      </label>
+                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                        <div className="flex items-center gap-1.5">
+                          <AppIcon icon={Clock3} className="h-4 w-4" />
+                          <span className="text-sm font-medium text-olive">Минут</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={59}
+                          value={durationClockMinutes}
+                          onChange={(event) => updateTourDurationClockMinutes(event.target.value)}
+                          placeholder="30"
+                        />
+                        {durationMinutes ? (
+                          <p className="text-xs font-medium text-primary">
+                            {formatDuration(Number(durationMinutes) || null)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-olive/40">например 4 часа для джип-тура</p>
+                        )}
+                      </label>
                     </div>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={364}
-                      value={durationNights}
-                      onChange={(e) => setDurationNights(e.target.value)}
-                      placeholder="2"
-                    />
-                    <p className="text-xs text-olive/40">0 — без ночёвок</p>
-                  </label>
-                </>
+                  )}
+                </div>
               ) : (
                 <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
                   <div className="flex items-center gap-1.5">
@@ -4492,7 +4693,7 @@ export function ExcursionEditor({
           <div className="mt-2 border-t border-olive/8 pt-6">
             <h3 className="text-base font-semibold text-olive">Группа и требования</h3>
             <p className="mt-1 text-sm text-olive/55">
-              Формат проведения, размер группы, язык и физичес��ие требования.
+              Формат проведения, размер группы, язык и физические требования.
             </p>
           </div>
 
@@ -4589,7 +4790,7 @@ export function ExcursionEditor({
             <div className="space-y-4 rounded-2xl border border-terra/20 bg-terra/5 p-4 shadow-sm sm:p-5">
               <p className="text-sm font-semibold text-olive">Безопасность и условия маршрута</p>
               <p className="text-xs text-olive/55">
-                Для активных туров в��жно указать условия маршрута, снаряжение и правила
+                Для активных туров важно указать условия маршрута, снаряжение и правила
                 безопасности.
               </p>
               <label className="block space-y-1">
@@ -4615,7 +4816,7 @@ export function ExcursionEditor({
                 />
               </label>
               <div className="space-y-2">
-                <span className="text-sm font-medium text-olive">Предоста��ляемое снаряжение</span>
+                <span className="text-sm font-medium text-olive">Предоставляемое снаряжение</span>
                 <div className="flex flex-wrap gap-2">
                   {EQUIPMENT_PROVIDED_PRESETS.map((item) => {
                     const isSelected = equipmentProvided.includes(item);
@@ -4671,7 +4872,7 @@ export function ExcursionEditor({
                   onPressedChange={(val) => setInsuranceIncluded(val)}
                 />
                 <span className="text-sm font-medium text-olive">
-                  Страховка включе��а в стоимость
+                  Страховка включена в стоимость
                 </span>
               </div>
               {insuranceIncluded && (
@@ -4817,7 +5018,7 @@ export function ExcursionEditor({
               </div>
               {mealPlan === "CUSTOM" && (
                 <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Подро��ности о питании</span>
+                  <span className="text-xs font-medium text-olive/60">Подробности о питании</span>
                   <textarea
                     value={mealDetails}
                     onChange={(e) => setMealDetails(e.target.value)}
@@ -5003,7 +5204,7 @@ export function ExcursionEditor({
         <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
           <h2 className="text-lg font-semibold text-olive md:text-xl">Медиа и контакты</h2>
 
-          {/* в”Ђв”Ђ Contacts block в”Ђв”Ђ */}
+          {/* Contacts block */}
           <div className="space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
@@ -5604,6 +5805,15 @@ export function ExcursionEditor({
               | "NEEDS_FIX"
               | "REJECTED"
           }
+          pendingEditStatus={
+            excursion.pendingEditStatus as
+              | "DRAFT"
+              | "PENDING_MODERATION"
+              | "PUBLISHED"
+              | "NEEDS_FIX"
+              | "REJECTED"
+              | null
+          }
           isReady={wizardSteps.slice(0, 5).every((s) => s.status === "complete")}
           readinessReasons={missingRequiredByStep
             .filter((step) => step.index < 5)
@@ -5655,6 +5865,12 @@ export function ExcursionEditor({
                 onCoordinatesChange={(nextLat, nextLng) => {
                   setMapDraftLatitude(nextLat);
                   setMapDraftLongitude(nextLng);
+                }}
+                initialSearchValue={mapDraftLocationName || locationInput}
+                onLocationSearchResolved={(item) => {
+                  const exactMatch = findExactCrimeaLocationByName(item.name);
+                  setMapDraftLocationName(exactMatch?.name ?? item.name);
+                  setMapDraftLocationId(exactMatch?.id ?? "");
                 }}
                 onAddressResolved={(resolvedItem: ReverseGeocodeItem) => {
                   setMapDraftAddress(resolvedItem.address);

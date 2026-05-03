@@ -9,6 +9,7 @@ import {
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
+import { buildTransferWorkflowStatusWhere } from "@/lib/transfers";
 
 export type AdminModerationSnapshot = {
   properties: {
@@ -99,9 +100,11 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
           orderBy: [{ updatedAt: "desc" }],
           select: { updatedAt: true },
         }),
-        db.transfer.count({ where: { status: TransferStatus.PENDING_MODERATION } }),
+        db.transfer.count({
+          where: buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION),
+        }),
         db.transfer.findFirst({
-          where: { status: TransferStatus.PENDING_MODERATION },
+          where: buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION),
           orderBy: [{ updatedAt: "desc" }],
           select: { updatedAt: true },
         }),

@@ -311,8 +311,10 @@ export function getMissingExcursionPublishFields(
   }
 
   if (isTour) {
-    if (!payload.durationDays || payload.durationDays < 1) {
-      missing.push("длительность в днях");
+    const hasDayDuration = Boolean(payload.durationDays && payload.durationDays >= 1);
+    const hasMinuteDuration = Boolean(payload.durationMinutes && payload.durationMinutes >= 15);
+    if (!hasDayDuration && !hasMinuteDuration) {
+      missing.push("длительность в днях или минутах");
     }
   } else if (!payload.durationMinutes || payload.durationMinutes < 15) {
     missing.push("длительность");

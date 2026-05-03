@@ -217,7 +217,7 @@ export function getItineraryProgramTitle(value?: string | null): string {
   return ITINERARY_ITEM_LABEL_META[resolveItineraryItemLabel(value)].programTitle;
 }
 
-// ─── Enhanced Itinerary Day ────────────────��────────────────────────────────
+// Enhanced itinerary day
 
 export type ItineraryDayV2 = {
   day: number;

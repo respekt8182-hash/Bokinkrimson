@@ -18,6 +18,7 @@ import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { normalizeLocationName, searchLocationDirectory } from "@/lib/location-directory";
 import { normalizeLegacyFotoImageUrl, serializeMedia } from "@/lib/media";
 import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
+import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import {
   parsePublishedPropertySnapshot,
   shouldUsePublishedSnapshot,
@@ -714,7 +715,11 @@ export function resolvePublicCatalogDisplayState(property: {
     longitude:
       snapshot?.property.longitude ??
       (property.longitude === null ? null : Number(property.longitude)),
-    description: snapshot?.property.description ?? property.description,
+    description: cleanPublicText(snapshot?.property.description ?? property.description, {
+      minLength: 10,
+      maxLength: 5000,
+      preserveLineBreaks: true,
+    }),
     checkInFrom: snapshot?.property.checkInFrom ?? property.checkInFrom,
     childrenAllowed: snapshot?.property.childrenAllowed ?? property.childrenAllowed,
     petsPolicy: snapshot?.property.petsPolicy ?? property.petsPolicy,
@@ -864,7 +869,7 @@ function getBestStayPriceByRooms(input: {
 }
 
 function normalizeAmenityText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return cleanPublicText(value.replace(/\s+/g, " ").trim(), { minLength: 2, maxLength: 80 }) ?? "";
 }
 
 const MAX_KEY_AMENITIES_PER_PROPERTY = 4;
@@ -1930,24 +1935,25 @@ function buildPublicPropertyCardFromRecord(
     url: normalizeLegacyFotoImageUrl(media.url),
   }));
   const displayAmenities = snap ? snap.amenities : property.amenities.map((item) => item.amenity);
-  const displayCustomAmenities = snap
-    ? snap.customAmenities
-    : property.customAmenities.map((item) => item.name);
-  const displayKeyRoomAmenityNames = snap
-    ? snap.keyRoomAmenityNames
-    : property.roomAmenitySettings.map((item) => item.feature.name);
-  const displayRooms = snap ? snap.rooms : property.rooms.map(serializeRoom);
+  const displayCustomAmenities = cleanPublicTextList(
+    snap ? snap.customAmenities : property.customAmenities.map((item) => item.name),
+    { minLength: 2, maxLength: 80 },
+  );
+  const displayKeyRoomAmenityNames = cleanPublicTextList(
+    snap ? snap.keyRoomAmenityNames : property.roomAmenitySettings.map((item) => item.feature.name),
+    { minLength: 2, maxLength: 80 },
+  );
+  const rawDisplayRooms = snap ? snap.rooms : property.rooms.map(serializeRoom);
+  const displayRooms = rawDisplayRooms.map((room) => ({
+    ...room,
+    customFeatures: cleanPublicTextList(room.customFeatures, { minLength: 2, maxLength: 80 }),
+  }));
 
   // Room-level amenity names for highlight/group computation.
-  const roomAmenityNamesByRoom = snap
-    ? snap.rooms.map((room) => [
-        ...room.features.map((f) => f.name),
-        ...room.customFeatures.map((f) => stripPaidAmenitySuffix(f)),
-      ])
-    : property.rooms.map((room) => [
-        ...room.features.map((item) => item.feature.name),
-        ...room.customFeatures.map((item) => stripPaidAmenitySuffix(item.name)),
-      ]);
+  const roomAmenityNamesByRoom = displayRooms.map((room) => [
+    ...room.features.map((feature) => feature.name),
+    ...room.customFeatures.map((feature) => stripPaidAmenitySuffix(feature)),
+  ]);
 
   // Min price: snapshot rooms have serialized prices (number), live rooms have Prisma.Decimal.
   const { minNightPrice, currency } = snap
@@ -1977,6 +1983,14 @@ function buildPublicPropertyCardFromRecord(
   const displayType = sp?.type ?? property.type;
   const displayLocationId = sp?.locationId ?? property.locationId;
   const displayLocationName = sp?.locationName ?? property.locationName;
+  const displayDescription = cleanPublicText(sp?.description ?? property.description, {
+    minLength: 10,
+    maxLength: 5000,
+    preserveLineBreaks: true,
+  });
+  const displayFaqItems = cleanFaqItems(
+    sp?.faqItems ?? (Array.isArray(property.faqItems) ? (property.faqItems as FaqItem[]) : []),
+  );
 
   const selectedKeyAmenityNames = sortAmenityValuesForCatalog(displayKeyRoomAmenityNames).slice(
     0,
@@ -2017,9 +2031,8 @@ function buildPublicPropertyCardFromRecord(
     address: sp?.address ?? property.address,
     latitude: sp?.latitude ?? (property.latitude === null ? null : Number(property.latitude)),
     longitude: sp?.longitude ?? (property.longitude === null ? null : Number(property.longitude)),
-    description: sp?.description ?? property.description,
-    faqItems:
-      sp?.faqItems ?? (Array.isArray(property.faqItems) ? (property.faqItems as FaqItem[]) : []),
+    description: displayDescription,
+    faqItems: displayFaqItems,
     media: displayMedia,
     amenities: displayAmenities,
     customAmenities: displayCustomAmenities,

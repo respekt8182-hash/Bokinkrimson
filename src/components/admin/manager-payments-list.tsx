@@ -232,6 +232,10 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
       ].filter(Boolean)
     : [];
   const isTransferTopUp = payment.transferPayment?.paymentReason === "fleet_topup";
+  const topUpVehicleCount = payment.transferPayment?.vehicleCount ?? payment.roomCount;
+  const topUpRequiredAmount = payment.transferPayment?.requiredAmountRub ?? payment.amount;
+  const confirmButtonLabel = isTransferTopUp ? "Подтвердить доплату" : "Подтвердить оплату";
+  const confirmLoadingLabel = isTransferTopUp ? "Подтверждаем доплату..." : "Подтверждаем...";
 
   async function handleAction(action: "confirm" | "reject") {
     setLoading(action);
@@ -306,6 +310,24 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
         </div>
       </div>
 
+      {isTransferTopUp ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <div className="flex items-start gap-2">
+            <AppIcon icon={Car} className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-900">
+                Доплата за добавленный транспорт
+              </p>
+              <p className="mt-0.5 text-xs leading-5 text-amber-800/80">
+                Пользователь обновил оплаченный трансфер и добавил транспорт в автопарк. К
+                подтверждению: {formatMoney(topUpRequiredAmount)}
+                {topUpVehicleCount ? `, транспортов в карточке: ${topUpVehicleCount}` : ""}.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Entity info */}
       <div className="mt-3 rounded-xl bg-cream p-3">
         <p className="text-xs font-medium uppercase tracking-wide text-olive/50">{entityLabel}</p>
@@ -332,7 +354,9 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
           <div className="rounded-xl bg-white/65 px-3 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-olive/45">Тариф</p>
             <p className="mt-0.5 text-sm font-semibold text-olive">
-              {isTransferTopUp ? "Доплата за автопарк трансфера" : getTariffLabel(payment.tariffCode)}
+              {isTransferTopUp
+                ? "Доплата за добавленный транспорт"
+                : getTariffLabel(payment.tariffCode)}
             </p>
             <p className="mt-0.5 text-xs text-olive/48">
               {tariffCode}
@@ -344,7 +368,8 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
             {isTransferTopUp ? (
               <p className="mt-1 text-xs text-amber-700">
                 Уже подтверждено: {formatMoney(payment.transferPayment?.coveredAmountRub ?? 0)}.
-                Всего: {formatMoney(payment.transferPayment?.totalAmountRub ?? payment.amount)}.
+                Всего после обновления:{" "}
+                {formatMoney(payment.transferPayment?.totalAmountRub ?? payment.amount)}.
               </p>
             ) : null}
           </div>
@@ -393,7 +418,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
           />
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void handleAction("confirm")} disabled={loading !== null}>
-              {loading === "confirm" ? "Подтверждаем..." : "Подтвердить оплату"}
+              {loading === "confirm" ? confirmLoadingLabel : confirmButtonLabel}
             </Button>
             <Button
               variant="ghost"
@@ -422,10 +447,20 @@ export function ManagerPaymentsList({
 }: ManagerPaymentsListProps) {
   const completedGroups = groupPaymentsByDay(completedPayments);
   const currentMonthConfirmedTotal = getCurrentMonthConfirmedTotal(completedPayments);
+  const pendingTransferTopUps = pendingPayments.filter(
+    (payment) => payment.transferPayment?.paymentReason === "fleet_topup",
+  );
+  const regularPendingPayments = pendingPayments.filter(
+    (payment) => payment.transferPayment?.paymentReason !== "fleet_topup",
+  );
+  const pendingTransferTopUpTotal = pendingTransferTopUps.reduce(
+    (sum, payment) => sum + payment.amount,
+    0,
+  );
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700/70">
             Подтверждено за месяц
@@ -433,6 +468,19 @@ export function ManagerPaymentsList({
           <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-800">
             {formatMoney(currentMonthConfirmedTotal)}
           </p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700/75">
+            Доплаты за транспорт
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-amber-800">
+            {pendingTransferTopUps.length}
+          </p>
+          {pendingTransferTopUps.length > 0 ? (
+            <p className="mt-1 text-xs font-semibold text-amber-700">
+              К подтверждению: {formatMoney(pendingTransferTopUpTotal)}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-2xl border border-olive/10 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-olive/45">
@@ -466,9 +514,40 @@ export function ManagerPaymentsList({
           </p>
         ) : (
           <div className="mt-3 space-y-3">
-            {pendingPayments.map((payment) => (
-              <PaymentCard key={payment.id} payment={payment} />
-            ))}
+            {pendingTransferTopUps.length > 0 ? (
+              <>
+                <div className="rounded-[24px] border border-amber-200 bg-amber-50/75 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900">
+                        Доплаты после обновления трансфера
+                      </p>
+                      <p className="mt-0.5 text-xs leading-5 text-amber-800/75">
+                        Эти заявки появились после того, как пользователь добавил транспорт в уже
+                        оплаченный трансфер.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                      {formatMoney(pendingTransferTopUpTotal)}
+                    </span>
+                  </div>
+                </div>
+                {pendingTransferTopUps.map((payment) => (
+                  <PaymentCard key={payment.id} payment={payment} />
+                ))}
+              </>
+            ) : null}
+
+            {regularPendingPayments.length > 0 ? (
+              <div className="space-y-3">
+                {pendingTransferTopUps.length > 0 ? (
+                  <h3 className="text-sm font-semibold text-olive/70">Остальные заявки</h3>
+                ) : null}
+                {regularPendingPayments.map((payment) => (
+                  <PaymentCard key={payment.id} payment={payment} />
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </section>

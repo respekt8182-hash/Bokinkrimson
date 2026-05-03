@@ -19,6 +19,7 @@ import {
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
+import { buildTransferWorkflowStatusWhere } from "@/lib/transfers";
 
 function StatusRow({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -87,8 +88,10 @@ export default async function AdminHomePage() {
         db.excursion.count({ where: { status: ExcursionStatus.PENDING_MODERATION } }),
         db.excursion.count({ where: { status: ExcursionStatus.REJECTED } }),
         db.transfer.count(),
-        db.transfer.count({ where: { status: TransferStatus.PENDING_MODERATION } }),
-        db.transfer.count({ where: { status: TransferStatus.REJECTED } }),
+        db.transfer.count({
+          where: buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION),
+        }),
+        db.transfer.count({ where: buildTransferWorkflowStatusWhere(TransferStatus.REJECTED) }),
       ]);
 
       return {

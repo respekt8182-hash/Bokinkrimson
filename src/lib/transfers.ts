@@ -1,9 +1,6 @@
-import { PaymentStatus, TransferStatus } from "@prisma/client";
+import { PaymentStatus, Prisma, TransferStatus } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
-import {
-  getTransferPaymentTariffCode,
-  getTransferPlacementCoverageState,
-} from "@/lib/payments";
+import { getTransferPaymentTariffCode, getTransferPlacementCoverageState } from "@/lib/payments";
 import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
 import { ensurePublishedTransferSnapshotBeforeOwnerEdit } from "@/lib/transfer-public-snapshot";
 
@@ -146,6 +143,27 @@ export function canSubmitPublishedTransferEdit(
     pendingEditStatus === TransferStatus.DRAFT ||
     pendingEditStatus === TransferStatus.REJECTED
   );
+}
+
+export function buildTransferWorkflowStatusWhere(
+  status: TransferStatus,
+): Prisma.TransferWhereInput {
+  if (status === TransferStatus.PUBLISHED) {
+    return {
+      status: TransferStatus.PUBLISHED,
+      pendingEditStatus: null,
+    };
+  }
+
+  return {
+    OR: [
+      { status },
+      {
+        status: TransferStatus.PUBLISHED,
+        pendingEditStatus: status,
+      },
+    ],
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

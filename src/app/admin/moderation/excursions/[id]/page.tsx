@@ -7,6 +7,7 @@ import { ReviewModerationList } from "@/components/admin/review-moderation-list"
 import { AdminUnavailableState } from "@/components/admin/admin-ui";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
+import { formatProgramDuration } from "@/lib/excursion-offers";
 import { getExcursionStatusLabel } from "@/lib/excursions";
 import { buildPublicExcursionPath } from "@/lib/public-excursions";
 import { serializeReview } from "@/lib/reviews";
@@ -21,22 +22,6 @@ function formatMoney(value: number | null, currency: string): string {
   }
 
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
-}
-
-function formatDuration(minutes: number | null): string {
-  if (!minutes || minutes <= 0) {
-    return "Не указана";
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const restMinutes = minutes % 60;
-  if (hours === 0) {
-    return `${restMinutes} мин`;
-  }
-  if (restMinutes === 0) {
-    return `${hours} ч`;
-  }
-  return `${hours} ч ${restMinutes} мин`;
 }
 
 function optionalText(value: string | null | undefined): string | null {
@@ -191,7 +176,7 @@ export default async function AdminModerationExcursionPage({
                 excursion.currency,
               )}
             </dd>
-            <dd className="text-olive/75">{formatDuration(excursion.durationMinutes)}</dd>
+            <dd className="text-olive/75">{formatProgramDuration(excursion)}</dd>
           </div>
         </dl>
 

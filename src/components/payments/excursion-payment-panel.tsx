@@ -31,6 +31,7 @@ type ExcursionPaymentPanelProps = {
   offerType: ExcursionOfferTypeValue;
   excursionTitle: string;
   status: ExcursionStatusValue;
+  pendingEditStatus?: ExcursionStatusValue | null;
   isReady: boolean;
   readinessReasons: string[];
   onBeforePay?: () => Promise<boolean>;
@@ -150,6 +151,7 @@ export function ExcursionPaymentPanel({
   offerType,
   excursionTitle,
   status: initialStatus,
+  pendingEditStatus: initialPendingEditStatus = null,
   isReady,
   readinessReasons,
   onBeforePay,
@@ -163,7 +165,9 @@ export function ExcursionPaymentPanel({
 }: ExcursionPaymentPanelProps) {
   const copy = getOfferCopy(offerType);
   const [status, setStatus] = useState<ExcursionStatusValue>(initialStatus);
-  const [pendingEditStatus, setPendingEditStatus] = useState<ExcursionStatusValue | null>(null);
+  const [pendingEditStatus, setPendingEditStatus] = useState<ExcursionStatusValue | null>(
+    initialPendingEditStatus,
+  );
   const [payments, setPayments] = useState<SerializedPayment[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [managerRequested, setManagerRequested] = useState(false);
@@ -310,6 +314,10 @@ export function ExcursionPaymentPanel({
   useEffect(() => {
     setStatus(initialStatus);
   }, [initialStatus]);
+
+  useEffect(() => {
+    setPendingEditStatus(initialPendingEditStatus);
+  }, [initialPendingEditStatus]);
 
   useEffect(() => {
     if (adminMode) {

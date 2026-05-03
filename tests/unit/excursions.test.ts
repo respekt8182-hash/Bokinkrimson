@@ -10,6 +10,10 @@ import {
   getExcursionAutoModerationUpdate,
   getMissingExcursionPublishFields,
 } from "../../src/lib/excursions";
+import {
+  parsePublishedExcursionSnapshot,
+  shouldUsePublishedExcursionSnapshot,
+} from "../../src/lib/excursion-public-snapshot";
 
 describe("excursion payment and publication helpers", () => {
   it("requires tour-specific publish fields", () => {
@@ -79,6 +83,38 @@ describe("excursion payment and publication helpers", () => {
     expect(missing).toEqual([]);
   });
 
+  it("accepts a tour duration in minutes without days or nights", () => {
+    const missing = getMissingExcursionPublishFields({
+      offerType: ExcursionOfferType.TOUR,
+      title: "Джип-тур на полдня",
+      locationId: "yalta",
+      categoryId: "jeep",
+      description: "Маршрут на джипах по горным дорогам и смотровым площадкам.",
+      durationMinutes: 240,
+      durationDays: null,
+      durationNights: null,
+      timelineLength: 0,
+      itineraryDaysLength: 1,
+      routeLocationsLength: 0,
+      startPoint: "Набережная",
+      availabilityMode: ExcursionAvailabilityMode.DATED,
+      availabilityNote: null,
+      hasRegularSchedule: false,
+      hasSessions: true,
+      priceFrom: 5000,
+      priceUnitLabel: "чел",
+      contactFirstName: "Иван",
+      contactLastName: "Петров",
+      contactPhone: "+79990000000",
+      contactPhone2: null,
+      accommodationProvided: null,
+      accommodationType: null,
+      photoUrls: ["1.jpg", "2.jpg", "3.jpg"],
+    });
+
+    expect(missing).toEqual([]);
+  });
+
   it("builds auto-moderation update for draft and published edit states", () => {
     expect(getExcursionAutoModerationUpdate(ExcursionStatus.DRAFT, null)).toEqual({
       status: ExcursionStatus.PENDING_MODERATION,
@@ -127,5 +163,36 @@ describe("excursion payment and publication helpers", () => {
         ExcursionStatus.PENDING_MODERATION,
       ),
     ).toBe(true);
+  });
+
+  it("keeps the approved excursion snapshot public while edits wait for moderation", () => {
+    const publishedSnapshot = {
+      excursion: {
+        title: "Approved title",
+        durationMinutes: 240,
+        durationDays: null,
+        durationNights: null,
+      },
+      pickupLocations: [],
+      routeLocations: [],
+    };
+
+    expect(
+      shouldUsePublishedExcursionSnapshot({
+        status: ExcursionStatus.PUBLISHED,
+        pendingEditStatus: ExcursionStatus.PENDING_MODERATION,
+        publishedSnapshot,
+      }),
+    ).toBe(true);
+    expect(parsePublishedExcursionSnapshot(publishedSnapshot)?.excursion.title).toBe(
+      "Approved title",
+    );
+    expect(
+      shouldUsePublishedExcursionSnapshot({
+        status: ExcursionStatus.PUBLISHED,
+        pendingEditStatus: null,
+        publishedSnapshot,
+      }),
+    ).toBe(false);
   });
 });

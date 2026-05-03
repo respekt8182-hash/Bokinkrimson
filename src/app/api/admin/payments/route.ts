@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { buildOffsetPagination, parsePagination } from "@/lib/pagination";
-import { getTransferPaymentReference } from "@/lib/payments";
+import { getTransferPaymentPayload, getTransferPaymentReference } from "@/lib/payments";
 
 export async function GET(request: NextRequest) {
   const admin = await getAdminSession();
@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
         tariffCode: p.tariffCode,
         providerPayload: p.providerPayload,
       });
+      const transferPayload = getTransferPaymentPayload(p.providerPayload);
       const referencedTransfer = transferReference
         ? transfersById.get(transferReference.transferId)
         : null;
@@ -147,6 +148,15 @@ export async function GET(request: NextRequest) {
         canceledAt: p.canceledAt?.toISOString() ?? null,
         managerNotes: p.managerNotes,
         confirmedById: p.confirmedById,
+        transferPayment: transferPayload
+          ? {
+              paymentReason: transferPayload.paymentReason ?? null,
+              vehicleCount: transferPayload.vehicleCount ?? null,
+              totalAmountRub: transferPayload.totalAmountRub ?? null,
+              coveredAmountRub: transferPayload.coveredAmountRub ?? null,
+              requiredAmountRub: transferPayload.requiredAmountRub ?? null,
+            }
+          : null,
         property: p.property
           ? {
               id: p.property.id,

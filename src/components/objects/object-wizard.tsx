@@ -157,6 +157,30 @@ function mapStepToTab(step: WizardStep): WizardTabId {
   return normalizeStep(step);
 }
 
+function normalizeLocationLookup(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase("ru-RU")
+    .replace(/ё/g, "е")
+    .replace(
+      /^(?:г\.?|город|пгт\.?|посёлок городского типа|поселок городского типа|пос\.?|посёлок|поселок|с\.?|село|д\.?|деревня)\s+/,
+      "",
+    )
+    .replace(/\s+/g, " ");
+}
+
+function findLocationSuggestionByName(
+  value: string,
+  items: readonly LocationSuggestionItem[],
+): LocationSuggestionItem | null {
+  const normalizedValue = normalizeLocationLookup(value);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return items.find((item) => normalizeLocationLookup(item.name) === normalizedValue) ?? null;
+}
+
 // Shared textarea style so step blocks stay visually consistent.
 function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
@@ -184,7 +208,6 @@ export function ObjectWizard({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [addressLookupPending, setAddressLookupPending] = useState(false);
-  const [addressSyncPending, setAddressSyncPending] = useState(false);
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [isRegistryChecking, setIsRegistryChecking] = useState(false);
   const [registryCheckMessage, setRegistryCheckMessage] = useState("");
@@ -209,6 +232,10 @@ export function ObjectWizard({
     initialProperty.longitude,
   );
   const [mapDraftAddress, setMapDraftAddress] = useState(initialProperty.address ?? "");
+  const [mapDraftLocationName, setMapDraftLocationName] = useState(
+    initialProperty.locationName ?? "",
+  );
+  const [mapDraftLocationId, setMapDraftLocationId] = useState(initialProperty.locationId ?? "");
 
   const [phone, setPhone] = useState(initialProperty.phone ?? "");
   const [phoneName, setPhoneName] = useState(initialProperty.phoneName ?? "");
@@ -337,6 +364,8 @@ export function ObjectWizard({
     setMapDraftLatitude(latitude);
     setMapDraftLongitude(longitude);
     setMapDraftAddress(address);
+    setMapDraftLocationName(locationInput);
+    setMapDraftLocationId(selectedLocationId);
     setIsMapDialogOpen(true);
     setError("");
   }
@@ -359,6 +388,11 @@ export function ObjectWizard({
       setAddress(mapDraftAddress.trim());
     }
 
+    if (mapDraftLocationName.trim()) {
+      setLocationInput(mapDraftLocationName.trim());
+      setSelectedLocationId(mapDraftLocationId.trim());
+    }
+
     setIsMapDialogOpen(false);
     setError("");
   }
@@ -377,6 +411,8 @@ export function ObjectWizard({
     setMapDraftLatitude(item.latitude);
     setMapDraftLongitude(item.longitude);
     setMapDraftAddress(item.address ?? "");
+    setMapDraftLocationName(item.locationName ?? "");
+    setMapDraftLocationId(item.locationId ?? "");
     setPhone(item.phone ?? "");
     setPhoneName(item.phoneName ?? "");
     setPhone2(item.phone2 ?? "");
@@ -680,53 +716,6 @@ export function ObjectWizard({
   }, [locationInput]);
 
   useEffect(() => {
-    if (activeStep !== 3) {
-      return;
-    }
-
-    if (addressChangeSourceRef.current !== "input") {
-      return;
-    }
-
-    const value = address.trim();
-    if (value.length < 5) {
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setAddressSyncPending(true);
-      try {
-        const response = await fetch(`/api/geocode?address=${encodeURIComponent(value)}`);
-        if (!response.ok) {
-          return;
-        }
-
-        const body = (await response.json()) as {
-          item?: { latitude: number; longitude: number; address: string };
-        };
-
-        if (!body.item) {
-          return;
-        }
-
-        setLatitude(body.item.latitude);
-        setLongitude(body.item.longitude);
-
-        if (body.item.address && body.item.address !== address) {
-          addressChangeSourceRef.current = "system";
-          setAddress(body.item.address);
-        }
-      } finally {
-        setAddressSyncPending(false);
-      }
-    }, 700);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [activeStep, address]);
-
-  useEffect(() => {
     if (!canAutoSaveRules || rulesSnapshot === lastSavedRulesSnapshotRef.current) {
       return;
     }
@@ -1023,11 +1012,6 @@ export function ObjectWizard({
               Открыть карту
             </Button>
           </div>
-          {addressSyncPending ? (
-            <p className="text-xs text-olive/60">
-              Обновляем метку на карте по введенному адресу...
-            </p>
-          ) : null}
           <div className="rounded-xl border border-olive/15 bg-white p-3 text-sm text-olive/80">
             <p>
               Координаты:{" "}
@@ -1643,13 +1627,44 @@ export function ObjectWizard({
                   setMapDraftLatitude(lat);
                   setMapDraftLongitude(lng);
                 }}
+                initialSearchValue={mapDraftLocationName || locationInput}
+                onLocationSearchResolved={(item) => {
+                  const exactMatch =
+                    findLocationSuggestionByName(item.name, locationSuggestions) ??
+                    findLocationSuggestionByName(
+                      item.name,
+                      crimeaLocations.map((location) => ({ id: location.id, name: location.name })),
+                    );
+                  setMapDraftLocationName(exactMatch?.name ?? item.name);
+                  setMapDraftLocationId(exactMatch?.id ?? "");
+                }}
                 onAddressResolved={(resolvedItem) => {
                   setMapDraftAddress(resolvedItem.address);
+                  const localityFromGeocode =
+                    resolvedItem.localityDisplayName?.trim() ??
+                    resolvedItem.localityName?.trim() ??
+                    "";
+                  if (localityFromGeocode) {
+                    const exactMatch =
+                      findLocationSuggestionByName(localityFromGeocode, locationSuggestions) ??
+                      findLocationSuggestionByName(
+                        localityFromGeocode,
+                        crimeaLocations.map((location) => ({
+                          id: location.id,
+                          name: location.name,
+                        })),
+                      );
+                    setMapDraftLocationName(exactMatch?.name ?? localityFromGeocode);
+                    setMapDraftLocationId(exactMatch?.id ?? "");
+                  }
                 }}
               />
             </div>
 
             <div className="mt-3 rounded-xl bg-cream p-3 text-sm text-olive/80">
+              <p>
+                Населенный пункт: {mapDraftLocationName || "еще не определен"}
+              </p>
               <p>
                 Выбрано:{" "}
                 {mapDraftLatitude !== null && mapDraftLongitude !== null

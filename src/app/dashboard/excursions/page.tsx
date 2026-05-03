@@ -58,7 +58,11 @@ function hasProgramOutline(item: SerializedExcursion): boolean {
 
 function hasDuration(item: SerializedExcursion): boolean {
   if (item.offerType === ExcursionOfferType.TOUR) {
-    return Number(item.durationDays ?? 0) > 0 || Number(item.durationNights ?? 0) > 0;
+    return (
+      Number(item.durationDays ?? 0) > 0 ||
+      Number(item.durationNights ?? 0) > 0 ||
+      Number(item.durationMinutes ?? 0) >= 15
+    );
   }
 
   return Number(item.durationMinutes ?? 0) > 0;

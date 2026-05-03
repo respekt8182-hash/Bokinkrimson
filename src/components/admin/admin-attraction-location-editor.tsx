@@ -115,6 +115,8 @@ export function AdminAttractionLocationEditor({
             longitude={longitude}
             onCoordinatesChange={handleCoordinatesChange}
             onAddressResolved={handleAddressResolved}
+            initialSearchValue={locationName}
+            onLocationSearchResolved={(item) => setLocationName(item.name)}
           />
         </div>
       </div>
