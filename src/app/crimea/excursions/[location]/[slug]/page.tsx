@@ -2298,8 +2298,8 @@ export default async function PublicExcursionPage({
         {hasPublishedReviews ? (
           <div className="mt-6" id="reviews">
             <PropertyReviewsSection
-              submitUrl={`/api/public/excursions/${encodeURIComponent(item.slug)}/reviews`}
-              loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.slug)}/reviews`}
+              submitUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
+              loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
               entityPath={item.path}
               entityLabel="экскурсии"
               avgRating={item.avgRating}
@@ -3501,8 +3501,8 @@ export default async function PublicExcursionPage({
 
       <div className="mt-6" id="reviews">
         <PropertyReviewsSection
-          submitUrl={`/api/public/excursions/${encodeURIComponent(item.slug)}/reviews`}
-          loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.slug)}/reviews`}
+          submitUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
+          loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
           entityPath={item.path}
           entityLabel="экскурсии"
           avgRating={item.avgRating}

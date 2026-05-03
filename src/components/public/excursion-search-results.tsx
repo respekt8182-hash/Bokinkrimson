@@ -55,6 +55,7 @@ import {
   setPublicMobileBottomNavProgress,
 } from "@/lib/public-mobile-nav-visibility";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 import {
   formatProgramDuration,
   formatProgramPrice,
@@ -3253,6 +3254,7 @@ function ExcursionCard({
   const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
     .trim()
     .toUpperCase();
+  const detailsHref = useMemo(() => stripSearchParamsFromPath(item.path), [item.path]);
 
   return (
     <article
@@ -3268,7 +3270,7 @@ function ExcursionCard({
     >
       {/* Full-card overlay link */}
       <Link
-        href={item.path}
+        href={detailsHref}
         aria-labelledby={titleId}
         aria-label={`Открыть ${item.title}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
@@ -3444,7 +3446,7 @@ function ExcursionCard({
                 </p>
               </div>
               <Link
-                href={item.path}
+                href={detailsHref}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -3482,7 +3484,7 @@ function ExcursionCard({
                 {priceLabel}
               </p>
               <Link
-                href={item.path}
+                href={detailsHref}
                 className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Подробнее

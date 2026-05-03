@@ -84,7 +84,7 @@ export function FaqEditor({
                 placeholder="Ответ"
                 maxLength={answerMaxLength}
                 rows={2}
-                className="flex-1 resize-none rounded-xl border border-[color:var(--border)] px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/20"
+                className="min-h-[88px] w-full resize-y rounded-xl border border-[color:var(--border)] px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/20"
               />
               {showCounters ? (
                 <p className="text-right text-[11px] tabular-nums text-olive/45">

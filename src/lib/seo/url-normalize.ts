@@ -53,3 +53,9 @@ export function buildOrderedSearchParams(
 
   return params;
 }
+
+export function stripSearchParamsFromPath(path: string): string {
+  const [pathWithoutHash, hash = ""] = path.split("#", 2);
+  const [pathname] = pathWithoutHash.split("?", 1);
+  return hash ? `${pathname}#${hash}` : pathname;
+}

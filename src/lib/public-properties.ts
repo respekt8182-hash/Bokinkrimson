@@ -444,10 +444,11 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, "-");
 }
 
-// Slug always ends with db id so we can restore the entity from URL safely.
-export function buildPropertySlug(name: string | null, id: string): string {
+// Public slugs are kept human-readable for SEO; legacy id-suffixed URLs are still resolved.
+export function buildPropertySlug(name: string | null, _id?: string): string {
+  void _id;
   const base = slugify(name ?? "obekt") || "obekt";
-  return `${base}-${id}`;
+  return base;
 }
 
 const publicEntityIdPatterns = [
@@ -456,7 +457,7 @@ const publicEntityIdPatterns = [
   /^demo_(?:property|excursion|tour|attraction|transfer)_\d+$/i,
 ];
 
-function isPublicEntityId(value: string): boolean {
+export function isPublicEntityId(value: string): boolean {
   return publicEntityIdPatterns.some((pattern) => pattern.test(value));
 }
 
@@ -1795,8 +1796,21 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   },
 });
 
+const publicPropertyIdentifierSelect = Prisma.validator<Prisma.PropertySelect>()({
+  id: true,
+  name: true,
+  locationId: true,
+  status: true,
+  pendingEditStatus: true,
+  publishedSnapshot: true,
+  updatedAt: true,
+});
+
 type PublicPropertyRecord = Prisma.PropertyGetPayload<{
   include: typeof publicPropertyInclude;
+}>;
+type PublicPropertyIdentifierRecord = Prisma.PropertyGetPayload<{
+  select: typeof publicPropertyIdentifierSelect;
 }>;
 
 const getCachedPublicPropertyRecord = cache(
@@ -1809,6 +1823,63 @@ const getCachedPublicPropertyRecord = cache(
       include: publicPropertyInclude,
     }),
 );
+
+function getPropertyIdentifierState(
+  property: PublicPropertyIdentifierRecord,
+  options?: { usePublishedSnapshot?: boolean },
+): { slug: string; locationId: string | null } {
+  const snapshot =
+    options?.usePublishedSnapshot !== false &&
+    shouldUsePublishedSnapshot({
+      status: property.status,
+      pendingEditStatus: property.pendingEditStatus,
+      publishedSnapshot: property.publishedSnapshot,
+    })
+      ? parsePublishedPropertySnapshot(property.publishedSnapshot)
+      : null;
+  const displayName = snapshot?.property.name ?? property.name;
+  const displayLocationId = snapshot?.property.locationId ?? property.locationId;
+
+  return {
+    slug: buildPropertySlug(displayName, property.id),
+    locationId: displayLocationId,
+  };
+}
+
+async function findPropertyIdByPublicSlug(input: {
+  identifier: string;
+  expectedLocationId?: string | null;
+  ownerId?: string | null;
+  usePublishedSnapshot?: boolean;
+}): Promise<string | null> {
+  const slug = slugify(input.identifier);
+  if (!slug) {
+    return null;
+  }
+
+  const rows = await db.property.findMany({
+    where: input.ownerId
+      ? {
+          ownerId: input.ownerId,
+          ownerDeletedAt: null,
+        }
+      : buildPublishedPropertyVisibilityWhere(),
+    select: publicPropertyIdentifierSelect,
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const match = rows.find((property) => {
+    const state = getPropertyIdentifierState(property, {
+      usePublishedSnapshot: input.usePublishedSnapshot,
+    });
+    return (
+      state.slug === slug &&
+      (!input.expectedLocationId || state.locationId === input.expectedLocationId)
+    );
+  });
+
+  return match?.id ?? null;
+}
 
 async function getReviewReactionById(
   property: Pick<PublicPropertyRecord, "reviews">,
@@ -2024,7 +2095,18 @@ export async function getPublicPropertyByIdentifier(
   expectedLocationId?: string | null,
   viewerUserId?: string | null,
 ): Promise<PublicPropertyCard | null> {
-  const id = extractPropertyId(identifier);
+  const extractedId = extractPropertyId(identifier);
+  const id = isPublicEntityId(extractedId)
+    ? extractedId
+    : await findPropertyIdByPublicSlug({
+        identifier,
+        expectedLocationId,
+        usePublishedSnapshot: true,
+      });
+  if (!id) {
+    return null;
+  }
+
   const property = await getCachedPublicPropertyRecord(id);
 
   if (!property) {
@@ -2046,10 +2128,22 @@ export async function getPublicPropertyByIdentifier(
 export async function getOwnerPreviewPropertyByIdentifier(
   identifier: string,
   ownerId: string,
-  _expectedLocationId?: string | null,
+  expectedLocationId?: string | null,
   viewerUserId?: string | null,
 ): Promise<PublicPropertyCard | null> {
-  const id = extractPropertyId(identifier);
+  const extractedId = extractPropertyId(identifier);
+  const id = isPublicEntityId(extractedId)
+    ? extractedId
+    : await findPropertyIdByPublicSlug({
+        identifier,
+        expectedLocationId,
+        ownerId,
+        usePublishedSnapshot: false,
+      });
+  if (!id) {
+    return null;
+  }
+
   const property = await db.property.findFirst({
     where: {
       id,

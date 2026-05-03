@@ -165,8 +165,8 @@ export default async function TransferDetailPage({
 
       <div className="mx-auto w-full max-w-6xl px-4 pb-8 md:px-6 md:pb-10">
         <PropertyReviewsSection
-          submitUrl={`/api/public/transfers/${encodeURIComponent(item.slug)}/reviews`}
-          loadMoreUrl={`/api/public/transfers/${encodeURIComponent(item.slug)}/reviews`}
+          submitUrl={`/api/public/transfers/${encodeURIComponent(item.id)}/reviews`}
+          loadMoreUrl={`/api/public/transfers/${encodeURIComponent(item.id)}/reviews`}
           entityPath={item.path}
           entityLabel="трансфера"
           avgRating={item.avgRating}

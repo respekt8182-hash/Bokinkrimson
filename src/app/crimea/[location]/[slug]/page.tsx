@@ -239,8 +239,8 @@ export default async function PublicPropertyPage({
       />
 
       <PropertyReviewsSection
-        submitUrl={`/api/public/properties/${encodeURIComponent(item.slug)}/reviews`}
-        loadMoreUrl={`/api/public/properties/${encodeURIComponent(item.slug)}/reviews`}
+        submitUrl={`/api/public/properties/${encodeURIComponent(item.id)}/reviews`}
+        loadMoreUrl={`/api/public/properties/${encodeURIComponent(item.id)}/reviews`}
         entityPath={item.path}
         entityLabel={"объекта"}
         avgRating={item.avgRating}

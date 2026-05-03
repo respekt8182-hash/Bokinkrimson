@@ -1,18 +1,20 @@
 // Integration tests for public catalog APIs and route accessibility.
 import { describe, expect, it } from "vitest";
 import { buildPublicExcursionPath, buildExcursionSlug } from "../../src/lib/public-excursions";
+import { buildPublicTransferPath, buildTransferPublicSlug } from "../../src/lib/public-marketplace";
 import {
   buildPropertySlug,
   buildPublicPropertyPath,
   extractPropertyId,
   slugify,
 } from "../../src/lib/public-properties";
+import { stripSearchParamsFromPath } from "../../src/lib/seo/url-normalize";
 
 describe("public seo paths", () => {
   it("builds transliterated property slug", () => {
     const slug = buildPropertySlug("Отель Ромашка", "cabc123xyz9");
-    expect(slug).toContain("otel-romashka");
-    expect(slug).toContain("cabc123xyz9");
+    expect(slug).toBe("otel-romashka");
+    expect(slug).not.toContain("cabc123xyz9");
   });
 
   it("extracts id from slug and raw id", () => {
@@ -56,6 +58,36 @@ describe("public seo paths", () => {
 
     expect(propertyPath).toMatch(/^\/crimea\/yalta\//);
     expect(excursionPath).toMatch(/^\/crimea\/excursions\/sudak\//);
+    expect(propertyPath).not.toContain("?");
+    expect(excursionPath).not.toContain("?");
+    expect(propertyPath).not.toContain("cabc123xyz9");
+    expect(excursionPath).not.toContain("cabc123xyz8");
+  });
+
+  it("builds public transfer path without technical id", () => {
+    const transferPath = buildPublicTransferPath({
+      id: "cmohb63e50001exmkyx1lx59l",
+      title: "Такси по городу Ялта седан",
+    });
+
+    expect(buildTransferPublicSlug("Такси по городу Ялта седан")).toBe(
+      "taksi-po-gorodu-yalta-sedan",
+    );
+    expect(transferPath).toBe("/transfers/taksi-po-gorodu-yalta-sedan");
+    expect(transferPath).not.toContain("cmohb63e50001exmkyx1lx59l");
+  });
+
+  it("strips volatile search params from public detail links", () => {
+    expect(
+      stripSearchParamsFromPath(
+        "/crimea/feodosiya/apartamenty-demo_property_16?guests=2&checkIn=2026-05-03",
+      ),
+    ).toBe("/crimea/feodosiya/apartamenty-demo_property_16");
+    expect(
+      stripSearchParamsFromPath(
+        "/crimea/excursions/yalta/tur-demo_tour_01?dateFrom=2026-05-03&guests=2#program",
+      ),
+    ).toBe("/crimea/excursions/yalta/tur-demo_tour_01#program");
   });
 
   it("prefers anchor slug in excursion path when present", () => {
@@ -71,6 +103,6 @@ describe("public seo paths", () => {
 
   it("slugify falls back to latin-safe text", () => {
     expect(slugify("Ялта 2026 !!!")).toBe("yalta-2026");
-    expect(buildExcursionSlug(null, "cabc123xyza")).toBe("ekskursiya-cabc123xyza");
+    expect(buildExcursionSlug(null, "cabc123xyza")).toBe("ekskursiya");
   });
 });

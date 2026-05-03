@@ -16,7 +16,7 @@ import {
   isDatabaseSchemaMissingError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
-import { extractPropertyId, slugify } from "@/lib/public-properties";
+import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import {
   createStaticAttractionDraft,
   getStaticAttractionByIdentifier,
@@ -219,6 +219,18 @@ const transferInclude = {
 
 type TransferRow = Prisma.TransferGetPayload<{ include: typeof transferInclude }>;
 
+const transferIdentifierSelect = Prisma.validator<Prisma.TransferSelect>()({
+  id: true,
+  title: true,
+  slug: true,
+  status: true,
+  pendingEditStatus: true,
+  publishedSnapshot: true,
+  updatedAt: true,
+});
+
+type TransferIdentifierRow = Prisma.TransferGetPayload<{ select: typeof transferIdentifierSelect }>;
+
 type Point = {
   latitude: number;
   longitude: number;
@@ -226,6 +238,46 @@ type Point = {
 
 function isMarketplaceFallbackError(error: unknown): boolean {
   return isDatabaseSchemaMissingError(error) || isDatabaseFallbackEligibleError(error);
+}
+
+function getTransferIdentifierSlug(row: TransferIdentifierRow): string {
+  const publicRow = applyPublishedTransferSnapshotToRow(row);
+  return buildTransferPublicSlug(publicRow.title);
+}
+
+async function findTransferIdByPublicSlug(input: {
+  identifier: string;
+  ownerId?: string | null;
+}): Promise<string | null> {
+  const publicSlug = slugify(input.identifier.trim());
+  if (!publicSlug) {
+    return null;
+  }
+
+  const rows = await db.transfer.findMany({
+    where: input.ownerId
+      ? {
+          ownerId: input.ownerId,
+          owner: {
+            deletedAt: null,
+          },
+        }
+      : {
+          status: TransferStatus.PUBLISHED,
+          isPublishedVisible: true,
+          owner: {
+            deletedAt: null,
+          },
+        },
+    select: transferIdentifierSelect,
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const match = rows.find(
+    (row) => getTransferIdentifierSlug(row) === publicSlug || slugify(row.slug) === publicSlug,
+  );
+
+  return match?.id ?? null;
 }
 
 function logMarketplaceFallback(context: string, entityLabel: string): void {
@@ -383,6 +435,10 @@ export function buildTransferSlug(title: string | null, id: string): string {
   return `${base}-${id}`;
 }
 
+export function buildTransferPublicSlug(title: string | null): string {
+  return slugify(title ?? "transfer") || "transfer";
+}
+
 export function buildPublicAttractionPath(item: {
   id: string;
   title: string | null;
@@ -393,7 +449,7 @@ export function buildPublicAttractionPath(item: {
 }
 
 export function buildPublicTransferPath(item: { id: string; title: string | null }): string {
-  return `/transfers/${buildTransferSlug(item.title, item.id)}`;
+  return `/transfers/${buildTransferPublicSlug(item.title)}`;
 }
 
 function mapAttractionCatalogItem(
@@ -443,7 +499,7 @@ function mapTransferCatalogItem(
 
   return {
     id: row.id,
-    slug: buildTransferSlug(row.title, row.id),
+    slug: buildTransferPublicSlug(row.title),
     path: buildPublicTransferPath({ id: row.id, title: row.title }),
     title: row.title ?? "Трансфер без названия",
     transferType: row.transferType,
@@ -787,7 +843,14 @@ export async function getPublicAttractionByIdentifier(
 export async function getPublicTransferByIdentifier(
   identifier: string,
 ): Promise<PublicTransferCatalogItem | null> {
-  const id = extractPropertyId(identifier);
+  const extractedId = extractPropertyId(identifier);
+  const id = isPublicEntityId(extractedId)
+    ? extractedId
+    : await findTransferIdByPublicSlug({ identifier });
+  if (!id) {
+    return null;
+  }
+
   let row: TransferRow | null;
   try {
     row = await db.transfer.findFirst({
@@ -817,7 +880,14 @@ export async function getOwnerPreviewTransferByIdentifier(
   identifier: string,
   ownerId: string,
 ): Promise<PublicTransferCatalogItem | null> {
-  const id = extractPropertyId(identifier);
+  const extractedId = extractPropertyId(identifier);
+  const id = isPublicEntityId(extractedId)
+    ? extractedId
+    : await findTransferIdByPublicSlug({ identifier, ownerId });
+  if (!id) {
+    return null;
+  }
+
   let row: TransferRow | null;
 
   try {

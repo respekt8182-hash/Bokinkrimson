@@ -10,7 +10,7 @@ import {
   ExcursionSessionStatus,
   ReviewEntityType,
   ReviewStatus,
-  type Prisma,
+  Prisma,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -26,7 +26,7 @@ import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/ca
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { serializeReview } from "@/lib/reviews";
-import { extractPropertyId, slugify } from "@/lib/public-properties";
+import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 import type {
   ExcursionExtraOption,
@@ -423,9 +423,10 @@ function filterPublicSectionPhotoGroups(
   };
 }
 
-export function buildExcursionSlug(title: string | null, id: string): string {
+export function buildExcursionSlug(title: string | null, _id?: string): string {
+  void _id;
   const base = slugify(title ?? "ekskursiya") || "ekskursiya";
-  return `${base}-${id}`;
+  return base;
 }
 
 export function buildPublicExcursionPath(excursion: {
@@ -441,6 +442,61 @@ export function buildPublicExcursionPath(excursion: {
     excursion.locationId ??
     "crimea";
   return `/crimea/excursions/${location}/${buildExcursionSlug(excursion.title, excursion.id)}`;
+}
+
+const publicExcursionIdentifierSelect = Prisma.validator<Prisma.ExcursionSelect>()({
+  id: true,
+  title: true,
+  locationId: true,
+  updatedAt: true,
+  anchorLocation: {
+    select: { slug: true },
+  },
+});
+
+type PublicExcursionIdentifierRecord = Prisma.ExcursionGetPayload<{
+  select: typeof publicExcursionIdentifierSelect;
+}>;
+
+function getExcursionIdentifierState(
+  excursion: PublicExcursionIdentifierRecord,
+): { slug: string; locationId: string } {
+  return {
+    slug: buildExcursionSlug(excursion.title, excursion.id),
+    locationId: excursion.anchorLocation?.slug ?? excursion.locationId ?? "crimea",
+  };
+}
+
+async function findExcursionIdByPublicSlug(input: {
+  identifier: string;
+  expectedLocationId?: string | null;
+  ownerId?: string | null;
+}): Promise<string | null> {
+  const slug = slugify(input.identifier);
+  if (!slug) {
+    return null;
+  }
+
+  const rows = await db.excursion.findMany({
+    where: input.ownerId
+      ? {
+          ownerId: input.ownerId,
+          deletedAt: null,
+        }
+      : buildPublishedExcursionVisibilityWhere(),
+    select: publicExcursionIdentifierSelect,
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const match = rows.find((excursion) => {
+    const state = getExcursionIdentifierState(excursion);
+    return (
+      state.slug === slug &&
+      (!input.expectedLocationId || state.locationId === input.expectedLocationId)
+    );
+  });
+
+  return match?.id ?? null;
 }
 
 async function resolveDistrict(input: {
@@ -1267,10 +1323,21 @@ export async function getPublicExcursionCatalog(
 
 async function getExcursionCardByIdentifier(input: {
   identifier: string;
+  expectedLocationId?: string | null;
   viewerUserId?: string | null;
   ownerId?: string | null;
 }): Promise<PublicExcursionCard | null> {
-  const id = extractPropertyId(input.identifier);
+  const extractedId = extractPropertyId(input.identifier);
+  const id = isPublicEntityId(extractedId)
+    ? extractedId
+    : await findExcursionIdByPublicSlug({
+        identifier: input.identifier,
+        expectedLocationId: input.expectedLocationId,
+        ownerId: input.ownerId,
+      });
+  if (!id) {
+    return null;
+  }
 
   const excursion = await db.excursion.findFirst({
     where: input.ownerId
@@ -1557,11 +1624,12 @@ async function getExcursionCardByIdentifier(input: {
 
 export async function getPublicExcursionByIdentifier(
   identifier: string,
-  _expectedLocationId?: string | null,
+  expectedLocationId?: string | null,
   viewerUserId?: string | null,
 ): Promise<PublicExcursionCard | null> {
   return getExcursionCardByIdentifier({
     identifier,
+    expectedLocationId,
     viewerUserId,
   });
 }
@@ -1569,11 +1637,12 @@ export async function getPublicExcursionByIdentifier(
 export async function getOwnerPreviewExcursionByIdentifier(
   identifier: string,
   ownerId: string,
-  _expectedLocationId?: string | null,
+  expectedLocationId?: string | null,
   viewerUserId?: string | null,
 ): Promise<PublicExcursionCard | null> {
   return getExcursionCardByIdentifier({
     identifier,
+    expectedLocationId,
     ownerId,
     viewerUserId,
   });

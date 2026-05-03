@@ -28,6 +28,7 @@ import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-but
 import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
 import type { PublicCatalogItem } from "@/lib/public-properties";
+import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
 const SWIPE_THRESHOLD = 50;
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -238,7 +239,6 @@ function PublicPropertySearchCardInner({
   initialIsFavorite,
   view = "list",
   prioritizeImage = false,
-  searchGuests = null,
   isHighlighted = false,
   isNew = false,
   onWishlistToggle,
@@ -301,28 +301,7 @@ function PublicPropertySearchCardInner({
     item.amenityHighlights.length - amenityHighlights.length,
   );
 
-  const guestsForLinks = useMemo(() => {
-    if (typeof searchGuests === "number" && Number.isFinite(searchGuests) && searchGuests > 0)
-      return Math.floor(searchGuests);
-    if (roomCapacity !== null && roomCapacity > 0) return roomCapacity;
-    return 2;
-  }, [roomCapacity, searchGuests]);
-
-  const detailsHref = useMemo(() => {
-    const [rawPath, rawQuery = ""] = item.path.split("?");
-    const params = new URLSearchParams(rawQuery);
-    const checkInFromPath = params.get("checkIn")?.trim() ?? "";
-    const checkOutFromPath = params.get("checkOut")?.trim() ?? "";
-    const guestsFromPath = params.get("guests")?.trim() ?? "";
-    const adultsFromPath = params.get("guestsAdults")?.trim() ?? "";
-    const childrenFromPath = params.get("guestsChildren")?.trim() ?? "";
-    params.set("checkIn", checkInFromPath || item.stayContext.checkIn);
-    params.set("checkOut", checkOutFromPath || item.stayContext.checkOut);
-    params.set("guests", guestsFromPath || String(guestsForLinks));
-    params.set("guestsAdults", adultsFromPath || String(guestsForLinks));
-    params.set("guestsChildren", childrenFromPath || "0");
-    return `${rawPath}?${params.toString()}`;
-  }, [guestsForLinks, item.path, item.stayContext.checkIn, item.stayContext.checkOut]);
+  const detailsHref = useMemo(() => stripSearchParamsFromPath(item.path), [item.path]);
 
   useEffect(() => {
     const el = cardRef.current;

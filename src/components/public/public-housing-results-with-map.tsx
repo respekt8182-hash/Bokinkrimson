@@ -173,55 +173,6 @@ function sanitizePoint(point: Partial<MapPointResponse>): MapPointResponse {
   };
 }
 
-function appendStayParamsToPath(
-  path: string,
-  params: {
-    checkIn: string;
-    checkOut: string;
-    guests: string;
-    guestsAdults?: string;
-    guestsChildren?: string;
-  },
-): string {
-  const [pathWithoutHash, hash = ""] = path.split("#", 2);
-  const [pathname, queryString = ""] = pathWithoutHash.split("?", 2);
-  const query = new URLSearchParams(queryString);
-
-  if (params.checkIn) {
-    query.set("checkIn", params.checkIn);
-  } else {
-    query.delete("checkIn");
-  }
-
-  if (params.checkOut) {
-    query.set("checkOut", params.checkOut);
-  } else {
-    query.delete("checkOut");
-  }
-
-  if (params.guests) {
-    query.set("guests", params.guests);
-  } else {
-    query.delete("guests");
-  }
-
-  if (params.guestsAdults) {
-    query.set("guestsAdults", params.guestsAdults);
-  } else {
-    query.delete("guestsAdults");
-  }
-
-  if (params.guestsChildren) {
-    query.set("guestsChildren", params.guestsChildren);
-  } else {
-    query.delete("guestsChildren");
-  }
-
-  const nextQuery = query.toString();
-  const nextPath = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-  return hash ? `${nextPath}#${hash}` : nextPath;
-}
-
 function createInitialMapState(): MapState {
   return {
     status: "idle",
@@ -497,14 +448,8 @@ export function PublicHousingResultsWithMap({
     const sourcePoints =
       mapState.status === "ready" && mapState.points.length > 0 ? mapState.points : fallbackPoints;
 
-    return sourcePoints.map((point) => {
-      const mergedPoint = sanitizePoint(point);
-      return {
-        ...mergedPoint,
-        path: appendStayParamsToPath(mergedPoint.path, stayParams),
-      };
-    });
-  }, [fallbackPoints, mapState.points, mapState.status, stayParams]);
+    return sourcePoints.map((point) => sanitizePoint(point));
+  }, [fallbackPoints, mapState.points, mapState.status]);
 
   const pointsWithCoordinates = useMemo(
     () =>

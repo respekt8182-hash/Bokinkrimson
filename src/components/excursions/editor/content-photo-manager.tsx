@@ -84,17 +84,23 @@ export function ContentPhotoManager({
           {emptyText}
         </div>
       ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           {photoUrls.map((url, index) => (
             <article
               key={`${url}-${index}`}
-              className="overflow-hidden rounded-2xl border border-olive/12 bg-white shadow-sm"
+              className="rounded-2xl border border-olive/12 bg-white shadow-sm"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Фото ${index + 1}`} className="h-40 w-full object-cover" />
-              <div className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="text-xs font-medium text-olive/65">Фото {index + 1}</span>
-                <div className="flex items-center gap-1">
+              <img
+                src={url}
+                alt={`Фото ${index + 1}`}
+                className="h-40 w-full rounded-t-2xl object-cover"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                <span className="min-w-0 text-xs font-medium text-olive/65">
+                  Фото {index + 1}
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={() => onMove(index, -1)}
@@ -117,8 +123,9 @@ export function ContentPhotoManager({
                     type="button"
                     onClick={() => onRemove(index)}
                     disabled={disabled || isUploading}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-50 disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 ring-1 ring-red-200 transition hover:bg-red-100 hover:text-red-700 disabled:opacity-40"
                     aria-label={`Удалить фото ${index + 1}`}
+                    title="Удалить фото"
                   >
                     <AppIcon icon={Trash2} className="h-4 w-4" />
                   </button>

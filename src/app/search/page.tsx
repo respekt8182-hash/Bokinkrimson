@@ -31,55 +31,6 @@ function pick(value: string | string[] | undefined): string {
   return value ?? "";
 }
 
-function appendStayParamsToPath(
-  path: string,
-  params: {
-    checkIn: string;
-    checkOut: string;
-    guests: string;
-    guestsAdults?: string;
-    guestsChildren?: string;
-  },
-): string {
-  const [pathWithoutHash, hash = ""] = path.split("#", 2);
-  const [pathname, queryString = ""] = pathWithoutHash.split("?", 2);
-  const query = new URLSearchParams(queryString);
-
-  if (params.checkIn) {
-    query.set("checkIn", params.checkIn);
-  } else {
-    query.delete("checkIn");
-  }
-
-  if (params.checkOut) {
-    query.set("checkOut", params.checkOut);
-  } else {
-    query.delete("checkOut");
-  }
-
-  if (params.guests) {
-    query.set("guests", params.guests);
-  } else {
-    query.delete("guests");
-  }
-
-  if (params.guestsAdults) {
-    query.set("guestsAdults", params.guestsAdults);
-  } else {
-    query.delete("guestsAdults");
-  }
-
-  if (params.guestsChildren) {
-    query.set("guestsChildren", params.guestsChildren);
-  } else {
-    query.delete("guestsChildren");
-  }
-
-  const nextQuery = query.toString();
-  const nextPath = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-  return hash ? `${nextPath}#${hash}` : nextPath;
-}
-
 function toLocationSuggestions(
   items: Array<{
     type: string;
@@ -277,16 +228,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const initialSortParam =
     initialHousingResult.filters.sort === "relevance" ? "" : initialHousingResult.filters.sort;
-  const initialItemsWithStayParams = initialHousingResult.items.map((item) => ({
-    ...item,
-    path: appendStayParamsToPath(item.path, {
-      checkIn,
-      checkOut,
-      guests,
-      guestsAdults,
-      guestsChildren,
-    }),
-  }));
   return (
     <>
       {canEmitSearchSchema ? (
@@ -309,7 +250,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
       <HousingCatalogClient
         initialResponse={{
-          items: initialItemsWithStayParams,
+          items: initialHousingResult.items,
           total: initialHousingResult.total,
           page: 1,
           pageSize: 30,

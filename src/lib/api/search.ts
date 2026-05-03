@@ -19,42 +19,6 @@ function parseItems(value: unknown): PublicCatalogItem[] {
   return value as PublicCatalogItem[];
 }
 
-function appendStayParamsToPath(path: string, filters: SearchFilters): string {
-  const [pathWithoutHash, hash = ""] = path.split("#", 2);
-  const [pathname, queryString = ""] = pathWithoutHash.split("?", 2);
-  const query = new URLSearchParams(queryString);
-
-  if (filters.checkIn) {
-    query.set("checkIn", filters.checkIn);
-  } else {
-    query.delete("checkIn");
-  }
-  if (filters.checkOut) {
-    query.set("checkOut", filters.checkOut);
-  } else {
-    query.delete("checkOut");
-  }
-  if (filters.guests) {
-    query.set("guests", filters.guests);
-  } else {
-    query.delete("guests");
-  }
-  if (filters.guestsAdults) {
-    query.set("guestsAdults", filters.guestsAdults);
-  } else {
-    query.delete("guestsAdults");
-  }
-  if (filters.guestsChildren) {
-    query.set("guestsChildren", filters.guestsChildren);
-  } else {
-    query.delete("guestsChildren");
-  }
-
-  const nextQuery = query.toString();
-  const nextPath = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-  return hash ? `${nextPath}#${hash}` : nextPath;
-}
-
 export function buildAccommodationSearchParams(
   filters: SearchFilters,
   page = 1,
@@ -87,7 +51,7 @@ export function buildAccommodationSearchParams(
   return params;
 }
 
-function toSearchResponse(payload: SearchApiResponse, filters: SearchFilters): SearchResponse {
+function toSearchResponse(payload: SearchApiResponse): SearchResponse {
   const page = Number.isFinite(payload.page) ? Math.max(1, payload.page) : 1;
   const totalPages = Number.isFinite(payload.total_pages) ? Math.max(1, payload.total_pages) : 1;
   const pageSize = Number.isFinite(payload.page_size)
@@ -96,10 +60,7 @@ function toSearchResponse(payload: SearchApiResponse, filters: SearchFilters): S
   const total = Number.isFinite(payload.total) ? Math.max(0, payload.total) : 0;
 
   return {
-    items: parseItems(payload.items).map((item) => ({
-      ...item,
-      path: appendStayParamsToPath(item.path, filters),
-    })),
+    items: parseItems(payload.items),
     total,
     page,
     pageSize,
@@ -126,7 +87,7 @@ export async function fetchAccommodationSearch(
   }
 
   const payload = (await response.json()) as SearchApiResponse;
-  return toSearchResponse(payload, filters);
+  return toSearchResponse(payload);
 }
 
 export function buildHousingCatalogUrl(

@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import { formatProgramDuration, formatProgramPrice } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
 import type { PublicExcursionCatalogItem } from "@/lib/public-excursions";
+import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
 type MapExcursionPopupCardProps = {
   item: PublicExcursionCatalogItem;
@@ -42,6 +43,7 @@ function hasMeaningfulDuration(item: PublicExcursionCatalogItem): boolean {
 }
 
 export function MapExcursionPopupCard({ item, className, onClose }: MapExcursionPopupCardProps) {
+  const detailsHref = stripSearchParamsFromPath(item.path);
   const locationLabel =
     item.locationName || item.mainLocationName || item.districtName || item.routeSummary || "Крым";
   const metaLabel =
@@ -133,7 +135,7 @@ export function MapExcursionPopupCard({ item, className, onClose }: MapExcursion
         </div>
 
         <Link
-          href={item.path}
+          href={detailsHref}
           className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-terra px-4 text-sm font-semibold text-white transition hover:bg-terra/88"
         >
           Подробнее

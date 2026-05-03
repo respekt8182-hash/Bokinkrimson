@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
+import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
 export type MapPopupPropertyItem = {
   id: string;
@@ -66,6 +67,7 @@ export function MapPropertyPopupCard({
     () => Array.from(new Set(item.photos.filter((url) => url.trim().length > 0))).slice(0, 5),
     [item.photos],
   );
+  const detailsHref = useMemo(() => stripSearchParamsFromPath(item.path), [item.path]);
   const currentImage = photos[0] ?? null;
 
   if (variant === "compact") {
@@ -78,7 +80,7 @@ export function MapPropertyPopupCard({
         )}
       >
         <Link
-          href={item.path}
+          href={detailsHref}
           aria-label={`Открыть карточку ${item.title}`}
           className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
         />
@@ -166,7 +168,7 @@ export function MapPropertyPopupCard({
       )}
     >
       <Link
-        href={item.path}
+        href={detailsHref}
         aria-label={`Открыть карточку ${item.title}`}
         className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
       />
