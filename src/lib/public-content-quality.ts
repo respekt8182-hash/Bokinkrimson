@@ -12,51 +12,108 @@ type CleanPublicTextListOptions = CleanPublicTextOptions & {
 
 const DEFAULT_MIN_TEXT_LENGTH = 2;
 const DEFAULT_MAX_TEXT_LENGTH = 5000;
+const ELLIPSIS = "\u2026";
+const CYRILLIC_YO_LOWER = "\u0451";
+const CYRILLIC_E_LOWER = "\u0435";
+const WINDOWS_1251_DECODER = new TextDecoder("windows-1251");
+const WINDOWS_1251_CONTINUATION_CODES = new Set(
+  Array.from({ length: 64 }, (_, index) =>
+    WINDOWS_1251_DECODER.decode(Uint8Array.of(0x80 + index)).charCodeAt(0),
+  ),
+);
 
-const mojibakePattern =
-  /(?:Рџ|Рљ|Рќ|Рћ|Р§|РЁ|Р“|Р”|Р•|Р—|Р°|Р±|РІ|Рі|Рґ|Рµ|Р¶|Р·|Рё|Р№|Рє|Р»|Рј|РЅ|Рѕ|Рї|СЂ|СЃ|С‚|Сѓ|С„|С…|С†|С‡|С€|С‰|С‹|СЊ|СЋ|СЏ|вЂ|в„|в™|вќ|вњ|в€|Гђ|Г‘|Гў|Г—|â€|Â|�)/u;
+const latinPlaceholderPattern = /\b(?:lorem\s+ipsum|ipsum\s+dolor|dolor\s+sit\s+amet)\b/i;
+const latinDemoPattern = /\b(?:test|demo)\s+(?:card|listing|content|text|description)\b/i;
+const wordPattern = /[a-z\u0430-\u044f\u04510-9]{3,}/giu;
+const sentencePattern = /[^.!?\u2026\n]+(?:[.!?\u2026]+|$)/g;
 
-const servicePlaceholderPatterns = [
-  /\b(?:lorem\s+ipsum|ipsum\s+dolor|dolor\s+sit\s+amet)\b/i,
-  /\b(?:test|demo)\s+(?:card|listing|content|text|description)\b/i,
-  /(?:тестов(?:ая|ый|ое|ые)|демо|демонстрационн(?:ая|ый|ое|ые)|примерн(?:ая|ый|ое|ые))\s+(?:карточк\w*|объект\w*|проект\w*|описан\w*|маршрут\w*|текст\w*|контент\w*)/iu,
-  /(?:для\s+оценки|для\s+демонстрации|визуальной\s+оценки|наполненного\s+каталога|заполненном\s+сайте|тестового\s+наполнения)/iu,
-  /(?:здесь|тут)\s+будет\s+(?:описание|текст|информация)/iu,
-  /(?:введите|добавьте|укажите)\s+(?:описание|текст|информацию)/iu,
-  /(?:описание|текст)\s+(?:пока\s+)?(?:не\s+)?(?:добавлен[оа]?|заполнен[оа]?|указан[оа]?)/iu,
-  /(?:asdf|qwerty|йцукен|ывапролдж|фывфыв)/iu,
+const placeholderSubjectStems = [
+  "\u0442\u0435\u0441\u0442\u043e\u0432",
+  "\u0434\u0435\u043c\u043e",
+  "\u0434\u0435\u043c\u043e\u043d\u0441\u0442\u0440\u0430\u0446\u0438\u043e\u043d\u043d",
+  "\u043f\u0440\u0438\u043c\u0435\u0440\u043d",
 ];
 
-const weakMarketingPatterns = [
-  /\bнового\s+поколения\b.*\bкомфортной\s+жизни\b/iu,
-  /\bнаслаждаться\s+красивыми\s+закатами\s+каждый\s+день\b/iu,
+const placeholderNounStems = [
+  "\u043a\u0430\u0440\u0442\u043e\u0447\u043a",
+  "\u043e\u0431\u044a\u0435\u043a\u0442",
+  "\u043f\u0440\u043e\u0435\u043a\u0442",
+  "\u043e\u043f\u0438\u0441\u0430\u043d",
+  "\u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+  "\u0442\u0435\u043a\u0441\u0442",
+  "\u043a\u043e\u043d\u0442\u0435\u043d\u0442",
+];
+
+const placeholderContextPhrases = [
+  "\u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438",
+  "\u0434\u043b\u044f \u0434\u0435\u043c\u043e\u043d\u0441\u0442\u0440\u0430\u0446\u0438\u0438",
+  "\u0432\u0438\u0437\u0443\u0430\u043b\u044c\u043d\u043e\u0439 \u043e\u0446\u0435\u043d\u043a\u0438",
+  "\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u043e\u0433\u043e \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430",
+  "\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u043e\u043c \u0441\u0430\u0439\u0442\u0435",
+  "\u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0433\u043e \u043d\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f",
+];
+
+const placeholderPronouns = ["\u0437\u0434\u0435\u0441\u044c", "\u0442\u0443\u0442"];
+const placeholderObjects = [
+  "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435",
+  "\u0442\u0435\u043a\u0441\u0442",
+  "\u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f",
+];
+const placeholderPromptVerbs = [
+  "\u0432\u0432\u0435\u0434\u0438\u0442\u0435",
+  "\u0434\u043e\u0431\u0430\u0432\u044c\u0442\u0435",
+  "\u0443\u043a\u0430\u0436\u0438\u0442\u0435",
+];
+const missingContentNouns = [
+  "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435",
+  "\u0442\u0435\u043a\u0441\u0442",
+];
+const missingContentStates = [
+  "\u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d",
+  "\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d",
+  "\u0443\u043a\u0430\u0437\u0430\u043d",
+];
+const keyboardMashTokens = [
+  "asdf",
+  "qwerty",
+  "\u0439\u0446\u0443\u043a\u0435\u043d",
+  "\u044b\u0432\u0430\u043f\u0440\u043e\u043b\u0434\u0436",
+  "\u0444\u044b\u0432\u0444\u044b\u0432",
+];
+
+const weakMarketingPhrases = [
+  "\u043d\u043e\u0432\u043e\u0433\u043e \u043f\u043e\u043a\u043e\u043b\u0435\u043d\u0438\u044f",
+  "\u043a\u043e\u043c\u0444\u043e\u0440\u0442\u043d\u043e\u0439 \u0436\u0438\u0437\u043d\u0438",
+  "\u043d\u0430\u0441\u043b\u0430\u0436\u0434\u0430\u0442\u044c\u0441\u044f \u043a\u0440\u0430\u0441\u0438\u0432\u044b\u043c\u0438 \u0437\u0430\u043a\u0430\u0442\u0430\u043c\u0438 \u043a\u0430\u0436\u0434\u044b\u0439 \u0434\u0435\u043d\u044c",
 ];
 
 const stopWords = new Set([
-  "для",
-  "или",
-  "это",
-  "что",
-  "как",
-  "при",
-  "над",
-  "под",
-  "без",
-  "еще",
-  "ещё",
-  "уже",
-  "все",
-  "всё",
-  "его",
-  "она",
-  "они",
-  "там",
-  "тут",
-  "есть",
-  "можно",
-  "будет",
-  "после",
+  "\u0434\u043b\u044f",
+  "\u0438\u043b\u0438",
+  "\u044d\u0442\u043e",
+  "\u0447\u0442\u043e",
+  "\u043a\u0430\u043a",
+  "\u043f\u0440\u0438",
+  "\u043d\u0430\u0434",
+  "\u043f\u043e\u0434",
+  "\u0431\u0435\u0437",
+  "\u0435\u0449\u0435",
+  "\u0443\u0436\u0435",
+  "\u0432\u0441\u0435",
+  "\u0435\u0433\u043e",
+  "\u043e\u043d\u0430",
+  "\u043e\u043d\u0438",
+  "\u0442\u0430\u043c",
+  "\u0442\u0443\u0442",
+  "\u0435\u0441\u0442\u044c",
+  "\u043c\u043e\u0436\u043d\u043e",
+  "\u0431\u0443\u0434\u0435\u0442",
+  "\u043f\u043e\u0441\u043b\u0435",
 ]);
+
+function normalizeRussian(value: string): string {
+  return value.toLowerCase().replaceAll(CYRILLIC_YO_LOWER, CYRILLIC_E_LOWER);
+}
 
 function normalizeWhitespace(value: string, preserveLineBreaks: boolean): string {
   const normalized = value
@@ -76,17 +133,117 @@ function normalizeWhitespace(value: string, preserveLineBreaks: boolean): string
     .trim();
 }
 
-function getTextWords(value: string): string[] {
+function normalizeForChecks(value: string): string {
+  return normalizeRussian(normalizeWhitespace(value, false));
+}
+
+function includesAny(value: string, candidates: readonly string[]): boolean {
+  return candidates.some((candidate) => value.includes(candidate));
+}
+
+function hasPlaceholderStemPair(value: string): boolean {
   return (
-    value
-      .toLowerCase()
-      .replace(/ё/g, "е")
-      .match(/[a-zа-я0-9]{3,}/giu) ?? []
+    placeholderSubjectStems.some((stem) => value.includes(stem)) &&
+    placeholderNounStems.some((stem) => value.includes(stem))
   );
 }
 
+function hasMojibake(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0xfffd) {
+      return true;
+    }
+
+    const next = value.charCodeAt(index + 1);
+    if (!Number.isFinite(next)) {
+      continue;
+    }
+
+    if (
+      (code === 0x0420 || code === 0x0421) &&
+      WINDOWS_1251_CONTINUATION_CODES.has(next)
+    ) {
+      return true;
+    }
+
+    if (
+      code === 0x0413 &&
+      ((next >= 0x0080 && next <= 0x00ff) ||
+        (next >= 0x0041 && next <= 0x005a) ||
+        (next >= 0x0061 && next <= 0x007a))
+    ) {
+      return true;
+    }
+
+    if (code === 0x0432 && next === 0x0402) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getTextWords(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replaceAll(CYRILLIC_YO_LOWER, CYRILLIC_E_LOWER)
+    .match(wordPattern) ?? [];
+}
+
 function hasServicePlaceholder(value: string): boolean {
-  return servicePlaceholderPatterns.some((pattern) => pattern.test(value));
+  if (latinPlaceholderPattern.test(value) || latinDemoPattern.test(value)) {
+    return true;
+  }
+
+  const normalized = normalizeForChecks(value);
+  if (!normalized) {
+    return false;
+  }
+
+  if (includesAny(normalized, keyboardMashTokens)) {
+    return true;
+  }
+
+  if (hasPlaceholderStemPair(normalized)) {
+    return true;
+  }
+
+  if (includesAny(normalized, placeholderContextPhrases)) {
+    return true;
+  }
+
+  if (
+    placeholderPronouns.some((pronoun) =>
+      placeholderObjects.some(
+        (object) =>
+          normalized.includes(
+            `${pronoun} \u0431\u0443\u0434\u0435\u0442 ${object}`,
+          ),
+      ),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    placeholderPromptVerbs.some((verb) =>
+      placeholderObjects.some((object) => normalized.includes(`${verb} ${object}`)),
+    )
+  ) {
+    return true;
+  }
+
+  return missingContentNouns.some((noun) =>
+    missingContentStates.some(
+      (state) =>
+        normalized.includes(`${noun} ${state}`) ||
+        normalized.includes(`${noun} \u043d\u0435 ${state}`) ||
+        normalized.includes(
+          `${noun} \u043f\u043e\u043a\u0430 \u043d\u0435 ${state}`,
+        ),
+    ),
+  );
 }
 
 function hasLowLexicalQuality(value: string): boolean {
@@ -119,7 +276,7 @@ function hasBrokenCharacterMix(value: string): boolean {
     return false;
   }
 
-  const lettersAndDigits = value.match(/[a-zа-яё0-9]/giu)?.length ?? 0;
+  const lettersAndDigits = value.match(/[a-z\u0430-\u044f\u04510-9]/giu)?.length ?? 0;
   const visible = value.replace(/\s/g, "").length;
   if (visible === 0) {
     return true;
@@ -128,13 +285,23 @@ function hasBrokenCharacterMix(value: string): boolean {
   return lettersAndDigits / visible < 0.55;
 }
 
+function hasWeakMarketingCopy(value: string): boolean {
+  const normalized = normalizeForChecks(value);
+
+  return (
+    (normalized.includes(weakMarketingPhrases[0]) &&
+      normalized.includes(weakMarketingPhrases[1])) ||
+    normalized.includes(weakMarketingPhrases[2])
+  );
+}
+
 function isBadSentence(value: string): boolean {
   const sentence = value.trim();
   if (!sentence) {
     return true;
   }
 
-  if (mojibakePattern.test(sentence) || hasServicePlaceholder(sentence)) {
+  if (hasMojibake(sentence) || hasServicePlaceholder(sentence)) {
     return true;
   }
 
@@ -142,16 +309,11 @@ function isBadSentence(value: string): boolean {
     return true;
   }
 
-  return sentence.length >= 90 && weakMarketingPatterns.some((pattern) => pattern.test(sentence));
+  return sentence.length >= 90 && hasWeakMarketingCopy(sentence);
 }
 
 function splitSentences(value: string): string[] {
-  return (
-    value
-      .match(/[^.!?…\n]+(?:[.!?…]+|$)/g)
-      ?.map((sentence) => sentence.trim())
-      .filter(Boolean) ?? []
-  );
+  return value.match(sentencePattern)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
 }
 
 function truncateToCompleteSentence(value: string, maxLength: number): string {
@@ -164,7 +326,7 @@ function truncateToCompleteSentence(value: string, maxLength: number): string {
     candidate.lastIndexOf("."),
     candidate.lastIndexOf("!"),
     candidate.lastIndexOf("?"),
-    candidate.lastIndexOf("…"),
+    candidate.lastIndexOf(ELLIPSIS),
   );
 
   if (lastSentenceEnd >= Math.min(80, Math.floor(maxLength * 0.45))) {
@@ -180,7 +342,7 @@ function cleanParagraph(value: string): string | null {
     return null;
   }
 
-  if (mojibakePattern.test(normalized) || hasServicePlaceholder(normalized)) {
+  if (hasMojibake(normalized) || hasServicePlaceholder(normalized)) {
     const sentences = splitSentences(normalized);
     const safeSentences: string[] = [];
 
@@ -260,7 +422,7 @@ export function cleanPublicTextList(
       continue;
     }
 
-    const key = cleaned.toLowerCase().replace(/ё/g, "е");
+    const key = normalizeRussian(cleaned);
     if (seen.has(key)) {
       continue;
     }
@@ -290,7 +452,7 @@ export function cleanFaqItems(value: FaqItem[] | null | undefined): FaqItem[] {
       continue;
     }
 
-    const key = q.toLowerCase().replace(/ё/g, "е");
+    const key = normalizeRussian(q);
     if (seen.has(key)) {
       continue;
     }
