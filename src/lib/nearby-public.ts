@@ -153,6 +153,7 @@ const nearbyPropertySelect = Prisma.validator<Prisma.PropertySelect>()({
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     take: 6,
     select: {
+      type: true,
       url: true,
     },
   },
@@ -212,11 +213,12 @@ function buildNearbyExcursionItem(
   row: NearbyExcursionRecord,
   distanceKm: number,
 ): NearbyExcursionItem {
-  const coverImageUrl = normalizePublicAssetUrls(
-    Array.isArray(row.photoUrls)
-      ? row.photoUrls.filter((value): value is string => typeof value === "string")
-      : [],
-  )[0] ?? null;
+  const coverImageUrl =
+    normalizePublicAssetUrls(
+      Array.isArray(row.photoUrls)
+        ? row.photoUrls.filter((value): value is string => typeof value === "string")
+        : [],
+    )[0] ?? null;
   const nextSessionStartAt = row.sessions[0]?.startAt ?? null;
 
   return {
@@ -319,9 +321,7 @@ export async function getNearbyExcursions(input: {
         return null;
       }
 
-      const roadDistanceKm = toRoadDistanceKm(
-        haversineDistanceKm(origin, { latitude, longitude }),
-      );
+      const roadDistanceKm = toRoadDistanceKm(haversineDistanceKm(origin, { latitude, longitude }));
 
       if (roadDistanceKm > radiusKm) {
         return null;

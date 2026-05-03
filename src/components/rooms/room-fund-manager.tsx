@@ -86,6 +86,7 @@ const MAX_TOTAL_GUESTS = 20;
 const DEFAULT_BED_TYPE: BedTypeId = "double_queen";
 const MOBILE_ROOMS_PAGE_SIZE = 4;
 const DESKTOP_ROOMS_PAGE_SIZE = 5;
+const AUTO_CREATED_ROOM_AREA_SQM = 20;
 
 function toFloatOrNull(value: string): number | null {
   const normalized = value.replace(",", ".").trim();
@@ -133,6 +134,45 @@ function formatPlacesLabel(value: number): string {
 function buildRoomTitle(roomName: string): string {
   const normalizedRoomName = normalizeRoomTitle(roomName);
   return normalizedRoomName.slice(0, 120);
+}
+
+function buildAutoCreatedRoomPayload() {
+  const roomType = defaultRoomMeta.roomType;
+  const roomName = defaultRoomMeta.roomName;
+  const initialBeds = resolveMainPlacesForRoomType(roomType);
+  const initialBedSets = buildDefaultBedSetsForRoomType(roomType);
+  const initialBedSetsMeta = initialBedSets
+    .map((set) => buildBedConfigurationFromRows(set.rows))
+    .filter((configuration) => configuration.length > 0);
+  const bedConfiguration = initialBedSetsMeta[0] ?? [];
+
+  return {
+    title: buildRoomTitle(roomName),
+    beds: initialBeds,
+    extraBeds: 0,
+    roomsCount: 1,
+    areaSqm: AUTO_CREATED_ROOM_AREA_SQM,
+    bathroomType: "IN_ROOM",
+    featureIds: [],
+    customFeatures: [],
+    meta: {
+      ...defaultRoomMeta,
+      roomType,
+      roomName,
+      nameInExtranet: null,
+      bedConfiguration,
+      bedSets: initialBedSetsMeta,
+      hasAdditionalPlaces: false,
+      additionalPlaceTypes: [],
+      hasPrivateBathroom: true,
+      privateBathroomLocations: ["in_room"],
+      privateToiletLocations: ["in_bathroom"],
+      hasSharedBathroom: false,
+      sharedBathroomLocations: [],
+      sharedToiletLocations: [],
+      privateBathroomCount: 1,
+    },
+  };
 }
 
 function resolvePrimaryBedUnits(room: SerializedRoom, roomMeta: RoomMeta): number {
@@ -295,6 +335,7 @@ export function RoomFundManager({
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const [rooms, setRooms] = useState<SerializedRoom[]>(initialRooms);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [roomsLoadError, setRoomsLoadError] = useState("");
@@ -305,6 +346,10 @@ export function RoomFundManager({
   const [isCompactRoomList, setIsCompactRoomList] = useState(false);
   const [currentRoomsPage, setCurrentRoomsPage] = useState(1);
   const editorSectionRef = useRef<HTMLElement | null>(null);
+  const createRoomRequestIdRef = useRef(0);
+  const isCreatingRoomRef = useRef(false);
+  const initialCreateHandledRef = useRef(false);
+  const activeEditorRoomRef = useRef<SerializedRoom | null>(null);
   const roomEditorSectionRefs = useRef<Record<RoomEditorSectionId, HTMLElement | null>>({
     general: null,
     capacity: null,
@@ -461,7 +506,7 @@ export function RoomFundManager({
     () => (editingRoomId ? (rooms.find((room) => room.id === editingRoomId) ?? null) : null),
     [editingRoomId, rooms],
   );
-  const canSaveRoom = !isSaving && isAreaSqmValid;
+  const canSaveRoom = Boolean(editingRoomId) && !isCreatingRoom && !isSaving && isAreaSqmValid;
   const checklistItems = useMemo<
     Array<{ id: RoomEditorSectionId; label: string; done: boolean }>
   >(() => {
@@ -532,9 +577,9 @@ export function RoomFundManager({
     (completedChecklistCount / Math.max(1, checklistItems.length)) * 100;
   const saveRoomLabel = isSaving
     ? "Сохранение..."
-    : editingRoomId
-      ? "Сохранить изменения"
-      : "Создать номер";
+    : isCreatingRoom
+      ? "Создание..."
+      : "Сохранить изменения";
 
   const roomsPerPage = isCompactRoomList ? MOBILE_ROOMS_PAGE_SIZE : DESKTOP_ROOMS_PAGE_SIZE;
   const roomCards = useMemo<RoomCardListItem[]>(() => {
@@ -605,11 +650,11 @@ export function RoomFundManager({
     return Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
   }, [currentRoomsPage, maxVisiblePageButtons, totalRoomsPages]);
 
-  async function notifyChanged() {
+  const notifyChanged = useCallback(async () => {
     if (onChanged) {
       await onChanged();
     }
-  }
+  }, [onChanged]);
 
   const refreshRooms = useCallback(async () => {
     setIsLoadingRooms(true);
@@ -623,7 +668,20 @@ export function RoomFundManager({
       }
 
       const body = (await response.json()) as { items: SerializedRoom[] };
-      setRooms(body.items);
+      setRooms(() => {
+        const editorRoom = activeEditorRoomRef.current;
+        if (!editorRoom) {
+          return body.items;
+        }
+
+        const refreshedEditorRoom = body.items.find((item) => item.id === editorRoom.id) ?? null;
+        if (refreshedEditorRoom) {
+          activeEditorRoomRef.current = refreshedEditorRoom;
+          return body.items;
+        }
+
+        return [editorRoom, ...body.items];
+      });
     } catch {
       setRoomsLoadError("Не удалось загрузить номера.");
     } finally {
@@ -650,6 +708,7 @@ export function RoomFundManager({
   }, [totalRoomsPages]);
 
   const resetForm = useCallback(() => {
+    activeEditorRoomRef.current = null;
     setEditingRoomId(null);
     setOpenedRoomMenuId(null);
     setRoomType(defaultRoomMeta.roomType);
@@ -686,12 +745,6 @@ export function RoomFundManager({
     });
   }, []);
 
-  const openCreateForm = useCallback(() => {
-    resetForm();
-    setIsEditorOpen(true);
-    scrollToEditor();
-  }, [resetForm, scrollToEditor]);
-
   const clearCreateModeFromUrl = useCallback(() => {
     if (!pathname || searchParams.get("create") !== "1") {
       return;
@@ -704,48 +757,115 @@ export function RoomFundManager({
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
 
+  const startEdit = useCallback(
+    (room: SerializedRoom) => {
+      const meta = getLegacyMeta(room);
+      activeEditorRoomRef.current = room;
+      isCreatingRoomRef.current = false;
+      setIsCreatingRoom(false);
+      setOpenedRoomMenuId(null);
+      setEditingRoomId(room.id);
+      setIsEditorOpen(true);
+      setRoomType(meta.roomType);
+      const suggestions = (roomNameSuggestionsByType[meta.roomType] ?? []).filter(
+        (option) => !option.toLowerCase().includes("свое"),
+      );
+      if (suggestions.includes(meta.roomName)) {
+        setSelectedRoomName(meta.roomName);
+        setCustomRoomName("");
+      } else {
+        setSelectedRoomName(CUSTOM_ROOM_NAME_VALUE);
+        setCustomRoomName(meta.roomName);
+      }
+      setNameInExtranet(meta.nameInExtranet ?? "");
+      setBeds(resolveMainPlacesForRoomType(meta.roomType, room.beds));
+      setExtraBeds(room.extraBeds);
+      setAreaSqmInput(room.areaSqm === null ? "" : String(room.areaSqm));
+      setBedSets(buildBedSetsFromMeta(meta, meta.roomType));
+      setHasAdditionalPlaces(meta.hasAdditionalPlaces);
+      setSelectedAdditionalPlaceTypes(meta.additionalPlaceTypes);
+      const hasPrivateBathroomSelected = meta.hasPrivateBathroom;
+      const hasSharedBathroomSelected = !hasPrivateBathroomSelected && meta.hasSharedBathroom;
+      setHasPrivateBathroom(hasPrivateBathroomSelected);
+      setPrivateBathroomLocations(meta.privateBathroomLocations);
+      setPrivateToiletLocations(meta.privateToiletLocations);
+      setPrivateBathroomCount(meta.privateBathroomCount ?? 1);
+      setHasSharedBathroom(hasSharedBathroomSelected);
+      setSharedBathroomLocations(meta.sharedBathroomLocations);
+      setSharedToiletLocations(meta.sharedToiletLocations);
+      setIsBathroomSectionEnabled(hasPrivateBathroomSelected || hasSharedBathroomSelected);
+      setError("");
+      scrollToEditor();
+    },
+    [scrollToEditor],
+  );
+
+  const createRoomDraft = useCallback(async () => {
+    if (isCreatingRoomRef.current) {
+      return;
+    }
+
+    const requestId = createRoomRequestIdRef.current + 1;
+    createRoomRequestIdRef.current = requestId;
+    isCreatingRoomRef.current = true;
+
+    resetForm();
+    setIsEditorOpen(true);
+    setIsCreatingRoom(true);
+    scrollToEditor();
+
+    try {
+      const response = await fetch(`/api/properties/${propertyId}/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildAutoCreatedRoomPayload()),
+      });
+
+      if (createRoomRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setError(body.error ?? "Не удалось автоматически создать номер");
+        return;
+      }
+
+      const body = (await response.json()) as { item: SerializedRoom };
+      const savedRoom = body.item;
+
+      setRooms((prev) =>
+        prev.some((item) => item.id === savedRoom.id)
+          ? prev.map((item) => (item.id === savedRoom.id ? savedRoom : item))
+          : [savedRoom, ...prev],
+      );
+      setCurrentRoomsPage(1);
+      startEdit(savedRoom);
+      await notifyChanged();
+    } catch {
+      if (createRoomRequestIdRef.current === requestId) {
+        setError("Не удалось автоматически создать номер");
+      }
+    } finally {
+      if (createRoomRequestIdRef.current === requestId) {
+        isCreatingRoomRef.current = false;
+        setIsCreatingRoom(false);
+      }
+    }
+  }, [notifyChanged, propertyId, resetForm, scrollToEditor, startEdit]);
+
+  const openCreateForm = useCallback(() => {
+    void createRoomDraft();
+  }, [createRoomDraft]);
+
   const closeEditor = useCallback(() => {
+    createRoomRequestIdRef.current += 1;
+    isCreatingRoomRef.current = false;
+    setIsCreatingRoom(false);
     resetForm();
     setIsEditorOpen(false);
     clearCreateModeFromUrl();
   }, [clearCreateModeFromUrl, resetForm]);
-
-  function startEdit(room: SerializedRoom) {
-    const meta = getLegacyMeta(room);
-    setOpenedRoomMenuId(null);
-    setEditingRoomId(room.id);
-    setIsEditorOpen(true);
-    setRoomType(meta.roomType);
-    const suggestions = (roomNameSuggestionsByType[meta.roomType] ?? []).filter(
-      (option) => !option.toLowerCase().includes("свое"),
-    );
-    if (suggestions.includes(meta.roomName)) {
-      setSelectedRoomName(meta.roomName);
-      setCustomRoomName("");
-    } else {
-      setSelectedRoomName(CUSTOM_ROOM_NAME_VALUE);
-      setCustomRoomName(meta.roomName);
-    }
-    setNameInExtranet(meta.nameInExtranet ?? "");
-    setBeds(resolveMainPlacesForRoomType(meta.roomType, room.beds));
-    setExtraBeds(room.extraBeds);
-    setAreaSqmInput(room.areaSqm === null ? "" : String(room.areaSqm));
-    setBedSets(buildBedSetsFromMeta(meta, meta.roomType));
-    setHasAdditionalPlaces(meta.hasAdditionalPlaces);
-    setSelectedAdditionalPlaceTypes(meta.additionalPlaceTypes);
-    const hasPrivateBathroomSelected = meta.hasPrivateBathroom;
-    const hasSharedBathroomSelected = !hasPrivateBathroomSelected && meta.hasSharedBathroom;
-    setHasPrivateBathroom(hasPrivateBathroomSelected);
-    setPrivateBathroomLocations(meta.privateBathroomLocations);
-    setPrivateToiletLocations(meta.privateToiletLocations);
-    setPrivateBathroomCount(meta.privateBathroomCount ?? 1);
-    setHasSharedBathroom(hasSharedBathroomSelected);
-    setSharedBathroomLocations(meta.sharedBathroomLocations);
-    setSharedToiletLocations(meta.sharedToiletLocations);
-    setIsBathroomSectionEnabled(hasPrivateBathroomSelected || hasSharedBathroomSelected);
-    setError("");
-    scrollToEditor();
-  }
 
   function goToRoomsPage(nextPage: number) {
     setOpenedRoomMenuId(null);
@@ -753,10 +873,11 @@ export function RoomFundManager({
   }
 
   useEffect(() => {
-    if (!initialCreateMode) {
+    if (!initialCreateMode || initialCreateHandledRef.current) {
       return;
     }
 
+    initialCreateHandledRef.current = true;
     openCreateForm();
   }, [initialCreateMode, openCreateForm]);
 
@@ -927,6 +1048,11 @@ export function RoomFundManager({
   async function saveRoom() {
     setError("");
 
+    if (!editingRoomId) {
+      setError("Номер создаётся автоматически. Подождите несколько секунд.");
+      return;
+    }
+
     const roomName = getRoomNameFromState(selectedRoomName, customRoomName);
     const areaSqm = parsedAreaSqm;
 
@@ -1051,14 +1177,8 @@ export function RoomFundManager({
     setIsSaving(true);
 
     try {
-      const url = editingRoomId
-        ? `/api/properties/${propertyId}/rooms/${editingRoomId}`
-        : `/api/properties/${propertyId}/rooms`;
-
-      const method = editingRoomId ? "PATCH" : "POST";
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch(`/api/properties/${propertyId}/rooms/${editingRoomId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -1072,15 +1192,9 @@ export function RoomFundManager({
       const body = (await response.json()) as { item: SerializedRoom };
       const savedRoom = body.item;
 
-      if (editingRoomId) {
-        setRooms((prev) => prev.map((item) => (item.id === savedRoom.id ? savedRoom : item)));
-        setCurrentRoomsPage(1);
-        closeEditor();
-      } else {
-        setRooms((prev) => [savedRoom, ...prev]);
-        setCurrentRoomsPage(1);
-        startEdit(savedRoom);
-      }
+      setRooms((prev) => prev.map((item) => (item.id === savedRoom.id ? savedRoom : item)));
+      setCurrentRoomsPage(1);
+      closeEditor();
 
       await notifyChanged();
     } finally {
@@ -1155,7 +1269,7 @@ export function RoomFundManager({
                   Номерной фонд
                 </p>
                 <h3 className="text-xl font-bold text-olive">
-                  {editingRoomId ? "Редактирование номера" : "Создание номера"}
+                  {isCreatingRoom ? "Создание номера" : "Редактирование номера"}
                 </h3>
               </div>
             </div>
@@ -1830,14 +1944,15 @@ export function RoomFundManager({
                   <div
                     ref={(node) => registerEditorSectionRef("photo", node)}
                     data-room-editor-section="photo"
-                    className="min-w-0 scroll-mt-32 rounded-2xl border border-dashed border-olive/20 bg-cream/20 p-4 text-center sm:p-5"
+                    className="min-w-0 scroll-mt-32 rounded-2xl border border-olive/12 bg-cream/30 p-4 text-center sm:p-5"
                   >
-                    <p className="flex justify-center text-primary">
-                      <AppIcon icon={ImageIcon} className="h-8 w-8" />
+                    <p className="text-sm font-semibold text-olive">
+                      {isCreatingRoom ? "Создаём номер..." : "Загрузка фото пока недоступна"}
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-olive">Фото номера</p>
                     <p className="mt-1 text-sm text-olive/55">
-                      После создания номера откроется загрузка фотографий.
+                      {isCreatingRoom
+                        ? "Сейчас откроется управление фотографиями."
+                        : "Закройте форму и попробуйте открыть создание номера ещё раз."}
                     </p>
                   </div>
                 )}
@@ -1845,11 +1960,7 @@ export function RoomFundManager({
                 {/* Action buttons */}
                 <div className="hidden flex-wrap items-center gap-3 border-t border-olive/8 pt-4 sm:flex">
                   <Button onClick={() => void saveRoom()} disabled={!canSaveRoom} className="px-6">
-                    {isSaving
-                      ? "Сохранение..."
-                      : editingRoomId
-                        ? "Сохранить изменения"
-                        : "Создать номер"}
+                    {saveRoomLabel}
                   </Button>
                   <Button variant="ghost" onClick={closeEditor}>
                     Отменить
@@ -1904,9 +2015,11 @@ export function RoomFundManager({
                     Действия
                   </p>
                   <p className="truncate text-sm font-semibold text-olive">
-                    {editingRoomId ? "Редактирование номера" : "Создание номера"}
+                    {isCreatingRoom ? "Создание номера" : "Редактирование номера"}
                   </p>
-                  <p className="mt-0.5 text-xs text-olive/60">Сохраните номер или закройте форму</p>
+                  <p className="mt-0.5 text-xs text-olive/60">
+                    Сохраните изменения или закройте форму
+                  </p>
                 </div>
                 <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
                   {completedChecklistCount}/{checklistItems.length}
@@ -2039,8 +2152,7 @@ export function RoomFundManager({
             {paginatedRoomCards.map((roomCard) => {
               const { room, cardDetails, instanceNumber } = roomCard;
               const firstImage = room.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
-              const roomInstanceLabel =
-                instanceNumber === null ? null : `Номер ${instanceNumber}`;
+              const roomInstanceLabel = instanceNumber === null ? null : `Номер ${instanceNumber}`;
               const deleteLabel =
                 roomInstanceLabel === null
                   ? cardDetails.title

@@ -1,5 +1,6 @@
 import {
   CustomLocationStatus,
+  MediaType,
   PetsPolicy,
   Prisma,
   PropertyStatus,
@@ -649,7 +650,7 @@ export function resolvePublicCatalogDisplayState(property: {
   childrenAllowed: boolean | null;
   petsPolicy: PetsPolicy | null;
   starRating: number | null;
-  media: Array<{ url: string }>;
+  media: Array<{ url: string; type: MediaType }>;
   rooms: Array<{
     id: string;
     title: string;
@@ -724,10 +725,9 @@ export function resolvePublicCatalogDisplayState(property: {
     childrenAllowed: snapshot?.property.childrenAllowed ?? property.childrenAllowed,
     petsPolicy: snapshot?.property.petsPolicy ?? property.petsPolicy,
     starRating: snapshot?.property.starRating ?? property.starRating ?? 0,
-    imageUrls: (snapshot
-      ? snapshot.media.map((media) => media.url)
-      : property.media.map((media) => media.url)
-    )
+    imageUrls: (snapshot ? snapshot.media : property.media)
+      .filter((media) => media.type === MediaType.IMAGE)
+      .map((media) => media.url)
       .map((url) => normalizeLegacyFotoImageUrl(url))
       .filter((url) => url.trim().length > 0),
     rooms,

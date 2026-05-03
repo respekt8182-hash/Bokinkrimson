@@ -23,7 +23,6 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import {
   crimeaLocations,
-  mediaLimits,
   normalizePropertyTypeId,
   propertyAboutLimits,
   propertyTypes,
@@ -33,7 +32,6 @@ import {
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
 } from "@/lib/contact-links";
-import { accommodationPhotoUploadLimitsLabel } from "@/lib/photo-upload";
 import type { SerializedProperty } from "@/lib/properties";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { buildWebsiteFaviconUrl } from "@/lib/website-favicon";
@@ -118,7 +116,10 @@ function normalizeLocation(value: string): string {
 }
 
 function normalizeLocationLookupText(value: string): string {
-  return normalizeLocation(value).replace(/[^a-z0-9а-я\s-]+/g, " ").replace(/\s+/g, " ").trim();
+  return normalizeLocation(value)
+    .replace(/[^a-z0-9а-я\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -359,11 +360,7 @@ export function ObjectAboutPage({
       return null;
     }
 
-    return (
-      items.find(
-        (item) => normalizeLocationLookupText(item.name) === normalizedValue,
-      ) ?? null
-    );
+    return items.find((item) => normalizeLocationLookupText(item.name) === normalizedValue) ?? null;
   }
 
   async function resolveLocationFromAddress(
@@ -855,9 +852,7 @@ export function ObjectAboutPage({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/60">
                   Этап {activeBlockIndex + 1}/{blockChecks.length}
                 </p>
-                <p className="mt-1 truncate text-lg font-semibold text-olive">
-                  {activeBlockTitle}
-                </p>
+                <p className="mt-1 truncate text-lg font-semibold text-olive">{activeBlockTitle}</p>
               </div>
               <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                 {completedBlocksCount}/{blockChecks.length}
@@ -960,11 +955,7 @@ export function ObjectAboutPage({
                     <span
                       className={cn(
                         "text-[10px] font-semibold uppercase tracking-wide",
-                        isCurrent
-                          ? "text-sun/95"
-                          : item.done
-                            ? "text-primary/65"
-                            : "text-olive/45",
+                        isCurrent ? "text-sun/95" : item.done ? "text-primary/65" : "text-olive/45",
                       )}
                     >
                       {statusLabel}
@@ -1082,8 +1073,8 @@ export function ObjectAboutPage({
 
           <div className="space-y-5 p-4 sm:p-5">
             <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Заполните основные данные об объекте: выберите тип, укажите название и добавьте описание.
-              Эти данные увидят гости при поиске жилья.
+              Заполните основные данные об объекте: выберите тип, укажите название и добавьте
+              описание. Эти данные увидят гости при поиске жилья.
             </p>
 
             <div className="space-y-2">
@@ -1099,7 +1090,9 @@ export function ObjectAboutPage({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-olive/50">Выберите один вариант, который лучше всего описывает ваш объект</p>
+              <p className="text-xs text-olive/50">
+                Выберите один вариант, который лучше всего описывает ваш объект
+              </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {propertyTypes.map((item) => {
                   const isSelected = selectedType === item.id;
@@ -1214,7 +1207,8 @@ export function ObjectAboutPage({
 
           <div className="space-y-4 p-4 sm:p-5">
             <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Укажите, где находится ваш объект. Гости смогут найти его по населённому пункту и увидят точку на карте.
+              Укажите, где находится ваш объект. Гости смогут найти его по населённому пункту и
+              увидят точку на карте.
             </p>
 
             <div className="space-y-1.5">
@@ -1376,7 +1370,9 @@ export function ObjectAboutPage({
               onChange={(event) => setRegistryNumber(event.target.value)}
               placeholder="Например: 012345678"
             />
-            <p className="text-xs text-olive/50">Скопируйте номер с сайта реестра и вставьте сюда</p>
+            <p className="text-xs text-olive/50">
+              Скопируйте номер с сайта реестра и вставьте сюда
+            </p>
           </div>
           {!property.classificationApplicable ? (
             <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
@@ -1428,7 +1424,8 @@ export function ObjectAboutPage({
           </div>
 
           <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-            Укажите хотя бы один телефон — он обязателен. Мессенджеры и соцсети добавляйте по желанию, чтобы гостям было удобнее связаться.
+            Укажите хотя бы один телефон — он обязателен. Мессенджеры и соцсети добавляйте по
+            желанию, чтобы гостям было удобнее связаться.
           </p>
 
           {/* Required fields */}
@@ -1774,13 +1771,10 @@ export function ObjectAboutPage({
           <div>
             <h2 className="text-xl font-semibold text-olive">Фото объекта</h2>
             <p className="mt-1 text-sm text-olive/55">
-              Загрузите фотографии вашего объекта — фасад, территорию, общие зоны. Фото номеров добавляются отдельно на вкладке «Номера».
+              Загрузите фотографии вашего объекта — фасад, территорию, общие зоны. Фото номеров
+              добавляются отдельно на вкладке «Номера».
             </p>
           </div>
-          <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-            Можно загрузить до {mediaLimits.property.images} фото и до{" "}
-            {mediaLimits.property.videos} видео. Требования к фото: {accommodationPhotoUploadLimitsLabel}. Первое фото станет обложкой карточки.
-          </p>
           <PropertyMediaManager
             propertyId={property.id}
             initialMedia={property.media}
@@ -1801,9 +1795,7 @@ export function ObjectAboutPage({
             >
               Назад
             </Button>
-            <Button onClick={() => router.push(`${basePath}/${property.id}/rules`)}>
-              Далее
-            </Button>
+            <Button onClick={() => router.push(`${basePath}/${property.id}/rules`)}>Далее</Button>
           </div>
         </section>
       ) : null}

@@ -53,6 +53,7 @@ import {
   IconDeviceFloppy,
   IconDeviceTv,
   IconDoorEnter,
+  IconDotsVertical,
   IconEyeglass,
   IconEye,
   IconEyeOff,
@@ -203,6 +204,8 @@ export const Copy = asLucideIcon(IconCopy);
 export const CookingPot = asLucideIcon(IconToolsKitchen2);
 export const CreditCard = asLucideIcon(IconCreditCard);
 export const DoorOpen = asLucideIcon(IconDoorEnter);
+export const MoreVertical = asLucideIcon(IconDotsVertical);
+export const EllipsisVertical = asLucideIcon(IconDotsVertical);
 export const ExternalLink = asLucideIcon(IconArrowUpRight);
 export const Eye = asLucideIcon(IconEye);
 export const EyeOff = asLucideIcon(IconEyeOff);
