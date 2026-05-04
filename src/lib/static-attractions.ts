@@ -77,6 +77,7 @@ export type StaticAttractionEditablePatch = Partial<
 type StaticAttractionOverrideFile = Record<string, StaticAttractionEditablePatch>;
 
 const overridesFilePath = path.join(process.cwd(), "data", "attractions-overrides.json");
+const PLACEHOLDER_ATTRACTION_IMAGE_URL = "/attractions/zaglushka.png";
 
 const BASE_STATIC_ATTRACTIONS: StaticAttraction[] = [
   {
@@ -473,6 +474,25 @@ function normalizeIsoDate(value: unknown, fallback: string): string {
   return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
 }
 
+function hasPlaceholderOnlyGallery(gallery: StaticAttractionGalleryImage[]): boolean {
+  return (
+    gallery.length > 0 &&
+    gallery.every((image) => image.url.trim() === PLACEHOLDER_ATTRACTION_IMAGE_URL)
+  );
+}
+
+function applyAttractionVisibilityPolicy(item: StaticAttraction): StaticAttraction {
+  if (!hasPlaceholderOnlyGallery(item.gallery)) {
+    return item;
+  }
+
+  return {
+    ...item,
+    status: "HIDDEN",
+    isPublishedVisible: false,
+  };
+}
+
 function normalizeAttraction(input: Partial<StaticAttraction> & { id: string }): StaticAttraction {
   const now = new Date().toISOString();
   const title = normalizeNullableString(input.title) ?? "Достопримечательность";
@@ -484,7 +504,7 @@ function normalizeAttraction(input: Partial<StaticAttraction> & { id: string }):
     normalizeNullableString(input.shortDescription) ??
     `Описание места ${title} в каталоге Крым Вокруг.`;
 
-  return {
+  return applyAttractionVisibilityPolicy({
     id: input.id,
     slug,
     title,
@@ -514,7 +534,7 @@ function normalizeAttraction(input: Partial<StaticAttraction> & { id: string }):
     createdByLogin: normalizeNullableString(input.createdByLogin),
     createdAt: normalizeIsoDate(input.createdAt, now),
     updatedAt: normalizeIsoDate(input.updatedAt, now),
-  };
+  });
 }
 
 async function readOverrideFile(): Promise<StaticAttractionOverrideFile> {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { deleteManagedUrlFromStorage } from "@/lib/storage";
-import { getTransferFleet } from "@/lib/transfers";
+import { getTransferFleet, getTransferPhotoUrlsFromFleet } from "@/lib/transfers";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -24,7 +24,7 @@ function collectTransferPhotoUrls(transfer: {
 }): string[] {
   const urls = [
     ...transfer.photoUrls,
-    ...getTransferFleet(transfer).map((item) => item.photoUrl ?? ""),
+    ...getTransferPhotoUrlsFromFleet(getTransferFleet(transfer)),
   ];
 
   return Array.from(new Set(urls.map((url) => url.trim()).filter((url) => url.length > 0)));

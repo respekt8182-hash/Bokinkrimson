@@ -530,6 +530,7 @@ function mapTransferCatalogItem(
         item.luggageNote ||
         item.priceFrom ||
         item.photoUrl ||
+        item.photoUrls.length > 0 ||
         item.description,
     );
 

@@ -18,6 +18,7 @@ export type TransferFleetItem = {
   priceFrom: number | null;
   priceUnitLabel: string;
   photoUrl: string | null;
+  photoUrls: string[];
   description: string;
 };
 
@@ -88,6 +89,7 @@ export const transferPriceUnitOptions = [
 ] as const;
 
 export const maxTransferServiceTags = 5;
+export const maxTransferVehiclePhotoUrls = 6;
 
 export function getTransferWorkflowStatus(
   status: TransferStatus,
@@ -231,6 +233,27 @@ function normalizePhotoUrl(value: unknown): string | null {
   return trimmed ?? null;
 }
 
+function normalizePhotoUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const urls: string[] = [];
+
+  for (const candidate of value) {
+    const url = normalizePhotoUrl(candidate);
+    if (!url || seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    urls.push(url);
+  }
+
+  return urls.slice(0, maxTransferVehiclePhotoUrls);
+}
+
 function hasMeaningfulFleetData(item: TransferFleetItem): boolean {
   return Boolean(
     item.title ||
@@ -242,6 +265,7 @@ function hasMeaningfulFleetData(item: TransferFleetItem): boolean {
     item.luggageNote ||
     item.priceFrom ||
     item.photoUrl ||
+    item.photoUrls.length > 0 ||
     item.description,
   );
 }
@@ -286,6 +310,7 @@ export function createEmptyTransferFleetItem(): TransferFleetItem {
     priceFrom: null,
     priceUnitLabel: defaultPriceUnitLabel,
     photoUrl: null,
+    photoUrls: [],
     description: "",
   };
 }
@@ -336,6 +361,11 @@ export function normalizeTransferFleet(value: unknown): TransferFleetItem[] {
         return null;
       }
 
+      const explicitPhotoUrls = normalizePhotoUrls(candidate.photoUrls);
+      const legacyPhotoUrl = normalizePhotoUrl(candidate.photoUrl);
+      const photoUrls =
+        explicitPhotoUrls.length > 0 ? explicitPhotoUrls : legacyPhotoUrl ? [legacyPhotoUrl] : [];
+
       const item: TransferFleetItem = {
         id: toOptionalString(candidate.id) ?? `fleet-${index + 1}`,
         title: toOptionalString(candidate.title) ?? "",
@@ -347,7 +377,8 @@ export function normalizeTransferFleet(value: unknown): TransferFleetItem[] {
         luggageNote: toOptionalString(candidate.luggageNote) ?? "",
         priceFrom: toPositiveNumber(candidate.priceFrom as NumericLike),
         priceUnitLabel: toOptionalString(candidate.priceUnitLabel) ?? defaultPriceUnitLabel,
-        photoUrl: normalizePhotoUrl(candidate.photoUrl),
+        photoUrl: photoUrls[0] ?? null,
+        photoUrls,
         description: toOptionalString(candidate.description) ?? "",
       };
 
@@ -359,6 +390,7 @@ export function normalizeTransferFleet(value: unknown): TransferFleetItem[] {
 }
 
 export function buildLegacyTransferFleet(input: TransferSummaryInput): TransferFleetItem[] {
+  const photoUrls = normalizePhotoUrls(input.photoUrls ?? []);
   const legacyItem: TransferFleetItem = {
     id: "legacy-primary",
     title: "",
@@ -370,7 +402,8 @@ export function buildLegacyTransferFleet(input: TransferSummaryInput): TransferF
     luggageNote: "",
     priceFrom: toPositiveNumber(input.priceFrom),
     priceUnitLabel: input.priceUnitLabel?.trim() || defaultPriceUnitLabel,
-    photoUrl: (input.photoUrls ?? []).map((url) => url.trim()).find(Boolean) ?? null,
+    photoUrl: photoUrls[0] ?? null,
+    photoUrls,
     description: "",
   };
 
@@ -390,18 +423,37 @@ export function getTransferPrimaryFleetItem(items: TransferFleetItem[]): Transfe
   return items[0] ?? null;
 }
 
-export function getTransferPhotoUrlsFromFleet(items: TransferFleetItem[]): string[] {
+export function getTransferFleetItemPhotoUrls(item: TransferFleetItem): string[] {
+  const urls = [...(Array.isArray(item.photoUrls) ? item.photoUrls : []), item.photoUrl ?? ""];
   const seen = new Set<string>();
-  const urls: string[] = [];
+  const normalized: string[] = [];
 
-  for (const item of items) {
-    const url = item.photoUrl?.trim();
+  for (const candidate of urls) {
+    const url = candidate.trim();
     if (!url || seen.has(url)) {
       continue;
     }
 
     seen.add(url);
-    urls.push(url);
+    normalized.push(url);
+  }
+
+  return normalized;
+}
+
+export function getTransferPhotoUrlsFromFleet(items: TransferFleetItem[]): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+
+  for (const item of items) {
+    for (const url of getTransferFleetItemPhotoUrls(item)) {
+      if (seen.has(url)) {
+        continue;
+      }
+
+      seen.add(url);
+      urls.push(url);
+    }
   }
 
   return urls;

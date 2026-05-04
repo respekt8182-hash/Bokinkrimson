@@ -62,6 +62,36 @@ describe("transfer fleet normalization", () => {
     ).toBe(true);
   });
 
+  it("keeps several photos for one vehicle and derives transfer gallery from them", () => {
+    const fleet = normalizeTransferFleet([
+      {
+        id: "minivan",
+        vehicleModel: "Hyundai Staria",
+        priceFrom: 3200,
+        photoUrls: [
+          " /uploads/transfer-front.webp ",
+          "/uploads/transfer-front.webp",
+          "/uploads/transfer-salon.webp",
+          "/uploads/transfer-trunk.webp",
+        ],
+      },
+    ]);
+
+    const summary = deriveTransferSummaryFromFleet({ fleet });
+
+    expect(fleet[0]?.photoUrl).toBe("/uploads/transfer-front.webp");
+    expect(fleet[0]?.photoUrls).toEqual([
+      "/uploads/transfer-front.webp",
+      "/uploads/transfer-salon.webp",
+      "/uploads/transfer-trunk.webp",
+    ]);
+    expect(summary.photoUrls).toEqual([
+      "/uploads/transfer-front.webp",
+      "/uploads/transfer-salon.webp",
+      "/uploads/transfer-trunk.webp",
+    ]);
+  });
+
   it("calculates transfer placement fee from fleet size", () => {
     expect(calculateTransferPublicationFeeRub(1)).toBe(1900);
     expect(calculateTransferPublicationFeeRub(3)).toBe(2900);

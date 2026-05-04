@@ -4,7 +4,12 @@ import {
   isWithinRadiusKm,
   roundDistanceKm,
 } from "@/lib/catalog-radius";
-import { getStaticAttractionCatalog } from "@/lib/static-attractions";
+import {
+  getStaticAttractionById,
+  getStaticAttractionByIdentifier,
+  getStaticAttractionCatalog,
+  getStaticAttractions,
+} from "@/lib/static-attractions";
 
 describe("catalog radius helpers", () => {
   it("checks distance against the selected map radius", () => {
@@ -47,5 +52,18 @@ describe("static attraction catalog radius filtering", () => {
     expect(
       narrow.entries.every((entry) => entry.distanceKm !== null && entry.distanceKm <= 5),
     ).toBe(true);
+  });
+
+  it("treats placeholder-only attractions as hidden everywhere", async () => {
+    const placeholderId = "attraction_new_kostel_uspeniya_bogoroditsy_kerch";
+    const hiddenItem = await getStaticAttractionById(placeholderId);
+    const publicItems = await getStaticAttractions();
+    const publicByIdentifier = await getStaticAttractionByIdentifier(placeholderId);
+
+    expect(hiddenItem).not.toBeNull();
+    expect(hiddenItem?.status).toBe("HIDDEN");
+    expect(hiddenItem?.isPublishedVisible).toBe(false);
+    expect(publicItems.some((item) => item.id === placeholderId)).toBe(false);
+    expect(publicByIdentifier).toBeNull();
   });
 });
