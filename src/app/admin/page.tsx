@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import {
   Car,
+  Clock3,
   Compass,
   FileText,
   House,
@@ -22,6 +23,7 @@ import {
   AdminPanel,
   AdminStatCard,
 } from "@/components/admin/admin-ui";
+import { getAdminPlacementRenewals } from "@/lib/admin-placement-renewals";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
@@ -55,6 +57,7 @@ export default async function AdminHomePage() {
     excursionDraftsCount,
     tourDraftsCount,
     transferDraftsCount,
+    placementRenewalsCount,
     isDatabaseFallback,
   } = await loadDataWithDatabaseFallback(
     {
@@ -83,6 +86,7 @@ export default async function AdminHomePage() {
         excursionDraftsCount,
         tourDraftsCount,
         transferDraftsCount,
+        placementRenewalsCount,
       ] = await Promise.all([
         db.user.count({
           where: {
@@ -212,6 +216,7 @@ export default async function AdminHomePage() {
             owner: { deletedAt: null },
           },
         }),
+        getAdminPlacementRenewals().then((items) => items.length),
       ]);
 
       return {
@@ -232,6 +237,7 @@ export default async function AdminHomePage() {
         excursionDraftsCount,
         tourDraftsCount,
         transferDraftsCount,
+        placementRenewalsCount,
         isDatabaseFallback: false,
       };
     },
@@ -253,6 +259,7 @@ export default async function AdminHomePage() {
       excursionDraftsCount: 0,
       tourDraftsCount: 0,
       transferDraftsCount: 0,
+      placementRenewalsCount: 0,
       isDatabaseFallback: true,
     },
   );
@@ -347,6 +354,14 @@ export default async function AdminHomePage() {
               Трансферы на модерации
             </AdminLinkButton>
             <AdminLinkButton
+              href="/admin/renewals"
+              variant="ghost"
+              className="justify-start rounded-[22px] px-4 py-4"
+            >
+              <Clock3 className="h-4 w-4" />
+              Продление размещения
+            </AdminLinkButton>
+            <AdminLinkButton
               href="/admin/messages"
               variant="ghost"
               className="justify-start rounded-[22px] px-4 py-4"
@@ -381,6 +396,11 @@ export default async function AdminHomePage() {
               label="Трансферы на модерации"
               value={pendingTransfersCount}
               tone="bg-cyan-100 text-cyan-800"
+            />
+            <StatusRow
+              label="Заканчивается размещение"
+              value={placementRenewalsCount}
+              tone="bg-lime-100 text-lime-800"
             />
             <StatusRow
               label="Новые заявки"
@@ -449,11 +469,7 @@ export default async function AdminHomePage() {
         description="Сколько неопубликованных карточек сейчас сохранено на сайте."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <StatusRow
-            label="Жильё"
-            value={propertyDraftsCount}
-            tone="bg-slate-100 text-slate-700"
-          />
+          <StatusRow label="Жильё" value={propertyDraftsCount} tone="bg-slate-100 text-slate-700" />
           <StatusRow
             label="Экскурсии"
             value={excursionDraftsCount}

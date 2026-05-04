@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Compass,
   Car,
+  Clock3,
   CreditCard,
   FileText,
   Headset,
@@ -50,6 +51,7 @@ const menu: MenuItem[] = [
   { href: "/admin/transfers", label: "Трансферы", icon: Car },
   { href: "/admin/users", label: "Пользователи", icon: Users },
   { href: "/admin/payments", label: "Оплата", icon: CreditCard },
+  { href: "/admin/renewals", label: "Продление", icon: Clock3 },
   { href: "/admin/applications", label: "Заявки", icon: FileText },
   { href: "/admin/messages", label: "Сообщения", icon: MessageSquareText },
   { href: "/admin/support-chat", label: "Чат поддержки", icon: Headset },
@@ -127,6 +129,10 @@ function getPageTitle(pathname: string): string {
 
   if (pathname.startsWith("/admin/payments")) {
     return "Оплата";
+  }
+
+  if (pathname.startsWith("/admin/renewals")) {
+    return "Продление";
   }
 
   if (pathname.startsWith("/admin/applications")) {
