@@ -17,7 +17,7 @@ describe("site public assets", () => {
     const favicon32Png = join(process.cwd(), "public", "favicon-32x32.png");
     const favicon120Png = join(process.cwd(), "public", "favicon-120x120.png");
     const appleTouchIcon = join(process.cwd(), "public", "apple-touch-icon.png");
-    const socialPreview = join(process.cwd(), "public", "social-preview.png");
+    const socialPreview = join(process.cwd(), "public", "social-preview-site-20260504.png");
 
     expect(existsSync(faviconSvg)).toBe(true);
     expect(existsSync(faviconIco)).toBe(true);

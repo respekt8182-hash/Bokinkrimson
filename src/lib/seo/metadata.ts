@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
 
-export const defaultSocialImagePath = "/social-preview.png";
+export const defaultSocialImagePath = "/social-preview-site-20260504.png";
 export const defaultSocialImageUrl = absoluteUrl(defaultSocialImagePath);
 export const defaultSocialImageMetadata = {
   url: defaultSocialImageUrl,
