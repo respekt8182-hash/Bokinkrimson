@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalDocumentLayout, LegalSection } from "@/components/legal/legal-document-layout";
 import { companyConfig } from "@/config/company";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 
 const publicationDate = new Date(companyConfig.legalDocumentPublishedAt);
 const publicationDateLabel = publicationDate.toLocaleDateString("ru-RU");
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
     title: "Согласие на обработку персональных данных",
     description: consentDescription,
     url: "/consent",
+    images: [defaultSocialImageMetadata],
   },
 };
 

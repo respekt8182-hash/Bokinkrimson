@@ -6,6 +6,7 @@ import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { getHomeCityShowcaseItems } from "@/lib/home-cities";
 import { getHomeStats } from "@/lib/home-stats";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 
 export const metadata: Metadata = {
   title: {
@@ -23,12 +24,14 @@ export const metadata: Metadata = {
       "Маркетплейс жилья, экскурсий, досуга и трансферов по Крыму без комиссии с каждого клиента или бронирования.",
     url: "/",
     locale: "ru_RU",
+    images: [defaultSocialImageMetadata],
   },
   twitter: {
     card: "summary_large_image",
     title: "Жильё, экскурсии, досуг и трансферы по Крыму — Крым Вокруг",
     description:
       "Маркетплейс жилья, экскурсий, досуга и трансферов по Крыму без комиссии с каждого клиента или бронирования.",
+    images: [defaultSocialImageMetadata.url],
   },
 };
 

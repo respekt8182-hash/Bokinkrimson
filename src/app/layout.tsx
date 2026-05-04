@@ -5,6 +5,7 @@ import { RootShell } from "@/components/layout/root-shell";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { defaultSocialImage } from "@/lib/seo/metadata";
 import { absoluteUrl, resolveMetadataBase, siteConfig } from "@/lib/seo/site";
 import {
   buildOrganizationStructuredData,
@@ -44,7 +45,6 @@ const headingFont = Yeseva_One({
   weight: "400",
 });
 
-const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
 const faviconVersion = "20260428";
 const versionedFavicon = (path: string) => `${path}?v=${faviconVersion}`;
 
@@ -71,8 +71,11 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: defaultSocialImageUrl,
+        url: defaultSocialImage.url,
         alt: siteConfig.name,
+        width: defaultSocialImage.width,
+        height: defaultSocialImage.height,
+        type: defaultSocialImage.type,
       },
     ],
   },
@@ -80,7 +83,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteConfig.name,
     description: siteConfig.shortDescription,
-    images: [defaultSocialImageUrl],
+    images: [defaultSocialImage.url],
   },
   icons: {
     icon: [
@@ -126,9 +129,6 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://api.yookassa.ru" />
         <link rel="preconnect" href="https://mc.yandex.ru" crossOrigin="" />
         <link rel="preconnect" href="https://api-maps.yandex.ru" crossOrigin="" />
-        <meta property="og:image" content={defaultSocialImageUrl} />
-        <meta property="og:image:alt" content={siteConfig.name} />
-        <meta name="twitter:image" content={defaultSocialImageUrl} />
         <Script id="yandex-metrika" strategy="beforeInteractive">
           {yandexMetrikaScript}
         </Script>

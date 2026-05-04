@@ -7,7 +7,8 @@ import {
   getPublicExcursionCatalog,
   getResolvedExcursionLocationBySlug,
 } from "@/lib/public-excursions";
-import { absoluteUrl, formatLocationInPrepositional } from "@/lib/seo/site";
+import { defaultSocialImageUrl } from "@/lib/seo/metadata";
+import { formatLocationInPrepositional } from "@/lib/seo/site";
 import {
   buildBreadcrumbListStructuredData,
   buildCollectionPageStructuredData,
@@ -18,7 +19,6 @@ type ExcursionsByLocationPageProps = {
   params: Promise<{ location: string }>;
 };
 
-const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
 export const dynamicParams = false;
 
 export async function generateStaticParams() {

@@ -23,7 +23,7 @@ import {
   buildHousingLocationPath,
   housingHubPath,
 } from "@/lib/seo/routes";
-import { absoluteUrl, formatLocationInPrepositional } from "@/lib/seo/site";
+import { formatLocationInPrepositional } from "@/lib/seo/site";
 import {
   buildBreadcrumbListStructuredData,
   buildFaqStructuredData,
@@ -98,14 +98,13 @@ export async function generateMetadata({
     .filter((media) => media.type === "IMAGE")
     .slice(0, 4)
     .map((media) => media.url);
-  const socialImages = images.length > 0 ? images : [absoluteUrl("/crimea-map-preview-realistic.webp")];
 
   return {
     ...buildWebPageMetadata({
       title,
       description: metadataDescription,
       path: item.path,
-      images: socialImages,
+      images,
       robots: previewRequested ? { index: false, follow: false } : undefined,
     }),
   };

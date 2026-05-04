@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PublicExcursionList } from "@/components/excursions/public-excursion-list";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getExcursionSeoDirectoryData, getPublicExcursionCatalog } from "@/lib/public-excursions";
-import { absoluteUrl } from "@/lib/seo/site";
+import { defaultSocialImageUrl } from "@/lib/seo/metadata";
 import {
   buildBreadcrumbListStructuredData,
   buildCollectionPageStructuredData,
@@ -14,7 +14,6 @@ type ExcursionsByCategoryPageProps = {
   params: Promise<{ category: string }>;
 };
 
-const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
 export const dynamicParams = false;
 
 export async function generateStaticParams() {

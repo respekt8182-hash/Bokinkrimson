@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { companyConfig } from "@/config/company";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 
 export const metadata: Metadata = {
   title: "Сотрудничество",
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
     description:
       "Размещение жилья и экскурсий на Крым Вокруг без комиссии с каждого клиента или бронирования.",
     url: "/cooperation",
+    images: [defaultSocialImageMetadata],
   },
 };
 

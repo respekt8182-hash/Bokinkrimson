@@ -17,12 +17,14 @@ describe("site public assets", () => {
     const favicon32Png = join(process.cwd(), "public", "favicon-32x32.png");
     const favicon120Png = join(process.cwd(), "public", "favicon-120x120.png");
     const appleTouchIcon = join(process.cwd(), "public", "apple-touch-icon.png");
+    const socialPreview = join(process.cwd(), "public", "social-preview.png");
 
     expect(existsSync(faviconSvg)).toBe(true);
     expect(existsSync(faviconIco)).toBe(true);
     expect(existsSync(favicon32Png)).toBe(true);
     expect(existsSync(favicon120Png)).toBe(true);
     expect(existsSync(appleTouchIcon)).toBe(true);
+    expect(existsSync(socialPreview)).toBe(true);
 
     const svg = readFileSync(faviconSvg, "utf8");
     expect(svg).toMatch(/^<svg\b/);
@@ -66,6 +68,11 @@ describe("site public assets", () => {
       format: "png",
       width: 180,
       height: 180,
+    });
+    await expect(sharp(socialPreview).metadata()).resolves.toMatchObject({
+      format: "png",
+      width: 1200,
+      height: 630,
     });
   });
 });

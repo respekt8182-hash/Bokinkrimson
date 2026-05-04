@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LegalDocumentLayout, LegalSection } from "@/components/legal/legal-document-layout";
 import { companyConfig } from "@/config/company";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 import { getServicesAndTariffsDocumentUrl } from "@/lib/site-tariffs";
 
 const publicationDate = new Date(companyConfig.legalDocumentPublishedAt);
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
     description:
       "Публичная оферта сайта Крым Вокруг на оказание услуг по размещению информации на сайте.",
     url: "/oferta",
+    images: [defaultSocialImageMetadata],
   },
 };
 

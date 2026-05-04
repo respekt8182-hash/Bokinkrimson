@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ServicesAndTariffsSection } from "@/components/pricing/services-and-tariffs-section";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 
 export const metadata: Metadata = {
   title: "Услуги и тарифы",
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
     description:
       "Актуальные тарифы на размещение объектов, экскурсий, туров и трансферов на Крым Вокруг.",
     url: "/uslugi-i-tarify",
+    images: [defaultSocialImageMetadata],
   },
 };
 

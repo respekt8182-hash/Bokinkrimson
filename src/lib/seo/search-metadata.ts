@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { propertyTypes } from "@/lib/constants";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getExcursionSeoDirectoryData } from "@/lib/public-excursions";
-import { buildWebPageMetadata } from "@/lib/seo/metadata";
+import { buildWebPageMetadata, defaultSocialImageUrl } from "@/lib/seo/metadata";
 import {
   buildExcursionsHubPath,
   buildHousingHubPath,
@@ -12,7 +12,7 @@ import {
   housingHubPath,
   toursHubPath,
 } from "@/lib/seo/routes";
-import { absoluteUrl, formatLocationInPrepositional } from "@/lib/seo/site";
+import { formatLocationInPrepositional } from "@/lib/seo/site";
 import {
   hasQueryValue,
   normalizeQueryValue,
@@ -42,8 +42,6 @@ type SeoDirectoryItem = {
   slug: string;
   name: string;
 };
-
-const defaultSocialImageUrl = absoluteUrl("/crimea-map-preview-realistic.webp");
 
 const housingNoiseKeys = new Set([
   "q",

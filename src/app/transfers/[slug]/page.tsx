@@ -17,6 +17,7 @@ import {
 } from "@/lib/public-marketplace";
 import { serializeReview } from "@/lib/reviews";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { buildWebPageMetadata } from "@/lib/seo/metadata";
 import { buildExcursionsLocationPath } from "@/lib/seo/routes";
 import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
 
@@ -50,20 +51,17 @@ export async function generateMetadata({
     };
   }
 
-  return {
-    title: `${item.title} — трансферы по Крыму`,
-    description:
-      item.description?.slice(0, 160) ?? `Трансферная услуга ${item.title} в каталоге Крым Вокруг.`,
-    alternates: {
-      canonical: buildCanonicalPath(item.path),
-    },
+  const title = `${item.title} — трансферы по Крыму`;
+  const description =
+    item.description?.slice(0, 160) ?? `Трансферная услуга ${item.title} в каталоге Крым Вокруг.`;
+
+  return buildWebPageMetadata({
+    title,
+    description,
+    path: buildCanonicalPath(item.path),
+    images: item.coverImageUrl ? [item.coverImageUrl] : undefined,
     robots: previewRequested ? { index: false, follow: false } : undefined,
-    openGraph: {
-      title: item.title,
-      description: item.description ?? undefined,
-      images: item.coverImageUrl ? [item.coverImageUrl] : undefined,
-    },
-  };
+  });
 }
 
 export default async function TransferDetailPage({

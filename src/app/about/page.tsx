@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { companyConfig } from "@/config/company";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 import { excursionsHubPath, housingHubPath } from "@/lib/seo/routes";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
     description:
       "Площадка жилья, экскурсий и туров по Крыму с разовой оплатой за размещение и прямой связью с владельцами.",
     url: "/about",
+    images: [defaultSocialImageMetadata],
   },
 };
 

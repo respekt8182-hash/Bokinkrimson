@@ -1,8 +1,19 @@
 import type { Metadata } from "next";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
 
-export const defaultSocialImagePath = "/crimea-map-preview-realistic.webp";
-const defaultSocialImageUrl = absoluteUrl(defaultSocialImagePath);
+export const defaultSocialImagePath = "/social-preview.png";
+export const defaultSocialImageUrl = absoluteUrl(defaultSocialImagePath);
+export const defaultSocialImageMetadata = {
+  url: defaultSocialImageUrl,
+  alt: siteConfig.name,
+  width: 1200,
+  height: 630,
+  type: "image/png",
+} as const;
+export const defaultSocialImage = {
+  path: defaultSocialImagePath,
+  ...defaultSocialImageMetadata,
+} as const;
 
 type BuildWebPageMetadataInput = {
   title: string;
@@ -103,10 +114,25 @@ export function buildWebPageMetadata({
   images,
   robots,
 }: BuildWebPageMetadataInput): Metadata {
-  const socialImages = (images?.filter(Boolean) ?? [defaultSocialImageUrl]).map((imageUrl) => ({
-    url: imageUrl,
-    alt: title,
-  }));
+  const inputImages = images?.filter(Boolean);
+  const socialImages = (inputImages?.length ? inputImages : [defaultSocialImageUrl]).map(
+    (imageUrl) => {
+      const absoluteImageUrl = absoluteUrl(imageUrl);
+      const isDefaultImage = absoluteImageUrl === defaultSocialImageUrl;
+
+      return {
+        url: absoluteImageUrl,
+        alt: title,
+        ...(isDefaultImage
+          ? {
+              width: defaultSocialImage.width,
+              height: defaultSocialImage.height,
+              type: defaultSocialImage.type,
+            }
+          : {}),
+      };
+    },
+  );
 
   return {
     title,

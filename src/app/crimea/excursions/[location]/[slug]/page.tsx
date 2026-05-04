@@ -82,7 +82,6 @@ import {
   buildFaqStructuredData,
   buildExcursionStructuredData,
 } from "@/lib/seo/structured-data";
-import { absoluteUrl } from "@/lib/seo/site";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import {
   formatItineraryItemIndexLabel,
@@ -988,14 +987,11 @@ export async function generateMetadata({
     ],
   });
   const images = item.photoUrls.slice(0, 4);
-  const socialImages =
-    images.length > 0 ? images : [absoluteUrl("/crimea-map-preview-realistic.webp")];
-
   return buildWebPageMetadata({
     title,
     description: metadataDescription,
     path: item.path,
-    images: socialImages,
+    images,
     robots: previewRequested ? { index: false, follow: false } : undefined,
   });
 }

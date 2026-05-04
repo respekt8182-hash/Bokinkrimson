@@ -6,6 +6,7 @@ import { NearbyPropertiesSectionServer } from "@/components/public/nearby-proper
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getPublicAttractionByIdentifier } from "@/lib/public-marketplace";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { buildWebPageMetadata } from "@/lib/seo/metadata";
 import { absoluteUrl } from "@/lib/seo/site";
 
 type AttractionDetailPageProps = {
@@ -24,18 +25,12 @@ export async function generateMetadata({ params }: AttractionDetailPageProps): P
     };
   }
 
-  return {
+  return buildWebPageMetadata({
     title: item.seoTitle,
     description: item.metaDescription,
-    alternates: {
-      canonical: buildCanonicalPath(item.path),
-    },
-    openGraph: {
-      title: item.seoTitle,
-      description: item.metaDescription,
-      images: item.coverImageUrl ? [item.coverImageUrl] : undefined,
-    },
-  };
+    path: buildCanonicalPath(item.path),
+    images: item.coverImageUrl ? [item.coverImageUrl] : undefined,
+  });
 }
 
 export default async function AttractionDetailPage({ params }: AttractionDetailPageProps) {
