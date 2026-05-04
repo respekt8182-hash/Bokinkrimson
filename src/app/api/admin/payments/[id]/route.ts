@@ -7,7 +7,11 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { resolveAdminRelationUserId } from "@/lib/admin-user-reference";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
-import { getPlacementValidUntil, getTransferPaymentReference } from "@/lib/payments";
+import {
+  getPlacementValidUntil,
+  getTransferPaymentReference,
+  setPaymentAdminRevenueIncluded,
+} from "@/lib/payments";
 import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
 import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 
@@ -16,8 +20,9 @@ type RouteContext = {
 };
 
 const actionSchema = z.object({
-  action: z.enum(["confirm", "reject"]),
+  action: z.enum(["confirm", "reject", "setAccounting"]),
   notes: z.string().max(2000).optional().default(""),
+  includeInMonthlyRevenue: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -52,14 +57,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  if (payment.status === PaymentStatus.SUCCEEDED) {
-    return NextResponse.json({ error: "Платеж уже подтвержден" }, { status: 409 });
-  }
-
-  if (payment.status === PaymentStatus.CANCELED) {
-    return NextResponse.json({ error: "Платеж уже отклонен" }, { status: 409 });
-  }
-
   let payload: unknown;
   try {
     payload = await request.json();
@@ -74,6 +71,57 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { action, notes } = parsed.data;
   const confirmedById = resolveAdminRelationUserId(admin.id);
+
+  if (action === "setAccounting") {
+    if (payment.status !== PaymentStatus.SUCCEEDED) {
+      return NextResponse.json(
+        { error: "Считать в доходе можно только подтвержденные платежи" },
+        { status: 409 },
+      );
+    }
+
+    if (typeof parsed.data.includeInMonthlyRevenue !== "boolean") {
+      return NextResponse.json({ error: "Некорректные данные" }, { status: 400 });
+    }
+
+    const updated = await db.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPayload: setPaymentAdminRevenueIncluded(
+          payment.providerPayload,
+          parsed.data.includeInMonthlyRevenue,
+        ),
+      },
+      select: { id: true },
+    });
+
+    await writeAdminAuditLog(db, {
+      adminUserId: admin.id,
+      action: "payment_accounting_toggle",
+      targetType: "payment",
+      targetId: payment.id,
+      details: {
+        provider: payment.provider,
+        includeInMonthlyRevenue: parsed.data.includeInMonthlyRevenue,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      payment: {
+        id: updated.id,
+        includeInMonthlyRevenue: parsed.data.includeInMonthlyRevenue,
+      },
+    });
+  }
+
+  if (payment.status === PaymentStatus.SUCCEEDED) {
+    return NextResponse.json({ error: "Платеж уже подтвержден" }, { status: 409 });
+  }
+
+  if (payment.status === PaymentStatus.CANCELED) {
+    return NextResponse.json({ error: "Платеж уже отклонен" }, { status: 409 });
+  }
 
   if (action === "confirm") {
     const now = new Date();

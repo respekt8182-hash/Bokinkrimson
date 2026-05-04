@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/admin-ui";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
-import { getTransferPaymentPayload, getTransferPaymentReference } from "@/lib/payments";
+import {
+  getTransferPaymentPayload,
+  getTransferPaymentReference,
+  shouldCountPaymentInAdminRevenue,
+} from "@/lib/payments";
 import { ManagerPaymentsList } from "@/components/admin/manager-payments-list";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +103,7 @@ export default async function AdminPaymentsPage() {
       canceledAt: p.canceledAt?.toISOString() ?? null,
       managerNotes: p.managerNotes,
       confirmedById: p.confirmedById,
+      includeInMonthlyRevenue: shouldCountPaymentInAdminRevenue(p.providerPayload),
       transferPayment: transferPayload
         ? {
             paymentReason: transferPayload.paymentReason ?? null,

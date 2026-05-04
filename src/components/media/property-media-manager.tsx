@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -218,7 +219,7 @@ export function PropertyMediaManager({
         return;
       }
 
-      if (!event.target.closest("[data-media-menu-root]")) {
+      if (!event.target.closest("[data-media-menu-root], [data-media-mobile-menu]")) {
         setOpenMenuId(null);
       }
     };
@@ -237,6 +238,8 @@ export function PropertyMediaManager({
   );
   const coverImageId = imageMedia[0]?.id ?? null;
   const isBusy = isUploading || isReordering || removingMediaId !== null;
+  const activeMenuItem = openMenuId ? (media.find((item) => item.id === openMenuId) ?? null) : null;
+  const activeMenuItemIsCover = activeMenuItem?.id === coverImageId;
 
   async function sync() {
     if (onChanged) {
@@ -798,11 +801,13 @@ export function PropertyMediaManager({
                   {openMenuId === item.id ? (
                     <div
                       data-media-action
-                      className="fixed inset-x-4 top-1/2 z-50 w-auto -translate-y-1/2 overflow-hidden rounded-2xl bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.18)] ring-1 ring-olive/10 sm:absolute sm:inset-auto sm:right-0 sm:top-12 sm:z-auto sm:w-56 sm:translate-y-0"
+                      role="menu"
+                      className="absolute right-0 top-12 z-30 hidden w-56 overflow-hidden rounded-2xl bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.18)] ring-1 ring-olive/10 sm:block"
                     >
                       {item.type === MEDIA_IMAGE ? (
                         <button
                           type="button"
+                          role="menuitem"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -817,6 +822,7 @@ export function PropertyMediaManager({
                       ) : null}
                       <button
                         type="button"
+                        role="menuitem"
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -840,6 +846,62 @@ export function PropertyMediaManager({
           Добавьте фото объекта, чтобы оно появилось в карточке и галерее.
         </div>
       )}
+
+      {activeMenuItem && typeof document !== "undefined"
+        ? createPortal(
+            <div data-media-mobile-menu className="sm:hidden">
+              <button
+                type="button"
+                data-media-action
+                aria-label="Закрыть меню действий"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenMenuId(null);
+                }}
+                className="fixed inset-0 z-[9998] cursor-default bg-olive/28 backdrop-blur-[2px]"
+              />
+              <div
+                data-media-action
+                role="menu"
+                className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-[9999] overflow-hidden rounded-[24px] bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.22)] ring-1 ring-olive/10"
+              >
+                <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-olive/12" />
+                {activeMenuItem.type === MEDIA_IMAGE ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void makeCover(activeMenuItem.id);
+                    }}
+                    disabled={activeMenuItemIsCover || isBusy}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                    Сделать обложкой
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void removeMedia(activeMenuItem.id);
+                  }}
+                  disabled={isBusy}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AppIcon icon={Trash2} className="h-4 w-4" />
+                  Удалить
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

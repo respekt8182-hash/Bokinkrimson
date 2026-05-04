@@ -32,7 +32,7 @@ import {
   collectExcursionSectionPhotoUrls,
   getItineraryDayPhotoUrls,
   getTimelineStepPhotoUrls,
-  normalizeExcursionSectionPhotoGroups,
+  resolveExcursionSectionPhotoState,
 } from "@/types/excursions";
 
 export type SerializedExcursion = {
@@ -873,12 +873,18 @@ export function collectExcursionPresentationPhotoUrls(input: {
   itineraryDays?: Prisma.JsonValue | ItineraryDay[];
   timeline?: Prisma.JsonValue | TimelineStep[];
 }): string[] {
+  const resolvedSectionPhotos = resolveExcursionSectionPhotoState({
+    photoUrls: input.photoUrls,
+    sectionPhotoGroups: input.sectionPhotoGroups as
+      | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+      | null
+      | undefined,
+  });
+
   return Array.from(
     new Set([
-      ...(input.photoUrls ?? []).map((url) => url.trim()).filter(Boolean),
-      ...collectExcursionSectionPhotoUrls(
-        input.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
-      ),
+      ...resolvedSectionPhotos.photoUrls,
+      ...collectExcursionSectionPhotoUrls(resolvedSectionPhotos.sectionPhotoGroups),
       ...collectExcursionProgramPhotoUrls(input),
     ]),
   );
@@ -893,14 +899,22 @@ export async function deleteExcursionStorageEntries(
     timeline?: Prisma.JsonValue | TimelineStep[];
   }>,
 ): Promise<void> {
-  const urls = excursions.flatMap((excursion) => [
-    ...excursion.photoUrls,
-    ...collectExcursionSectionPhotoUrls(
-      excursion.sectionPhotoGroups as Partial<Record<string, string[]>> | null | undefined,
-    ),
-    ...excursion.videoUrls,
-    ...collectExcursionProgramPhotoUrls(excursion),
-  ]);
+  const urls = excursions.flatMap((excursion) => {
+    const resolvedSectionPhotos = resolveExcursionSectionPhotoState({
+      photoUrls: excursion.photoUrls,
+      sectionPhotoGroups: excursion.sectionPhotoGroups as
+        | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+        | null
+        | undefined,
+    });
+
+    return [
+      ...resolvedSectionPhotos.photoUrls,
+      ...collectExcursionSectionPhotoUrls(resolvedSectionPhotos.sectionPhotoGroups),
+      ...excursion.videoUrls,
+      ...collectExcursionProgramPhotoUrls(excursion),
+    ];
+  });
   if (urls.length === 0) {
     return;
   }
@@ -1219,6 +1233,13 @@ export function serializeExcursion(excursion: {
   pickupLocations?: Array<{ locationId: string }>;
   routeLocations?: Array<{ locationId: string; sortOrder: number }>;
 }): SerializedExcursion {
+  const resolvedSectionPhotos = resolveExcursionSectionPhotoState({
+    photoUrls: excursion.photoUrls,
+    sectionPhotoGroups: excursion.sectionPhotoGroups as
+      | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+      | null
+      | undefined,
+  });
   const routeLocations = [...(excursion.routeLocations ?? [])].sort(
     (left, right) => left.sortOrder - right.sortOrder,
   );
@@ -1328,13 +1349,8 @@ export function serializeExcursion(excursion: {
     nextSessionStartAt: excursion.sessions?.[0]?.startAt
       ? excursion.sessions[0].startAt.toISOString()
       : null,
-    photoUrls: excursion.photoUrls,
-    sectionPhotoGroups: normalizeExcursionSectionPhotoGroups(
-      excursion.sectionPhotoGroups as
-        | Partial<Record<string, string[] | null | undefined>>
-        | null
-        | undefined,
-    ),
+    photoUrls: resolvedSectionPhotos.photoUrls,
+    sectionPhotoGroups: resolvedSectionPhotos.sectionPhotoGroups,
     videoUrls: excursion.videoUrls,
     priceUnitLabel: excursion.priceUnitLabel,
     accommodationProvided: excursion.accommodationProvided,

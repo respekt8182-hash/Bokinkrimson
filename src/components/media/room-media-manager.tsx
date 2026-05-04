@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { AppIcon } from "@/components/ui/app-icon";
 import { mediaLimits } from "@/lib/constants";
 import { cn } from "@/lib/cn";
@@ -186,7 +187,7 @@ export function RoomMediaManager({
         return;
       }
 
-      if (!event.target.closest("[data-room-media-menu-root]")) {
+      if (!event.target.closest("[data-room-media-menu-root], [data-room-media-mobile-menu]")) {
         setOpenMenuId(null);
       }
     };
@@ -199,6 +200,10 @@ export function RoomMediaManager({
   const coverImageId = imageMedia[0]?.id ?? null;
   const imageCount = imageMedia.length;
   const isBusy = isUploading || isReordering || removingMediaId !== null;
+  const activeMenuItem = openMenuId
+    ? (imageMedia.find((item) => item.id === openMenuId) ?? null)
+    : null;
+  const activeMenuItemIsCover = activeMenuItem?.id === coverImageId;
   const mediaCountLabel =
     imageCount === 0 ? "Фотографий пока нет" : `${imageCount} из ${mediaLimits.room.images} фото`;
 
@@ -686,10 +691,12 @@ export function RoomMediaManager({
                   {openMenuId === item.id ? (
                     <div
                       data-room-media-action
-                      className="fixed inset-x-4 top-1/2 z-50 w-auto -translate-y-1/2 overflow-hidden rounded-2xl bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.18)] ring-1 ring-olive/10 sm:absolute sm:inset-auto sm:right-0 sm:top-12 sm:z-auto sm:w-56 sm:translate-y-0"
+                      role="menu"
+                      className="absolute right-0 top-12 z-30 hidden w-56 overflow-hidden rounded-2xl bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.18)] ring-1 ring-olive/10 sm:block"
                     >
                       <button
                         type="button"
+                        role="menuitem"
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -703,6 +710,7 @@ export function RoomMediaManager({
                       </button>
                       <button
                         type="button"
+                        role="menuitem"
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -726,6 +734,60 @@ export function RoomMediaManager({
           Добавьте фото номера, чтобы оно появилось в карточке и галерее.
         </div>
       )}
+
+      {activeMenuItem && typeof document !== "undefined"
+        ? createPortal(
+            <div data-room-media-mobile-menu className="sm:hidden">
+              <button
+                type="button"
+                data-room-media-action
+                aria-label="Закрыть меню действий"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenMenuId(null);
+                }}
+                className="fixed inset-0 z-[9998] cursor-default bg-olive/28 backdrop-blur-[2px]"
+              />
+              <div
+                data-room-media-action
+                role="menu"
+                className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-[9999] overflow-hidden rounded-[24px] bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.22)] ring-1 ring-olive/10"
+              >
+                <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-olive/12" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void makeCover(activeMenuItem.id);
+                  }}
+                  disabled={activeMenuItemIsCover || isBusy}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                  Сделать обложкой
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void removeMedia(activeMenuItem.id);
+                  }}
+                  disabled={isBusy}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AppIcon icon={Trash2} className="h-4 w-4" />
+                  Удалить
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -11,6 +11,9 @@ import { db } from "@/lib/db";
 
 export default async function AdminMessagesPage() {
   const rows = await db.adminMessage.findMany({
+    where: {
+      senderUser: { deletedAt: null },
+    },
     orderBy: [{ createdAt: "desc" }],
     include: {
       senderUser: {

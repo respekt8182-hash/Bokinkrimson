@@ -199,6 +199,21 @@ function getSectionPhotoFieldConfigs(input: {
     },
   ];
 }
+
+function movePhotoUrlToFirst(photoUrls: string[], photoIndex: number): string[] {
+  if (photoIndex <= 0 || photoIndex >= photoUrls.length) {
+    return photoUrls;
+  }
+
+  const nextPhotoUrls = [...photoUrls];
+  const [selectedPhotoUrl] = nextPhotoUrls.splice(photoIndex, 1);
+  if (!selectedPhotoUrl) {
+    return photoUrls;
+  }
+
+  return [selectedPhotoUrl, ...nextPhotoUrls];
+}
+
 type WeekdayId = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 type WeekdaySchedule = {
@@ -1374,7 +1389,6 @@ export function ExcursionEditor({
         });
         if (response.ok) {
           setSaveStatus("saved");
-          router.refresh();
         } else {
           setSaveStatus("error");
         }
@@ -2377,7 +2391,6 @@ export function ExcursionEditor({
       }
 
       router.push(listHref);
-      router.refresh();
     } finally {
       setIsDeleting(false);
     }
@@ -2455,7 +2468,6 @@ export function ExcursionEditor({
     const ok = await patchExcursion({ photoUrls: nextPhotoUrls });
     if (ok) {
       setSuccess("Фото удалено");
-      router.refresh();
     }
   }
 
@@ -2480,7 +2492,23 @@ export function ExcursionEditor({
     }
 
     setSuccess("Порядок фото в верхней галерее обновлён");
-    router.refresh();
+  }
+
+  async function makePhotoCover(photoIndex: number) {
+    const previousPhotoUrls = photoUrls;
+    const nextPhotoUrls = movePhotoUrlToFirst(photoUrls, photoIndex);
+    if (nextPhotoUrls === photoUrls) {
+      return;
+    }
+
+    setPhotoUrls(nextPhotoUrls);
+    const saved = await patchExcursion({ photoUrls: nextPhotoUrls }, { applyResponse: false });
+    if (!saved) {
+      setPhotoUrls(previousPhotoUrls);
+      return;
+    }
+
+    setSuccess("Обложка верхней галереи обновлена");
   }
 
   function buildProgramPhotoTargetKey(kind: "day" | "step", index: number): string {
@@ -2517,7 +2545,6 @@ export function ExcursionEditor({
     }
 
     setSuccess(successMessage);
-    router.refresh();
     return true;
   }
 
@@ -2614,6 +2641,16 @@ export function ExcursionEditor({
     await persistSectionPhotoGroupChange(key, nextPhotoUrls, "Порядок фото раздела обновлён");
   }
 
+  async function makeSectionPhotoFirst(key: ExcursionSectionPhotoGroupKey, photoIndex: number) {
+    const currentPhotoUrls = sectionPhotoGroups[key];
+    const nextPhotoUrls = movePhotoUrlToFirst(currentPhotoUrls, photoIndex);
+    if (nextPhotoUrls === currentPhotoUrls) {
+      return;
+    }
+
+    await persistSectionPhotoGroupChange(key, nextPhotoUrls, "Первое фото раздела обновлено");
+  }
+
   async function removeSectionPhoto(key: ExcursionSectionPhotoGroupKey, photoIndex: number) {
     const currentPhotoUrls = sectionPhotoGroups[key];
     const nextPhotoUrls = currentPhotoUrls.filter((_, index) => index !== photoIndex);
@@ -2657,7 +2694,6 @@ export function ExcursionEditor({
     }
 
     setSuccess(successMessage);
-    router.refresh();
     return true;
   }
 
@@ -2674,7 +2710,6 @@ export function ExcursionEditor({
     }
 
     setSuccess(successMessage);
-    router.refresh();
     return true;
   }
 
@@ -2808,6 +2843,21 @@ export function ExcursionEditor({
     await persistItineraryDayPhotoChange(nextDays, previousDays, "Порядок фото дня обновлён");
   }
 
+  async function makeItineraryDayPhotoFirst(dayIndex: number, photoIndex: number) {
+    const currentPhotoUrls = getItineraryDayPhotoUrls(itineraryDays[dayIndex]);
+    const nextPhotoUrls = movePhotoUrlToFirst(currentPhotoUrls, photoIndex);
+    if (nextPhotoUrls === currentPhotoUrls) {
+      return;
+    }
+
+    const previousDays = itineraryDays;
+    const nextDays = itineraryDays.map((day, index) =>
+      index === dayIndex ? { ...day, photoUrls: nextPhotoUrls } : day,
+    );
+
+    await persistItineraryDayPhotoChange(nextDays, previousDays, "Первое фото дня обновлено");
+  }
+
   async function removeItineraryDayPhoto(dayIndex: number, photoIndex: number) {
     const currentPhotoUrls = getItineraryDayPhotoUrls(itineraryDays[dayIndex]);
     const nextPhotoUrls = currentPhotoUrls.filter((_, index) => index !== photoIndex);
@@ -2842,6 +2892,21 @@ export function ExcursionEditor({
     );
 
     await persistTimelinePhotoChange(nextTimeline, previousTimeline, "Порядок фото шага обновлён");
+  }
+
+  async function makeTimelinePhotoFirst(stepIndex: number, photoIndex: number) {
+    const currentPhotoUrls = getTimelineStepPhotoUrls(timeline[stepIndex]);
+    const nextPhotoUrls = movePhotoUrlToFirst(currentPhotoUrls, photoIndex);
+    if (nextPhotoUrls === currentPhotoUrls) {
+      return;
+    }
+
+    const previousTimeline = timeline;
+    const nextTimeline = timeline.map((step, index) =>
+      index === stepIndex ? { ...step, photoUrls: nextPhotoUrls } : step,
+    );
+
+    await persistTimelinePhotoChange(nextTimeline, previousTimeline, "Первое фото шага обновлено");
   }
 
   async function removeTimelinePhoto(stepIndex: number, photoIndex: number) {
@@ -3888,6 +3953,9 @@ export function ExcursionEditor({
                   onMovePhoto={(dayIndex, photoIndex, direction) =>
                     void moveItineraryDayPhoto(dayIndex, photoIndex, direction)
                   }
+                  onMakePhotoFirst={(dayIndex, photoIndex) =>
+                    void makeItineraryDayPhotoFirst(dayIndex, photoIndex)
+                  }
                   onRemovePhoto={(dayIndex, photoIndex) =>
                     void removeItineraryDayPhoto(dayIndex, photoIndex)
                   }
@@ -3913,6 +3981,9 @@ export function ExcursionEditor({
                   }
                   onMovePhoto={(stepIndex, photoIndex, direction) =>
                     void moveTimelinePhoto(stepIndex, photoIndex, direction)
+                  }
+                  onMakePhotoFirst={(stepIndex, photoIndex) =>
+                    void makeTimelinePhotoFirst(stepIndex, photoIndex)
                   }
                   onRemovePhoto={(stepIndex, photoIndex) =>
                     void removeTimelinePhoto(stepIndex, photoIndex)
@@ -5630,7 +5701,10 @@ export function ExcursionEditor({
                 isUploading={isUploadingPhotos}
                 onUpload={(files) => void uploadPhotos(files)}
                 onMove={(photoIndex, direction) => void movePhoto(photoIndex, direction)}
+                onMakeFirst={(photoIndex) => void makePhotoCover(photoIndex)}
                 onRemove={(photoIndex) => void removePhoto(photoIndex)}
+                makeFirstLabel="Сделать обложкой"
+                firstBadgeLabel="Обложка"
               />
 
               <p className="text-xs text-olive/65">
@@ -5686,6 +5760,9 @@ export function ExcursionEditor({
                         onUpload={(files) => void uploadSectionPhotos(sectionConfig.key, files)}
                         onMove={(photoIndex, direction) =>
                           void moveSectionPhoto(sectionConfig.key, photoIndex, direction)
+                        }
+                        onMakeFirst={(photoIndex) =>
+                          void makeSectionPhotoFirst(sectionConfig.key, photoIndex)
                         }
                         onRemove={(photoIndex) =>
                           void removeSectionPhoto(sectionConfig.key, photoIndex)

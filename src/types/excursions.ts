@@ -360,8 +360,39 @@ export type ExcursionSectionPhotoGroupKey = (typeof EXCURSION_SECTION_PHOTO_GROU
 
 export type ExcursionSectionPhotoGroups = Record<ExcursionSectionPhotoGroupKey, string[]>;
 
+const EXCURSION_SECTION_PHOTO_FALLBACK_PREFIX = "__excursion_section_photo__:";
+const EXCURSION_SECTION_PHOTO_FALLBACK_SEPARATOR = "::";
+
 function normalizePhotoUrlList(value: string[] | undefined): string[] {
   return Array.from(new Set((value ?? []).map((item) => item.trim()).filter(Boolean)));
+}
+
+function isExcursionSectionPhotoGroupKey(value: string): value is ExcursionSectionPhotoGroupKey {
+  return EXCURSION_SECTION_PHOTO_GROUP_KEYS.some((key) => key === value);
+}
+
+function decodeExcursionSectionPhotoFallbackEntry(
+  value: string,
+): { key: ExcursionSectionPhotoGroupKey; url: string } | null {
+  if (!value.startsWith(EXCURSION_SECTION_PHOTO_FALLBACK_PREFIX)) {
+    return null;
+  }
+
+  const encodedValue = value.slice(EXCURSION_SECTION_PHOTO_FALLBACK_PREFIX.length);
+  const separatorIndex = encodedValue.indexOf(EXCURSION_SECTION_PHOTO_FALLBACK_SEPARATOR);
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const key = encodedValue.slice(0, separatorIndex);
+  const url = encodedValue
+    .slice(separatorIndex + EXCURSION_SECTION_PHOTO_FALLBACK_SEPARATOR.length)
+    .trim();
+  if (!isExcursionSectionPhotoGroupKey(key) || !url) {
+    return null;
+  }
+
+  return { key, url };
 }
 
 export function normalizeExcursionSectionPhotoGroups(
@@ -400,6 +431,65 @@ export function collectExcursionSectionPhotoUrls(
   return Array.from(
     new Set(EXCURSION_SECTION_PHOTO_GROUP_KEYS.flatMap((key) => normalized[key]).filter(Boolean)),
   );
+}
+
+export function resolveExcursionSectionPhotoState(input: {
+  photoUrls?: string[] | null | undefined;
+  sectionPhotoGroups?:
+    | Partial<Record<ExcursionSectionPhotoGroupKey, string[] | null | undefined>>
+    | null
+    | undefined;
+}): { photoUrls: string[]; sectionPhotoGroups: ExcursionSectionPhotoGroups } {
+  const photoUrls: string[] = [];
+  const fallbackGroups = normalizeExcursionSectionPhotoGroups(undefined);
+
+  for (const rawUrl of input.photoUrls ?? []) {
+    const trimmedUrl = rawUrl.trim();
+    if (!trimmedUrl) {
+      continue;
+    }
+
+    const decoded = decodeExcursionSectionPhotoFallbackEntry(trimmedUrl);
+    if (decoded) {
+      fallbackGroups[decoded.key] = [...fallbackGroups[decoded.key], decoded.url];
+      continue;
+    }
+
+    photoUrls.push(trimmedUrl);
+  }
+
+  const explicitGroups = normalizeExcursionSectionPhotoGroups(input.sectionPhotoGroups);
+  return {
+    photoUrls: normalizePhotoUrlList(photoUrls),
+    sectionPhotoGroups: normalizeExcursionSectionPhotoGroups({
+      dates: [...explicitGroups.dates, ...fallbackGroups.dates],
+      program: [...explicitGroups.program, ...fallbackGroups.program],
+      logistics: [...explicitGroups.logistics, ...fallbackGroups.logistics],
+      accommodation: [...explicitGroups.accommodation, ...fallbackGroups.accommodation],
+      included: [...explicitGroups.included, ...fallbackGroups.included],
+      requirements: [...explicitGroups.requirements, ...fallbackGroups.requirements],
+    }),
+  };
+}
+
+export function buildExcursionPhotoStorageWithSectionFallback(
+  photoUrls: string[] | null | undefined,
+  sectionPhotoGroups:
+    | Partial<Record<ExcursionSectionPhotoGroupKey, string[] | null | undefined>>
+    | null
+    | undefined,
+): string[] {
+  const normalizedPhotoUrls = normalizePhotoUrlList(photoUrls ?? undefined);
+  const normalizedGroups = normalizeExcursionSectionPhotoGroups(sectionPhotoGroups);
+  return [
+    ...normalizedPhotoUrls,
+    ...EXCURSION_SECTION_PHOTO_GROUP_KEYS.flatMap((key) =>
+      normalizedGroups[key].map(
+        (url) =>
+          `${EXCURSION_SECTION_PHOTO_FALLBACK_PREFIX}${key}${EXCURSION_SECTION_PHOTO_FALLBACK_SEPARATOR}${url}`,
+      ),
+    ),
+  ];
 }
 
 export function getTimelineStepPhotoUrls(step?: Partial<TimelineStep> | null): string[] {

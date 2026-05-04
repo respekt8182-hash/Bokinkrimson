@@ -13,6 +13,8 @@ import {
   mapYookassaStatus,
   resolvePaymentStatusTransition,
   serializePayment,
+  setPaymentAdminRevenueIncluded,
+  shouldCountPaymentInAdminRevenue,
 } from "../../src/lib/payments";
 
 describe("payments domain", () => {
@@ -105,6 +107,23 @@ describe("payments domain", () => {
     expect(reference).toEqual({
       transferId: "transfer-1",
       transferTitle: null,
+    });
+  });
+
+  it("stores manager revenue accounting flag without losing payment payload context", () => {
+    const payload = buildTransferPaymentPayload({
+      transferId: "transfer-1",
+      transferTitle: "Airport transfer",
+    });
+
+    const excludedPayload = setPaymentAdminRevenueIncluded(payload, false);
+
+    expect(shouldCountPaymentInAdminRevenue(payload)).toBe(true);
+    expect(shouldCountPaymentInAdminRevenue(excludedPayload)).toBe(false);
+    expect(getTransferPaymentPayload(excludedPayload)).toEqual({
+      entityType: "transfer",
+      transferId: "transfer-1",
+      transferTitle: "Airport transfer",
     });
   });
 

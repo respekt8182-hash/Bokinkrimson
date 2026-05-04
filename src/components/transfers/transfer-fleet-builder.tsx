@@ -6,12 +6,14 @@ import {
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
+  MoreVertical,
   Plus,
   Trash2,
   Users,
   WalletCards,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { AppIcon } from "@/components/ui/app-icon";
 import { accommodationPhotoUploadAccept } from "@/lib/photo-upload";
 import {
@@ -56,6 +58,7 @@ export function TransferFleetBuilder({
   const [serviceTags, setServiceTags] = useState<string[]>(initialServiceTags);
   const [customTag, setCustomTag] = useState("");
   const [uploadingVehicleId, setUploadingVehicleId] = useState<string | null>(null);
+  const [openPhotoMenuId, setOpenPhotoMenuId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const photoUrls = useMemo(
@@ -63,10 +66,49 @@ export function TransferFleetBuilder({
     [fleet],
   );
   const tagLimitReached = serviceTags.length >= maxTransferServiceTags;
+  const activePhotoMenuId =
+    openPhotoMenuId && fleet.some((item) => item.id === openPhotoMenuId) ? openPhotoMenuId : null;
+  const activePhotoMenuEntry = activePhotoMenuId
+    ? (fleet
+        .map((item, index) => ({ item, index }))
+        .find((entry) => entry.item.id === activePhotoMenuId) ?? null)
+    : null;
 
   useEffect(() => {
     onChange?.(fleet, serviceTags);
   }, [fleet, onChange, serviceTags]);
+
+  useEffect(() => {
+    if (!activePhotoMenuId) {
+      return;
+    }
+
+    const closeMenu = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) {
+        setOpenPhotoMenuId(null);
+        return;
+      }
+
+      if (
+        !event.target.closest("[data-transfer-photo-menu-root], [data-transfer-photo-mobile-menu]")
+      ) {
+        setOpenPhotoMenuId(null);
+      }
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenPhotoMenuId(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [activePhotoMenuId]);
 
   function updateFleetItem(id: string, patch: Partial<TransferFleetItem>) {
     setFleet((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -109,6 +151,23 @@ export function TransferFleetBuilder({
     });
   }
 
+  function moveFleetItemToFirst(id: string) {
+    setFleet((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index <= 0) {
+        return current;
+      }
+
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      if (!item) {
+        return current;
+      }
+
+      return [item, ...next];
+    });
+  }
+
   function toggleServiceTag(tag: string) {
     setServiceTags((current) => {
       if (current.includes(tag)) {
@@ -145,6 +204,7 @@ export function TransferFleetBuilder({
     }
 
     setError("");
+    setOpenPhotoMenuId(null);
     setUploadingVehicleId(vehicleId);
 
     try {
@@ -306,8 +366,8 @@ export function TransferFleetBuilder({
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="space-y-3">
-                  <div className="overflow-hidden rounded-[24px] border border-dashed border-olive/16 bg-cream/70">
-                    <div className="aspect-[4/3] bg-cream">
+                  <div className="relative rounded-[24px] border border-dashed border-olive/16 bg-cream/70">
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-t-[24px] bg-cream">
                       {item.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -321,12 +381,94 @@ export function TransferFleetBuilder({
                           Главное фото транспорта
                         </div>
                       )}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/18 via-transparent to-black/18 opacity-80" />
                     </div>
+
+                    {index === 0 ? (
+                      <span className="pointer-events-none absolute left-2.5 top-2.5 z-10 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-olive shadow-sm ring-1 ring-olive/10">
+                        Главный
+                      </span>
+                    ) : null}
+
+                    {item.photoUrl ? (
+                      <div data-transfer-photo-menu-root className="absolute right-2 top-2 z-20">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenPhotoMenuId((current) => (current === item.id ? null : item.id));
+                          }}
+                          disabled={uploadingVehicleId !== null}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/96 text-olive shadow-sm ring-1 ring-olive/10 transition hover:bg-cream focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55"
+                          aria-label={`Действия с фото транспорта ${index + 1}`}
+                        >
+                          <AppIcon icon={MoreVertical} className="h-5 w-5" />
+                        </button>
+
+                        {activePhotoMenuId === item.id ? (
+                          <div
+                            role="menu"
+                            className="absolute right-0 top-12 z-30 hidden w-56 overflow-hidden rounded-2xl bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.18)] ring-1 ring-olive/10 sm:block"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setOpenPhotoMenuId(null);
+                                moveFleetItemToFirst(item.id);
+                              }}
+                              disabled={index === 0 || uploadingVehicleId !== null}
+                              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                              <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                              Сделать главным
+                            </button>
+                            <label className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream">
+                              <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                              Заменить фото
+                              <input
+                                type="file"
+                                accept={accommodationPhotoUploadAccept}
+                                className="sr-only"
+                                disabled={uploadingVehicleId !== null}
+                                onChange={(event) => {
+                                  const file = event.currentTarget.files?.[0] ?? null;
+                                  setOpenPhotoMenuId(null);
+                                  void uploadPhoto(item.id, file);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setOpenPhotoMenuId(null);
+                                updateFleetItem(item.id, { photoUrl: null });
+                              }}
+                              disabled={uploadingVehicleId !== null}
+                              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                              <AppIcon icon={Trash2} className="h-4 w-4" />
+                              Убрать фото
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="border-t border-olive/10 p-3">
                       <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/22 hover:text-primary">
                         <AppIcon icon={ImageIcon} className="h-4 w-4" />
-                        {uploadingVehicleId === item.id ? "Загрузка..." : "Загрузить фото"}
+                        {uploadingVehicleId === item.id
+                          ? "Загрузка..."
+                          : item.photoUrl
+                            ? "Заменить фото"
+                            : "Загрузить фото"}
                         <input
                           type="file"
                           accept={accommodationPhotoUploadAccept}
@@ -339,15 +481,6 @@ export function TransferFleetBuilder({
                           }}
                         />
                       </label>
-                      {item.photoUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => updateFleetItem(item.id, { photoUrl: null })}
-                          className="mt-2 inline-flex w-full items-center justify-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive/72 transition hover:border-rose-200 hover:text-rose-600"
-                        >
-                          Убрать фото
-                        </button>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -523,6 +656,76 @@ export function TransferFleetBuilder({
       {error ? (
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
+
+      {activePhotoMenuEntry && typeof document !== "undefined"
+        ? createPortal(
+            <div data-transfer-photo-mobile-menu className="sm:hidden">
+              <button
+                type="button"
+                aria-label="Закрыть меню действий"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenPhotoMenuId(null);
+                }}
+                className="fixed inset-0 z-[9998] cursor-default bg-olive/28 backdrop-blur-[2px]"
+              />
+              <div
+                role="menu"
+                className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-[9999] overflow-hidden rounded-[24px] bg-white py-2 shadow-[0_20px_60px_rgba(31,30,25,0.22)] ring-1 ring-olive/10"
+              >
+                <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-olive/12" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenPhotoMenuId(null);
+                    moveFleetItemToFirst(activePhotoMenuEntry.item.id);
+                  }}
+                  disabled={activePhotoMenuEntry.index === 0 || uploadingVehicleId !== null}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                  Сделать главным
+                </button>
+                <label className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream">
+                  <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
+                  Заменить фото
+                  <input
+                    type="file"
+                    accept={accommodationPhotoUploadAccept}
+                    className="sr-only"
+                    disabled={uploadingVehicleId !== null}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0] ?? null;
+                      setOpenPhotoMenuId(null);
+                      void uploadPhoto(activePhotoMenuEntry.item.id, file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenPhotoMenuId(null);
+                    updateFleetItem(activePhotoMenuEntry.item.id, { photoUrl: null });
+                  }}
+                  disabled={uploadingVehicleId !== null}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AppIcon icon={Trash2} className="h-4 w-4" />
+                  Убрать фото
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

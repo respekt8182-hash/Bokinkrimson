@@ -32,8 +32,10 @@ import { getRequestIp } from "@/lib/security";
 import { deleteManagedUrlFromStorage } from "@/lib/storage";
 import { updateExcursionSchema } from "@/lib/schemas";
 import {
+  buildExcursionPhotoStorageWithSectionFallback,
   collectExcursionSectionPhotoUrls,
   normalizeExcursionSectionPhotoGroups,
+  resolveExcursionSectionPhotoState,
 } from "@/types/excursions";
 
 // Owner excursion details endpoint:
@@ -447,10 +449,21 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const data = parsed.data;
+  const hasSectionPhotoGroupsColumn = await areDatabaseColumnsAvailable("Excursion", [
+    "sectionPhotoGroups",
+  ]);
+  const existingSectionPhotos = resolveExcursionSectionPhotoState({
+    photoUrls: existing.photoUrls,
+    sectionPhotoGroups: existing.sectionPhotoGroups as
+      | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+      | null
+      | undefined,
+  });
 
   if (
     data.sectionPhotoGroups !== undefined &&
-    !(await areDatabaseColumnsAvailable("Excursion", ["sectionPhotoGroups"]))
+    !hasSectionPhotoGroupsColumn &&
+    String(process.env.NODE_ENV) === "__never__"
   ) {
     return NextResponse.json(
       {
@@ -461,17 +474,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  const nextPhotoUrls = data.photoUrls ? dedupeUrls(data.photoUrls) : existing.photoUrls;
+  const nextPhotoUrls =
+    data.photoUrls !== undefined ? dedupeUrls(data.photoUrls) : existingSectionPhotos.photoUrls;
   const nextSectionPhotoGroups =
     data.sectionPhotoGroups !== undefined
       ? normalizeExcursionSectionPhotoGroups(data.sectionPhotoGroups)
-      : normalizeExcursionSectionPhotoGroups(
-          existing.sectionPhotoGroups as
-            | Partial<Record<string, string[] | null | undefined>>
-            | null
-            | undefined,
-        );
-  const nextVideoUrls = data.videoUrls ? dedupeUrls(data.videoUrls) : existing.videoUrls;
+      : existingSectionPhotos.sectionPhotoGroups;
+  const nextVideoUrls = data.videoUrls !== undefined ? dedupeUrls(data.videoUrls) : existing.videoUrls;
   const nextStatus = data.status ?? existing.status;
   const isPublishedOwnerEdit = existing.status === ExcursionStatus.PUBLISHED && !editor.isAdmin;
   const hasPublishedContentEdit = shouldMarkPublishedExcursionAsEdited(data);
@@ -667,10 +676,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const nextItineraryDays =
     data.itineraryDays ?? (existing.itineraryDays as Prisma.JsonValue as Prisma.JsonArray);
   const existingManagedUrls = new Set([
-    ...existing.photoUrls,
-    ...collectExcursionSectionPhotoUrls(
-      existing.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
-    ),
+    ...existingSectionPhotos.photoUrls,
+    ...collectExcursionSectionPhotoUrls(existingSectionPhotos.sectionPhotoGroups),
     ...existing.videoUrls,
     ...collectExcursionProgramPhotoUrls({
       itineraryDays: existing.itineraryDays,
@@ -924,8 +931,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.vkUrl !== undefined ? { vkUrl: data.vkUrl } : {}),
     ...(data.maxUrl !== undefined ? { maxUrl: data.maxUrl } : {}),
     ...(data.okUrl !== undefined ? { okUrl: data.okUrl } : {}),
-    ...(data.photoUrls !== undefined ? { photoUrls: nextPhotoUrls } : {}),
-    ...(data.sectionPhotoGroups !== undefined
+    ...(data.photoUrls !== undefined ||
+    (!hasSectionPhotoGroupsColumn && data.sectionPhotoGroups !== undefined)
+      ? {
+          photoUrls: hasSectionPhotoGroupsColumn
+            ? nextPhotoUrls
+            : buildExcursionPhotoStorageWithSectionFallback(nextPhotoUrls, nextSectionPhotoGroups),
+        }
+      : {}),
+    ...(data.sectionPhotoGroups !== undefined && hasSectionPhotoGroupsColumn
       ? { sectionPhotoGroups: nextSectionPhotoGroups as Prisma.InputJsonValue }
       : {}),
     ...(data.videoUrls !== undefined ? { videoUrls: nextVideoUrls } : {}),

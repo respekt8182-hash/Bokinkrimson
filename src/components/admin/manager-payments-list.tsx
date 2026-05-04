@@ -2,6 +2,7 @@
 "use client";
 
 import {
+  Archive,
   Car,
   CircleAlert,
   CircleCheckBig,
@@ -31,6 +32,7 @@ type ManagerPayment = {
   canceledAt: string | null;
   managerNotes: string | null;
   confirmedById: string | null;
+  includeInMonthlyRevenue: boolean;
   transferPayment: {
     paymentReason: "publication" | "fleet_topup" | null;
     vehicleCount: number | null;
@@ -114,7 +116,7 @@ function groupPaymentsByDay(payments: ManagerPayment[]): Array<{
         items: [],
       } satisfies { key: string; label: string; total: number; items: ManagerPayment[] });
 
-    if (payment.status === "SUCCEEDED") {
+    if (payment.status === "SUCCEEDED" && payment.includeInMonthlyRevenue) {
       group.total += payment.amount;
     }
     group.items.push(payment);
@@ -128,6 +130,7 @@ function getCurrentMonthConfirmedTotal(payments: ManagerPayment[]): number {
   const now = new Date();
   return payments
     .filter((payment) => payment.status === "SUCCEEDED")
+    .filter((payment) => payment.includeInMonthlyRevenue)
     .filter((payment) => {
       const date = getPaymentAccountingDate(payment);
       return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
@@ -179,7 +182,7 @@ async function readPaymentActionError(response: Response): Promise<string> {
 function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?: () => void }) {
   const router = useRouter();
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState<"confirm" | "reject" | null>(null);
+  const [loading, setLoading] = useState<"confirm" | "reject" | "accounting" | null>(null);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
@@ -263,6 +266,34 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
     }
   }
 
+  async function handleAccountingToggle(nextIncluded: boolean) {
+    setLoading("accounting");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/admin/payments/${payment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "setAccounting",
+          includeInMonthlyRevenue: nextIncluded,
+        }),
+      });
+
+      if (!response.ok) {
+        setError(await readPaymentActionError(response));
+        return;
+      }
+
+      router.refresh();
+      onAction?.();
+    } catch {
+      setError("Ошибка сети");
+    } finally {
+      setLoading(null);
+    }
+  }
+
   if (done) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
@@ -296,6 +327,11 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
                   ? "Подтверждено"
                   : "Отклонено"}
             </span>
+            {payment.status === "SUCCEEDED" && !payment.includeInMonthlyRevenue ? (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                Не считается в месяце
+              </span>
+            ) : null}
             <span className="text-xs text-olive/40">{payment.id.slice(0, 12)}...</span>
           </div>
           <p className="mt-1.5 text-lg font-bold tabular-nums text-olive">
@@ -406,6 +442,40 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
         </div>
       )}
 
+      {payment.status === "SUCCEEDED" ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-olive/10 bg-cream/70 px-3 py-2.5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-olive/45">
+              Доход за месяц
+            </p>
+            <p className="text-sm font-semibold text-olive">
+              {payment.includeInMonthlyRevenue
+                ? "Платеж учитывается в сумме"
+                : "Платеж исключен из суммы"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleAccountingToggle(!payment.includeInMonthlyRevenue)}
+            disabled={loading !== null}
+            className="rounded-2xl border border-olive/12 bg-white px-3 py-2 text-xs font-semibold text-olive transition hover:border-primary/20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {loading === "accounting"
+              ? "Сохраняем..."
+              : payment.includeInMonthlyRevenue
+                ? "Не считать"
+                : "Считать"}
+          </button>
+        </div>
+      ) : null}
+
+      {!isPending && error ? (
+        <div className="mt-2 flex items-center gap-2 text-sm text-red-600">
+          <AppIcon icon={CircleAlert} className="h-4 w-4" />
+          {error}
+        </div>
+      ) : null}
+
       {/* Actions for pending */}
       {isPending && (
         <div className="mt-3 space-y-3 border-t border-olive/10 pt-3">
@@ -445,8 +515,12 @@ export function ManagerPaymentsList({
   pendingPayments,
   completedPayments,
 }: ManagerPaymentsListProps) {
+  const [showArchive, setShowArchive] = useState(false);
   const completedGroups = groupPaymentsByDay(completedPayments);
   const currentMonthConfirmedTotal = getCurrentMonthConfirmedTotal(completedPayments);
+  const excludedSucceededCount = completedPayments.filter(
+    (payment) => payment.status === "SUCCEEDED" && !payment.includeInMonthlyRevenue,
+  ).length;
   const pendingTransferTopUps = pendingPayments.filter(
     (payment) => payment.transferPayment?.paymentReason === "fleet_topup",
   );
@@ -468,6 +542,11 @@ export function ManagerPaymentsList({
           <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-800">
             {formatMoney(currentMonthConfirmedTotal)}
           </p>
+          {excludedSucceededCount > 0 ? (
+            <p className="mt-1 text-xs font-semibold text-emerald-700/75">
+              Исключено вручную: {excludedSucceededCount}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700/75">
@@ -498,6 +577,70 @@ export function ManagerPaymentsList({
         </div>
       </section>
 
+      <section className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setShowArchive(false)}
+          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+            !showArchive
+              ? "bg-primary text-white"
+              : "border border-olive/12 bg-white text-olive hover:border-primary/20 hover:text-primary"
+          }`}
+        >
+          <Clock3 className="h-4 w-4" />
+          Текущие заявки
+          {pendingPayments.length > 0 ? (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
+              {pendingPayments.length}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowArchive(true)}
+          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+            showArchive
+              ? "bg-primary text-white"
+              : "border border-olive/12 bg-white text-olive hover:border-primary/20 hover:text-primary"
+          }`}
+        >
+          <Archive className="h-4 w-4" />
+          Оплаченные и история
+          {completedPayments.length > 0 ? (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
+              {completedPayments.length}
+            </span>
+          ) : null}
+        </button>
+      </section>
+
+      {showArchive ? (
+        <section>
+          <h2 className="text-lg font-semibold text-olive">Оплаченные и история</h2>
+          {completedGroups.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-olive/20 bg-cream/50 p-4 text-sm text-olive/55">
+              Архив пока пуст
+            </p>
+          ) : (
+            <div className="mt-3 space-y-5">
+              {completedGroups.map((group) => (
+                <div key={group.key} className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-olive/10 pb-2">
+                    <p className="text-sm font-semibold text-olive">{group.label}</p>
+                    <p className="text-xs font-semibold text-emerald-700">
+                      Учтено в доходе: {formatMoney(group.total)}
+                    </p>
+                  </div>
+                  {group.items.map((payment) => (
+                    <PaymentCard key={payment.id} payment={payment} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
       {/* Pending section */}
       <section>
         <h2 className="text-lg font-semibold text-olive">
@@ -551,28 +694,9 @@ export function ManagerPaymentsList({
           </div>
         )}
       </section>
-
-      {/* Completed section */}
-      {completedGroups.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-olive">История по дням</h2>
-          <div className="mt-3 space-y-5">
-            {completedGroups.map((group) => (
-              <div key={group.key} className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-olive/10 pb-2">
-                  <p className="text-sm font-semibold text-olive">{group.label}</p>
-                  <p className="text-xs font-semibold text-emerald-700">
-                    Подтверждено: {formatMoney(group.total)}
-                  </p>
-                </div>
-                {group.items.map((payment) => (
-                  <PaymentCard key={payment.id} payment={payment} />
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
+        </>
       )}
+
     </div>
   );
 }

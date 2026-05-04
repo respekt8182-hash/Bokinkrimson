@@ -54,6 +54,7 @@ export type TransferPaymentPayload = {
 };
 
 const TRANSFER_PAYMENT_TARIFF_PREFIX = "transfer_standard:";
+const ADMIN_REVENUE_INCLUDED_KEY = "includeInAdminRevenue";
 
 export type PlacementCoverageState = {
   hasActivePlacement: boolean;
@@ -232,6 +233,31 @@ export function getTransferPaymentReference(input: {
     transferId,
     transferTitle: transferPayload?.transferTitle || null,
   };
+}
+
+export function shouldCountPaymentInAdminRevenue(providerPayload: unknown): boolean {
+  if (!isRecord(providerPayload)) {
+    return true;
+  }
+
+  return providerPayload[ADMIN_REVENUE_INCLUDED_KEY] !== false;
+}
+
+export function setPaymentAdminRevenueIncluded(
+  providerPayload: Prisma.JsonValue | null,
+  included: boolean,
+): Prisma.InputJsonObject {
+  if (isRecord(providerPayload)) {
+    return {
+      ...providerPayload,
+      [ADMIN_REVENUE_INCLUDED_KEY]: included,
+    } as Prisma.InputJsonObject;
+  }
+
+  return {
+    [ADMIN_REVENUE_INCLUDED_KEY]: included,
+    ...(providerPayload === null ? {} : { legacyProviderPayload: providerPayload }),
+  } as Prisma.InputJsonObject;
 }
 
 export type YookassaStatus = "pending" | "waiting_for_capture" | "succeeded" | "canceled";

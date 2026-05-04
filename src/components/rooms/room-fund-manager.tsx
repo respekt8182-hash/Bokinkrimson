@@ -12,7 +12,6 @@ import { Select } from "@/components/ui/select";
 import { SeaToggle } from "@/components/ui/sea-toggle";
 import { cn } from "@/lib/cn";
 import { mediaLimits } from "@/lib/constants";
-import { accommodationPhotoUploadLimitsLabel } from "@/lib/photo-upload";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import {
   additionalPlaceTypeOptions,
@@ -1919,8 +1918,7 @@ export function RoomFundManager({
                       </span>
                     </summary>
                     <p className="mt-2 text-sm text-olive/65">
-                      Требование: минимум 3 фото, максимум {mediaLimits.room.images} фото.{" "}
-                      {accommodationPhotoUploadLimitsLabel}.
+                      Требование: минимум 3 фото, максимум {mediaLimits.room.images} фото.
                     </p>
                     {editingRoom.mediaStats.imageCount < 3 ? (
                       <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

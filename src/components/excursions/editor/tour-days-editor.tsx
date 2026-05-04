@@ -25,6 +25,7 @@ type TourDaysEditorProps = {
   onItemLabelChange: (value: ItineraryItemLabel) => void;
   onUploadPhotos: (dayIndex: number, files: FileList | null) => void;
   onMovePhoto: (dayIndex: number, photoIndex: number, direction: -1 | 1) => void;
+  onMakePhotoFirst: (dayIndex: number, photoIndex: number) => void;
   onRemovePhoto: (dayIndex: number, photoIndex: number) => void;
   disabled?: boolean;
   uploadingDayIndex?: number | null;
@@ -90,6 +91,7 @@ export function TourDaysEditor({
   onItemLabelChange,
   onUploadPhotos,
   onMovePhoto,
+  onMakePhotoFirst,
   onRemovePhoto,
   disabled = false,
   uploadingDayIndex = null,
@@ -321,6 +323,7 @@ export function TourDaysEditor({
               isUploading={uploadingDayIndex === index}
               onUpload={(files) => onUploadPhotos(index, files)}
               onMove={(photoIndex, direction) => onMovePhoto(index, photoIndex, direction)}
+              onMakeFirst={(photoIndex) => onMakePhotoFirst(index, photoIndex)}
               onRemove={(photoIndex) => onRemovePhoto(index, photoIndex)}
             />
           </div>

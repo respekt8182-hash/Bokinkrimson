@@ -47,7 +47,7 @@ import {
   collectExcursionSectionPhotoUrls,
   getItineraryDayPhotoUrls,
   getTimelineStepPhotoUrls,
-  normalizeExcursionSectionPhotoGroups,
+  resolveExcursionSectionPhotoState,
 } from "@/types/excursions";
 
 type ResolvedDistrict = {
@@ -472,9 +472,14 @@ function collectRawPublicExcursionGalleryPhotoUrls(input: {
   itineraryDays?: Prisma.JsonValue | ItineraryDay[];
   timeline?: Prisma.JsonValue | TimelineStep[];
 }): string[] {
-  const sectionPhotoUrls = collectExcursionSectionPhotoUrls(
-    input.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
-  );
+  const resolvedSectionPhotos = resolveExcursionSectionPhotoState({
+    photoUrls: toStringArray(input.photoUrls),
+    sectionPhotoGroups: input.sectionPhotoGroups as
+      | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+      | null
+      | undefined,
+  });
+  const sectionPhotoUrls = collectExcursionSectionPhotoUrls(resolvedSectionPhotos.sectionPhotoGroups);
   const itineraryPhotoUrls = Array.isArray(input.itineraryDays)
     ? input.itineraryDays.flatMap((day) => getItineraryDayPhotoUrls(day as ItineraryDay))
     : [];
@@ -483,7 +488,7 @@ function collectRawPublicExcursionGalleryPhotoUrls(input: {
     : [];
 
   return normalizePublicPhotoUrls([
-    ...toStringArray(input.photoUrls),
+    ...resolvedSectionPhotos.photoUrls,
     ...sectionPhotoUrls,
     ...itineraryPhotoUrls,
     ...timelinePhotoUrls,
@@ -510,8 +515,15 @@ function getPublicExcursionCoverImageUrl(input: {
 
 function filterPublicSectionPhotoGroups(
   value: Partial<Record<string, string[] | null | undefined>> | null | undefined,
+  photoUrls?: string[],
 ): ExcursionSectionPhotoGroups {
-  const normalized = normalizeExcursionSectionPhotoGroups(value);
+  const normalized = resolveExcursionSectionPhotoState({
+    photoUrls,
+    sectionPhotoGroups: value as
+      | Partial<Record<"dates" | "program" | "logistics" | "accommodation" | "included" | "requirements", string[] | null | undefined>>
+      | null
+      | undefined,
+  }).sectionPhotoGroups;
 
   return {
     dates: filterExistingPublicAssetUrls(normalized.dates),
@@ -1768,6 +1780,7 @@ async function getExcursionCardByIdentifier(input: {
     photoUrls: getPublicExcursionGalleryPhotoUrls(display),
     sectionPhotoGroups: filterPublicSectionPhotoGroups(
       display.sectionPhotoGroups as Partial<Record<string, string[] | null | undefined>>,
+      toStringArray(display.photoUrls),
     ),
     videoUrls: filterExistingPublicAssetUrls(toStringArray(display.videoUrls)),
     priceUnitLabel: display.priceUnitLabel,

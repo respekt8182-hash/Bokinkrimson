@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { buildOffsetPagination, parsePagination } from "@/lib/pagination";
-import { getTransferPaymentPayload, getTransferPaymentReference } from "@/lib/payments";
+import {
+  getTransferPaymentPayload,
+  getTransferPaymentReference,
+  shouldCountPaymentInAdminRevenue,
+} from "@/lib/payments";
 
 export async function GET(request: NextRequest) {
   const admin = await getAdminSession();
@@ -148,6 +152,7 @@ export async function GET(request: NextRequest) {
         canceledAt: p.canceledAt?.toISOString() ?? null,
         managerNotes: p.managerNotes,
         confirmedById: p.confirmedById,
+        includeInMonthlyRevenue: shouldCountPaymentInAdminRevenue(p.providerPayload),
         transferPayment: transferPayload
           ? {
               paymentReason: transferPayload.paymentReason ?? null,

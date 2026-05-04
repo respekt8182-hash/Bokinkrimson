@@ -1,4 +1,10 @@
-import { ExcursionStatus, PropertyStatus, TransferStatus } from "@prisma/client";
+import {
+  ExcursionOfferType,
+  ExcursionStatus,
+  PropertyStatus,
+  TransferStatus,
+  UserRole,
+} from "@prisma/client";
 import {
   Car,
   Compass,
@@ -45,6 +51,10 @@ export default async function AdminHomePage() {
     transfersCount,
     pendingTransfersCount,
     rejectedTransfersCount,
+    propertyDraftsCount,
+    excursionDraftsCount,
+    tourDraftsCount,
+    transferDraftsCount,
     isDatabaseFallback,
   } = await loadDataWithDatabaseFallback(
     {
@@ -69,29 +79,139 @@ export default async function AdminHomePage() {
         transfersCount,
         pendingTransfersCount,
         rejectedTransfersCount,
+        propertyDraftsCount,
+        excursionDraftsCount,
+        tourDraftsCount,
+        transferDraftsCount,
       ] = await Promise.all([
-        db.user.count(),
-        db.property.count(),
-        db.property.count({
-          where: buildPropertyWorkflowStatusWhere(PropertyStatus.PENDING_MODERATION),
+        db.user.count({
+          where: {
+            role: UserRole.USER,
+            deletedAt: null,
+          },
         }),
         db.property.count({
           where: {
             ownerDeletedAt: null,
             status: PropertyStatus.PUBLISHED,
+            isPublishedVisible: true,
+            owner: { deletedAt: null },
           },
         }),
-        db.property.count({ where: buildPropertyWorkflowStatusWhere(PropertyStatus.REJECTED) }),
-        db.application.count(),
-        db.adminMessage.count(),
-        db.excursion.count(),
-        db.excursion.count({ where: { status: ExcursionStatus.PENDING_MODERATION } }),
-        db.excursion.count({ where: { status: ExcursionStatus.REJECTED } }),
-        db.transfer.count(),
-        db.transfer.count({
-          where: buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION),
+        db.property.count({
+          where: {
+            AND: [
+              buildPropertyWorkflowStatusWhere(PropertyStatus.PENDING_MODERATION),
+              {
+                ownerDeletedAt: null,
+                owner: { deletedAt: null },
+              },
+            ],
+          },
         }),
-        db.transfer.count({ where: buildTransferWorkflowStatusWhere(TransferStatus.REJECTED) }),
+        db.property.count({
+          where: {
+            ownerDeletedAt: null,
+            status: PropertyStatus.PUBLISHED,
+            isPublishedVisible: true,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.property.count({
+          where: {
+            AND: [
+              buildPropertyWorkflowStatusWhere(PropertyStatus.REJECTED),
+              {
+                ownerDeletedAt: null,
+                owner: { deletedAt: null },
+              },
+            ],
+          },
+        }),
+        db.application.count({
+          where: {
+            guestUser: { deletedAt: null },
+          },
+        }),
+        db.adminMessage.count({
+          where: {
+            senderUser: { deletedAt: null },
+          },
+        }),
+        db.excursion.count({
+          where: {
+            deletedAt: null,
+            status: ExcursionStatus.PUBLISHED,
+            isPublishedVisible: true,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.excursion.count({
+          where: {
+            deletedAt: null,
+            status: ExcursionStatus.PENDING_MODERATION,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.excursion.count({
+          where: {
+            deletedAt: null,
+            status: ExcursionStatus.REJECTED,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.transfer.count({
+          where: {
+            status: TransferStatus.PUBLISHED,
+            isPublishedVisible: true,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.transfer.count({
+          where: {
+            AND: [
+              buildTransferWorkflowStatusWhere(TransferStatus.PENDING_MODERATION),
+              { owner: { deletedAt: null } },
+            ],
+          },
+        }),
+        db.transfer.count({
+          where: {
+            AND: [
+              buildTransferWorkflowStatusWhere(TransferStatus.REJECTED),
+              { owner: { deletedAt: null } },
+            ],
+          },
+        }),
+        db.property.count({
+          where: {
+            ownerDeletedAt: null,
+            status: PropertyStatus.DRAFT,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.excursion.count({
+          where: {
+            deletedAt: null,
+            status: ExcursionStatus.DRAFT,
+            offerType: ExcursionOfferType.EXCURSION,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.excursion.count({
+          where: {
+            deletedAt: null,
+            status: ExcursionStatus.DRAFT,
+            offerType: ExcursionOfferType.TOUR,
+            owner: { deletedAt: null },
+          },
+        }),
+        db.transfer.count({
+          where: {
+            status: TransferStatus.DRAFT,
+            owner: { deletedAt: null },
+          },
+        }),
       ]);
 
       return {
@@ -108,6 +228,10 @@ export default async function AdminHomePage() {
         transfersCount,
         pendingTransfersCount,
         rejectedTransfersCount,
+        propertyDraftsCount,
+        excursionDraftsCount,
+        tourDraftsCount,
+        transferDraftsCount,
         isDatabaseFallback: false,
       };
     },
@@ -125,6 +249,10 @@ export default async function AdminHomePage() {
       transfersCount: 0,
       pendingTransfersCount: 0,
       rejectedTransfersCount: 0,
+      propertyDraftsCount: 0,
+      excursionDraftsCount: 0,
+      tourDraftsCount: 0,
+      transferDraftsCount: 0,
       isDatabaseFallback: true,
     },
   );
@@ -166,19 +294,19 @@ export default async function AdminHomePage() {
           label="Жильё и размещение"
           value={propertiesCount}
           icon={House}
-          description="Все карточки жилья"
+          description="Опубликованные карточки жилья"
         />
         <AdminStatCard
           label="Каталог экскурсий"
           value={excursionsCount}
           icon={Compass}
-          description="Все экскурсии и туры"
+          description="Опубликованные экскурсии и туры"
         />
         <AdminStatCard
           label="Трансферы"
           value={transfersCount}
           icon={Car}
-          description="Карточки водителей и маршрутов"
+          description="Опубликованные карточки трансферов"
         />
         <AdminStatCard
           label="Сообщения"
@@ -315,6 +443,30 @@ export default async function AdminHomePage() {
           </div>
         </AdminPanel>
       </section>
+
+      <AdminPanel
+        title="Черновики"
+        description="Сколько неопубликованных карточек сейчас сохранено на сайте."
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <StatusRow
+            label="Жильё"
+            value={propertyDraftsCount}
+            tone="bg-slate-100 text-slate-700"
+          />
+          <StatusRow
+            label="Экскурсии"
+            value={excursionDraftsCount}
+            tone="bg-sky-100 text-sky-800"
+          />
+          <StatusRow label="Туры" value={tourDraftsCount} tone="bg-indigo-100 text-indigo-800" />
+          <StatusRow
+            label="Трансферы"
+            value={transferDraftsCount}
+            tone="bg-cyan-100 text-cyan-800"
+          />
+        </div>
+      </AdminPanel>
     </div>
   );
 }

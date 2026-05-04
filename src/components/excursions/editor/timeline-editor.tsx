@@ -26,6 +26,7 @@ type TimelineEditorProps = {
   onChange: (steps: TimelineStep[]) => void;
   onUploadPhotos: (stepIndex: number, files: FileList | null) => void;
   onMovePhoto: (stepIndex: number, photoIndex: number, direction: -1 | 1) => void;
+  onMakePhotoFirst: (stepIndex: number, photoIndex: number) => void;
   onRemovePhoto: (stepIndex: number, photoIndex: number) => void;
   disabled?: boolean;
   uploadingStepIndex?: number | null;
@@ -125,6 +126,7 @@ export function TimelineEditor({
   onChange,
   onUploadPhotos,
   onMovePhoto,
+  onMakePhotoFirst,
   onRemovePhoto,
   disabled = false,
   uploadingStepIndex = null,
@@ -409,6 +411,7 @@ export function TimelineEditor({
                     isUploading={uploadingStepIndex === index}
                     onUpload={(files) => onUploadPhotos(index, files)}
                     onMove={(photoIndex, direction) => onMovePhoto(index, photoIndex, direction)}
+                    onMakeFirst={(photoIndex) => onMakePhotoFirst(index, photoIndex)}
                     onRemove={(photoIndex) => onRemovePhoto(index, photoIndex)}
                   />
                 </div>

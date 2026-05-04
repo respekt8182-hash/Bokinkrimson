@@ -57,19 +57,36 @@ export async function GET(req: NextRequest) {
         where: { id: chatId },
         include: {
           user: {
-            select: { id: true, firstName: true, lastName: true, phone: true, avatarUrl: true },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              avatarUrl: true,
+              deletedAt: true,
+            },
           },
           messages: { orderBy: { createdAt: "asc" } },
         },
       });
-      if (!chat) {
+      if (!chat || chat.user.deletedAt) {
         return NextResponse.json({ error: "Чат не найден" }, { status: 404 });
       }
-      return NextResponse.json({ chat });
+      const user = {
+        id: chat.user.id,
+        firstName: chat.user.firstName,
+        lastName: chat.user.lastName,
+        phone: chat.user.phone,
+        avatarUrl: chat.user.avatarUrl,
+      };
+      return NextResponse.json({ chat: { ...chat, user } });
     }
 
     // List all chats with preview
     const chats = await db.supportChat.findMany({
+      where: {
+        user: { deletedAt: null },
+      },
       orderBy: { updatedAt: "desc" },
       include: {
         user: {
@@ -152,8 +169,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const chat = await db.supportChat.findUnique({ where: { id: chatId } });
-    if (!chat) {
+    const chat = await db.supportChat.findUnique({
+      where: { id: chatId },
+      include: { user: { select: { deletedAt: true } } },
+    });
+    if (!chat || chat.user.deletedAt) {
       return NextResponse.json({ error: "Чат не найден" }, { status: 404 });
     }
 

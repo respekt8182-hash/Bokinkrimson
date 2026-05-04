@@ -3,7 +3,12 @@ import {
   collectExcursionPresentationPhotoUrls,
   collectExcursionProgramPhotoUrls,
 } from "../../src/lib/excursions";
-import { getItineraryDayPhotoUrls, getTimelineStepPhotoUrls } from "../../src/types/excursions";
+import {
+  buildExcursionPhotoStorageWithSectionFallback,
+  getItineraryDayPhotoUrls,
+  getTimelineStepPhotoUrls,
+  resolveExcursionSectionPhotoState,
+} from "../../src/types/excursions";
 
 describe("excursion program photo helpers", () => {
   it("normalizes and deduplicates photo urls inside itinerary days", () => {
@@ -88,5 +93,30 @@ describe("excursion program photo helpers", () => {
       "/uploads/day.webp",
       "/uploads/step.webp",
     ]);
+  });
+
+  it("restores section photos from compatibility fallback stored in photoUrls", () => {
+    const storedPhotoUrls = buildExcursionPhotoStorageWithSectionFallback(["/uploads/gallery.webp"], {
+      dates: ["/uploads/dates.webp"],
+      program: ["/uploads/program.webp"],
+    });
+
+    expect(resolveExcursionSectionPhotoState({ photoUrls: storedPhotoUrls })).toEqual({
+      photoUrls: ["/uploads/gallery.webp"],
+      sectionPhotoGroups: {
+        dates: ["/uploads/dates.webp"],
+        program: ["/uploads/program.webp"],
+        logistics: [],
+        accommodation: [],
+        included: [],
+        requirements: [],
+      },
+    });
+
+    expect(
+      collectExcursionPresentationPhotoUrls({
+        photoUrls: storedPhotoUrls,
+      }),
+    ).toEqual(["/uploads/gallery.webp", "/uploads/dates.webp", "/uploads/program.webp"]);
   });
 });
