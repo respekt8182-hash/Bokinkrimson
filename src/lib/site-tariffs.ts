@@ -42,20 +42,20 @@ export function calculateTransferPublicationFeeRub(vehicleCount: number): number
 }
 
 export const publicServiceTariffRows: PublicServiceTariffRow[] = [
-  ...placementTariffsByGroup.MULTI_ROOM.map((tariff) => ({
-    id: tariff.code,
-    serviceName: "Размещение объекта",
-    serviceNote: tariff.title,
-    priceRub: tariff.amountRub,
-    conditionsLabel: formatRoomRange(tariff.roomCountMin, tariff.roomCountMax),
-    durationLabel: placementDurationLabel,
-  })),
   ...placementTariffsByGroup.SINGLE_UNIT.map((tariff) => ({
     id: tariff.code,
     serviceName: "Размещение объекта",
     serviceNote: "Квартира, дом, коттедж или частный сектор",
     priceRub: tariff.amountRub,
     conditionsLabel: "От 1 номера / объекта",
+    durationLabel: placementDurationLabel,
+  })),
+  ...placementTariffsByGroup.MULTI_ROOM.map((tariff) => ({
+    id: tariff.code,
+    serviceName: "Размещение объекта",
+    serviceNote: tariff.title,
+    priceRub: tariff.amountRub,
+    conditionsLabel: formatRoomRange(tariff.roomCountMin, tariff.roomCountMax),
     durationLabel: placementDurationLabel,
   })),
   {
