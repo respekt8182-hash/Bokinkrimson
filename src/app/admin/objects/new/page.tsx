@@ -7,6 +7,7 @@ import {
 import { db } from "@/lib/db";
 import { createPropertyDraft } from "@/lib/properties";
 import { AdminCreatePropertyForm } from "@/components/admin/admin-create-property-form";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 
 type AdminCreatePropertyPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -63,6 +64,7 @@ export default async function AdminCreatePropertyPage({
           Создайте объект размещения и назначьте владельца.
         </p>
       </div>
+      <PlacementPromoNotice compact />
 
       <AdminCreatePropertyForm
         users={users}

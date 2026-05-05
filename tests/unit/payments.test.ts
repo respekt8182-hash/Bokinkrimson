@@ -16,6 +16,7 @@ import {
   setPaymentAdminRevenueIncluded,
   shouldCountPaymentInAdminRevenue,
 } from "../../src/lib/payments";
+import { buildPlacementPromoPayload } from "../../src/lib/placement-promo";
 
 describe("payments domain", () => {
   it("maps YooKassa statuses", () => {
@@ -139,6 +140,18 @@ describe("payments domain", () => {
     expect(getTariffByRoomCount(1, "apartment").code).toBe("UNIT_SINGLE");
   });
 
+  it("applies the seasonal placement discount before June 2026", () => {
+    const quote = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      now: new Date("2026-05-10T09:00:00.000Z"),
+    });
+
+    expect(quote.originalAmount).toBe(3990);
+    expect(quote.amount).toBe(3192);
+    expect(quote.promo?.discountPercent).toBe(20);
+  });
+
   it("calculates only the tariff difference for an active placement after room increase", () => {
     const placement = getPlacementCoverageState({
       payments: [
@@ -154,6 +167,7 @@ describe("payments domain", () => {
       quote: getTariffQuote({
         roomCount: 2,
         propertyType: null,
+        now: new Date("2026-07-01T09:00:00.000Z"),
       }),
       now: new Date("2026-03-10T09:00:00.000Z"),
     });
@@ -188,6 +202,7 @@ describe("payments domain", () => {
       quote: getTariffQuote({
         roomCount: 2,
         propertyType: null,
+        now: new Date("2026-07-01T09:00:00.000Z"),
       }),
       now: new Date("2026-03-10T09:00:00.000Z"),
     });
@@ -195,6 +210,39 @@ describe("payments domain", () => {
     expect(placement.hasActivePlacement).toBe(true);
     expect(placement.coveredAmount).toBe(4990);
     expect(placement.coveredRoomCount).toBe(2);
+    expect(placement.requiredPaymentAmount).toBe(0);
+    expect(placement.fullyCovered).toBe(true);
+  });
+
+  it("counts discounted placement payments as full coverage after the promo ends", () => {
+    const promoPayload = buildPlacementPromoPayload({
+      originalAmountRub: 3990,
+      discountedAmountRub: 3192,
+      now: new Date("2026-05-10T09:00:00.000Z"),
+    });
+
+    const placement = getPlacementCoverageState({
+      payments: [
+        {
+          amount: 3192,
+          roomCount: 1,
+          status: PaymentStatus.SUCCEEDED,
+          paidAt: new Date("2026-05-10T09:00:00.000Z"),
+          createdAt: new Date("2026-05-10T09:00:00.000Z"),
+          placementValidUntil: new Date("2027-05-10T09:00:00.000Z"),
+          providerPayload: promoPayload ? ({ placementPromo: promoPayload } as never) : null,
+        },
+      ],
+      quote: getTariffQuote({
+        roomCount: 1,
+        propertyType: "apartment",
+        now: new Date("2026-07-01T09:00:00.000Z"),
+      }),
+      now: new Date("2026-07-01T09:00:00.000Z"),
+    });
+
+    expect(placement.coveredAmount).toBe(3192);
+    expect(placement.coveredOriginalAmount).toBe(3990);
     expect(placement.requiredPaymentAmount).toBe(0);
     expect(placement.fullyCovered).toBe(true);
   });

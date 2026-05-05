@@ -7,6 +7,7 @@ import { type TextareaHTMLAttributes, useEffect, useMemo, useRef, useState } fro
 import { PropertyMediaManager } from "@/components/media/property-media-manager";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 import { PropertyRulesExtraFields } from "@/components/objects/property-rules-extra-fields";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { RoomAmenitiesManager } from "@/components/rooms/room-amenities-manager";
 import { RoomFundManager } from "@/components/rooms/room-fund-manager";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -807,6 +808,7 @@ export function ObjectWizard({
       {activeStep === 1 ? (
         <section className="wizard-section-enter space-y-4">
           <h2 className="text-lg font-semibold text-olive md:text-xl">Информация об объекте</h2>
+          <PlacementPromoNotice compact />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,1fr)]">
             <div className="space-y-4">
               <section className="rounded-xl border border-olive/15 bg-white p-3">

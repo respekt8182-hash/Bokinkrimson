@@ -3,6 +3,7 @@ import { ArrowUpRight, Car, Eye, FileText, MapPin, ShieldCheck, Star } from "luc
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
+import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
 import { AppIcon } from "@/components/ui/app-icon";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
@@ -16,7 +17,10 @@ import {
 } from "@/lib/payments";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
 import { serializeReview } from "@/lib/reviews";
-import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
+import {
+  calculateTransferPublicationFeeRub,
+  calculateTransferPublicationOriginalFeeRub,
+} from "@/lib/site-tariffs";
 import {
   applyPublishedTransferSnapshotToRow,
   refreshPublishedTransferSnapshot,
@@ -284,6 +288,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     payments.find((payment) => payment.status === PaymentStatus.SUCCEEDED) ?? null;
   const paidUntil = succeededPayment ? resolvePaymentPlacementValidUntil(succeededPayment) : null;
   const currentPublicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
+  const originalPublicationFeeRub = calculateTransferPublicationOriginalFeeRub(fleet.length);
 
   return (
     <div className="space-y-6">
@@ -588,6 +593,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
 
           <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_18px_48px_rgba(58,43,35,0.06)]">
             <h3 className="text-lg font-semibold text-olive">Оплата размещения</h3>
+            <PlacementPromoNotice compact className="mt-3" />
             <dl className="mt-4 grid gap-2 text-sm">
               <div className="rounded-2xl bg-cream/80 px-3 py-3">
                 <dt className="text-olive/50">Тип карточки</dt>
@@ -606,8 +612,11 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
               </div>
               <div className="rounded-2xl bg-cream/80 px-3 py-3">
                 <dt className="text-olive/50">Стоимость</dt>
-                <dd className="font-semibold text-olive">
-                  {formatRub(latestPayment?.amount ?? currentPublicationFeeRub)}
+                <dd>
+                  <PlacementPromoPrice
+                    originalAmountRub={originalPublicationFeeRub}
+                    finalAmountRub={Number(latestPayment?.amount ?? currentPublicationFeeRub)}
+                  />
                 </dd>
               </div>
               <div className="rounded-2xl bg-cream/80 px-3 py-3">

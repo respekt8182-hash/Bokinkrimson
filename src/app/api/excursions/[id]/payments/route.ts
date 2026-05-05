@@ -6,6 +6,11 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serializePayment } from "@/lib/payments";
 import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
+import {
+  buildPlacementPromoMetadata,
+  buildPlacementPromoPayload,
+  getPlacementPromoPrice,
+} from "@/lib/placement-promo";
 import { EXCURSION_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
@@ -151,18 +156,29 @@ export async function POST(request: Request, context: RouteContext) {
   const idempotenceKey = crypto.randomUUID();
   const tariffCode =
     excursion.offerType === ExcursionOfferType.TOUR ? "tour_standard" : "excursion_standard";
+  const publicationPrice = getPlacementPromoPrice(EXCURSION_PUBLICATION_FEE_RUB);
+  const amount = publicationPrice.finalAmountRub;
+  const placementPromo = buildPlacementPromoPayload({
+    originalAmountRub: publicationPrice.originalAmountRub,
+    discountedAmountRub: amount,
+  });
+  const promoMetadata = buildPlacementPromoMetadata({
+    originalAmountRub: publicationPrice.originalAmountRub,
+    discountedAmountRub: amount,
+  });
 
   if (body.provider === "MANAGER") {
     const created = await db.payment.create({
       data: {
         excursionId: excursion.id,
         ownerId: session.id,
-        amount: EXCURSION_PUBLICATION_FEE_RUB,
+        amount,
         tariffCode,
         roomCount: 0,
         status: PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey,
+        ...(placementPromo ? { providerPayload: { placementPromo } } : {}),
       },
       include: {
         excursion: {
@@ -191,7 +207,7 @@ export async function POST(request: Request, context: RouteContext) {
     data: {
       excursionId: excursion.id,
       ownerId: session.id,
-      amount: EXCURSION_PUBLICATION_FEE_RUB,
+      amount,
       tariffCode,
       roomCount: 0,
       status: PaymentStatus.CREATED,
@@ -211,21 +227,26 @@ export async function POST(request: Request, context: RouteContext) {
     const offerLabels = getOfferLabels(excursion.offerType);
     const yooPayment = await createYookassaPayment({
       idempotenceKey,
-      amountRub: EXCURSION_PUBLICATION_FEE_RUB,
+      amountRub: amount,
       description: `Публикация ${offerLabels.genitive} «${excursion.title ?? "Без названия"}»`,
       metadata: {
         paymentId: created.id,
         excursionId: excursion.id,
         offerType: excursion.offerType,
+        ...promoMetadata,
       },
     });
+    const providerPayload = {
+      ...yooPayment,
+      metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
+    };
 
     const updated = await db.payment.update({
       where: { id: created.id },
       data: {
         providerPaymentId: yooPayment.id,
         confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload: yooPayment,
+        providerPayload,
         status: PaymentStatus.PENDING,
       },
       include: {

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PropertyStatus } from "@prisma/client";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
 import { isPropertyPublicationControlAvailable } from "@/lib/admin-schema-compat";
 import { db } from "@/lib/db";
@@ -172,6 +173,8 @@ export default async function AdminPropertyEditPage({ params }: Props) {
             Открыть редактор
           </Link>
         </div>
+
+        <PlacementPromoNotice compact className="mt-4" />
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {editorSections.map((section) => (

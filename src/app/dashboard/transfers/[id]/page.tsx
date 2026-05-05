@@ -21,7 +21,13 @@ import {
   TRANSFER_EXTRA_VEHICLE_FEE_RUB,
   TRANSFER_PUBLICATION_FEE_RUB,
   calculateTransferPublicationFeeRub,
+  calculateTransferPublicationOriginalFeeRub,
 } from "@/lib/site-tariffs";
+import {
+  buildPlacementPromoMetadata,
+  buildPlacementPromoPayload,
+  getPlacementPromoPrice,
+} from "@/lib/placement-promo";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import {
   applyPublishedTransferSnapshotToRow,
@@ -306,6 +312,7 @@ export default async function DashboardTransferEditPage({
     }
 
     const publicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
+    const originalPublicationFeeRub = calculateTransferPublicationOriginalFeeRub(fleet.length);
     const shouldPreparePayment = intent === "submit" && publishReady;
     const transferPaymentsSupported = shouldPreparePayment
       ? await areDatabaseColumnsAvailable("Payment", ["transferId"])
@@ -338,6 +345,7 @@ export default async function DashboardTransferEditPage({
     const transferPaymentCoverage = getTransferPlacementCoverageState({
       payments,
       publicationFeeRub,
+      originalPublicationFeeRub,
     });
     const hasFullPaymentCoverage = transferPaymentCoverage.fullyCovered;
     const shouldSubmitPublishedEdit =
@@ -441,9 +449,19 @@ export default async function DashboardTransferEditPage({
       }
 
       const requiredPaymentAmount = transferPaymentCoverage.requiredPaymentAmount;
+      const requiredOriginalPaymentAmount =
+        transferPaymentCoverage.requiredOriginalPaymentAmount;
       const paymentReason = transferPaymentCoverage.hasActivePlacement
         ? "fleet_topup"
         : "publication";
+      const placementPromo = buildPlacementPromoPayload({
+        originalAmountRub: requiredOriginalPaymentAmount,
+        discountedAmountRub: requiredPaymentAmount,
+      });
+      const promoMetadata = buildPlacementPromoMetadata({
+        originalAmountRub: requiredOriginalPaymentAmount,
+        discountedAmountRub: requiredPaymentAmount,
+      });
       const transferPaymentPayload = buildTransferPaymentPayload({
         transferId: id,
         transferTitle: title,
@@ -452,6 +470,7 @@ export default async function DashboardTransferEditPage({
         totalAmountRub: publicationFeeRub,
         coveredAmountRub: transferPaymentCoverage.coveredAmount,
         requiredAmountRub: requiredPaymentAmount,
+        placementPromo,
       });
 
       const openPayment =
@@ -544,15 +563,20 @@ export default async function DashboardTransferEditPage({
           metadata: {
             paymentId: created.id,
             transferId: id,
+            ...promoMetadata,
           },
         });
+        const providerPayload = {
+          ...yooPayment,
+          metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
+        };
 
         const updated = await db.payment.update({
           where: { id: created.id },
           data: {
             providerPaymentId: yooPayment.id,
             confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-            providerPayload: yooPayment,
+            providerPayload,
             status: PaymentStatus.PENDING,
           },
         });
@@ -622,6 +646,7 @@ export default async function DashboardTransferEditPage({
         }
       : undefined,
   });
+  const transferPublicationPrice = getPlacementPromoPrice(TRANSFER_PUBLICATION_FEE_RUB);
 
   return (
     <TransferEditorPage
@@ -657,7 +682,8 @@ export default async function DashboardTransferEditPage({
       initialFleet={fleet}
       initialServiceTags={serviceTags}
       publicPath={publicPath}
-      publicationFeeRub={TRANSFER_PUBLICATION_FEE_RUB}
+      publicationFeeRub={transferPublicationPrice.finalAmountRub}
+      originalPublicationFeeRub={transferPublicationPrice.originalAmountRub}
       extraVehicleFeeRub={TRANSFER_EXTRA_VEHICLE_FEE_RUB}
       initialPayments={payments.map(serializePayment)}
       saved={saved}

@@ -5,6 +5,7 @@ import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-bu
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { AdminPageHeader, AdminUnavailableState } from "@/components/admin/admin-ui";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { ExcursionEditor } from "@/components/excursions/excursion-editor";
 import { purgeExpiredDeletedExcursions } from "@/lib/admin-entity-lifecycle";
 import {
@@ -186,6 +187,7 @@ export default async function AdminExcursionEditPage({
           </>
         }
       />
+      <PlacementPromoNotice compact />
 
       <ExcursionEditor
         initialExcursion={serializeExcursion(excursion)}

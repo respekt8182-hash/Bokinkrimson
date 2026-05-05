@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
+import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import {
   additionalServiceRows,
-  formatTariffPrice,
   publicServiceTariffRows,
 } from "@/lib/site-tariffs";
 
@@ -46,6 +46,7 @@ export function ServicesAndTariffsSection({
         размещение карточки объекта, экскурсии, тура или трансфера. Все тарифы ниже собраны из
         текущей логики публикации сайта.
       </p>
+      <PlacementPromoNotice className="mt-5" />
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">
         <div className="hidden overflow-x-auto md:block">
@@ -65,8 +66,8 @@ export function ServicesAndTariffsSection({
                     <p className="font-semibold text-olive">{row.serviceName}</p>
                     <p className="mt-1 text-xs leading-5 text-olive/60">{row.serviceNote}</p>
                   </td>
-                  <td className="px-4 py-4 align-top font-semibold text-olive">
-                    {formatTariffPrice(row.priceRub)}
+                  <td className="px-4 py-4 align-top">
+                    <PlacementPromoPrice originalAmountRub={row.priceRub} />
                   </td>
                   <td className="px-4 py-4 align-top text-olive/75">{row.conditionsLabel}</td>
                   <td className="px-4 py-4 align-top text-olive/75">{row.durationLabel}</td>
@@ -87,8 +88,8 @@ export function ServicesAndTariffsSection({
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
                   <dt className="text-olive/55">Стоимость</dt>
-                  <dd className="text-right font-semibold text-olive">
-                    {formatTariffPrice(row.priceRub)}
+                  <dd className="text-right">
+                    <PlacementPromoPrice originalAmountRub={row.priceRub} align="right" />
                   </dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">

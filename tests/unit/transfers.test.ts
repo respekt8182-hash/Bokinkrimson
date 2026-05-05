@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { TransferStatus } from "@prisma/client";
-import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
+import {
+  calculateTransferPublicationFeeRub,
+  calculateTransferPublicationOriginalFeeRub,
+} from "@/lib/site-tariffs";
 import {
   buildTransferWorkflowStatusWhere,
   deriveTransferSummaryFromFleet,
@@ -93,8 +96,13 @@ describe("transfer fleet normalization", () => {
   });
 
   it("calculates transfer placement fee from fleet size", () => {
-    expect(calculateTransferPublicationFeeRub(1)).toBe(1900);
-    expect(calculateTransferPublicationFeeRub(3)).toBe(2900);
+    const duringPromo = new Date("2026-05-10T09:00:00.000Z");
+    const afterPromo = new Date("2026-07-01T09:00:00.000Z");
+
+    expect(calculateTransferPublicationFeeRub(1, duringPromo)).toBe(1520);
+    expect(calculateTransferPublicationFeeRub(3, duringPromo)).toBe(2520);
+    expect(calculateTransferPublicationFeeRub(1, afterPromo)).toBe(1900);
+    expect(calculateTransferPublicationOriginalFeeRub(3)).toBe(2900);
   });
 
   it("uses pending edit status as transfer workflow status for published cards", () => {

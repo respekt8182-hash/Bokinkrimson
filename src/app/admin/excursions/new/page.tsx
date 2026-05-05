@@ -11,6 +11,7 @@ import {
   AdminUnavailableState,
 } from "@/components/admin/admin-ui";
 import { AdminCreateExcursionForm } from "@/components/admin/admin-create-excursion-form";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { createExcursionDraft } from "@/lib/excursions";
@@ -102,6 +103,7 @@ export default async function AdminCreateExcursionPage({
           </Link>
         }
       />
+      <PlacementPromoNotice compact />
 
       <AdminCreateExcursionForm
         users={users}

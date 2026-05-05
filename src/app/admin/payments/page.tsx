@@ -2,6 +2,7 @@
 import { PaymentProvider } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/admin-ui";
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import {
@@ -162,6 +163,7 @@ export default async function AdminPaymentsPage() {
         title="Оплата"
         description="Заявки на оплату через менеджера и история решений."
       />
+      <PlacementPromoNotice />
 
       <ManagerPaymentsList pendingPayments={pending} completedPayments={completed} />
     </div>

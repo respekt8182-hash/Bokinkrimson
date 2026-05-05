@@ -5,6 +5,12 @@ import {
   type PlacementPricingGroup,
   placementTariffsByGroup,
 } from "@/lib/constants";
+import {
+  getPlacementPromoOriginalCoverageAmount,
+  getPlacementPromoPrice,
+  type PlacementPromoPayload,
+  type PlacementPromoPrice,
+} from "@/lib/placement-promo";
 
 export type PlacementTariff =
   (typeof placementTariffsByGroup)[keyof typeof placementTariffsByGroup][number];
@@ -14,7 +20,9 @@ export type TariffQuote = {
   pricingGroup: PlacementPricingGroup;
   propertyType: string | null;
   roomCount: number;
+  originalAmount: number;
   amount: number;
+  promo: PlacementPromoPrice | null;
   currency: "RUB";
 };
 
@@ -25,6 +33,7 @@ export type SerializedPayment = {
   transferId: string | null;
   ownerId: string;
   amount: number;
+  originalCoverageAmount: number;
   tariffCode: string;
   roomCount: number;
   status: PaymentStatus;
@@ -60,8 +69,10 @@ export type PlacementCoverageState = {
   hasActivePlacement: boolean;
   paidUntil: string | null;
   coveredAmount: number;
+  coveredOriginalAmount: number;
   coveredRoomCount: number;
   requiredPaymentAmount: number;
+  requiredOriginalPaymentAmount: number;
   fullyCovered: boolean;
 };
 
@@ -69,8 +80,10 @@ export type TransferPlacementCoverageState = {
   hasActivePlacement: boolean;
   paidUntil: string | null;
   coveredAmount: number;
+  coveredOriginalAmount: number;
   coveredVehicleCount: number;
   requiredPaymentAmount: number;
+  requiredOriginalPaymentAmount: number;
   fullyCovered: boolean;
 };
 
@@ -151,6 +164,7 @@ export function buildTransferPaymentPayload(input: {
   totalAmountRub?: number;
   coveredAmountRub?: number;
   requiredAmountRub?: number;
+  placementPromo?: PlacementPromoPayload | null;
 }): Prisma.InputJsonObject {
   return {
     entityType: "transfer",
@@ -163,6 +177,7 @@ export function buildTransferPaymentPayload(input: {
     ...(input.requiredAmountRub !== undefined
       ? { requiredAmountRub: input.requiredAmountRub }
       : {}),
+    ...(input.placementPromo ? { placementPromo: input.placementPromo } : {}),
   };
 }
 
@@ -324,16 +339,21 @@ export function getTariffByRoomCount(
 export function getTariffQuote(input: {
   roomCount: number;
   propertyType: string | null;
+  now?: Date;
 }): TariffQuote {
   const normalizedRoomCount = Math.max(1, input.roomCount);
   const pricingGroup = getPlacementPricingGroupByType(input.propertyType);
   const tariff = getTariffByRoomCount(normalizedRoomCount, input.propertyType);
+  const promoPrice = getPlacementPromoPrice(tariff.amountRub, input.now);
+
   return {
     tariff,
     pricingGroup,
     propertyType: input.propertyType,
     roomCount: normalizedRoomCount,
-    amount: tariff.amountRub,
+    originalAmount: promoPrice.originalAmountRub,
+    amount: promoPrice.finalAmountRub,
+    promo: promoPrice.isDiscounted ? promoPrice : null,
     currency: "RUB",
   };
 }
@@ -391,6 +411,10 @@ export function serializePayment(payment: {
     propertyName: payment.property?.name ?? null,
     excursionName: payment.excursion?.title ?? null,
     transferName: payment.transfer?.title ?? transferReference?.transferTitle ?? null,
+    originalCoverageAmount: getPlacementPromoOriginalCoverageAmount(
+      payment.providerPayload,
+      Number(payment.amount),
+    ),
   };
 }
 
@@ -421,6 +445,7 @@ export function getPlacementCoverageState(input: {
     paidAt: Date | null;
     createdAt: Date;
     placementValidUntil?: Date | null;
+    providerPayload?: Prisma.JsonValue | null;
   }>;
   quote: TariffQuote | null;
   now?: Date;
@@ -434,17 +459,24 @@ export function getPlacementCoverageState(input: {
       amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
       roomCount: item.roomCount,
       validUntil: resolvePaymentPlacementValidUntil(item),
+      originalCoverageAmount: getPlacementPromoOriginalCoverageAmount(
+        item.providerPayload,
+        typeof item.amount === "number" ? item.amount : Number(item.amount),
+      ),
     }))
     .filter((item) => item.validUntil.getTime() > now.getTime());
 
   if (succeededPayments.length === 0) {
     const requiredPaymentAmount = input.quote?.amount ?? 0;
+    const requiredOriginalPaymentAmount = input.quote?.originalAmount ?? requiredPaymentAmount;
     return {
       hasActivePlacement: false,
       paidUntil: null,
       coveredAmount: 0,
+      coveredOriginalAmount: 0,
       coveredRoomCount: 0,
       requiredPaymentAmount,
+      requiredOriginalPaymentAmount,
       fullyCovered: requiredPaymentAmount <= 0,
     };
   }
@@ -456,18 +488,30 @@ export function getPlacementCoverageState(input: {
     (item) => item.validUntil.getTime() === latestValidUntilMs,
   );
   const coveredAmount = currentCyclePayments.reduce((sum, item) => sum + item.amount, 0);
+  const coveredOriginalAmount = currentCyclePayments.reduce(
+    (sum, item) => sum + item.originalCoverageAmount,
+    0,
+  );
   const coveredRoomCount = currentCyclePayments.reduce(
     (max, item) => Math.max(max, item.roomCount),
     0,
   );
-  const requiredPaymentAmount = input.quote ? Math.max(0, input.quote.amount - coveredAmount) : 0;
+  const activeCoverageAmount = input.quote?.promo ? coveredAmount : coveredOriginalAmount;
+  const requiredPaymentAmount = input.quote
+    ? Math.max(0, input.quote.amount - activeCoverageAmount)
+    : 0;
+  const requiredOriginalPaymentAmount = input.quote
+    ? Math.max(0, input.quote.originalAmount - coveredOriginalAmount)
+    : 0;
 
   return {
     hasActivePlacement: true,
     paidUntil: new Date(latestValidUntilMs).toISOString(),
     coveredAmount,
+    coveredOriginalAmount,
     coveredRoomCount,
     requiredPaymentAmount,
+    requiredOriginalPaymentAmount,
     fullyCovered: requiredPaymentAmount <= 0,
   };
 }
@@ -481,12 +525,15 @@ export function getTransferPlacementCoverageState(input: {
     paidAt: Date | null;
     createdAt: Date;
     placementValidUntil?: Date | null;
+    providerPayload?: Prisma.JsonValue | null;
   }>;
   publicationFeeRub: number;
+  originalPublicationFeeRub?: number;
   now?: Date;
 }): TransferPlacementCoverageState {
   const now = input.now ?? new Date();
   const requiredTotal = Math.max(0, input.publicationFeeRub);
+  const requiredOriginalTotal = Math.max(0, input.originalPublicationFeeRub ?? requiredTotal);
   const succeededPayments = input.payments
     .filter(
       (item) => item.status === PaymentStatus.SUCCEEDED && item.provider !== PaymentProvider.MOCK,
@@ -495,6 +542,10 @@ export function getTransferPlacementCoverageState(input: {
       amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
       vehicleCount: item.roomCount,
       validUntil: resolvePaymentPlacementValidUntil(item),
+      originalCoverageAmount: getPlacementPromoOriginalCoverageAmount(
+        item.providerPayload,
+        typeof item.amount === "number" ? item.amount : Number(item.amount),
+      ),
     }))
     .filter((item) => item.validUntil.getTime() > now.getTime());
 
@@ -503,8 +554,10 @@ export function getTransferPlacementCoverageState(input: {
       hasActivePlacement: false,
       paidUntil: null,
       coveredAmount: 0,
+      coveredOriginalAmount: 0,
       coveredVehicleCount: 0,
       requiredPaymentAmount: requiredTotal,
+      requiredOriginalPaymentAmount: requiredOriginalTotal,
       fullyCovered: requiredTotal <= 0,
     };
   }
@@ -516,18 +569,27 @@ export function getTransferPlacementCoverageState(input: {
     (item) => item.validUntil.getTime() === latestValidUntilMs,
   );
   const coveredAmount = currentCyclePayments.reduce((sum, item) => sum + item.amount, 0);
+  const coveredOriginalAmount = currentCyclePayments.reduce(
+    (sum, item) => sum + item.originalCoverageAmount,
+    0,
+  );
   const coveredVehicleCount = currentCyclePayments.reduce(
     (max, item) => Math.max(max, item.vehicleCount),
     0,
   );
-  const requiredPaymentAmount = Math.max(0, requiredTotal - coveredAmount);
+  const activeCoverageAmount =
+    requiredTotal < requiredOriginalTotal ? coveredAmount : coveredOriginalAmount;
+  const requiredPaymentAmount = Math.max(0, requiredTotal - activeCoverageAmount);
+  const requiredOriginalPaymentAmount = Math.max(0, requiredOriginalTotal - coveredOriginalAmount);
 
   return {
     hasActivePlacement: true,
     paidUntil: new Date(latestValidUntilMs).toISOString(),
     coveredAmount,
+    coveredOriginalAmount,
     coveredVehicleCount,
     requiredPaymentAmount,
+    requiredOriginalPaymentAmount,
     fullyCovered: requiredPaymentAmount <= 0,
   };
 }

@@ -1,7 +1,10 @@
 import { PaymentStatus, Prisma, TransferStatus } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
 import { getTransferPaymentTariffCode, getTransferPlacementCoverageState } from "@/lib/payments";
-import { calculateTransferPublicationFeeRub } from "@/lib/site-tariffs";
+import {
+  calculateTransferPublicationFeeRub,
+  calculateTransferPublicationOriginalFeeRub,
+} from "@/lib/site-tariffs";
 import { ensurePublishedTransferSnapshotBeforeOwnerEdit } from "@/lib/transfer-public-snapshot";
 
 type NumericLike = number | string | { toString(): string } | null | undefined;
@@ -612,6 +615,7 @@ export async function autoSubmitTransferAfterSuccessfulPayment(
         paidAt: true,
         createdAt: true,
         placementValidUntil: true,
+        providerPayload: true,
       },
     }),
   ]);
@@ -624,6 +628,7 @@ export async function autoSubmitTransferAfterSuccessfulPayment(
   const coverage = getTransferPlacementCoverageState({
     payments,
     publicationFeeRub: calculateTransferPublicationFeeRub(fleet.length),
+    originalPublicationFeeRub: calculateTransferPublicationOriginalFeeRub(fleet.length),
   });
 
   if (!coverage.fullyCovered) {

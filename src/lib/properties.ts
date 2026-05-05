@@ -1005,6 +1005,7 @@ export async function autoSubmitPropertyAfterSuccessfulPayment(
       paidAt: true,
       createdAt: true,
       placementValidUntil: true,
+      providerPayload: true,
     },
   });
 

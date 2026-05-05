@@ -1,6 +1,7 @@
 import { companyConfig } from "@/config/company";
 import { placementTariffsByGroup } from "@/lib/constants";
 import { PLACEMENT_VALIDITY_DAYS } from "@/lib/payments";
+import { getPlacementPromoPrice } from "@/lib/placement-promo";
 
 export const EXCURSION_PUBLICATION_FEE_RUB = 1990;
 export const TRANSFER_PUBLICATION_FEE_RUB = 1900;
@@ -31,7 +32,17 @@ function formatRoomRange(min: number, max: number | null): string {
 
 const placementDurationLabel = `${PLACEMENT_VALIDITY_DAYS} дней с момента оплаты`;
 
-export function calculateTransferPublicationFeeRub(vehicleCount: number): number {
+export function calculateTransferPublicationFeeRub(vehicleCount: number, now = new Date()): number {
+  const normalizedVehicleCount = Number.isFinite(vehicleCount)
+    ? Math.max(1, Math.round(vehicleCount))
+    : 1;
+  return (
+    getPlacementPromoPrice(TRANSFER_PUBLICATION_FEE_RUB, now).finalAmountRub +
+    Math.max(0, normalizedVehicleCount - 1) * TRANSFER_EXTRA_VEHICLE_FEE_RUB
+  );
+}
+
+export function calculateTransferPublicationOriginalFeeRub(vehicleCount: number): number {
   const normalizedVehicleCount = Number.isFinite(vehicleCount)
     ? Math.max(1, Math.round(vehicleCount))
     : 1;
@@ -122,6 +133,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 ];
 
 export const publicTariffHighlights = [
+  "До 1 июня 2026 действует скидка 20% на основные услуги размещения. Дополнительные услуги оплачиваются без скидки.",
   "Сервис берет оплату только за размещение карточки и не удерживает комиссию с каждого бронирования.",
   "Для объектов размещения тариф рассчитывается по количеству активных номеров и типу объекта.",
   "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией; в трансферах один автомобиль включен в базовую стоимость, каждый следующий стоит 500 ₽.",

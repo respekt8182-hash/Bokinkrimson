@@ -6,7 +6,7 @@ import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 export const metadata: Metadata = {
   title: "Услуги и тарифы",
   description:
-    "Тарифы на размещение объектов, экскурсий, туров и трансферов на сайте Крым Вокруг с открытой моделью оплаты без комиссии с бронирования.",
+    "Тарифы на размещение объектов, экскурсий, туров и трансферов на сайте Крым Вокруг. До 1 июня 2026 действует скидка 20% на основные услуги размещения.",
   alternates: {
     canonical: buildCanonicalPath("/uslugi-i-tarify"),
   },
@@ -19,6 +19,8 @@ export const metadata: Metadata = {
     images: [defaultSocialImageMetadata],
   },
 };
+
+export const dynamic = "force-dynamic";
 
 export default function ServicesAndTariffsPage() {
   return (

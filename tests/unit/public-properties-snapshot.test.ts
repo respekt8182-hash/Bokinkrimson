@@ -1,5 +1,5 @@
 // Unit tests for published property snapshot creation, parsing, and edit fallback rules.
-import { PetsPolicy, PropertyStatus } from "@prisma/client";
+import { MediaType, PetsPolicy, PropertyStatus } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { resolvePublicCatalogDisplayState } from "../../src/lib/public-properties";
 
@@ -116,7 +116,7 @@ describe("public catalog display state", () => {
       childrenAllowed: true,
       petsPolicy: PetsPolicy.ALLOWED,
       starRating: 5,
-      media: [{ url: "/draft-cover.webp" }],
+      media: [{ url: "/draft-cover.webp", type: MediaType.IMAGE }],
       rooms: [
         {
           id: "room-draft",
@@ -163,7 +163,7 @@ describe("public catalog display state", () => {
       childrenAllowed: true,
       petsPolicy: PetsPolicy.ON_REQUEST,
       starRating: 4,
-      media: [{ url: "/live-cover.webp" }],
+      media: [{ url: "/live-cover.webp", type: MediaType.IMAGE }],
       rooms: [
         {
           id: "room-live",

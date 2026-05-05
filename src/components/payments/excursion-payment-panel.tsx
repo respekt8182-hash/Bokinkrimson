@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -493,10 +494,10 @@ export function ExcursionPaymentPanel({
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold tabular-nums text-olive">
-                  {new Intl.NumberFormat("ru-RU").format(EXCURSION_PUBLICATION_FEE_RUB)}{" "}
-                  <span className="text-base font-semibold text-olive/60">₽</span>
-                </p>
+                <PlacementPromoPrice
+                  originalAmountRub={EXCURSION_PUBLICATION_FEE_RUB}
+                  finalClassName="text-2xl"
+                />
                 <p className="text-xs text-olive/55">
                   Единоразовая оплата за публикацию {copy.genitive}
                 </p>
@@ -518,6 +519,7 @@ export function ExcursionPaymentPanel({
             </>
           )}
         </div>
+        {!adminMode ? <PlacementPromoNotice compact className="mt-3" /> : null}
 
         {!isReady ? (
           <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">

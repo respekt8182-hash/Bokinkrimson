@@ -11,6 +11,10 @@ import {
   serializePayment,
 } from "@/lib/payments";
 import {
+  buildPlacementPromoMetadata,
+  buildPlacementPromoPayload,
+} from "@/lib/placement-promo";
+import {
   getPropertyPaymentReadinessIssues,
   getPropertyProgress,
   purgeExpiredPropertyDraftsForOwner,
@@ -204,6 +208,17 @@ export async function POST(request: Request, context: RouteContext) {
   const amount = placement.hasActivePlacement
     ? placement.requiredPaymentAmount
     : readiness.quote.amount;
+  const originalAmount = placement.hasActivePlacement
+    ? placement.requiredOriginalPaymentAmount
+    : readiness.quote.originalAmount;
+  const placementPromo = buildPlacementPromoPayload({
+    originalAmountRub: originalAmount,
+    discountedAmountRub: Number(amount),
+  });
+  const promoMetadata = buildPlacementPromoMetadata({
+    originalAmountRub: originalAmount,
+    discountedAmountRub: Number(amount),
+  });
 
   const idempotenceKey = crypto.randomUUID();
 
@@ -220,6 +235,7 @@ export async function POST(request: Request, context: RouteContext) {
         idempotenceKey,
         confirmationUrl: null,
         placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
+        ...(placementPromo ? { providerPayload: { placementPromo } } : {}),
       },
       include: {
         property: { select: { name: true } },
@@ -262,15 +278,19 @@ export async function POST(request: Request, context: RouteContext) {
       idempotenceKey,
       amountRub: Number(amount),
       description: `Размещение объекта «${property.name ?? "Без названия"}» на 365 дней`,
-      metadata: { paymentId: created.id, propertyId: property.id },
+      metadata: { paymentId: created.id, propertyId: property.id, ...promoMetadata },
     });
+    const providerPayload = {
+      ...yooPayment,
+      metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
+    };
 
     const updated = await db.payment.update({
       where: { id: created.id },
       data: {
         providerPaymentId: yooPayment.id,
         confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload: yooPayment,
+        providerPayload,
         status: PaymentStatus.PENDING,
       },
       include: {

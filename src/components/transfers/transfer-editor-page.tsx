@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { type TextareaHTMLAttributes, useEffect, useMemo, useState } from "react";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
+import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -87,6 +88,7 @@ type TransferEditorPageProps = {
   initialServiceTags: string[];
   publicPath: string | null;
   publicationFeeRub: number;
+  originalPublicationFeeRub: number;
   extraVehicleFeeRub: number;
   initialPayments: SerializedPayment[];
   saved: boolean;
@@ -162,11 +164,14 @@ function getTransferPaymentTariffLabel(tariffCode: string): string {
 function getTransferPaymentCoverage(
   payments: SerializedPayment[],
   publicationFeeRub: number,
+  originalPublicationFeeRub: number,
 ): {
   hasActivePlacement: boolean;
   paidUntil: string | null;
   coveredAmount: number;
+  coveredOriginalAmount: number;
   requiredPaymentAmount: number;
+  requiredOriginalPaymentAmount: number;
   fullyCovered: boolean;
 } {
   const nowMs = Date.now();
@@ -174,9 +179,14 @@ function getTransferPaymentCoverage(
     .filter((payment) => payment.status === "SUCCEEDED" && payment.provider !== "MOCK")
     .map((payment) => ({
       amount: payment.amount,
+      originalCoverageAmount: payment.originalCoverageAmount ?? payment.amount,
       validUntil: getTransferPaymentValidUntil(payment),
     }))
-    .filter((payment): payment is { amount: number; validUntil: string } => {
+    .filter((payment): payment is {
+      amount: number;
+      originalCoverageAmount: number;
+      validUntil: string;
+    } => {
       if (!payment.validUntil) {
         return false;
       }
@@ -189,7 +199,9 @@ function getTransferPaymentCoverage(
       hasActivePlacement: false,
       paidUntil: null,
       coveredAmount: 0,
+      coveredOriginalAmount: 0,
       requiredPaymentAmount: Math.max(0, publicationFeeRub),
+      requiredOriginalPaymentAmount: Math.max(0, originalPublicationFeeRub),
       fullyCovered: publicationFeeRub <= 0,
     };
   }
@@ -201,13 +213,25 @@ function getTransferPaymentCoverage(
     (payment) => new Date(payment.validUntil).getTime() === latestValidUntilMs,
   );
   const coveredAmount = currentCyclePayments.reduce((sum, payment) => sum + payment.amount, 0);
-  const requiredPaymentAmount = Math.max(0, publicationFeeRub - coveredAmount);
+  const coveredOriginalAmount = currentCyclePayments.reduce(
+    (sum, payment) => sum + payment.originalCoverageAmount,
+    0,
+  );
+  const activeCoverageAmount =
+    publicationFeeRub < originalPublicationFeeRub ? coveredAmount : coveredOriginalAmount;
+  const requiredPaymentAmount = Math.max(0, publicationFeeRub - activeCoverageAmount);
+  const requiredOriginalPaymentAmount = Math.max(
+    0,
+    originalPublicationFeeRub - coveredOriginalAmount,
+  );
 
   return {
     hasActivePlacement: true,
     paidUntil: new Date(latestValidUntilMs).toISOString(),
     coveredAmount,
+    coveredOriginalAmount,
     requiredPaymentAmount,
+    requiredOriginalPaymentAmount,
     fullyCovered: requiredPaymentAmount <= 0,
   };
 }
@@ -271,6 +295,7 @@ export function TransferEditorPage({
   initialServiceTags,
   publicPath,
   publicationFeeRub,
+  originalPublicationFeeRub,
   extraVehicleFeeRub,
   initialPayments,
   saved,
@@ -472,9 +497,16 @@ export function TransferEditorPage({
   const latestPaymentIsOpen = latestPayment ? isOpenPayment(latestPayment.status) : false;
   const extraVehicleCount = Math.max(0, fleet.length - 1);
   const livePublicationFeeRub = publicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
-  const paymentCoverage = getTransferPaymentCoverage(payments, livePublicationFeeRub);
+  const originalLivePublicationFeeRub =
+    originalPublicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
+  const paymentCoverage = getTransferPaymentCoverage(
+    payments,
+    livePublicationFeeRub,
+    originalLivePublicationFeeRub,
+  );
   const hasFullPaymentCoverage = paymentCoverage.fullyCovered;
   const requiredPaymentAmount = paymentCoverage.requiredPaymentAmount;
+  const requiredOriginalPaymentAmount = paymentCoverage.requiredOriginalPaymentAmount;
   const needsPayment = publishReady && !hasFullPaymentCoverage;
   const needsTransferTopUp = needsPayment && paymentCoverage.hasActivePlacement;
   const managerPaymentPending = latestPaymentIsOpen && latestPayment?.provider === "MANAGER";
@@ -1490,9 +1522,11 @@ export function TransferEditorPage({
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">Базовое размещение</span>
-                  <span className="text-right font-medium text-olive">
-                    {formatMoney(publicationFeeRub)}
-                  </span>
+                  <PlacementPromoPrice
+                    originalAmountRub={originalPublicationFeeRub}
+                    finalAmountRub={publicationFeeRub}
+                    align="right"
+                  />
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">
@@ -1507,9 +1541,12 @@ export function TransferEditorPage({
                 </div>
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
                   <span className="font-semibold text-olive">Итого</span>
-                  <span className="text-2xl font-bold tabular-nums text-olive">
-                    {formatMoney(livePublicationFeeRub)}
-                  </span>
+                  <PlacementPromoPrice
+                    originalAmountRub={originalLivePublicationFeeRub}
+                    finalAmountRub={livePublicationFeeRub}
+                    align="right"
+                    finalClassName="text-2xl"
+                  />
                 </div>
                 {paymentCoverage.hasActivePlacement ? (
                   <>
@@ -1521,19 +1558,20 @@ export function TransferEditorPage({
                     </div>
                     <div className="flex items-start justify-between gap-4">
                       <span className="text-olive/65">К доплате</span>
-                      <span
-                        className={cn(
-                          "text-right font-semibold",
+                      <PlacementPromoPrice
+                        originalAmountRub={requiredOriginalPaymentAmount}
+                        finalAmountRub={requiredPaymentAmount}
+                        align="right"
+                        finalClassName={cn(
                           requiredPaymentAmount > 0 ? "text-amber-700" : "text-emerald-700",
                         )}
-                      >
-                        {formatMoney(requiredPaymentAmount)}
-                      </span>
+                      />
                     </div>
                   </>
                 ) : null}
               </div>
             </div>
+            <PlacementPromoNotice compact />
 
             {paidUntil ? (
               <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">

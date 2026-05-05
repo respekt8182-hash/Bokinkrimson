@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -174,6 +175,11 @@ export function PropertyPaymentPanel({
     ? hasActivePlacement
       ? placement.requiredPaymentAmount
       : readiness.quote.amount
+    : 0;
+  const originalAmountDue = readiness.quote
+    ? hasActivePlacement
+      ? placement.requiredOriginalPaymentAmount
+      : readiness.quote.originalAmount
     : 0;
 
   const readinessHint = useMemo(() => {
@@ -511,9 +517,12 @@ export function PropertyPaymentPanel({
                 {readiness.quote ? readiness.quote.tariff.title : "Не рассчитан"}
               </p>
               {readiness.quote ? (
-                <p className="mt-1 text-lg font-bold text-olive">
-                  {formatMoney(readiness.quote.amount)}
-                </p>
+                <PlacementPromoPrice
+                  originalAmountRub={readiness.quote.originalAmount}
+                  finalAmountRub={readiness.quote.amount}
+                  className="mt-1"
+                  finalClassName="text-lg"
+                />
               ) : (
                 <p className="mt-1 text-[11px] text-olive/50">Заполните все разделы</p>
               )}
@@ -536,6 +545,7 @@ export function PropertyPaymentPanel({
               </p>
             </div>
           </div>
+          <PlacementPromoNotice compact />
 
           {/* Payment summary */}
           {readiness.quote && readiness.ready && amountDue > 0 && (
@@ -572,17 +582,22 @@ export function PropertyPaymentPanel({
                     </div>
                     <div className="flex items-start justify-between gap-4">
                       <span className="text-olive/65">Новый тариф</span>
-                      <span className="font-medium text-olive">
-                        {formatMoney(readiness.quote.amount)}
-                      </span>
+                      <PlacementPromoPrice
+                        originalAmountRub={readiness.quote.originalAmount}
+                        finalAmountRub={readiness.quote.amount}
+                        align="right"
+                      />
                     </div>
                   </>
                 ) : null}
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
                   <span className="font-semibold text-olive">Итого</span>
-                  <span className="text-2xl font-bold tabular-nums text-olive">
-                    {new Intl.NumberFormat("ru-RU").format(amountDue)} ₽
-                  </span>
+                  <PlacementPromoPrice
+                    originalAmountRub={originalAmountDue}
+                    finalAmountRub={amountDue}
+                    align="right"
+                    finalClassName="text-2xl"
+                  />
                 </div>
               </div>
             </div>
