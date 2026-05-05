@@ -19,7 +19,7 @@ import { AppIcon } from "@/components/ui/app-icon";
 
 const contestPostUrl = "https://vk.com/wall-237324106_17";
 const contestCommunityUrl = "https://vk.com/krymvokrug";
-const contestTargetDateMs = new Date("2026-05-11T00:00:00+03:00").getTime();
+const contestTargetDateMs = new Date("2026-05-09T00:00:00+03:00").getTime();
 
 const prizeItems = [
   { title: "Жильё", text: "Гостевой дом, апартаменты, отель, номер или домик.", icon: House },
@@ -126,7 +126,7 @@ export function FreePlacementGiveawayPage() {
                   icon={CalendarDays}
                   className="h-3.5 w-3.5 text-[color:var(--icon-highlight)]"
                 />
-                Итоги 11 мая
+                Итоги 9 мая
               </span>
             </div>
 
@@ -170,7 +170,7 @@ export function FreePlacementGiveawayPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-white/54">
                   {isFinished ? "Итоги конкурса" : "До итогов"}
                 </p>
-                <p className="mt-1 text-xl font-semibold">11 мая 2026</p>
+                <p className="mt-1 text-xl font-semibold">9 мая 2026</p>
               </div>
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/12">
                 <AppIcon icon={Clock3} className="h-5 w-5 text-sage" />
@@ -280,7 +280,7 @@ export function FreePlacementGiveawayPage() {
               Подпишитесь и сделайте репост конкурсной записи
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-white/70">
-              Итоги подведём 11 мая в группе ВКонтакте «Крым Вокруг». Страница участника должна
+              Итоги подведём 9 мая в группе ВКонтакте «Крым Вокруг». Страница участника должна
               оставаться открытой до подведения итогов.
             </p>
           </div>
