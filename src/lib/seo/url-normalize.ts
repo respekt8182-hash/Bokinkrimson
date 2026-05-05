@@ -59,3 +59,29 @@ export function stripSearchParamsFromPath(path: string): string {
   const [pathname] = pathWithoutHash.split("?", 1);
   return hash ? `${pathname}#${hash}` : pathname;
 }
+
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+export function buildDateRangeParam(checkIn: string, checkOut: string): string {
+  const normalizedCheckIn = normalizeQueryValue(checkIn);
+  const normalizedCheckOut = normalizeQueryValue(checkOut);
+
+  if (!isoDatePattern.test(normalizedCheckIn) || !isoDatePattern.test(normalizedCheckOut)) {
+    return "";
+  }
+
+  return `${normalizedCheckIn}_${normalizedCheckOut}`;
+}
+
+export function parseDateRangeParam(value: string | null | undefined): {
+  checkIn: string;
+  checkOut: string;
+} {
+  const normalized = normalizeQueryValue(value ?? "");
+  const [checkIn = "", checkOut = ""] = normalized.split(/[_~]/, 2);
+
+  return {
+    checkIn: isoDatePattern.test(checkIn) ? checkIn : "",
+    checkOut: isoDatePattern.test(checkOut) ? checkOut : "",
+  };
+}

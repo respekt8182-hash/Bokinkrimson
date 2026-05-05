@@ -1,5 +1,8 @@
 // Client-side helpers for building housing search requests, URLs, and normalized responses.
 import type { PublicCatalogItem } from "@/lib/public-properties";
+import { buildCanonicalPath } from "@/lib/seo/canonical";
+import { buildHousingCatalogPath } from "@/lib/seo/routes";
+import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import type { SearchApiResponse, SearchFilters, SearchResponse } from "@/types/catalog";
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -95,29 +98,62 @@ export function buildHousingCatalogUrl(
   page = 1,
   keepPageParam = false,
 ): string {
-  const params = new URLSearchParams();
-  params.set("direction", "housing");
+  const entries: Array<[string, string]> = [];
+  const basePath = buildHousingCatalogPath({
+    location: filters.location,
+    locationId: filters.locationId,
+  });
+  const isLocationInPath = basePath !== "/rent";
 
-  appendIfNotEmpty(params, "q", filters.query);
-  appendIfNotEmpty(params, "location", filters.location);
-  appendIfNotEmpty(params, "propertyType", filters.propertyType);
-  appendIfNotEmpty(params, "checkIn", filters.checkIn);
-  appendIfNotEmpty(params, "checkOut", filters.checkOut);
-  appendIfNotEmpty(params, "guests", filters.guests);
-  appendIfNotEmpty(params, "guestsAdults", filters.guestsAdults);
-  appendIfNotEmpty(params, "guestsChildren", filters.guestsChildren);
-  appendIfNotEmpty(params, "minPrice", filters.minPrice);
-  appendIfNotEmpty(params, "maxPrice", filters.maxPrice);
-  appendIfNotEmpty(params, "sort", filters.sort);
-  appendIfNotEmpty(params, "minRating", filters.minRating);
+  if (filters.query.trim()) entries.push(["q", filters.query]);
+  if (!isLocationInPath && filters.location.trim()) entries.push(["location", filters.location]);
+  if (filters.propertyType.trim()) entries.push(["propertyType", filters.propertyType]);
+  const datesParam = buildDateRangeParam(filters.checkIn, filters.checkOut);
+  if (datesParam) {
+    entries.push(["dates", datesParam]);
+  } else {
+    if (filters.checkIn.trim()) entries.push(["checkIn", filters.checkIn]);
+    if (filters.checkOut.trim()) entries.push(["checkOut", filters.checkOut]);
+  }
+  if (filters.guests.trim() && filters.guests.trim() !== "2")
+    entries.push(["guests", filters.guests]);
+  if (filters.guestsAdults.trim() && filters.guestsAdults.trim() !== "2") {
+    entries.push(["guestsAdults", filters.guestsAdults]);
+  }
+  if (filters.guestsChildren.trim() && filters.guestsChildren.trim() !== "0") {
+    entries.push(["guestsChildren", filters.guestsChildren]);
+  }
+  if (filters.minPrice.trim()) entries.push(["minPrice", filters.minPrice]);
+  if (filters.maxPrice.trim()) entries.push(["maxPrice", filters.maxPrice]);
+  if (filters.sort.trim()) entries.push(["sort", filters.sort]);
+  if (filters.minRating.trim()) entries.push(["minRating", filters.minRating]);
 
-  if (filters.hasPhotos) params.set("hasPhotos", "1");
-  if (filters.hasReviews) params.set("hasReviews", "1");
-  if (filters.familyFriendly) params.set("familyFriendly", "1");
-  if (filters.petsAllowed) params.set("petsAllowed", "1");
-  if (keepPageParam && page > 1) params.set("page", String(page));
+  if (filters.hasPhotos) entries.push(["hasPhotos", "1"]);
+  if (filters.hasReviews) entries.push(["hasReviews", "1"]);
+  if (filters.familyFriendly) entries.push(["familyFriendly", "1"]);
+  if (filters.petsAllowed) entries.push(["petsAllowed", "1"]);
+  if (keepPageParam && page > 1) entries.push(["page", String(page)]);
 
-  return `/search?${params.toString()}`;
+  return buildCanonicalPath(basePath, entries, [
+    "q",
+    "location",
+    "propertyType",
+    "dates",
+    "checkIn",
+    "checkOut",
+    "guests",
+    "guestsAdults",
+    "guestsChildren",
+    "minPrice",
+    "maxPrice",
+    "sort",
+    "minRating",
+    "hasPhotos",
+    "hasReviews",
+    "familyFriendly",
+    "petsAllowed",
+    "page",
+  ]);
 }
 
 export function buildHousingMapQuery(filters: SearchFilters): string {

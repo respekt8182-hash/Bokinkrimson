@@ -11,6 +11,8 @@ import {
   fetchAccommodationSearch,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
+import { resolveKnownCrimeaLocationName } from "@/lib/seo/routes";
+import { parseDateRangeParam } from "@/lib/seo/url-normalize";
 import type { SearchFilters, SearchResponse } from "@/types/catalog";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -59,8 +61,28 @@ function parseBooleanParam(params: URLSearchParams, key: string): boolean {
   return value === "1" || value === "true";
 }
 
-function parseUrlFilters(search: string): SearchFilters {
+function readCatalogLocationFromPath(pathname: string): string {
+  const [, base, location] = pathname.split("/");
+
+  if (base !== "crimea" || !location) {
+    return "";
+  }
+
+  try {
+    return (
+      resolveKnownCrimeaLocationName({
+        location: decodeURIComponent(location),
+        locationId: decodeURIComponent(location),
+      }) ?? ""
+    );
+  } catch {
+    return resolveKnownCrimeaLocationName({ location, locationId: location }) ?? "";
+  }
+}
+
+function parseUrlFilters(search: string, pathname = ""): SearchFilters {
   const params = new URLSearchParams(search);
+  const compactDates = parseDateRangeParam(params.get("dates"));
   const sortValue = params.get("sort") ?? "";
   const normalizedSort =
     sortValue === "price_asc" ||
@@ -73,11 +95,11 @@ function parseUrlFilters(search: string): SearchFilters {
   return {
     direction: "housing",
     query: params.get("q")?.trim() ?? "",
-    location: params.get("location")?.trim() ?? "",
+    location: params.get("location")?.trim() ?? readCatalogLocationFromPath(pathname),
     locationId: params.get("locationId")?.trim() ?? "",
     propertyType: params.get("propertyType")?.trim() ?? "",
-    checkIn: params.get("checkIn")?.trim() ?? "",
-    checkOut: params.get("checkOut")?.trim() ?? "",
+    checkIn: params.get("checkIn")?.trim() ?? compactDates.checkIn,
+    checkOut: params.get("checkOut")?.trim() ?? compactDates.checkOut,
     guests: params.get("guests")?.trim() ?? "2",
     guestsAdults: params.get("guestsAdults")?.trim() ?? params.get("guests")?.trim() ?? "2",
     guestsChildren: params.get("guestsChildren")?.trim() ?? "0",
@@ -300,7 +322,7 @@ export function HousingCatalogClient({
 
   useEffect(() => {
     const handlePopState = () => {
-      void runFilterRequest(parseUrlFilters(window.location.search), {
+      void runFilterRequest(parseUrlFilters(window.location.search, window.location.pathname), {
         historyMode: "none",
       });
     };

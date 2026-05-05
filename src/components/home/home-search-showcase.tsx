@@ -20,6 +20,7 @@ import {
   Phone,
   Search,
   ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -41,11 +42,14 @@ import type { HomeCityShowcaseItem } from "@/lib/home-cities";
 import {
   attractionsHubPath,
   buildExcursionsLocationPath,
+  buildHousingCatalogPath,
   buildHousingLocationPath,
   excursionsHubPath,
   housingHubPath,
+  resolveKnownCrimeaLocationSlug,
   transfersHubPath,
 } from "@/lib/seo/routes";
+import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 
 const directionLabels = {
   housing: "Жильё",
@@ -179,6 +183,7 @@ const popoverExitDurationMs = 250;
 const guestsPopoverTransitionMs = 200;
 const maxGuestsCount = 20;
 const radiusOptions = [5, 10, 15, 25, 30, 50, 100] as const;
+const contestPagePath = "/rozigrash";
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -2160,27 +2165,33 @@ export function HomeSearchShowcase({
     const safeGuests = clampGuests(activeGuestsTotal);
     const params = new URLSearchParams();
 
-    if (usesDateGuests) {
+    if (usesDateGuests && safeGuests !== 2) {
       params.set("guests", String(safeGuests));
     }
+
+    let locationSlug: string | null = null;
 
     if (isSelectedSuggestionMatch && selectedSuggestion) {
       if (selectedSuggestion.type === "location") {
         params.set("location", selectedSuggestion.name);
+        locationSlug = resolveKnownCrimeaLocationSlug({
+          location: selectedSuggestion.name,
+          locationId: selectedSuggestion.locationId,
+          suggestionId: selectedSuggestion.id,
+        });
       } else {
         params.set("q", selectedSuggestion.name);
       }
-      params.set("suggestionType", selectedSuggestion.type);
-      params.set("suggestionId", selectedSuggestion.id);
       commitRecentSuggestion(selectedSuggestion);
     } else if (matchedLocationName) {
       params.set("location", matchedLocationName);
+      locationSlug = resolveKnownCrimeaLocationSlug({ location: matchedLocationName });
       commitRecentSuggestion({
         type: "location",
-        id: normalizeLocation(matchedLocationName).slice(0, 120),
+        id: locationSlug ?? normalizeLocation(matchedLocationName).slice(0, 120),
         name: matchedLocationName,
         subtitle: "",
-        locationId: null,
+        locationId: locationSlug,
         activeListingsCount: 0,
       });
     } else {
@@ -2196,11 +2207,16 @@ export function HomeSearchShowcase({
     }
 
     if (direction === "housing") {
-      if (housingDates.checkIn) {
-        params.set("checkIn", housingDates.checkIn);
-      }
-      if (housingDates.checkOut) {
-        params.set("checkOut", housingDates.checkOut);
+      const datesParam = buildDateRangeParam(housingDates.checkIn, housingDates.checkOut);
+      if (datesParam) {
+        params.set("dates", datesParam);
+      } else {
+        if (housingDates.checkIn) {
+          params.set("checkIn", housingDates.checkIn);
+        }
+        if (housingDates.checkOut) {
+          params.set("checkOut", housingDates.checkOut);
+        }
       }
       if (travelsWithPet) {
         params.set("petsAllowed", "1");
@@ -2209,20 +2225,30 @@ export function HomeSearchShowcase({
       if (!isExcursionAnyDate && excursionDate) {
         params.set("checkIn", excursionDate);
       }
-      params.set("radiusKm", String(excursionRadius));
+      if (excursionRadius !== 30) {
+        params.set("radiusKm", String(excursionRadius));
+      }
     } else if (usesRadius) {
-      params.set("radiusKm", String(excursionRadius));
+      if (excursionRadius !== 30) {
+        params.set("radiusKm", String(excursionRadius));
+      }
     }
 
     closeSearchDropdown();
     const basePath =
       direction === "housing"
-        ? housingHubPath
+        ? buildHousingCatalogPath({
+            location: params.get("location"),
+            suggestionId: locationSlug,
+          })
         : direction === "attractions"
           ? attractionsHubPath
           : direction === "transfers"
             ? transfersHubPath
             : excursionsHubPath;
+    if (direction === "housing" && basePath !== housingHubPath) {
+      params.delete("location");
+    }
     const queryString = params.toString();
     router.push(queryString ? `${basePath}?${queryString}` : basePath);
   };
@@ -2311,7 +2337,10 @@ export function HomeSearchShowcase({
       {isSuggestionsLoading ? (
         <div className="space-y-3 py-3">
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={`mobile-skeleton-${index}`} className="h-14 animate-pulse rounded-2xl bg-cream" />
+            <div
+              key={`mobile-skeleton-${index}`}
+              className="h-14 animate-pulse rounded-2xl bg-cream"
+            />
           ))}
         </div>
       ) : null}
@@ -2512,16 +2541,16 @@ export function HomeSearchShowcase({
                     direction === "housing" &&
                     Boolean(
                       housingDates.checkIn &&
-                        housingPreviewCheckOut &&
-                        housingPreviewCheckOut > housingDates.checkIn,
+                      housingPreviewCheckOut &&
+                      housingPreviewCheckOut > housingDates.checkIn,
                     );
                   const isHousingMiddle =
                     direction === "housing" &&
                     Boolean(
                       housingDates.checkIn &&
-                        housingPreviewCheckOut &&
-                        iso > housingDates.checkIn &&
-                        iso < housingPreviewCheckOut,
+                      housingPreviewCheckOut &&
+                      iso > housingDates.checkIn &&
+                      iso < housingPreviewCheckOut,
                     );
                   const isExcursionSelected =
                     direction === "excursions" && !isExcursionAnyDate && iso === excursionDate;
@@ -2773,7 +2802,9 @@ export function HomeSearchShowcase({
           onClick={() => setMobileStep("location")}
           className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-left transition hover:bg-cream"
         >
-          <span className="block text-sm text-olive/65">{getMobileLocationPlaceholder(direction)}</span>
+          <span className="block text-sm text-olive/65">
+            {getMobileLocationPlaceholder(direction)}
+          </span>
           <span className="block truncate text-base font-semibold text-midnight">
             {searchValue.trim() || renderSearchDemoLabel()}
           </span>
@@ -3902,6 +3933,20 @@ export function HomeSearchShowcase({
 
       {renderMobileSearchModal()}
 
+      <div className="mx-auto mt-6 flex max-w-5xl justify-center px-2">
+        <Link
+          href={contestPagePath}
+          className="relative isolate inline-flex min-h-14 w-full max-w-sm items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-center text-base font-bold text-white shadow-[0_16px_36px_rgba(58,43,35,0.18)] shadow-primary/20 ring-1 ring-white/40 transition hover:bg-primary-hover hover:shadow-primary/28 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2 sm:w-auto sm:min-w-72"
+        >
+          <span
+            aria-hidden="true"
+            className="absolute -inset-1 -z-10 rounded-[1.35rem] bg-primary/35 blur-sm motion-safe:animate-ping"
+          />
+          <AppIcon icon={Sparkles} className="h-5 w-5 text-white" />
+          Разместиться бесплатно
+        </Link>
+      </div>
+
       {/* ── Why choose us ── */}
       <div className="mx-auto mt-6 max-w-5xl">
         <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
@@ -3912,41 +3957,41 @@ export function HomeSearchShowcase({
           aria-label="Преимущества"
         >
           <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
-          {/* Card 1 */}
-          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
-              <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
+            {/* Card 1 */}
+            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
+                <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
+              </div>
+              <h3 className="text-base font-bold text-midnight">Только проверенные объявления</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих
+                владельцев жилья в Крыму.
+              </p>
             </div>
-            <h3 className="text-base font-bold text-midnight">Только проверенные объявления</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих
-              владельцев жилья в Крыму.
-            </p>
-          </div>
 
-          {/* Card 2 */}
-          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
-              <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
+            {/* Card 2 */}
+            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
+                <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
+              </div>
+              <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию —
+                вы экономите!
+              </p>
             </div>
-            <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию — вы
-              экономите!
-            </p>
-          </div>
 
-          {/* Card 3 */}
-          <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
-              <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
+            {/* Card 3 */}
+            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
+                <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
+              </div>
+              <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label}{" "}
+                и {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
+              </p>
             </div>
-            <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-              {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label} и{" "}
-              {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
-            </p>
-          </div>
           </div>
         </div>
       </div>

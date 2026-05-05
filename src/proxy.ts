@@ -8,6 +8,7 @@ import {
 } from "@/lib/rate-limit";
 import { getRequestIp } from "@/lib/security";
 import { assertRuntimeSecurityConfiguration } from "@/lib/security-config";
+import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 const mutatingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -63,10 +64,16 @@ function isProtectedUiRoute(pathname: string): boolean {
   return pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
 }
 
-function requiresStrictSecurityConfiguration(
-  pathname: string,
-  method: string,
-): boolean {
+function shouldNormalizeCatalogDateUrl(pathname: string): boolean {
+  if (pathname === "/rent") {
+    return true;
+  }
+
+  const segments = pathname.split("/").filter(Boolean);
+  return segments.length === 2 && segments[0] === "crimea";
+}
+
+function requiresStrictSecurityConfiguration(pathname: string, method: string): boolean {
   if (isProtectedUiRoute(pathname)) {
     return true;
   }
@@ -195,7 +202,10 @@ async function enforceProxyRateLimit(
 
     return null;
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
       return applySecurityHeaders(
         NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 }),
       );
@@ -209,6 +219,21 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAdminRoute = pathname.startsWith("/admin");
   const requestMethod = request.method.toUpperCase();
+
+  if (requestMethod === "GET" && shouldNormalizeCatalogDateUrl(pathname)) {
+    const checkIn = request.nextUrl.searchParams.get("checkIn") ?? "";
+    const checkOut = request.nextUrl.searchParams.get("checkOut") ?? "";
+    const dates = buildDateRangeParam(checkIn, checkOut);
+
+    if (dates) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.searchParams.delete("checkIn");
+      redirectUrl.searchParams.delete("checkOut");
+      redirectUrl.searchParams.set("dates", dates);
+
+      return applySecurityHeaders(NextResponse.redirect(redirectUrl, 308));
+    }
+  }
 
   try {
     assertRuntimeSecurityConfiguration();
@@ -243,7 +268,8 @@ export async function proxy(request: NextRequest) {
         return applySecurityHeaders(
           NextResponse.json(
             {
-              error: "Administrator sessions are isolated from owner and guest APIs. Use /api/admin/* instead.",
+              error:
+                "Administrator sessions are isolated from owner and guest APIs. Use /api/admin/* instead.",
             },
             { status: 403 },
           ),
@@ -315,5 +341,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*", "/rent", "/crimea/:path*"],
 };

@@ -182,15 +182,41 @@ function pluralizeReviews(count: number): string {
 
 function buildSearchUrl(direction: "excursions" | "tours", params: Record<string, string>): string {
   const basePath = direction === "tours" ? toursHubPath : excursionsHubPath;
-  const entries = Object.entries(params).filter(([, value]) => value);
+  const defaultOfferType = direction === "tours" ? "tour" : "excursion";
+  const entries = Object.entries(params).filter(([key, value]) => {
+    if (!value) {
+      return false;
+    }
+
+    if (key === "page" && value === "1") {
+      return false;
+    }
+
+    if (key === "radiusKm" && value === "30") {
+      return false;
+    }
+
+    if ((key === "guests" || key === "people") && value === "2") {
+      return false;
+    }
+
+    if (key === "offerType" && value === defaultOfferType) {
+      return false;
+    }
+
+    return true;
+  });
 
   return buildCanonicalPath(basePath, entries, [
     "location",
     "district",
     "category",
+    "checkIn",
+    "checkOut",
     "dateFrom",
     "dateTo",
     "guests",
+    "people",
     "format",
     "durationBucket",
     "minPrice",

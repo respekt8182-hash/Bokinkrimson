@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HousingSearchDateRangeField } from "@/components/public/housing-search-date-range-field";
 import { cn } from "@/lib/cn";
-import { excursionsHubPath, housingHubPath } from "@/lib/seo/routes";
+import { buildHousingCatalogPath, excursionsHubPath } from "@/lib/seo/routes";
+import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import { useEffect, useState, type FormEvent } from "react";
 
 type LocationInputProps = {
@@ -110,25 +111,33 @@ export function SearchForm() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const pathname = direction === "housing" ? housingHubPath : excursionsHubPath;
+    const pathname =
+      direction === "housing" ? buildHousingCatalogPath({ location }) : excursionsHubPath;
     const params = new URLSearchParams();
 
     if (query) {
       params.set("q", query);
     }
 
-    if (location) {
+    if (location && pathname === "/rent") {
       params.set("location", location);
     }
 
-    params.set("guests", String(guests));
-
-    if (checkIn) {
-      params.set("checkIn", checkIn);
+    if (guests !== 2) {
+      params.set("guests", String(guests));
     }
 
-    if (checkOut) {
-      params.set("checkOut", checkOut);
+    const datesParam = buildDateRangeParam(checkIn, checkOut);
+    if (datesParam) {
+      params.set("dates", datesParam);
+    } else {
+      if (checkIn) {
+        params.set("checkIn", checkIn);
+      }
+
+      if (checkOut) {
+        params.set("checkOut", checkOut);
+      }
     }
 
     const queryString = params.toString();

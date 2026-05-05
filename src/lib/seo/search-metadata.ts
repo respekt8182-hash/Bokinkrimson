@@ -58,6 +58,7 @@ const housingNoiseKeys = new Set([
   "adults",
   "children",
   "date",
+  "dates",
   "checkin",
   "checkout",
   "amenities",
@@ -81,6 +82,7 @@ const excursionNoiseKeys = new Set([
   "priceto",
   "guests",
   "date",
+  "dates",
   "checkin",
   "checkout",
   "radiuskm",
@@ -242,9 +244,7 @@ function buildExcursionBreadcrumbs(input: {
   return breadcrumbs;
 }
 
-export async function getSearchSeoState(
-  searchParams: SearchParamsInput,
-): Promise<SearchSeoState> {
+export async function getSearchSeoState(searchParams: SearchParamsInput): Promise<SearchSeoState> {
   const direction = resolveDirection(searchParams);
   const location = readString(searchParams, "location");
   const propertyType = readString(searchParams, "propertyType");

@@ -14,6 +14,7 @@ import {
   buildBreadcrumbListStructuredData,
 } from "@/lib/seo/structured-data";
 import { buildSearchMetadata, getSearchSeoState } from "@/lib/seo/search-metadata";
+import { parseDateRangeParam } from "@/lib/seo/url-normalize";
 
 type SearchPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -104,9 +105,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const familyFriendlyRaw = pick(params.familyFriendly) || pick(params.kidsFriendly);
   const petsAllowedRaw = pick(params.petsAllowed);
   const radiusKm = pick(params.radiusKm) || "30";
-  const checkIn = pick(params.checkIn);
-  const checkOut = pick(params.checkOut);
-  const guests = pick(params.guests) || "2";
+  const compactDates = parseDateRangeParam(pick(params.dates));
+  const checkIn =
+    pick(params.checkIn) || pick(params.dateFrom) || pick(params.date) || compactDates.checkIn;
+  const checkOut = pick(params.checkOut) || pick(params.dateTo) || compactDates.checkOut;
+  const guests = pick(params.guests) || pick(params.people) || pick(params.participants) || "2";
   const guestsAdults = pick(params.guestsAdults) || pick(params.adults);
   const guestsChildren = pick(params.guestsChildren) || pick(params.children);
   const hasPhotos = hasPhotosRaw === "1" || hasPhotosRaw === "true";
