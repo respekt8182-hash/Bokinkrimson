@@ -89,8 +89,6 @@ export default async function DashboardObjectChessboardPage({
         <PropertyChessboardWorkspace
           properties={[item]}
           initialPropertyId={property.id}
-          returnHref={`/dashboard/objects/${property.id}/amenities`}
-          returnLabel="К удобствам"
         />
       </div>
     </div>

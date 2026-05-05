@@ -23,7 +23,10 @@ export default async function DashboardChessboardPage({
   }
 
   const filters = await searchParams;
-  const returnMode = filters.from === "prices" || filters.from === "rooms" ? filters.from : null;
+  const returnMode =
+    filters.from === "payment" || filters.from === "prices" || filters.from === "rooms"
+      ? filters.from
+      : null;
   const properties = await loadDashboardPageData(
     {
       contextId: "dashboard-chessboard",
@@ -63,17 +66,12 @@ export default async function DashboardChessboardPage({
     null;
 
   const returnHref =
-    returnMode && initialPropertyId
-      ? `/dashboard/objects/${initialPropertyId}/${returnMode === "prices" ? "chessboard" : "room-categories"}`
-      : returnMode
-        ? "/dashboard/objects"
-        : null;
-  const returnLabel =
-    returnMode === "prices"
-      ? "К странице «Шахматка»"
-      : returnMode === "rooms"
-        ? "К вкладке «Номера»"
-        : "К объектам";
+    returnMode === "payment" && initialPropertyId
+      ? `/dashboard/objects/${initialPropertyId}/payment`
+      : null;
+  const returnLabel = returnMode === "payment" ? "Вернуться к оплате" : "К объектам";
+  const initialBoardMode =
+    returnMode === "payment" || returnMode === "prices" ? "prices" : "occupancy";
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-16 z-40 overflow-y-auto bg-cream/92 [@media(orientation:landscape)_and_(max-height:560px)]:top-0">
@@ -90,6 +88,7 @@ export default async function DashboardChessboardPage({
           initialPropertyId={initialPropertyId}
           returnHref={returnHref}
           returnLabel={returnLabel}
+          initialBoardMode={initialBoardMode}
           avoidDashboardBottomNav
         />
       </div>

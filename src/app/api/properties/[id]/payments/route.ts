@@ -60,7 +60,14 @@ function buildReadiness(
 ) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
-  const issues = getPropertyPaymentReadinessIssues(property.id, progress);
+  const issues = getPropertyPaymentReadinessIssues(property.id, progress).map((issue) =>
+    issue.id === "chessboard-pricing"
+      ? {
+          ...issue,
+          href: `/dashboard/chessboard?propertyId=${encodeURIComponent(property.id)}&from=payment`,
+        }
+      : issue,
+  );
   const reasons = issues.map((issue) => issue.reason);
 
   return {

@@ -13,6 +13,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ type PropertyChessboardWorkspaceProps = {
   initialPropertyId: string | null;
   returnHref?: string | null;
   returnLabel?: string;
+  initialBoardMode?: "occupancy" | "prices";
   avoidDashboardBottomNav?: boolean;
 };
 
@@ -784,6 +786,9 @@ function OverlayPickerField({
 export function PropertyChessboardWorkspace({
   properties,
   initialPropertyId,
+  returnHref = null,
+  returnLabel = "Вернуться",
+  initialBoardMode = "occupancy",
   avoidDashboardBottomNav = false,
 }: PropertyChessboardWorkspaceProps) {
   const initialTodayIso = useMemo(() => getLocalTodayIso(), []);
@@ -798,7 +803,7 @@ export function PropertyChessboardWorkspace({
   );
   const [periodStartIso, setPeriodStartIso] = useState(initialTodayIso);
   const [periodEndIso, setPeriodEndIso] = useState(initialPeriodEndIso);
-  const [boardMode, setBoardMode] = useState<BoardMode>("occupancy");
+  const [boardMode, setBoardMode] = useState<BoardMode>(initialBoardMode);
   const [isObjectMenuOpen, setIsObjectMenuOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
@@ -830,13 +835,17 @@ export function PropertyChessboardWorkspace({
   const [isDuplicatingPrices, setIsDuplicatingPrices] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
-  const [mobileRoomPage, setMobileRoomPage] = useState(0);
   const [bookingRoomPage, setBookingRoomPage] = useState(0);
   const [expandedMobileRailKey, setExpandedMobileRailKey] = useState<string | null>(null);
   const [dayCellWidthPx, setDayCellWidthPx] = useState(dayCellWidthDesktopPx);
   const [visibleDaysCount, setVisibleDaysCount] = useState(minVisibleDaysCount);
   const objectMenuRef = useRef<HTMLDivElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setBoardMode(initialBoardMode);
+    setDragSelection(null);
+  }, [initialBoardMode]);
 
   useEffect(() => {
     if (properties.length === 0) {
@@ -1084,39 +1093,12 @@ export function PropertyChessboardWorkspace({
     [roomPagerEntries],
   );
 
-  const visibleRoomGroups = useMemo<GroupedRoomBucket[]>(() => {
-    if (!isMobilePortrait) {
-      return groupedRooms;
-    }
-
-    const start = mobileRoomPage * mobileRoomsPerPage;
-    const slice = roomPagerEntries.slice(start, start + mobileRoomsPerPage);
-
-    return slice.map((entry) => ({
-      key: `mobile:${entry.room.id}`,
-      groupLabel: entry.groupLabel,
-      items: [entry.room],
-    }));
-  }, [groupedRooms, isMobilePortrait, mobileRoomPage, roomPagerEntries]);
+  const visibleRoomGroups = useMemo<GroupedRoomBucket[]>(() => groupedRooms, [groupedRooms]);
 
   const groupedRoomsWithOffset = useMemo<GroupedRoomBucketWithOffset[]>(
     () => addGroupOffsets(visibleRoomGroups),
     [visibleRoomGroups],
   );
-
-  const visibleRoomRange = useMemo(() => {
-    if (roomPagerEntries.length === 0) {
-      return { from: 0, to: 0 };
-    }
-
-    if (!isMobilePortrait) {
-      return { from: 1, to: roomPagerEntries.length };
-    }
-
-    const from = mobileRoomPage * mobileRoomsPerPage + 1;
-    const to = Math.min((mobileRoomPage + 1) * mobileRoomsPerPage, roomPagerEntries.length);
-    return { from, to };
-  }, [isMobilePortrait, mobileRoomPage, roomPagerEntries]);
 
   // Fast room/day occupancy lookup used by every rendered calendar cell.
   const occupancyLookup = useMemo(() => {
@@ -1176,7 +1158,6 @@ export function PropertyChessboardWorkspace({
   const canManageCalendar = selectedPropertyId !== null && rooms.length > 0;
 
   useEffect(() => {
-    setMobileRoomPage((prev) => Math.min(prev, Math.max(0, mobileRoomPageCount - 1)));
     setBookingRoomPage((prev) => Math.min(prev, Math.max(0, mobileRoomPageCount - 1)));
   }, [mobileRoomPageCount]);
 
@@ -1188,7 +1169,7 @@ export function PropertyChessboardWorkspace({
 
   useEffect(() => {
     setExpandedMobileRailKey(null);
-  }, [boardMode, mobileRoomPage, periodEndIso, periodStartIso, selectedPropertyId]);
+  }, [boardMode, periodEndIso, periodStartIso, selectedPropertyId]);
 
   useEffect(() => {
     if (!isBookingModalOpen || !bookingForm?.roomId) {
@@ -2179,6 +2160,18 @@ export function PropertyChessboardWorkspace({
           {/* Row 2: quick actions + period navigation */}
           <div className="mt-2 overflow-x-auto custom-scrollbar">
             <div className="flex min-w-max items-center gap-1.5 pb-0.5 sm:min-w-0 sm:flex-wrap">
+              {returnHref ? (
+                <Link
+                  href={returnHref}
+                  className={cn(
+                    compactToolbarButtonClass,
+                    "shrink-0 gap-1.5 border-primary/25 text-primary hover:border-primary/35 hover:bg-primary/6 hover:text-primary",
+                  )}
+                >
+                  <AppIcon icon={ChevronLeft} className="h-3.5 w-3.5" />
+                  {returnLabel}
+                </Link>
+              ) : null}
               {boardMode === "occupancy" ? (
                 <Button
                   className={cn(compactToolbarPrimaryButtonClass, "shrink-0")}
@@ -2316,24 +2309,6 @@ export function PropertyChessboardWorkspace({
               <p className="rounded-lg border border-dashed border-olive/30 px-3 py-3 text-sm text-olive/65">
                 В объекте пока нет активных номеров. Добавьте номер в разделе «Номерной фонд».
               </p>
-            ) : null}
-
-            {isMobilePortrait && roomPagerEntries.length > 0 ? (
-              <div className="mt-2 rounded-lg border border-primary/10 bg-[linear-gradient(135deg,rgba(15,118,110,0.05),rgba(250,248,245,0.94)_60%,rgba(255,255,255,0.98))] px-3 py-2 shadow-[0_16px_32px_-30px_rgba(15,118,110,0.4)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-olive/55">
-                      Номера
-                    </p>
-                    <p className="mt-0.5 text-sm font-semibold text-olive">
-                      {visibleRoomRange.from}-{visibleRoomRange.to} из {roomPagerEntries.length}
-                    </p>
-                  </div>
-                  <span className="glass-badge inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">
-                    {mobileRoomPage + 1}/{mobileRoomPageCount}
-                  </span>
-                </div>
-              </div>
             ) : null}
 
             {rooms.length > 0 ? (
@@ -2499,30 +2474,6 @@ export function PropertyChessboardWorkspace({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ) : null}
-            {isMobilePortrait && mobileRoomPageCount > 1 ? (
-              <div className="sticky-bottom-enter mt-2 rounded-lg border border-olive/10 bg-white/94 p-2.5 shadow-[0_18px_36px_-30px_rgba(58,43,35,0.32)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-olive">
-                      Номера {visibleRoomRange.from}-{visibleRoomRange.to} из{" "}
-                      {roomPagerEntries.length}
-                    </p>
-                    <p className="mt-0.5 text-xs text-olive/60">
-                      Переключайте блоки по 3 номера, чтобы оставить больше места самой шахматке.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
-                    {mobileRoomPage + 1}/{mobileRoomPageCount}
-                  </span>
-                </div>
-                <CompactPageDots
-                  pageCount={mobileRoomPageCount}
-                  currentPage={mobileRoomPage}
-                  onChange={setMobileRoomPage}
-                  className="mt-2.5"
-                />
               </div>
             ) : null}
           </div>

@@ -78,7 +78,14 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
 
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
-  const readinessIssues = getPropertyPaymentReadinessIssues(property.id, progress);
+  const readinessIssues = getPropertyPaymentReadinessIssues(property.id, progress).map((issue) =>
+    issue.id === "chessboard-pricing"
+      ? {
+          ...issue,
+          href: `/dashboard/chessboard?propertyId=${encodeURIComponent(property.id)}&from=payment`,
+        }
+      : issue,
+  );
   const readinessReasons = readinessIssues.map((issue) => issue.reason);
   const quote =
     roomCount > 0
