@@ -41,7 +41,7 @@ export function PlacementPromoNotice({ className, compact = false }: PlacementPr
           {PLACEMENT_PROMO_BADGE_LABEL}
         </span>
         <span className={cn("font-semibold text-red-700", compact ? "text-xs" : "text-sm")}>
-          Скидка до начала сезона
+          Бесплатное размещение
         </span>
       </div>
       <p className={cn("mt-2 leading-6 text-olive/72", compact ? "text-xs leading-5" : "")}>

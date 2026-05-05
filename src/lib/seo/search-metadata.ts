@@ -172,10 +172,10 @@ function resolveDirection(searchParams: SearchParamsInput): SearchDirection {
 
 function buildHousingDescription(location: string | null): string {
   if (location) {
-    return `Подборка жилья у моря ${formatLocationInPrepositional(location) ?? `в ${location}`}. Крым Вокруг берёт оплату только за размещение объявления, без комиссии с каждого клиента или бронирования.`;
+    return `Подборка жилья у моря ${formatLocationInPrepositional(location) ?? `в ${location}`}. До 20 июня 2026 размещение на Крым Вокруг бесплатно, без комиссии с каждого клиента или бронирования.`;
   }
 
-  return "Аренда жилья в Крыму у моря на Крым Вокруг. Сервис берёт оплату только за размещение объявления на платформе и не удерживает комиссию с каждого клиента или бронирования.";
+  return "Аренда жилья в Крыму у моря на Крым Вокруг. До 20 июня 2026 размещение бесплатно; сервис не удерживает комиссию с каждого клиента или бронирования.";
 }
 
 function buildExcursionDescription(location: string | null): string {
@@ -183,7 +183,7 @@ function buildExcursionDescription(location: string | null): string {
     return `Экскурсии ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму с прямой связью с организатором. Крым Вокруг работает без комиссии с каждого бронирования.`;
   }
 
-  return "Экскурсии и туры по Крыму с прямой связью с организаторами. Крым Вокруг берёт оплату только за размещение объявления и не удерживает процент с каждого бронирования.";
+  return "Экскурсии и туры по Крыму с прямой связью с организаторами. До 20 июня 2026 размещение бесплатно; Крым Вокруг не удерживает процент с каждого бронирования.";
 }
 
 function buildToursDescription(location: string | null): string {
@@ -191,7 +191,7 @@ function buildToursDescription(location: string | null): string {
     return `Туры ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму с прямой связью с организатором. Крым Вокруг работает без комиссии с каждого бронирования.`;
   }
 
-  return "Туры по Крыму с прямой связью с организаторами. Крым Вокруг берёт оплату только за размещение объявления и не удерживает процент с каждого бронирования.";
+  return "Туры по Крыму с прямой связью с организаторами. До 20 июня 2026 размещение бесплатно; Крым Вокруг не удерживает процент с каждого бронирования.";
 }
 
 function buildHousingBreadcrumbs(input: {

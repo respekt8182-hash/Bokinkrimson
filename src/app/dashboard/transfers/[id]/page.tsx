@@ -11,6 +11,7 @@ import {
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
+  buildFreePlacementPaymentPayload,
   buildTransferPaymentPayload,
   getTransferPaymentTariffCode,
   getTransferPlacementCoverageState,
@@ -26,6 +27,7 @@ import {
 import {
   buildPlacementPromoMetadata,
   buildPlacementPromoPayload,
+  getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
 } from "@/lib/placement-promo";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -430,6 +432,39 @@ export default async function DashboardTransferEditPage({
       }
 
       if (hasFullPaymentCoverage) {
+        if (publicationFeeRub <= 0 && !transferPaymentCoverage.hasActivePlacement) {
+          const now = new Date();
+          const freeTransferPaymentPayload = buildTransferPaymentPayload({
+            transferId: id,
+            transferTitle: title,
+            paymentReason: "publication",
+            vehicleCount: fleet.length,
+            totalAmountRub: publicationFeeRub,
+            coveredAmountRub: transferPaymentCoverage.coveredAmount,
+            requiredAmountRub: 0,
+          });
+
+          await db.payment.create({
+            data: {
+              ...(transferPaymentsSupported ? { transferId: id } : {}),
+              ownerId: currentSession.id,
+              amount: 0,
+              tariffCode: transferPaymentTariffCode,
+              roomCount: fleet.length,
+              status: PaymentStatus.SUCCEEDED,
+              provider: PaymentProvider.MANAGER,
+              idempotenceKey: crypto.randomUUID(),
+              paidAt: now,
+              placementValidUntil: getPlacementPromoDemoValidUntil(),
+              providerPayload: buildFreePlacementPaymentPayload({
+                originalAmountRub: originalPublicationFeeRub,
+                now,
+                context: freeTransferPaymentPayload,
+              }),
+            },
+          });
+        }
+
         if (publishedEditSupported) {
           redirect(`/dashboard/transfers/${id}?saved=1&payment=published-edit`);
         }
@@ -449,8 +484,7 @@ export default async function DashboardTransferEditPage({
       }
 
       const requiredPaymentAmount = transferPaymentCoverage.requiredPaymentAmount;
-      const requiredOriginalPaymentAmount =
-        transferPaymentCoverage.requiredOriginalPaymentAmount;
+      const requiredOriginalPaymentAmount = transferPaymentCoverage.requiredOriginalPaymentAmount;
       const paymentReason = transferPaymentCoverage.hasActivePlacement
         ? "fleet_topup"
         : "publication";

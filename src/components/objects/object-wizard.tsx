@@ -1595,11 +1595,11 @@ export function ObjectWizard({
                 href={`/dashboard/objects/${property.id}/payment`}
                 className="inline-flex items-center rounded-xl bg-terra px-4 py-2.5 text-sm font-semibold text-white"
               >
-                К оплате размещения
+                К публикации
               </Link>
             ) : (
               <span className="inline-flex cursor-not-allowed items-center rounded-xl bg-terra/45 px-4 py-2.5 text-sm font-semibold text-white/90">
-                К оплате после настройки цен
+                К публикации после настройки цен
               </span>
             )}
           </div>

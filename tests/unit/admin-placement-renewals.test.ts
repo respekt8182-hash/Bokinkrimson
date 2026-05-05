@@ -61,4 +61,19 @@ describe("admin placement renewals", () => {
 
     expect(latest?.validUntil.toISOString()).toBe("2027-05-01T10:00:00.000Z");
   });
+
+  it("uses the promo end date for free demo placements", () => {
+    const latest = getLatestPlacementPayment([
+      {
+        paidAt: new Date("2026-05-10T09:00:00.000Z"),
+        createdAt: new Date("2026-05-10T08:50:00.000Z"),
+        placementValidUntil: new Date("2027-05-10T09:00:00.000Z"),
+        providerPayload: {
+          placementCampaignType: "free_placement_until_2026_06_20",
+        },
+      },
+    ]);
+
+    expect(latest?.validUntil.toISOString()).toBe("2026-06-20T21:00:00.000Z");
+  });
 });

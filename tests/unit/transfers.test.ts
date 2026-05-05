@@ -95,12 +95,12 @@ describe("transfer fleet normalization", () => {
     ]);
   });
 
-  it("calculates transfer placement fee from fleet size", () => {
+  it("keeps transfer placement free during the launch campaign", () => {
     const duringPromo = new Date("2026-05-10T09:00:00.000Z");
     const afterPromo = new Date("2026-07-01T09:00:00.000Z");
 
-    expect(calculateTransferPublicationFeeRub(1, duringPromo)).toBe(1520);
-    expect(calculateTransferPublicationFeeRub(3, duringPromo)).toBe(2520);
+    expect(calculateTransferPublicationFeeRub(1, duringPromo)).toBe(0);
+    expect(calculateTransferPublicationFeeRub(3, duringPromo)).toBe(0);
     expect(calculateTransferPublicationFeeRub(1, afterPromo)).toBe(1900);
     expect(calculateTransferPublicationOriginalFeeRub(3)).toBe(2900);
   });

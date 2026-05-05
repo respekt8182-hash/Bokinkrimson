@@ -9,6 +9,10 @@ import {
 } from "@prisma/client";
 import { areDatabaseColumnsAvailable, db, type DbClientLike } from "@/lib/db";
 import {
+  PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS,
+  isFreePlacementDemoPayload,
+} from "@/lib/placement-promo";
+import {
   getTransferPaymentReference,
   getTransferPaymentTariffCode,
   resolvePaymentPlacementValidUntil,
@@ -169,6 +173,7 @@ export type PlacementRenewalPaymentLike = {
   paidAt: Date | null;
   createdAt: Date;
   placementValidUntil?: Date | null;
+  providerPayload?: Prisma.JsonValue | null;
 };
 
 export type PlacementRenewalTiming = {
@@ -208,6 +213,7 @@ export type AdminPlacementRenewalItem = {
     provider: PaymentProvider;
     paidAt: Date | null;
     createdAt: Date;
+    isDemo: boolean;
   };
   validUntil: Date;
   daysLeft: number;
@@ -339,7 +345,24 @@ function paymentSummary(payment: PlacementRenewalPayment) {
     provider: payment.provider,
     paidAt: payment.paidAt,
     createdAt: payment.createdAt,
+    isDemo: isFreePlacementDemoPayload(payment.providerPayload),
   };
+}
+
+function getRenewalTimingForLatest(input: {
+  latest: LatestPlacementPayment<PlacementRenewalPayment>;
+  now: Date;
+  lookaheadDays: number;
+}): PlacementRenewalTiming {
+  const isDemo = isFreePlacementDemoPayload(input.latest.payment.providerPayload);
+
+  return getPlacementRenewalTiming({
+    validUntil: input.latest.validUntil,
+    now: input.now,
+    lookaheadDays: isDemo
+      ? PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS
+      : input.lookaheadDays,
+  });
 }
 
 function createPropertyRenewalItem(input: {
@@ -348,11 +371,7 @@ function createPropertyRenewalItem(input: {
   now: Date;
   lookaheadDays: number;
 }): AdminPlacementRenewalItem | null {
-  const timing = getPlacementRenewalTiming({
-    validUntil: input.latest.validUntil,
-    now: input.now,
-    lookaheadDays: input.lookaheadDays,
-  });
+  const timing = getRenewalTimingForLatest(input);
 
   if (!timing.inWindow) {
     return null;
@@ -401,11 +420,7 @@ function createExcursionRenewalItem(input: {
   now: Date;
   lookaheadDays: number;
 }): AdminPlacementRenewalItem | null {
-  const timing = getPlacementRenewalTiming({
-    validUntil: input.latest.validUntil,
-    now: input.now,
-    lookaheadDays: input.lookaheadDays,
-  });
+  const timing = getRenewalTimingForLatest(input);
 
   if (!timing.inWindow) {
     return null;
@@ -458,11 +473,7 @@ function createTransferRenewalItem(input: {
   now: Date;
   lookaheadDays: number;
 }): AdminPlacementRenewalItem | null {
-  const timing = getPlacementRenewalTiming({
-    validUntil: input.latest.validUntil,
-    now: input.now,
-    lookaheadDays: input.lookaheadDays,
-  });
+  const timing = getRenewalTimingForLatest(input);
 
   if (!timing.inWindow) {
     return null;

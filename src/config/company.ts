@@ -9,7 +9,7 @@ export const companyConfig = {
   baseUrl: "https://krymvokrug.ru",
   logoPath: "/favicon.svg",
   shortDescription:
-    "Крым Вокруг — маркетплейс жилья у моря и экскурсий по Крыму. Сервис берет оплату только за размещение объявления на платформе и не удерживает комиссию с каждого клиента или бронирования.",
+    "Крым Вокруг — маркетплейс жилья у моря и экскурсий по Крыму. До 20 июня 2026 включительно размещение на сайте бесплатно; после бесплатного периода сервис не удерживает комиссию с каждого клиента или бронирования.",
   region: "Республика Крым",
   countryName: "Россия",
   countryCode: "RU",
@@ -32,8 +32,8 @@ export const companyConfig = {
 export function hasPublicCompanyContacts(): boolean {
   return Boolean(
     companyConfig.supportEmail ||
-      companyConfig.phone ||
-      companyConfig.addressLine ||
-      companyConfig.socialLinks.length > 0,
+    companyConfig.phone ||
+    companyConfig.addressLine ||
+    companyConfig.socialLinks.length > 0,
   );
 }

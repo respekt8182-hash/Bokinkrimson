@@ -30,16 +30,11 @@ function formatRoomRange(min: number, max: number | null): string {
   return `${min}-${max} номеров`;
 }
 
-const placementDurationLabel = `${PLACEMENT_VALIDITY_DAYS} дней с момента оплаты`;
+const placementDurationLabel = `${PLACEMENT_VALIDITY_DAYS} дней с момента публикации`;
 
 export function calculateTransferPublicationFeeRub(vehicleCount: number, now = new Date()): number {
-  const normalizedVehicleCount = Number.isFinite(vehicleCount)
-    ? Math.max(1, Math.round(vehicleCount))
-    : 1;
-  return (
-    getPlacementPromoPrice(TRANSFER_PUBLICATION_FEE_RUB, now).finalAmountRub +
-    Math.max(0, normalizedVehicleCount - 1) * TRANSFER_EXTRA_VEHICLE_FEE_RUB
-  );
+  return getPlacementPromoPrice(calculateTransferPublicationOriginalFeeRub(vehicleCount), now)
+    .finalAmountRub;
 }
 
 export function calculateTransferPublicationOriginalFeeRub(vehicleCount: number): number {
@@ -89,9 +84,9 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
     id: "transfer_standard",
     serviceName: "Размещение информации о трансфере",
     serviceNote:
-      "Публикация карточки трансфера с одним автомобилем. Каждый следующий автомобиль в автопарке добавляет 500 ₽ к стоимости размещения в ленте информации.",
+      "Публикация карточки трансфера с автопарком. До 20 июня 2026 включительно размещение бесплатно.",
     priceRub: TRANSFER_PUBLICATION_FEE_RUB,
-    conditionsLabel: `1 автомобиль включен, каждый следующий +${formatTariffPrice(
+    conditionsLabel: `После бесплатного периода: 1 автомобиль включен, каждый следующий +${formatTariffPrice(
       TRANSFER_EXTRA_VEHICLE_FEE_RUB,
     )}`,
     durationLabel: placementDurationLabel,
@@ -133,10 +128,11 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 ];
 
 export const publicTariffHighlights = [
-  "До 1 июня 2026 действует скидка 20% на основные услуги размещения. Дополнительные услуги оплачиваются без скидки.",
-  "Сервис берет оплату только за размещение карточки и не удерживает комиссию с каждого бронирования.",
+  "До 20 июня 2026 включительно размещение объектов, экскурсий, туров и трансферов бесплатно.",
+  "Пользователи, которые разместятся в бесплатный период, получат скидку 20% на дальнейшее продление размещения.",
+  "После бесплатного периода сервис берет оплату только за размещение карточки и не удерживает комиссию с каждого бронирования.",
   "Для объектов размещения тариф рассчитывается по количеству активных номеров и типу объекта.",
-  "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией; в трансферах один автомобиль включен в базовую стоимость, каждый следующий стоит 500 ₽.",
+  "Для экскурсий, туров и трансферов действует единоразовая публикация карточки перед модерацией; после бесплатного периода в трансферах один автомобиль включен в базовую стоимость, каждый следующий стоит 500 ₽.",
   "Если карточка возвращена на доработку в рамках оплаченного периода, повторная оплата не требуется.",
 ];
 

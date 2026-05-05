@@ -109,7 +109,7 @@ const stepMeta: Array<{
   { id: "location", title: "География", shortTitle: "География", icon: MapPin },
   { id: "fleet", title: "Автопарк", shortTitle: "Автопарк", icon: Car },
   { id: "contacts", title: "Контакты", shortTitle: "Контакты", icon: Phone },
-  { id: "publish", title: "Оплата", shortTitle: "Оплата", icon: ShieldCheck },
+  { id: "publish", title: "Публикация", shortTitle: "Публикация", icon: ShieldCheck },
 ];
 
 function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -182,17 +182,21 @@ function getTransferPaymentCoverage(
       originalCoverageAmount: payment.originalCoverageAmount ?? payment.amount,
       validUntil: getTransferPaymentValidUntil(payment),
     }))
-    .filter((payment): payment is {
-      amount: number;
-      originalCoverageAmount: number;
-      validUntil: string;
-    } => {
-      if (!payment.validUntil) {
-        return false;
-      }
+    .filter(
+      (
+        payment,
+      ): payment is {
+        amount: number;
+        originalCoverageAmount: number;
+        validUntil: string;
+      } => {
+        if (!payment.validUntil) {
+          return false;
+        }
 
-      return new Date(payment.validUntil).getTime() > nowMs;
-    });
+        return new Date(payment.validUntil).getTime() > nowMs;
+      },
+    );
 
   if (succeededPayments.length === 0) {
     return {
@@ -452,7 +456,7 @@ export function TransferEditorPage({
     { id: "location" as const, title: "География", done: locationReady },
     { id: "fleet" as const, title: "Автопарк", done: fleetReady },
     { id: "contacts" as const, title: "Контакты", done: contactsReady },
-    { id: "publish" as const, title: "Оплата", done: publishReady },
+    { id: "publish" as const, title: "Публикация", done: publishReady },
   ];
 
   const checklist: Array<{ label: string; done: boolean; step: StepId }> = [
@@ -477,7 +481,7 @@ export function TransferEditorPage({
     paymentNotice === "manager"
       ? "Заявка на оплату отправлена менеджеру. После подтверждения оплаты карточка уйдет на модерацию."
       : paymentNotice === "paid"
-        ? "Оплата найдена. Карточка отправлена на модерацию."
+        ? "Размещение зафиксировано. Карточка отправлена на модерацию."
         : paymentNotice === "published-edit"
           ? "Изменения сохранены и отправлены на повторную модерацию. Опубликованная версия остается на сайте."
           : paymentNotice === "pending"
@@ -496,7 +500,11 @@ export function TransferEditorPage({
   const latestPayment = payments[0] ?? null;
   const latestPaymentIsOpen = latestPayment ? isOpenPayment(latestPayment.status) : false;
   const extraVehicleCount = Math.max(0, fleet.length - 1);
-  const livePublicationFeeRub = publicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
+  const isLaunchFreePlacement = publicationFeeRub <= 0 && originalPublicationFeeRub > 0;
+  const extraVehicleFeeDueRub = isLaunchFreePlacement ? 0 : extraVehicleCount * extraVehicleFeeRub;
+  const livePublicationFeeRub = isLaunchFreePlacement
+    ? 0
+    : publicationFeeRub + extraVehicleFeeDueRub;
   const originalLivePublicationFeeRub =
     originalPublicationFeeRub + extraVehicleCount * extraVehicleFeeRub;
   const paymentCoverage = getTransferPaymentCoverage(
@@ -547,11 +555,11 @@ export function TransferEditorPage({
             ? paymentProvider === "MANAGER"
               ? `Отправить заявку на доплату ${formatMoney(requiredPaymentAmount)}`
               : `Перейти к доплате ${formatMoney(requiredPaymentAmount)}`
-          : hasFullPaymentCoverage
-            ? "Оплата подтверждена"
-            : paymentProvider === "MANAGER"
-              ? "Отправить заявку менеджеру"
-              : "Перейти к оплате";
+            : hasFullPaymentCoverage
+              ? "Оплата подтверждена"
+              : paymentProvider === "MANAGER"
+                ? "Отправить заявку менеджеру"
+                : "Перейти к оплате";
   const readinessIssues = checklist.filter((item) => !item.done && item.step !== "publish");
   const paidUntil = paymentCoverage.paidUntil;
   const transferStatusMeta: Record<
@@ -585,20 +593,22 @@ export function TransferEditorPage({
   };
   const statusMeta = transferStatusMeta[transfer.workflowStatus] ?? transferStatusMeta.DRAFT;
   const paymentReadinessHint = !publishReady
-    ? "Перед оплатой заполните обязательные разделы ниже."
-      : alreadyOnModeration
-        ? transfer.status === "PUBLISHED"
-          ? "Изменения уже отправлены на модерацию. Публичная версия остается на сайте."
-          : "Карточка уже отправлена на модерацию."
+    ? "Перед публикацией заполните обязательные разделы ниже."
+    : alreadyOnModeration
+      ? transfer.status === "PUBLISHED"
+        ? "Изменения уже отправлены на модерацию. Публичная версия остается на сайте."
+        : "Карточка уже отправлена на модерацию."
       : transfer.status === "PUBLISHED"
         ? hasFullPaymentCoverage
           ? "Публичная карточка останется на сайте. Стоимость правок покрыта, можно отправлять на повторную модерацию."
           : `Публичная карточка останется на сайте. После правок к доплате ${formatMoney(requiredPaymentAmount)}.`
         : hasFullPaymentCoverage
-          ? "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
+          ? livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement
+            ? "Размещение бесплатно до 20 июня 2026 включительно. Карточку можно отправить на модерацию без оплаты."
+            : "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
           : latestPaymentIsOpen
             ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
-            : "Карточка готова к оплате и последующей отправке на модерацию.";
+            : "Карточка готова к публикации и последующей отправке на модерацию.";
 
   function updatePaymentInState(item: SerializedPayment) {
     setPayments((currentPayments) => {
@@ -1417,7 +1427,9 @@ export function TransferEditorPage({
           <div className="border-b border-olive/8 bg-cream/60 px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-olive">Оплата размещения</h2>
+                <h2 className="text-xl font-semibold text-olive">
+                  {livePublicationFeeRub <= 0 ? "Публикация размещения" : "Оплата размещения"}
+                </h2>
                 <p className="mt-0.5 text-sm text-olive/55">
                   Последний шаг перед публикацией трансфера
                 </p>
@@ -1453,8 +1465,12 @@ export function TransferEditorPage({
               <p className="mb-2 font-semibold text-olive">Как это работает?</p>
               <ol className="list-inside list-decimal space-y-1.5 text-[13px]">
                 <li>Проверьте, что карточка, география, автопарк и контакты заполнены.</li>
-                <li>Выберите онлайн-оплату или заявку менеджеру.</li>
-                <li>После подтверждения оплаты карточка уйдет на модерацию автоматически.</li>
+                <li>
+                  {livePublicationFeeRub <= 0
+                    ? "До 20 июня размещение бесплатно, оплата не требуется."
+                    : "Выберите онлайн-оплату или заявку менеджеру."}
+                </li>
+                <li>Отправьте карточку на модерацию.</li>
                 <li>После модерации трансфер появится в каталоге.</li>
               </ol>
             </div>
@@ -1502,7 +1518,9 @@ export function TransferEditorPage({
             </div>
 
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="mb-3 text-sm font-semibold text-olive">Счет к оплате</p>
+              <p className="mb-3 text-sm font-semibold text-olive">
+                {livePublicationFeeRub <= 0 ? "Стоимость размещения" : "Счет к оплате"}
+              </p>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">Услуга</span>
@@ -1535,8 +1553,12 @@ export function TransferEditorPage({
                   </span>
                   <span className="text-right font-medium text-olive">
                     {extraVehicleCount > 0
-                      ? `${formatMoney(extraVehicleCount * extraVehicleFeeRub)}`
-                      : `0 ₽, каждый следующий +${formatMoney(extraVehicleFeeRub)}`}
+                      ? isLaunchFreePlacement
+                        ? `0 ₽, после бесплатного периода ${formatMoney(
+                            extraVehicleCount * extraVehicleFeeRub,
+                          )}`
+                        : `${formatMoney(extraVehicleFeeDueRub)}`
+                      : `0 ₽, после бесплатного периода каждый следующий +${formatMoney(extraVehicleFeeRub)}`}
                   </span>
                 </div>
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
@@ -1586,10 +1608,10 @@ export function TransferEditorPage({
               <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 <p className="mb-1 flex items-center gap-1.5 font-semibold text-red-800">
                   <AppIcon icon={CircleAlert} className="h-4 w-4" />
-                  Что нужно сделать перед оплатой
+                  Что нужно сделать перед публикацией
                 </p>
                 <p className="mb-3 text-xs text-red-600/70">
-                  Перейдите в нужные шаги, заполните данные и вернитесь к оплате.
+                  Перейдите в нужные шаги, заполните данные и вернитесь к публикации.
                 </p>
                 <ul className="space-y-2">
                   {readinessIssues.length > 0 ? (
@@ -1627,10 +1649,24 @@ export function TransferEditorPage({
 
             {hasFullPaymentCoverage && !alreadyOnModeration ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                <p className="font-semibold">Оплата подтверждена</p>
-                <p className="mt-1">
-                  Стоимость текущего автопарка покрыта. Нажмите «Отправить на модерацию», чтобы продолжить.
-                </p>
+                {livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement ? (
+                  <>
+                    <p className="font-semibold">Размещение бесплатно</p>
+                    <p className="mt-1">
+                      До 20 июня 2026 включительно карточку трансфера можно отправить на модерацию
+                      без оплаты. Размещение перейдет в демо-режим до 20 июня, а на продление
+                      сохранится скидка 20%.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">Оплата подтверждена</p>
+                    <p className="mt-1">
+                      Стоимость текущего автопарка покрыта. Нажмите «Отправить на модерацию», чтобы
+                      продолжить.
+                    </p>
+                  </>
+                )}
               </div>
             ) : null}
 
@@ -1638,7 +1674,8 @@ export function TransferEditorPage({
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                 <p className="font-semibold">Нужна доплата {formatMoney(requiredPaymentAmount)}</p>
                 <p className="mt-1 text-amber-700/80">
-                  Вы увеличили стоимость размещения, например добавили машину в автопарк. После подтверждения доплаты карточка уйдет на модерацию автоматически.
+                  Вы увеличили стоимость размещения, например добавили машину в автопарк. После
+                  подтверждения доплаты карточка уйдет на модерацию автоматически.
                 </p>
               </div>
             ) : null}

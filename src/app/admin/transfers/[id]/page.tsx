@@ -152,6 +152,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         paidAt: true,
         canceledAt: true,
         placementValidUntil: true,
+        providerPayload: true,
         managerNotes: true,
       },
     }),

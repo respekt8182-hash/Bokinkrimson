@@ -1,13 +1,15 @@
 // Owner moderation-submit endpoint: enforces readiness + active paid placement before moving object to moderation.
-import { PropertyStatus } from "@prisma/client";
+import { PaymentProvider, PaymentStatus, PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  buildFreePlacementPaymentPayload,
   getPlacementCoverageState,
   getTariffQuote,
   serializePayment,
 } from "@/lib/payments";
+import { getPlacementPromoDemoValidUntil } from "@/lib/placement-promo";
 import {
   getPropertyPaymentReadinessIssues,
   getPropertyProgress,
@@ -47,7 +49,9 @@ async function getOwnedPropertyForPayment(propertyId: string) {
   });
 }
 
-function buildReadiness(property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>) {
+function buildReadiness(
+  property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
+) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
   const issues = getPropertyPaymentReadinessIssues(property.id, progress);
@@ -110,7 +114,7 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  const payments = await db.payment.findMany({
+  let payments = await db.payment.findMany({
     where: {
       propertyId: property.id,
       ownerId: session.id,
@@ -122,12 +126,47 @@ export async function POST(_request: Request, context: RouteContext) {
       },
     },
   });
-  const placement = getPlacementCoverageState({
+  let placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
   });
+  const freePlacementAvailable = placement.fullyCovered && readiness.quote.amount <= 0;
 
-  if (!placement.hasActivePlacement) {
+  if (!placement.hasActivePlacement && freePlacementAvailable) {
+    const now = new Date();
+    const freePayment = await db.payment.create({
+      data: {
+        propertyId: property.id,
+        ownerId: session.id,
+        amount: 0,
+        tariffCode: readiness.quote.tariff.code,
+        roomCount: readiness.quote.roomCount,
+        status: PaymentStatus.SUCCEEDED,
+        provider: PaymentProvider.MANAGER,
+        idempotenceKey: crypto.randomUUID(),
+        confirmationUrl: null,
+        paidAt: now,
+        placementValidUntil: getPlacementPromoDemoValidUntil(),
+        providerPayload: buildFreePlacementPaymentPayload({
+          originalAmountRub: readiness.quote.originalAmount,
+          now,
+        }),
+      },
+      include: {
+        property: {
+          select: { name: true },
+        },
+      },
+    });
+
+    payments = [freePayment, ...payments];
+    placement = getPlacementCoverageState({
+      payments,
+      quote: readiness.quote,
+    });
+  }
+
+  if (!placement.hasActivePlacement && !freePlacementAvailable) {
     return NextResponse.json(
       {
         error: "Сначала оплатите размещение, чтобы отправить объект на модерацию",
@@ -190,7 +229,11 @@ export async function POST(_request: Request, context: RouteContext) {
         id: updated.id,
         status: updated.status,
         pendingEditStatus: updated.pendingEditStatus,
-        statusLabel: getPropertyWorkflowStatusLabel(updated.status, updated.moderationNotes, updated.pendingEditStatus),
+        statusLabel: getPropertyWorkflowStatusLabel(
+          updated.status,
+          updated.moderationNotes,
+          updated.pendingEditStatus,
+        ),
         moderationNotes: updated.moderationNotes,
         moderatedById: updated.moderatedById,
         moderatedAt: updated.moderatedAt ? updated.moderatedAt.toISOString() : null,
@@ -234,7 +277,11 @@ export async function POST(_request: Request, context: RouteContext) {
       id: updated.id,
       status: updated.status,
       pendingEditStatus: updated.pendingEditStatus,
-      statusLabel: getPropertyWorkflowStatusLabel(updated.status, updated.moderationNotes, updated.pendingEditStatus),
+      statusLabel: getPropertyWorkflowStatusLabel(
+        updated.status,
+        updated.moderationNotes,
+        updated.pendingEditStatus,
+      ),
       moderationNotes: updated.moderationNotes,
       moderatedById: updated.moderatedById,
       moderatedAt: updated.moderatedAt ? updated.moderatedAt.toISOString() : null,

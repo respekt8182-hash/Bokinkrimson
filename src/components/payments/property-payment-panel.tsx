@@ -156,21 +156,6 @@ export function PropertyPaymentPanel({
     hasActivePlacement &&
     !placement.fullyCovered &&
     placement.requiredPaymentAmount > 0;
-  const workflowStatus = useMemo(
-    () => getWorkflowStatus(propertyStatus, pendingEditStatus),
-    [pendingEditStatus, propertyStatus],
-  );
-  const canSubmitModerationWithPaidPlacement =
-    readiness.ready &&
-    hasActivePlacement &&
-    placement.fullyCovered &&
-    (workflowStatus === "DRAFT" || workflowStatus === "REJECTED");
-  const canCreatePayment =
-    readiness.ready &&
-    !hasOpenPayment &&
-    workflowStatus !== "PENDING_MODERATION" &&
-    workflowStatus !== "PUBLISHED" &&
-    (!hasActivePlacement || !placement.fullyCovered);
   const amountDue = readiness.quote
     ? hasActivePlacement
       ? placement.requiredPaymentAmount
@@ -181,6 +166,24 @@ export function PropertyPaymentPanel({
       ? placement.requiredOriginalPaymentAmount
       : readiness.quote.originalAmount
     : 0;
+  const hasFreePlacementCoverage =
+    Boolean(readiness.quote) && placement.fullyCovered && amountDue <= 0;
+  const workflowStatus = useMemo(
+    () => getWorkflowStatus(propertyStatus, pendingEditStatus),
+    [pendingEditStatus, propertyStatus],
+  );
+  const canSubmitModerationWithPaidPlacement =
+    readiness.ready &&
+    hasFreePlacementCoverage &&
+    placement.fullyCovered &&
+    (workflowStatus === "DRAFT" || workflowStatus === "REJECTED");
+  const canCreatePayment =
+    readiness.ready &&
+    !hasOpenPayment &&
+    amountDue > 0 &&
+    workflowStatus !== "PENDING_MODERATION" &&
+    workflowStatus !== "PUBLISHED" &&
+    (!hasActivePlacement || !placement.fullyCovered);
 
   const readinessHint = useMemo(() => {
     if (readiness.ready) {
@@ -191,12 +194,16 @@ export function PropertyPaymentPanel({
       if (hasActivePlacement) {
         return "Оплата уже активна. Карточку можно отправить на модерацию без повторной оплаты.";
       }
+      if (hasFreePlacementCoverage) {
+        return "Размещение бесплатно до 20 июня 2026 включительно. Карточку можно отправить на модерацию без оплаты.";
+      }
       return "Карточка готова к оплате и последующей отправке на модерацию.";
     }
 
-    return "Перед оплатой заполните обязательные разделы.";
+    return "Перед публикацией заполните обязательные разделы.";
   }, [
     hasActivePlacement,
+    hasFreePlacementCoverage,
     hasOutstandingTopUp,
     placement.requiredPaymentAmount,
     readiness.ready,
@@ -318,9 +325,7 @@ export function PropertyPaymentPanel({
           );
           return;
         }
-        setError(
-          body.error ?? "Не удалось отправить объект на модерацию",
-        );
+        setError(body.error ?? "Не удалось отправить объект на модерацию");
         return;
       }
 
@@ -433,7 +438,9 @@ export function PropertyPaymentPanel({
         <div className="border-b border-olive/8 bg-cream/60 px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-olive">Оплата размещения</h1>
+              <h1 className="text-xl font-semibold text-olive">
+                {amountDue <= 0 ? "Публикация размещения" : "Оплата размещения"}
+              </h1>
               <p className="mt-0.5 text-sm text-olive/55">Последний шаг перед публикацией</p>
               <p className="mt-0.5 text-xs text-olive/45">
                 <span className="font-medium text-olive/60">{propertyName}</span>
@@ -479,13 +486,16 @@ export function PropertyPaymentPanel({
           <div className="rounded-xl border border-olive/10 bg-cream/70 p-4 text-sm text-olive/75">
             <p className="mb-2 font-semibold text-olive">Как это работает?</p>
             <ol className="list-inside list-decimal space-y-1.5 text-[13px]">
-              <li>Убедитесь, что все предыдущие разделы заполнены (объект, правила, номера, удобства)</li>
-              <li>Оплатите размещение — тариф рассчитывается автоматически по количеству номеров</li>
-              <li>После оплаты карточка отправится на модерацию автоматически</li>
+              <li>
+                Убедитесь, что все предыдущие разделы заполнены (объект, правила, номера, удобства)
+              </li>
+              <li>До 20 июня размещение бесплатно — тариф показывается справочно</li>
+              <li>Отправьте карточку на модерацию без оплаты</li>
               <li>После прохождения модерации объект появится в каталоге</li>
             </ol>
             <p className="mt-2 text-xs text-olive/55">
-              Если размещение уже оплачено, изменения можно повторно отправить на модерацию кнопкой ниже.
+              Если размещение уже оплачено, изменения можно повторно отправить на модерацию кнопкой
+              ниже.
             </p>
           </div>
 
@@ -502,15 +512,15 @@ export function PropertyPaymentPanel({
                 {readiness.roomCount}
               </p>
               <p className="mt-2 text-[11px] text-olive/50">
-                {readiness.roomCount > 0 ? "Влияет на стоимость тарифа" : "Создайте номера на вкладке «Номера»"}
+                {readiness.roomCount > 0
+                  ? "Влияет на стоимость тарифа"
+                  : "Создайте номера на вкладке «Номера»"}
               </p>
             </div>
 
             {/* Tariff */}
             <div className="rounded-xl bg-cream p-3.5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                Тариф
-              </p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">Тариф</p>
               <p
                 className={`mt-1.5 text-base font-semibold leading-tight ${readiness.quote ? "text-olive" : "text-olive/35"}`}
               >
@@ -541,11 +551,24 @@ export function PropertyPaymentPanel({
                   : "Не определена"}
               </p>
               <p className="mt-1 text-[11px] text-olive/50">
-                {readiness.quote ? "Определяется типом объекта" : "Зависит от типа объекта и номеров"}
+                {readiness.quote
+                  ? "Определяется типом объекта"
+                  : "Зависит от типа объекта и номеров"}
               </p>
             </div>
           </div>
           <PlacementPromoNotice compact />
+
+          {readiness.quote && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+              <p className="font-semibold">Размещение бесплатно</p>
+              <p className="mt-1">
+                До 20 июня 2026 включительно можно отправить карточку на модерацию без оплаты. Мы
+                переведем размещение в демо-режим до 20 июня и сохраним скидку 20% на дальнейшее
+                продление.
+              </p>
+            </div>
+          ) : null}
 
           {/* Payment summary */}
           {readiness.quote && readiness.ready && amountDue > 0 && (
@@ -621,13 +644,11 @@ export function PropertyPaymentPanel({
               />
               {hasActivePlacement ? (
                 <span>
-                  Размещение оплачено до{" "}
-                  <strong>{formatDate(paidUntilIso)}</strong>
+                  Размещение оплачено до <strong>{formatDate(paidUntilIso)}</strong>
                 </span>
               ) : (
                 <span>
-                  Срок прошлой оплаты истёк:{" "}
-                  <strong>{formatDate(paidUntilIso)}</strong>
+                  Срок прошлой оплаты истёк: <strong>{formatDate(paidUntilIso)}</strong>
                 </span>
               )}
             </div>
@@ -638,9 +659,11 @@ export function PropertyPaymentPanel({
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <p className="mb-1 flex items-center gap-1.5 font-semibold text-red-800">
                 <AppIcon icon={CircleAlert} className="h-4 w-4" />
-                Что нужно сделать перед оплатой
+                Что нужно сделать перед публикацией
               </p>
-              <p className="mb-3 text-xs text-red-600/70">Перейдите по ссылкам ниже, заполните данные и вернитесь обратно</p>
+              <p className="mb-3 text-xs text-red-600/70">
+                Перейдите по ссылкам ниже, заполните данные и вернитесь обратно
+              </p>
               <ul className="space-y-1 pl-1">
                 {readinessIssues.map((issue) => (
                   <li key={issue.id} className="flex items-start gap-2">
@@ -688,59 +711,81 @@ export function PropertyPaymentPanel({
           )}
 
           {/* Payment method selector */}
-          {!canSubmitModerationWithPaidPlacement && canCreatePayment && readiness.ready && amountDue > 0 && !managerRequested && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-olive">Выберите способ оплаты</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("MANAGER")}
-                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                    paymentMethod === "MANAGER"
-                      ? "border-primary bg-primary/5"
-                      : "border-olive/15 bg-white hover:border-olive/30"
-                  }`}
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    paymentMethod === "MANAGER" ? "bg-primary/15" : "bg-olive/8"
-                  }`}>
-                    <AppIcon icon={Phone} className={`h-5 w-5 ${
-                      paymentMethod === "MANAGER" ? "text-primary" : "text-olive/50"
-                    }`} />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-semibold ${
-                      paymentMethod === "MANAGER" ? "text-primary" : "text-olive"
-                    }`}>Через менеджера</p>
-                    <p className="text-xs text-olive/55">Перевод на карту / по реквизитам</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("YOOKASSA")}
-                  className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                    paymentMethod === "YOOKASSA"
-                      ? "border-primary bg-primary/5"
-                      : "border-olive/15 bg-white hover:border-olive/30"
-                  }`}
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
-                  }`}>
-                    <AppIcon icon={CreditCard} className={`h-5 w-5 ${
-                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
-                    }`} />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-semibold ${
-                      paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
-                    }`}>Онлайн-оплата</p>
-                    <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
-                  </div>
-                </button>
+          {!canSubmitModerationWithPaidPlacement &&
+            canCreatePayment &&
+            readiness.ready &&
+            amountDue > 0 &&
+            !managerRequested && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-olive">Выберите способ оплаты</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("MANAGER")}
+                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
+                      paymentMethod === "MANAGER"
+                        ? "border-primary bg-primary/5"
+                        : "border-olive/15 bg-white hover:border-olive/30"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod === "MANAGER" ? "bg-primary/15" : "bg-olive/8"
+                      }`}
+                    >
+                      <AppIcon
+                        icon={Phone}
+                        className={`h-5 w-5 ${
+                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive/50"
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive"
+                        }`}
+                      >
+                        Через менеджера
+                      </p>
+                      <p className="text-xs text-olive/55">Перевод на карту / по реквизитам</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("YOOKASSA")}
+                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
+                      paymentMethod === "YOOKASSA"
+                        ? "border-primary bg-primary/5"
+                        : "border-olive/15 bg-white hover:border-olive/30"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
+                      }`}
+                    >
+                      <AppIcon
+                        icon={CreditCard}
+                        className={`h-5 w-5 ${
+                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
+                        }`}
+                      >
+                        Онлайн-оплата
+                      </p>
+                      <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
+                    </div>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -834,7 +879,6 @@ export function PropertyPaymentPanel({
                   Проверить статус
                 </Button>
               ) : null}
-
             </div>
           ) : null}
 
@@ -875,8 +919,12 @@ export function PropertyPaymentPanel({
             {payments.map((payment) => (
               <div key={payment.id} className="rounded-xl border border-olive/10 bg-cream/50 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-olive">{formatMoney(payment.amount)}</span>
-                  <span className="rounded-full bg-olive/8 px-2 py-0.5 text-[11px] font-semibold text-olive/70">{payment.statusLabel}</span>
+                  <span className="text-sm font-semibold text-olive">
+                    {formatMoney(payment.amount)}
+                  </span>
+                  <span className="rounded-full bg-olive/8 px-2 py-0.5 text-[11px] font-semibold text-olive/70">
+                    {payment.statusLabel}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-olive/55">Тариф: {payment.tariffCode}</p>
                 <p className="text-xs text-olive/45">{formatDateTime(payment.createdAt)}</p>
@@ -890,9 +938,15 @@ export function PropertyPaymentPanel({
               <thead>
                 <tr className="text-left text-olive/65">
                   <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">ID</th>
-                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Тариф</th>
-                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Сумма</th>
-                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">Статус</th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                    Тариф
+                  </th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                    Сумма
+                  </th>
+                  <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                    Статус
+                  </th>
                   <th className="py-1.5 text-xs font-semibold uppercase tracking-wide">Дата</th>
                 </tr>
               </thead>
@@ -903,7 +957,9 @@ export function PropertyPaymentPanel({
                       {payment.id.slice(0, 12)}...
                     </td>
                     <td className="py-2 pr-4 text-olive">{payment.tariffCode}</td>
-                    <td className="py-2 pr-4 font-medium text-olive">{formatMoney(payment.amount)}</td>
+                    <td className="py-2 pr-4 font-medium text-olive">
+                      {formatMoney(payment.amount)}
+                    </td>
                     <td className="py-2 pr-4 text-olive">{payment.statusLabel}</td>
                     <td className="py-2 text-olive">{formatDateTime(payment.createdAt)}</td>
                   </tr>

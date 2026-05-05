@@ -2,6 +2,7 @@ import { cn } from "@/lib/cn";
 import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import {
   additionalServiceRows,
+  publicTariffHighlights,
   publicServiceTariffRows,
 } from "@/lib/site-tariffs";
 
@@ -42,11 +43,17 @@ export function ServicesAndTariffsSection({
         </h2>
       )}
       <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
-        На сайте действует открытая модель оплаты: сервис берет фиксированную стоимость только за
-        размещение карточки объекта, экскурсии, тура или трансфера. Все тарифы ниже собраны из
-        текущей логики публикации сайта.
+        Сейчас размещение на сайте бесплатно до 20 июня 2026 включительно. Все, кто разместит
+        карточку в этот период, сохранят скидку 20% на дальнейшее продление размещения.
       </p>
       <PlacementPromoNotice className="mt-5" />
+      <ul className="mt-5 grid gap-2 text-sm leading-6 text-olive/72 md:grid-cols-2">
+        {publicTariffHighlights.map((item) => (
+          <li key={item} className="rounded-2xl bg-cream/72 px-4 py-3 ring-1 ring-olive/10">
+            {item}
+          </li>
+        ))}
+      </ul>
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">
         <div className="hidden overflow-x-auto md:block">

@@ -20,6 +20,10 @@ import {
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getProviderLabel } from "@/lib/payments";
+import {
+  PLACEMENT_PROMO_DEMO_LABEL,
+  PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS,
+} from "@/lib/placement-promo";
 
 export const dynamic = "force-dynamic";
 
@@ -187,13 +191,14 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
     {} as Record<PlacementRenewalEntityType, number>,
   );
   const nextSevenDaysCount = allItems.filter((item) => item.daysLeft <= 7).length;
+  const demoCount = allItems.filter((item) => item.payment.isDemo).length;
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         eyebrow="Продление"
         title="Заканчивается размещение"
-        description={`Опубликованные и оплаченные объявления, у которых срок размещения закончится в ближайшие ${lookaheadDays} ${pluralizeDays(lookaheadDays)}.`}
+        description={`Опубликованные объявления, у которых срок размещения закончится в ближайшие ${lookaheadDays} ${pluralizeDays(lookaheadDays)}. Демо-размещения показываются за ${PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS} ${pluralizeDays(PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS)} до окончания.`}
       />
 
       {isDatabaseFallback ? (
@@ -202,7 +207,7 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
         </AdminNotice>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <AdminStatCard
           label="К продлению"
           value={allItems.length}
@@ -216,6 +221,13 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
           description="Самые срочные контакты"
           icon={Clock3}
           tone={nextSevenDaysCount > 0 ? "warning" : "default"}
+        />
+        <AdminStatCard
+          label="Демо-режим"
+          value={demoCount}
+          description="Бесплатные размещения"
+          icon={Clock3}
+          tone={demoCount > 0 ? "warning" : "default"}
         />
         <AdminStatCard
           label="Жильё"
@@ -315,7 +327,7 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
           description={
             isDatabaseFallback
               ? "Попробуйте открыть раздел позже."
-              : "В выбранном периоде нет опубликованных оплаченных объявлений с окончанием срока."
+              : "В выбранном периоде нет опубликованных объявлений с окончанием платного или демо-срока."
           }
         />
       ) : (
@@ -337,6 +349,11 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
                       >
                         {item.entityLabel}
                       </span>
+                      {item.payment.isDemo ? (
+                        <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                          {PLACEMENT_PROMO_DEMO_LABEL}
+                        </span>
+                      ) : null}
                       <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
                         Осталось {formatDaysLeft(item.daysLeft)}
                       </span>
@@ -370,15 +387,25 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
 
                 <dl className="mt-4 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Оплачено до</dt>
+                    <dt className="text-olive/50">
+                      {item.payment.isDemo ? "Демо до" : "Оплачено до"}
+                    </dt>
                     <dd className="font-semibold text-olive">{formatDate(item.validUntil)}</dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Последняя оплата</dt>
-                    <dd className="font-semibold text-olive">{formatMoney(item.payment.amount)}</dd>
+                    <dt className="text-olive/50">
+                      {item.payment.isDemo ? "Тип размещения" : "Последняя оплата"}
+                    </dt>
+                    <dd className="font-semibold text-olive">
+                      {item.payment.isDemo
+                        ? "Бесплатное размещение"
+                        : formatMoney(item.payment.amount)}
+                    </dd>
                     <dd className="mt-1 text-xs text-olive/52">
-                      {getProviderLabel(item.payment.provider)}
-                      {item.payment.paidAt ? ` • ${formatDateTime(item.payment.paidAt)}` : ""}
+                      {item.payment.isDemo ? "0 ₽, демо-режим" : getProviderLabel(item.payment.provider)}
+                      {item.payment.paidAt && !item.payment.isDemo
+                        ? ` • ${formatDateTime(item.payment.paidAt)}`
+                        : ""}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">

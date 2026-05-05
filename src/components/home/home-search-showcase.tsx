@@ -183,8 +183,6 @@ const popoverExitDurationMs = 250;
 const guestsPopoverTransitionMs = 200;
 const maxGuestsCount = 20;
 const radiusOptions = [5, 10, 15, 25, 30, 50, 100] as const;
-const contestPagePath = "/rozigrash";
-
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 });
@@ -3933,22 +3931,17 @@ export function HomeSearchShowcase({
 
       {renderMobileSearchModal()}
 
-      <div className="mx-auto mt-6 flex max-w-5xl justify-center px-2">
-        <Link
-          href={contestPagePath}
-          className="relative isolate inline-flex min-h-14 w-full max-w-sm items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-center text-base font-bold text-white shadow-[0_16px_36px_rgba(58,43,35,0.18)] shadow-primary/20 ring-1 ring-white/40 transition hover:bg-primary-hover hover:shadow-primary/28 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2 sm:w-auto sm:min-w-72"
-        >
-          <span
-            aria-hidden="true"
-            className="absolute -inset-1 -z-10 rounded-[1.35rem] bg-primary/35 blur-sm motion-safe:animate-ping"
-          />
-          <AppIcon icon={Sparkles} className="h-5 w-5 text-white" />
-          Разместиться бесплатно
-        </Link>
-      </div>
-
       {/* ── Why choose us ── */}
       <div className="mx-auto mt-6 max-w-5xl">
+        <div className="mx-auto mb-4 flex max-w-3xl flex-col items-center justify-center gap-3 text-sm sm:flex-row sm:flex-wrap">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 font-bold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_-16px_rgba(185,28,28,0.75)]">
+            <AppIcon icon={Sparkles} className="h-4 w-4 text-white" />
+            0 ₽ до 20 июня
+          </span>
+          <span className="max-w-xl text-center font-semibold leading-6 text-olive">
+            Сейчас на сайте бесплатное размещение объявлений всех типов
+          </span>
+        </div>
         <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
           Почему выбирают «Крым Вокруг»?
         </h2>

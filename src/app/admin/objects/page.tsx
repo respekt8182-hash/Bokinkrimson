@@ -122,6 +122,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
               paidAt: true,
               createdAt: true,
               placementValidUntil: true,
+              providerPayload: true,
             },
             take: 1,
           },

@@ -4,14 +4,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serializePayment } from "@/lib/payments";
+import {
+  buildFreePlacementPaymentPayload,
+  resolvePaymentPlacementValidUntil,
+  serializePayment,
+} from "@/lib/payments";
 import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildPlacementPromoMetadata,
   buildPlacementPromoPayload,
+  getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
 } from "@/lib/placement-promo";
 import { EXCURSION_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type RouteContext = {
@@ -84,15 +90,21 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const payments = await listExcursionPayments(excursion.id, session.id);
+  const now = new Date();
   const latestOpenPayment =
-    payments.find((item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING) ??
-    null;
+    payments.find(
+      (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
+    ) ?? null;
 
   return NextResponse.json({
     status: excursion.status,
     pendingEditStatus: excursion.pendingEditStatus ?? null,
     items: payments.map(serializePayment),
-    hasPaid: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+    hasPaid: payments.some(
+      (item) =>
+        item.status === PaymentStatus.SUCCEEDED &&
+        resolvePaymentPlacementValidUntil(item).getTime() > now.getTime(),
+    ),
     hasPendingManagerPayment: latestOpenPayment?.provider === PaymentProvider.MANAGER,
   });
 }
@@ -114,12 +126,6 @@ export async function POST(request: Request, context: RouteContext) {
     // Empty body is allowed.
   }
 
-  try {
-    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
-  } catch {
-    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
-  }
-
   const { id } = await context.params;
   const excursion = await getOwnedExcursion(id);
 
@@ -128,8 +134,13 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const payments = await listExcursionPayments(excursion.id, session.id);
+  const now = new Date();
   const existingSucceeded =
-    payments.find((item) => item.status === PaymentStatus.SUCCEEDED) ?? null;
+    payments.find(
+      (item) =>
+        item.status === PaymentStatus.SUCCEEDED &&
+        resolvePaymentPlacementValidUntil(item).getTime() > now.getTime(),
+    ) ?? null;
   if (existingSucceeded) {
     return NextResponse.json(
       {
@@ -141,8 +152,9 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const existingOpen =
-    payments.find((item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING) ??
-    null;
+    payments.find(
+      (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
+    ) ?? null;
   if (existingOpen) {
     return NextResponse.json(
       {
@@ -166,6 +178,50 @@ export async function POST(request: Request, context: RouteContext) {
     originalAmountRub: publicationPrice.originalAmountRub,
     discountedAmountRub: amount,
   });
+
+  if (amount <= 0) {
+    const created = await db.payment.create({
+      data: {
+        excursionId: excursion.id,
+        ownerId: session.id,
+        amount: 0,
+        tariffCode,
+        roomCount: 0,
+        status: PaymentStatus.SUCCEEDED,
+        provider: PaymentProvider.MANAGER,
+        idempotenceKey,
+        confirmationUrl: null,
+        paidAt: now,
+        placementValidUntil: getPlacementPromoDemoValidUntil(),
+        providerPayload: buildFreePlacementPaymentPayload({
+          originalAmountRub: publicationPrice.originalAmountRub,
+          now,
+        }),
+      },
+      include: {
+        excursion: {
+          select: {
+            title: true,
+          },
+        },
+      },
+    });
+
+    await autoSubmitExcursionAfterSuccessfulPayment(db, excursion.id);
+
+    return NextResponse.json({
+      item: serializePayment(created),
+      managerRequested: false,
+      redirectUrl: null,
+      freePlacementGranted: true,
+    });
+  }
+
+  try {
+    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
+  } catch {
+    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
+  }
 
   if (body.provider === "MANAGER") {
     const created = await db.payment.create({

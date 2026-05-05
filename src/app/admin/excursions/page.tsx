@@ -102,6 +102,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
               paidAt: true,
               createdAt: true,
               placementValidUntil: true,
+              providerPayload: true,
             },
           },
           owner: {

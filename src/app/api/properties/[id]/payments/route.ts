@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
+  buildFreePlacementPaymentPayload,
   getPlacementCoverageState,
   getTariffQuote,
   serializePayment,
@@ -13,10 +14,12 @@ import {
 import {
   buildPlacementPromoMetadata,
   buildPlacementPromoPayload,
+  getPlacementPromoDemoValidUntil,
 } from "@/lib/placement-promo";
 import {
   getPropertyPaymentReadinessIssues,
   getPropertyProgress,
+  autoSubmitPropertyAfterSuccessfulPayment,
   purgeExpiredPropertyDraftsForOwner,
 } from "@/lib/properties";
 import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
@@ -52,7 +55,9 @@ async function getOwnedPropertyForPayment(propertyId: string) {
   });
 }
 
-function buildReadiness(property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>) {
+function buildReadiness(
+  property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
+) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
   const issues = getPropertyPaymentReadinessIssues(property.id, progress);
@@ -147,12 +152,6 @@ export async function POST(request: Request, context: RouteContext) {
     // Empty body is fine.
   }
 
-  try {
-    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
-  } catch {
-    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
-  }
-
   await purgeExpiredPropertyDraftsForOwner(db, session.id);
 
   const { id } = await context.params;
@@ -175,20 +174,6 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const payments = await listPropertyPayments(property.id, session.id);
-  const latestOpenPayment =
-    payments.find((item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING) ??
-    null;
-
-  if (latestOpenPayment) {
-    return NextResponse.json(
-      {
-        error: "У вас уже есть незавершенный платеж по этому объекту",
-        item: serializePayment(latestOpenPayment),
-      },
-      { status: 409 },
-    );
-  }
-
   const placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -211,6 +196,62 @@ export async function POST(request: Request, context: RouteContext) {
   const originalAmount = placement.hasActivePlacement
     ? placement.requiredOriginalPaymentAmount
     : readiness.quote.originalAmount;
+
+  if (amount <= 0) {
+    const now = new Date();
+    const created = await db.payment.create({
+      data: {
+        propertyId: property.id,
+        ownerId: session.id,
+        amount: 0,
+        tariffCode: readiness.quote.tariff.code,
+        roomCount: readiness.quote.roomCount,
+        status: PaymentStatus.SUCCEEDED,
+        provider: PaymentProvider.MANAGER,
+        idempotenceKey: crypto.randomUUID(),
+        confirmationUrl: null,
+        paidAt: now,
+        placementValidUntil: getPlacementPromoDemoValidUntil(),
+        providerPayload: buildFreePlacementPaymentPayload({
+          originalAmountRub: originalAmount,
+          now,
+        }),
+      },
+      include: {
+        property: { select: { name: true } },
+      },
+    });
+
+    await autoSubmitPropertyAfterSuccessfulPayment(db, property.id);
+
+    return NextResponse.json({
+      item: serializePayment(created),
+      redirectUrl: null,
+      freePlacementGranted: true,
+    });
+  }
+
+  try {
+    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
+  } catch {
+    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
+  }
+
+  const latestOpenPayment =
+    payments.find(
+      (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
+    ) ?? null;
+
+  if (latestOpenPayment) {
+    return NextResponse.json(
+      {
+        error: "У вас уже есть незавершенный платеж по этому объекту",
+        item: serializePayment(latestOpenPayment),
+      },
+      { status: 409 },
+    );
+  }
+
   const placementPromo = buildPlacementPromoPayload({
     originalAmountRub: originalAmount,
     discountedAmountRub: Number(amount),

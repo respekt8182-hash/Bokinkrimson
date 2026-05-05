@@ -6,8 +6,14 @@ import {
   placementTariffsByGroup,
 } from "@/lib/constants";
 import {
+  PLACEMENT_PROMO_CODE,
+  PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
+  PLACEMENT_PROMO_DEMO_MODE,
+  buildPlacementPromoPayload,
+  getPlacementPromoDemoValidUntil,
   getPlacementPromoOriginalCoverageAmount,
   getPlacementPromoPrice,
+  isFreePlacementDemoPayload,
   type PlacementPromoPayload,
   type PlacementPromoPrice,
 } from "@/lib/placement-promo";
@@ -275,6 +281,29 @@ export function setPaymentAdminRevenueIncluded(
   } as Prisma.InputJsonObject;
 }
 
+export function buildFreePlacementPaymentPayload(input: {
+  originalAmountRub: number;
+  discountedAmountRub?: number;
+  now?: Date;
+  context?: Prisma.InputJsonObject;
+}): Prisma.InputJsonObject {
+  const placementPromo = buildPlacementPromoPayload({
+    originalAmountRub: input.originalAmountRub,
+    discountedAmountRub: input.discountedAmountRub ?? 0,
+    now: input.now,
+  });
+
+  return {
+    ...(input.context ?? {}),
+    placementCampaign: PLACEMENT_PROMO_CODE,
+    placementCampaignType: "free_placement_until_2026_06_20",
+    placementMode: PLACEMENT_PROMO_DEMO_MODE,
+    placementDemoEndsAtIso: PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
+    includeInAdminRevenue: false,
+    ...(placementPromo ? { placementPromo } : {}),
+  };
+}
+
 export type YookassaStatus = "pending" | "waiting_for_capture" | "succeeded" | "canceled";
 
 export function mapYookassaStatus(status: YookassaStatus): PaymentStatus {
@@ -386,6 +415,11 @@ export function serializePayment(payment: {
     tariffCode: payment.tariffCode,
     providerPayload: payment.providerPayload,
   });
+  const serializedPlacementValidUntil = isFreePlacementDemoPayload(payment.providerPayload)
+    ? getPlacementPromoDemoValidUntil().toISOString()
+    : payment.placementValidUntil
+      ? payment.placementValidUntil.toISOString()
+      : null;
 
   return {
     id: payment.id,
@@ -405,9 +439,7 @@ export function serializePayment(payment: {
     updatedAt: payment.updatedAt.toISOString(),
     paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
     canceledAt: payment.canceledAt ? payment.canceledAt.toISOString() : null,
-    placementValidUntil: payment.placementValidUntil
-      ? payment.placementValidUntil.toISOString()
-      : null,
+    placementValidUntil: serializedPlacementValidUntil,
     propertyName: payment.property?.name ?? null,
     excursionName: payment.excursion?.title ?? null,
     transferName: payment.transfer?.title ?? transferReference?.transferTitle ?? null,
@@ -432,7 +464,12 @@ export function resolvePaymentPlacementValidUntil(payment: {
   paidAt: Date | null;
   createdAt: Date;
   placementValidUntil?: Date | null;
+  providerPayload?: Prisma.JsonValue | null;
 }): Date {
+  if (isFreePlacementDemoPayload(payment.providerPayload)) {
+    return getPlacementPromoDemoValidUntil();
+  }
+
   return payment.placementValidUntil ?? getPlacementValidUntil(payment.paidAt ?? payment.createdAt);
 }
 

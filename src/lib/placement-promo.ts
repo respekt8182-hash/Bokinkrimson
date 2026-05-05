@@ -1,11 +1,18 @@
-export const PLACEMENT_PROMO_CODE = "season-start-2026-20";
-export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 20;
-export const PLACEMENT_PROMO_ENDS_AT_ISO = "2026-06-01T00:00:00.000+03:00";
-export const PLACEMENT_PROMO_END_LABEL = "1 июня 2026";
-export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 июня";
-export const PLACEMENT_PROMO_BADGE_LABEL = "-20% до 1 июня";
+export const PLACEMENT_PROMO_CODE = "launch-free-placement-2026";
+export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 100;
+export const PLACEMENT_PROMO_RENEWAL_DISCOUNT_PERCENT = 20;
+export const PLACEMENT_PROMO_ENDS_AT_ISO = "2026-06-21T00:00:00.000+03:00";
+export const PLACEMENT_PROMO_END_LABEL = "20 июня 2026 включительно";
+export const PLACEMENT_PROMO_SHORT_END_LABEL = "20 июня";
+export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ до 20 июня";
 export const PLACEMENT_PROMO_NOTICE =
-  "До 1 июня 2026 действует скидка 20% на основные услуги размещения. Дополнительные услуги оплачиваются без скидки.";
+  "До 20 июня 2026 включительно размещение объектов, экскурсий, туров и трансферов бесплатно. Участники, которые разместятся в этот период, получат скидку 20% на дальнейшее продление размещения.";
+export const PLACEMENT_PROMO_DEMO_MODE = "demo";
+export const PLACEMENT_PROMO_DEMO_LABEL = "Демо-режим";
+export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
+export const PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS = 7;
+
+const LEGACY_PLACEMENT_PROMO_CODES = new Map<string, number>([["season-start-2026-20", 20]]);
 
 export type PlacementPromoPrice = {
   code: string;
@@ -30,6 +37,18 @@ export type PlacementPromoPayload = {
 };
 
 const promoEndsAtMs = Date.parse(PLACEMENT_PROMO_ENDS_AT_ISO);
+
+function isKnownPlacementPromo(code: string | null, discountPercent: number | null): boolean {
+  if (code === PLACEMENT_PROMO_CODE && discountPercent === PLACEMENT_PROMO_DISCOUNT_PERCENT) {
+    return true;
+  }
+
+  if (!code || discountPercent === null) {
+    return false;
+  }
+
+  return LEGACY_PLACEMENT_PROMO_CODES.get(code) === discountPercent;
+}
 
 function normalizeRubAmount(value: number): number {
   if (!Number.isFinite(value)) {
@@ -60,7 +79,14 @@ export function isPlacementPromoActive(now = new Date()): boolean {
   return now.getTime() < promoEndsAtMs;
 }
 
-export function getPlacementPromoPrice(originalAmountRub: number, now = new Date()): PlacementPromoPrice {
+export function getPlacementPromoDemoValidUntil(): Date {
+  return new Date(PLACEMENT_PROMO_DEMO_ENDS_AT_ISO);
+}
+
+export function getPlacementPromoPrice(
+  originalAmountRub: number,
+  now = new Date(),
+): PlacementPromoPrice {
   const originalAmount = normalizeRubAmount(originalAmountRub);
   const isDiscounted = isPlacementPromoActive(now) && originalAmount > 0;
   const finalAmount = isDiscounted
@@ -137,8 +163,9 @@ function parsePlacementPromoRecord(value: Record<string, unknown>): PlacementPro
   const endsAtIso = typeof value.endsAtIso === "string" ? value.endsAtIso : null;
 
   if (
-    code !== PLACEMENT_PROMO_CODE ||
-    discountPercent !== PLACEMENT_PROMO_DISCOUNT_PERCENT ||
+    !code ||
+    discountPercent === null ||
+    !isKnownPlacementPromo(code, discountPercent) ||
     originalAmountRub === null ||
     discountedAmountRub === null ||
     discountAmountRub === null ||
@@ -169,8 +196,9 @@ function parsePlacementPromoMetadata(value: Record<string, unknown>): PlacementP
     typeof value.placementPromoEndsAtIso === "string" ? value.placementPromoEndsAtIso : null;
 
   if (
-    code !== PLACEMENT_PROMO_CODE ||
-    discountPercent !== PLACEMENT_PROMO_DISCOUNT_PERCENT ||
+    !code ||
+    discountPercent === null ||
+    !isKnownPlacementPromo(code, discountPercent) ||
     originalAmountRub === null ||
     discountedAmountRub === null ||
     discountAmountRub === null ||
@@ -203,6 +231,27 @@ export function getPlacementPromoPayload(value: unknown): PlacementPromoPayload 
   }
 
   return isRecord(value.metadata) ? parsePlacementPromoMetadata(value.metadata) : null;
+}
+
+export function isFreePlacementDemoPayload(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (value.placementMode === PLACEMENT_PROMO_DEMO_MODE) {
+    return true;
+  }
+
+  if (value.placementCampaignType === "free_placement_until_2026_06_20") {
+    return true;
+  }
+
+  const promoPayload = getPlacementPromoPayload(value);
+  return (
+    promoPayload?.code === PLACEMENT_PROMO_CODE &&
+    promoPayload.discountPercent === PLACEMENT_PROMO_DISCOUNT_PERCENT &&
+    promoPayload.discountedAmountRub === 0
+  );
 }
 
 export function getPlacementPromoOriginalCoverageAmount(
