@@ -903,7 +903,12 @@ export function RoomFundManager({
   }
 
   useEffect(() => {
-    if (!initialCreateMode || initialCreateHandledRef.current) {
+    if (!initialCreateMode) {
+      initialCreateHandledRef.current = false;
+      return;
+    }
+
+    if (initialCreateHandledRef.current) {
       return;
     }
 
