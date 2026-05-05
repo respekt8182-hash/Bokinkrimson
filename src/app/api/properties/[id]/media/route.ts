@@ -25,7 +25,7 @@ import {
   RateLimitConfigurationError,
 } from "@/lib/rate-limit";
 import { getRequestIp } from "@/lib/security";
-import { uploadToStorage } from "@/lib/storage";
+import { deleteFromStorage, uploadToStorage } from "@/lib/storage";
 import { validateUploadFile } from "@/lib/upload-validation";
 
 type RouteContext = {
@@ -268,6 +268,8 @@ export async function POST(request: Request, context: RouteContext) {
       },
     );
   } catch (error) {
+    await deleteFromStorage(storageKey).catch(() => null);
+
     if (error instanceof Error && error.message === "MEDIA_LIMIT_EXCEEDED") {
       return NextResponse.json(
         {

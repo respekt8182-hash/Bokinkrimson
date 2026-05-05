@@ -9,6 +9,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { purgeExpiredExcursionDrafts } from "@/lib/excursions";
 import { purgeExpiredPropertyDrafts } from "@/lib/properties";
+import { pruneUnusedPublicUploads } from "@/lib/storage-cleanup";
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -26,12 +27,16 @@ export async function GET(req: NextRequest) {
       purgeExpiredPropertyDrafts(db),
       purgeExpiredExcursionDrafts(db),
     ]);
+    const uploadCleanup = await pruneUnusedPublicUploads(db);
+
     console.log(
-      `[cron/cleanup-drafts] deletedProperties=${deletedProperties} deletedExcursions=${deletedExcursions}`,
+      `[cron/cleanup-drafts] deletedProperties=${deletedProperties} deletedExcursions=${deletedExcursions} orphanUploadsDeleted=${uploadCleanup.deleted}`,
     );
     return NextResponse.json({
       deletedProperties,
       deletedExcursions,
+      orphanUploadsDeleted: uploadCleanup.deleted,
+      orphanUploadsScanned: uploadCleanup.scanned,
       deleted: deletedProperties + deletedExcursions,
     });
   } catch (error) {

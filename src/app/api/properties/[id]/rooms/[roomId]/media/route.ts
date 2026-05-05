@@ -19,24 +19,12 @@ import {
   markPropertyNeedsRemoderationAfterOwnerEdit,
   preparePropertyForPublishedOwnerEdit,
 } from "@/lib/properties";
-import {
-  createRateLimiter,
-  RateLimitBackendUnavailableError,
-  RateLimitConfigurationError,
-} from "@/lib/rate-limit";
-import { getRequestIp } from "@/lib/security";
-import { uploadToStorage } from "@/lib/storage";
+import { deleteFromStorage, uploadToStorage } from "@/lib/storage";
 import { validateUploadFile } from "@/lib/upload-validation";
 
 type RouteContext = {
   params: Promise<{ id: string; roomId: string }>;
 };
-
-const roomMediaUploadLimiter = createRateLimiter({
-  id: "room-media-upload",
-  windowMs: 15 * 60 * 1000,
-  maxRequests: 20,
-});
 
 async function getAccessibleRoom(
   propertyId: string,
@@ -112,29 +100,6 @@ export async function POST(request: Request, context: RouteContext) {
 
   if (!editor) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  }
-
-  const ip = getRequestIp(request);
-
-  try {
-    const limit = await roomMediaUploadLimiter.limit(`${editor.id}:${ip}`);
-    if (!limit.allowed) {
-      return NextResponse.json(
-        { error: `Too many upload attempts. Retry in ${limit.retryAfterSeconds} seconds.` },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(limit.retryAfterSeconds),
-          },
-        },
-      );
-    }
-  } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
-      return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
-    }
-
-    throw error;
   }
 
   const { id, roomId } = await context.params;
@@ -266,6 +231,8 @@ export async function POST(request: Request, context: RouteContext) {
       },
     );
   } catch (error) {
+    await deleteFromStorage(storageKey).catch(() => null);
+
     if (error instanceof Error && error.message === "MEDIA_LIMIT_EXCEEDED") {
       return NextResponse.json(
         {

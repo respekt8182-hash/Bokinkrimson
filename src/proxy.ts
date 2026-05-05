@@ -137,6 +137,10 @@ function isUploadPath(pathname: string): boolean {
   );
 }
 
+function isRoomMediaUploadPath(pathname: string): boolean {
+  return /^\/api\/properties\/[^/]+\/rooms\/[^/]+\/media$/.test(pathname);
+}
+
 async function enforceProxyRateLimit(
   request: NextRequest,
   pathname: string,
@@ -183,7 +187,7 @@ async function enforceProxyRateLimit(
       }
     }
 
-    if (isUploadPath(pathname)) {
+    if (isUploadPath(pathname) && !isRoomMediaUploadPath(pathname)) {
       const limit = await uploadLimiter.limit(key);
       if (!limit.allowed) {
         return applySecurityHeaders(

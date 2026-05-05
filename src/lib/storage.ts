@@ -3,11 +3,12 @@ import "server-only";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
-import { mkdir, readFile, rm, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "fs/promises";
 import path from "path";
 import { resolveBaseUrl } from "@/lib/seo/site";
 
@@ -36,6 +37,11 @@ type StoredObjectMeta = {
 export type StoredObject = StoredObjectMeta & {
   body: Buffer;
   contentLength: number;
+};
+
+export type PublicUploadStorageObject = {
+  key: string;
+  modifiedAt: number;
 };
 
 const localUploadsPublicDir = path.join(process.cwd(), "public", "uploads");
@@ -325,6 +331,98 @@ async function readS3Body(body: unknown): Promise<Buffer> {
 
 export function isStorageConfigured(): boolean {
   return hasRequiredS3Config(getConfig());
+}
+
+export function isLocalStorageBackend(): boolean {
+  const config = getConfig();
+  return !hasRequiredS3Config(config) || !config.bucket;
+}
+
+async function listLocalPublicUploadObjects(
+  currentDir = localUploadsPublicDir,
+): Promise<PublicUploadStorageObject[]> {
+  const entries = await readdir(currentDir, { withFileTypes: true }).catch(() => []);
+  const objects: PublicUploadStorageObject[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+
+    if (entry.isDirectory()) {
+      objects.push(...(await listLocalPublicUploadObjects(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || entry.name.endsWith(".meta.json")) {
+      continue;
+    }
+
+    const relativePath = path.relative(localUploadsPublicDir, fullPath);
+    if (!relativePath || relativePath.startsWith("..")) {
+      continue;
+    }
+
+    const key = relativePath.split(path.sep).join("/");
+    const fileStat = await stat(fullPath).catch(() => null);
+    objects.push({ key, modifiedAt: fileStat?.mtimeMs ?? 0 });
+  }
+
+  return objects;
+}
+
+function normalizeStoragePrefix(prefix: string): string {
+  const normalized = normalizeStorageKey(prefix);
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+export async function listPublicUploadStorageObjects(
+  prefixes: readonly string[] = [],
+): Promise<PublicUploadStorageObject[]> {
+  const config = getConfig();
+  const normalizedPrefixes = prefixes.map(normalizeStoragePrefix);
+
+  if (!hasRequiredS3Config(config) || !config.bucket) {
+    const objects = await listLocalPublicUploadObjects();
+    return normalizedPrefixes.length === 0
+      ? objects
+      : objects.filter((item) => normalizedPrefixes.some((prefix) => item.key.startsWith(prefix)));
+  }
+
+  const client = createClient(config);
+  const objects: PublicUploadStorageObject[] = [];
+  const prefixesToScan = normalizedPrefixes.length > 0 ? normalizedPrefixes : [undefined];
+
+  for (const prefix of prefixesToScan) {
+    let continuationToken: string | undefined;
+
+    do {
+      const response = await client.send(
+        new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      for (const item of response.Contents ?? []) {
+        if (!item.Key || item.Key.endsWith(".meta.json")) {
+          continue;
+        }
+
+        try {
+          objects.push({
+            key: normalizeStorageKey(item.Key),
+            modifiedAt: item.LastModified?.getTime() ?? 0,
+          });
+        } catch {
+          // Ignore invalid legacy object keys.
+        }
+      }
+
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+  }
+
+  return objects;
 }
 
 export async function uploadToStorage(input: UploadInput): Promise<UploadResult> {

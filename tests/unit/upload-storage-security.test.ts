@@ -8,6 +8,7 @@ import {
   createRateLimiter,
   RateLimitConfigurationError,
 } from "../../src/lib/rate-limit";
+import { collectPublicStorageKeysFromUnknown } from "../../src/lib/storage-cleanup";
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL;
@@ -85,6 +86,28 @@ describe("storage key normalization", () => {
     expect(normalizeStorageKey("\\avatars\\user-1\\photo.webp")).toBe(
       "avatars/user-1/photo.webp",
     );
+  });
+});
+
+describe("unused upload cleanup helpers", () => {
+  it("collects managed upload keys from nested draft and snapshot data", () => {
+    const keys = new Set<string>();
+
+    collectPublicStorageKeysFromUnknown(
+      {
+        media: [
+          { url: "/uploads/properties/property-1/photo.webp" },
+          { storageKey: "properties/property-1/rooms/room-1/photo.webp" },
+        ],
+        ignored: "https://example.com/external.webp",
+      },
+      keys,
+    );
+
+    expect([...keys].sort()).toEqual([
+      "properties/property-1/photo.webp",
+      "properties/property-1/rooms/room-1/photo.webp",
+    ]);
   });
 });
 
