@@ -403,6 +403,7 @@ const roomMetaSchema = z
       .trim()
       .min(2, "Название номера должно содержать минимум 2 символа")
       .max(120, "Название номера слишком длинное"),
+    floor: z.number().int().min(1).max(99).nullable(),
     nameInExtranet: z.string().trim().max(120, "Название в экстранете слишком длинное").nullable(),
     bedConfiguration: z
       .array(
@@ -606,7 +607,8 @@ const roomBaseSchema = z
     areaSqm: z
       .number()
       .min(5, "Площадь номера должна быть не меньше 5 м²")
-      .max(5000, "Площадь номера не должна превышать 5000 м²"),
+      .max(5000, "Площадь номера не должна превышать 5000 м²")
+      .nullable(),
     bathroomType: z.nativeEnum(BathroomType),
     featureIds: z.array(z.string().trim().min(1)).max(80),
     customFeatures: z

@@ -20,6 +20,7 @@ function makeBaseRoomPayload(): RoomPayload {
     meta: {
       roomType: "double_two_beds" as const,
       roomName: "Двухместный номер с 2 отдельными кроватями",
+      floor: 2,
       nameInExtranet: null,
       bedConfiguration: [{ type: "single" as const, count: 2 }],
       bedSets: [[{ type: "single" as const, count: 2 }]],
@@ -124,6 +125,16 @@ describe("room schema bed logic", () => {
             ],
           ],
         },
+      }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts draft rooms without area before the owner fills it manually", () => {
+    const result = createRoomSchema.safeParse(
+      makeRoomPayload({
+        areaSqm: null,
       }),
     );
 

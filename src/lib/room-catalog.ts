@@ -521,6 +521,7 @@ export type BathroomToiletId = (typeof bathroomToiletOptions)[number]["id"];
 export type RoomMeta = {
   roomType: RoomTypeId;
   roomName: string;
+  floor: number | null;
   nameInExtranet: string | null;
   bedConfiguration: RoomBedConfiguration[];
   bedSets: RoomBedConfiguration[][];
@@ -540,6 +541,7 @@ export const defaultRoomTypeId: RoomTypeId = "double_one_bed";
 export const defaultRoomMeta: RoomMeta = {
   roomType: defaultRoomTypeId,
   roomName: roomNameSuggestionsByType[defaultRoomTypeId][0] ?? "Двухместный номер с 1 кроватью",
+  floor: null,
   nameInExtranet: null,
   bedConfiguration: [],
   bedSets: [],
@@ -652,6 +654,10 @@ export function normalizeRoomMeta(value: unknown): RoomMeta | null {
     typeof value.nameInExtranet === "string" && value.nameInExtranet.trim().length > 0
       ? value.nameInExtranet.trim().slice(0, 120)
       : null;
+  const normalizedFloor =
+    typeof value.floor === "number" && Number.isInteger(value.floor)
+      ? Math.min(99, Math.max(1, value.floor))
+      : null;
 
   const bedConfiguration = normalizeBedConfiguration(value.bedConfiguration, bedTypeIds);
   const parsedBedSets = Array.isArray(value.bedSets)
@@ -692,6 +698,7 @@ export function normalizeRoomMeta(value: unknown): RoomMeta | null {
   return {
     roomType,
     roomName: normalizedRoomName,
+    floor: normalizedFloor,
     nameInExtranet: normalizedNameInExtranet,
     bedConfiguration: primaryBedConfiguration,
     bedSets,

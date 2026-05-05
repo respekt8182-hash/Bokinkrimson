@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { SeaToggle } from "@/components/ui/sea-toggle";
 import { cn } from "@/lib/cn";
 import { mediaLimits } from "@/lib/constants";
-import { normalizeRoomTitle } from "@/lib/room-title";
+import { joinRoomTitleParts, normalizeRoomTitle } from "@/lib/room-title";
 import {
   additionalPlaceTypeOptions,
   bathroomLocationOptions,
@@ -85,8 +85,6 @@ const MAX_TOTAL_GUESTS = 20;
 const DEFAULT_BED_TYPE: BedTypeId = "double_queen";
 const MOBILE_ROOMS_PAGE_SIZE = 4;
 const DESKTOP_ROOMS_PAGE_SIZE = 5;
-const AUTO_CREATED_ROOM_AREA_SQM = 20;
-
 function toFloatOrNull(value: string): number | null {
   const normalized = value.replace(",", ".").trim();
   if (!normalized) {
@@ -94,6 +92,15 @@ function toFloatOrNull(value: string): number | null {
   }
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toIntOrNull(value: string): number | null {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isInteger(parsed) ? parsed : null;
 }
 
 function formatAreaSqmForTitle(areaSqm: number): string {
@@ -130,9 +137,16 @@ function formatPlacesLabel(value: number): string {
   return `${places} мест`;
 }
 
-function buildRoomTitle(roomName: string): string {
+function formatFloorLabel(floor: number): string {
+  return `${floor} этаж`;
+}
+
+function buildRoomTitle(roomName: string, floor: number | null = null): string {
   const normalizedRoomName = normalizeRoomTitle(roomName);
-  return normalizedRoomName.slice(0, 120);
+  return joinRoomTitleParts(
+    [normalizedRoomName, typeof floor === "number" ? formatFloorLabel(floor) : null],
+    " · ",
+  ).slice(0, 120);
 }
 
 function buildAutoCreatedRoomPayload() {
@@ -150,7 +164,7 @@ function buildAutoCreatedRoomPayload() {
     beds: initialBeds,
     extraBeds: 0,
     roomsCount: 1,
-    areaSqm: AUTO_CREATED_ROOM_AREA_SQM,
+    areaSqm: null,
     bathroomType: "IN_ROOM",
     featureIds: [],
     customFeatures: [],
@@ -158,6 +172,7 @@ function buildAutoCreatedRoomPayload() {
       ...defaultRoomMeta,
       roomType,
       roomName,
+      floor: null,
       nameInExtranet: null,
       bedConfiguration,
       bedSets: initialBedSetsMeta,
@@ -310,6 +325,7 @@ function getLegacyMeta(room: SerializedRoom): RoomMeta {
   return {
     ...defaultRoomMeta,
     roomName: room.title,
+    floor: null,
     nameInExtranet: room.title,
     bedConfiguration: legacyBedConfiguration,
     bedSets: [legacyBedConfiguration],
@@ -361,6 +377,7 @@ export function RoomFundManager({
   const [roomType, setRoomType] = useState<RoomTypeId>(defaultRoomMeta.roomType);
   const [selectedRoomName, setSelectedRoomName] = useState(defaultRoomMeta.roomName);
   const [customRoomName, setCustomRoomName] = useState("");
+  const [floorInput, setFloorInput] = useState("");
   const [nameInExtranet, setNameInExtranet] = useState("");
   const [beds, setBeds] = useState(() => resolveMainPlacesForRoomType(defaultRoomMeta.roomType));
   const [extraBeds, setExtraBeds] = useState(0);
@@ -493,6 +510,14 @@ export function RoomFundManager({
       setHasAdditionalPlaces(true);
     }
   }, [extraBeds, hasAdditionalPlaces]);
+  const parsedFloor = useMemo(() => toIntOrNull(floorInput), [floorInput]);
+  const isFloorValid = parsedFloor !== null && parsedFloor >= 1 && parsedFloor <= 99;
+  const floorErrorText =
+    floorInput.trim().length === 0
+      ? "Укажите этаж, на котором расположен номер."
+      : parsedFloor !== null && !isFloorValid
+        ? "Введите этаж от 1 до 99."
+        : "";
   const parsedAreaSqm = useMemo(() => toFloatOrNull(areaSqmInput), [areaSqmInput]);
   const isAreaSqmValid = parsedAreaSqm !== null && parsedAreaSqm >= 5 && parsedAreaSqm <= 5000;
   const areaSqmErrorText =
@@ -505,14 +530,19 @@ export function RoomFundManager({
     () => (editingRoomId ? (rooms.find((room) => room.id === editingRoomId) ?? null) : null),
     [editingRoomId, rooms],
   );
-  const canSaveRoom = Boolean(editingRoomId) && !isCreatingRoom && !isSaving && isAreaSqmValid;
+  const canSaveRoom =
+    Boolean(editingRoomId) && !isCreatingRoom && !isSaving && isFloorValid && isAreaSqmValid;
   const checklistItems = useMemo<
     Array<{ id: RoomEditorSectionId; label: string; done: boolean }>
   >(() => {
     const roomName = getRoomNameFromState(selectedRoomName, customRoomName);
+    const roomFloor = toIntOrNull(floorInput);
     const areaSqm = toFloatOrNull(areaSqmInput);
+    const floorIsValid = roomFloor !== null && roomFloor >= 1 && roomFloor <= 99;
     const areaSqmIsValid = areaSqm !== null && areaSqm >= 5 && areaSqm <= 5000;
-    const generalSettingsDone = Boolean(roomType && roomName.length > 0 && areaSqmIsValid);
+    const generalSettingsDone = Boolean(
+      roomType && roomName.length > 0 && floorIsValid && areaSqmIsValid,
+    );
     const capacityDone =
       beds >= 1 &&
       extraBeds >= 0 &&
@@ -553,6 +583,7 @@ export function RoomFundManager({
     customRoomName,
     editingRoom,
     extraBeds,
+    floorInput,
     maxExtraBedsByTotalGuests,
     hasAdditionalPlaces,
     hasCapacityMismatch,
@@ -713,6 +744,7 @@ export function RoomFundManager({
     setRoomType(defaultRoomMeta.roomType);
     setSelectedRoomName(defaultRoomMeta.roomName);
     setCustomRoomName("");
+    setFloorInput("");
     setNameInExtranet("");
     setBeds(resolveMainPlacesForRoomType(defaultRoomMeta.roomType));
     setExtraBeds(0);
@@ -777,22 +809,21 @@ export function RoomFundManager({
         setCustomRoomName(meta.roomName);
       }
       setNameInExtranet(meta.nameInExtranet ?? "");
+      setFloorInput(meta.floor === null ? "" : String(meta.floor));
       setBeds(resolveMainPlacesForRoomType(meta.roomType, room.beds));
       setExtraBeds(room.extraBeds);
       setAreaSqmInput(room.areaSqm === null ? "" : String(room.areaSqm));
       setBedSets(buildBedSetsFromMeta(meta, meta.roomType));
       setHasAdditionalPlaces(meta.hasAdditionalPlaces);
       setSelectedAdditionalPlaceTypes(meta.additionalPlaceTypes);
-      const hasPrivateBathroomSelected = meta.hasPrivateBathroom;
-      const hasSharedBathroomSelected = !hasPrivateBathroomSelected && meta.hasSharedBathroom;
-      setHasPrivateBathroom(hasPrivateBathroomSelected);
-      setPrivateBathroomLocations(meta.privateBathroomLocations);
-      setPrivateToiletLocations(meta.privateToiletLocations);
-      setPrivateBathroomCount(meta.privateBathroomCount ?? 1);
-      setHasSharedBathroom(hasSharedBathroomSelected);
-      setSharedBathroomLocations(meta.sharedBathroomLocations);
-      setSharedToiletLocations(meta.sharedToiletLocations);
-      setIsBathroomSectionEnabled(hasPrivateBathroomSelected || hasSharedBathroomSelected);
+      setHasPrivateBathroom(true);
+      setPrivateBathroomLocations(["in_room"]);
+      setPrivateToiletLocations(["in_bathroom"]);
+      setPrivateBathroomCount(1);
+      setHasSharedBathroom(false);
+      setSharedBathroomLocations([]);
+      setSharedToiletLocations([]);
+      setIsBathroomSectionEnabled(true);
       setError("");
       scrollToEditor();
     },
@@ -1030,18 +1061,7 @@ export function RoomFundManager({
   }
 
   function resolveBathroomType(): "IN_ROOM" | "ON_FLOOR" | "OUTSIDE" {
-    if (hasPrivateBathroom) {
-      return "IN_ROOM";
-    }
-
-    if (
-      hasSharedBathroom &&
-      (sharedBathroomLocations.includes("outside") || sharedToiletLocations.includes("outside"))
-    ) {
-      return "OUTSIDE";
-    }
-
-    return "ON_FLOOR";
+    return "IN_ROOM";
   }
 
   async function saveRoom() {
@@ -1053,7 +1073,17 @@ export function RoomFundManager({
     }
 
     const roomName = getRoomNameFromState(selectedRoomName, customRoomName);
+    const roomFloor = parsedFloor;
     const areaSqm = parsedAreaSqm;
+
+    if (roomFloor === null) {
+      setError("Укажите этаж номера");
+      return;
+    }
+    if (roomFloor < 1 || roomFloor > 99) {
+      setError("Этаж номера должен быть от 1 до 99");
+      return;
+    }
 
     if (areaSqm === null) {
       setError("Укажите площадь номера");
@@ -1064,7 +1094,7 @@ export function RoomFundManager({
       return;
     }
 
-    const title = buildRoomTitle(roomName);
+    const title = buildRoomTitle(roomName, roomFloor);
 
     if (!roomName) {
       setError("Укажите название номера");
@@ -1126,24 +1156,6 @@ export function RoomFundManager({
       return;
     }
 
-    if (!hasPrivateBathroom && !hasSharedBathroom) {
-      setError("Укажите хотя бы один вариант ванной комнаты");
-      return;
-    }
-
-    if (
-      hasPrivateBathroom &&
-      (!privateBathroomLocations.length || !privateToiletLocations.length)
-    ) {
-      setError("Для собственного санузла укажите расположение санузла и туалета");
-      return;
-    }
-
-    if (hasSharedBathroom && (!sharedBathroomLocations.length || !sharedToiletLocations.length)) {
-      setError("Для общего санузла укажите расположение санузла и туалета");
-      return;
-    }
-
     const payload = {
       title,
       beds,
@@ -1158,18 +1170,19 @@ export function RoomFundManager({
       meta: {
         roomType,
         roomName,
+        floor: roomFloor,
         nameInExtranet: nameInExtranet.trim() ? nameInExtranet.trim() : null,
         bedConfiguration,
         bedSets: bedSetsMeta,
         hasAdditionalPlaces,
         additionalPlaceTypes: hasAdditionalPlaces ? selectedAdditionalPlaceTypes : [],
-        hasPrivateBathroom,
-        privateBathroomLocations: hasPrivateBathroom ? privateBathroomLocations : [],
-        privateToiletLocations: hasPrivateBathroom ? privateToiletLocations : [],
-        hasSharedBathroom,
-        sharedBathroomLocations: hasSharedBathroom ? sharedBathroomLocations : [],
-        sharedToiletLocations: hasSharedBathroom ? sharedToiletLocations : [],
-        privateBathroomCount: hasPrivateBathroom ? privateBathroomCount : null,
+        hasPrivateBathroom: true,
+        privateBathroomLocations: ["in_room"],
+        privateToiletLocations: ["in_bathroom"],
+        hasSharedBathroom: false,
+        sharedBathroomLocations: [],
+        sharedToiletLocations: [],
+        privateBathroomCount: 1,
       },
     };
 
@@ -1227,7 +1240,9 @@ export function RoomFundManager({
   function getRoomCardDetails(room: SerializedRoom, roomMeta: RoomMeta): RoomCardDetails {
     const normalizedRoomName = normalizeRoomTitle(roomMeta.roomName);
     const normalizedFallbackTitle = normalizeRoomTitle(room.title);
-    const baseTitle = normalizedRoomName || normalizedFallbackTitle || "Номер";
+    const baseTitle =
+      buildRoomTitle(normalizedRoomName || normalizedFallbackTitle || "Номер", roomMeta.floor) ||
+      "Номер";
     const areaTitle = room.areaSqm === null ? null : `${formatAreaSqmForTitle(room.areaSqm)} м²`;
     const title = areaTitle ? `${baseTitle} · ${areaTitle}` : baseTitle;
     const primaryBedUnits = resolvePrimaryBedUnits(room, roomMeta);
@@ -1355,6 +1370,30 @@ export function RoomFundManager({
                       placeholder="Например, Номер 12 у окна"
                       className="text-base"
                     />
+                  </label>
+
+                  <label className="block min-w-0 space-y-1.5">
+                    <span className="text-sm font-semibold text-olive">Этаж</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={99}
+                      step="1"
+                      value={floorInput}
+                      onChange={(event) => setFloorInput(event.target.value)}
+                      placeholder="Например, 2"
+                      className={cn(
+                        "text-base",
+                        floorErrorText
+                          ? "border-red-300 focus:border-red-400 focus:ring-red-200"
+                          : "",
+                      )}
+                      required
+                      aria-invalid={floorErrorText ? true : undefined}
+                    />
+                    {floorErrorText ? (
+                      <span className="text-sm text-red-600">{floorErrorText}</span>
+                    ) : null}
                   </label>
 
                   <div
@@ -1732,19 +1771,8 @@ export function RoomFundManager({
                       </p>
                     </div>
                     <SeaToggle
-                      pressed={isBathroomSectionEnabled}
-                      onPressedChange={(nextEnabled) => {
-                        setIsBathroomSectionEnabled(nextEnabled);
-                        if (!nextEnabled) {
-                          setHasPrivateBathroom(false);
-                          setPrivateBathroomLocations([]);
-                          setPrivateToiletLocations([]);
-                          setPrivateBathroomCount(1);
-                          setHasSharedBathroom(false);
-                          setSharedBathroomLocations([]);
-                          setSharedToiletLocations([]);
-                        }
-                      }}
+                      pressed
+                      onPressedChange={() => {}}
                       aria-label={
                         isBathroomSectionEnabled
                           ? "Отключить ванную комнату"
