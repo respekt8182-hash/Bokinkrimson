@@ -55,6 +55,7 @@ type ChessboardMonthSegment = {
 };
 
 type GroupedRoomBucket = {
+  key: string;
   groupLabel: string;
   items: SerializedChessboardRoom[];
 };
@@ -107,6 +108,13 @@ type PriceFormState = {
   editingPriceId: string | null;
 };
 
+type DuplicatePricesFormState = {
+  sourceRoomId: string;
+  targetRoomIds: string[];
+  dateFrom: string;
+  dateTo: string;
+};
+
 const dayLabels = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
 const monthLabels = [
   "Январь",
@@ -123,6 +131,7 @@ const monthLabels = [
   "Декабрь",
 ] as const;
 const minVisibleDaysCount = 28;
+const maxBoardRangeDaysCount = 370;
 const mobileRoomsPerPage = 3;
 const dayCellWidthDesktopPx = 44;
 const dayCellWidthTabletPx = 42;
@@ -215,6 +224,14 @@ function getOccupancyBarClasses(status: "CONFIRMED" | "CHECKED_IN", color: strin
 
 function compareIsoDates(left: string, right: string): number {
   return left.localeCompare(right);
+}
+
+function maxIsoDate(left: string, right: string): string {
+  return compareIsoDates(left, right) >= 0 ? left : right;
+}
+
+function minIsoDate(left: string, right: string): string {
+  return compareIsoDates(left, right) <= 0 ? left : right;
 }
 
 function normalizeIsoRange(startIso: string, endIso: string): { dateFrom: string; dateTo: string } {
@@ -338,6 +355,44 @@ function getLocalTodayIso(): string {
   return `${year}-${month}-${day}`;
 }
 
+function addDaysToIsoDate(dateIso: string, days: number): string {
+  const parsed = parseIsoDate(dateIso);
+  if (!parsed) {
+    return dateIso;
+  }
+
+  return toIsoDate(addDays(parsed, days));
+}
+
+function getInclusiveDateRangeDays(dateFromIso: string, dateToIso: string): number {
+  const dateFrom = parseIsoDate(dateFromIso);
+  const dateTo = parseIsoDate(dateToIso);
+  if (!dateFrom || !dateTo || dateTo < dateFrom) {
+    return 0;
+  }
+
+  return Math.floor((dateTo.getTime() - dateFrom.getTime()) / 86400000) + 1;
+}
+
+function getDefaultPeriodEndIso(dateFromIso: string): string {
+  return addDaysToIsoDate(dateFromIso, minVisibleDaysCount - 1);
+}
+
+function clampPeriodEndIso(
+  dateFromIso: string,
+  dateToIso: string,
+): { dateToIso: string; wasClamped: boolean } {
+  const daysCount = getInclusiveDateRangeDays(dateFromIso, dateToIso);
+  if (daysCount <= maxBoardRangeDaysCount) {
+    return { dateToIso, wasClamped: false };
+  }
+
+  return {
+    dateToIso: addDaysToIsoDate(dateFromIso, maxBoardRangeDaysCount - 1),
+    wasClamped: true,
+  };
+}
+
 function getStayNights(dateFromIso: string, dateToIso: string): number {
   const dateFrom = parseIsoDate(dateFromIso);
   const dateTo = parseIsoDate(dateToIso);
@@ -416,7 +471,8 @@ function formatGuestPartyLabel(adults: number, children: number): string {
 function getBookingColorLabel(color: string | null | undefined): string {
   const normalized = normalizeBookingColor(color);
   return (
-    bookingColorOptions.find((option) => option.id === normalized)?.label ?? bookingColorOptions[0].label
+    bookingColorOptions.find((option) => option.id === normalized)?.label ??
+    bookingColorOptions[0].label
   );
 }
 
@@ -555,6 +611,102 @@ function buildCompactPreviewLabel(value: string, maxLetters = 3): string {
     .toUpperCase();
 }
 
+function normalizeRoomSortText(value: string): string {
+  return value.toLowerCase().replace(/ё/g, "е");
+}
+
+function extractFloorNumber(title: string): number | null {
+  const normalized = normalizeRoomSortText(title);
+  const match = normalized.match(/(^|[^\d])(\d{1,3})\s*(?:-?\s*)?(?:этаж|эт\.?)/iu);
+  if (!match?.[2]) {
+    return null;
+  }
+
+  const floor = Number.parseInt(match[2], 10);
+  return Number.isFinite(floor) ? floor : null;
+}
+
+function extractExplicitRoomNumber(title: string): number | null {
+  const normalized = normalizeRoomSortText(title);
+  const patterns = [
+    /(?:№|#|n\s*|номер\s+|комната\s+|апартаменты\s+)(\d{1,4})/iu,
+    /^(\d{1,4})(?=\s|$|[.,:;/-])/iu,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    const rawNumber = match?.[1];
+    if (!rawNumber) {
+      continue;
+    }
+
+    const roomNumber = Number.parseInt(rawNumber, 10);
+    if (Number.isFinite(roomNumber)) {
+      return roomNumber;
+    }
+  }
+
+  return null;
+}
+
+function compareNullableNumbers(
+  left: number | null,
+  right: number | null,
+  direction: "asc" | "desc",
+): number {
+  if (left === null && right === null) {
+    return 0;
+  }
+  if (left === null) {
+    return 1;
+  }
+  if (right === null) {
+    return -1;
+  }
+
+  return direction === "asc" ? left - right : right - left;
+}
+
+function compareRoomsForChessboard(
+  left: SerializedChessboardRoom,
+  right: SerializedChessboardRoom,
+): number {
+  const floorComparison = compareNullableNumbers(
+    extractFloorNumber(left.title),
+    extractFloorNumber(right.title),
+    "asc",
+  );
+  if (floorComparison !== 0) {
+    return floorComparison;
+  }
+
+  const explicitRoomNumberComparison = compareNullableNumbers(
+    extractExplicitRoomNumber(left.title),
+    extractExplicitRoomNumber(right.title),
+    "desc",
+  );
+  if (explicitRoomNumberComparison !== 0) {
+    return explicitRoomNumberComparison;
+  }
+
+  const leftCapacity = left.beds + left.extraBeds;
+  const rightCapacity = right.beds + right.extraBeds;
+  if (leftCapacity !== rightCapacity) {
+    return rightCapacity - leftCapacity;
+  }
+
+  const leftArea = left.areaSqm ?? 0;
+  const rightArea = right.areaSqm ?? 0;
+  if (leftArea !== rightArea) {
+    return rightArea - leftArea;
+  }
+
+  return left.title.localeCompare(right.title, "ru", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function addGroupOffsets(groups: GroupedRoomBucket[]): GroupedRoomBucketWithOffset[] {
   let offset = 0;
 
@@ -635,16 +787,22 @@ export function PropertyChessboardWorkspace({
   avoidDashboardBottomNav = false,
 }: PropertyChessboardWorkspaceProps) {
   const initialTodayIso = useMemo(() => getLocalTodayIso(), []);
+  const initialPeriodEndIso = useMemo(
+    () => getDefaultPeriodEndIso(initialTodayIso),
+    [initialTodayIso],
+  );
   // UI state (menus/modals), dataset state (rooms/occupancies), and edit forms live together
   // because all calendar interactions need synchronized updates.
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     initialPropertyId ?? properties[0]?.id ?? null,
   );
   const [periodStartIso, setPeriodStartIso] = useState(initialTodayIso);
+  const [periodEndIso, setPeriodEndIso] = useState(initialPeriodEndIso);
   const [boardMode, setBoardMode] = useState<BoardMode>("occupancy");
   const [isObjectMenuOpen, setIsObjectMenuOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [isDuplicatePricesModalOpen, setIsDuplicatePricesModalOpen] = useState(false);
   const [isOccupancyActionsOpen, setIsOccupancyActionsOpen] = useState(false);
   const [rooms, setRooms] = useState<SerializedChessboardRoom[]>([]);
   const [occupanciesByRoom, setOccupanciesByRoom] = useState<
@@ -659,12 +817,17 @@ export function PropertyChessboardWorkspace({
   const [bookingModalError, setBookingModalError] = useState("");
   const [occupancyActionsError, setOccupancyActionsError] = useState("");
   const [priceModalError, setPriceModalError] = useState("");
+  const [duplicatePricesError, setDuplicatePricesError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [bookingForm, setBookingForm] = useState<BookingFormState | null>(null);
   const [activeOccupancy, setActiveOccupancy] = useState<SerializedRoomOccupancy | null>(null);
   const [priceForm, setPriceForm] = useState<PriceFormState | null>(null);
+  const [duplicatePricesForm, setDuplicatePricesForm] = useState<DuplicatePricesFormState | null>(
+    null,
+  );
   const [dragSelection, setDragSelection] = useState<DragSelectionState | null>(null);
   const [isSavingOccupancyAction, setIsSavingOccupancyAction] = useState(false);
+  const [isDuplicatingPrices, setIsDuplicatingPrices] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const [mobileRoomPage, setMobileRoomPage] = useState(0);
@@ -730,14 +893,23 @@ export function PropertyChessboardWorkspace({
     }
 
     const hasOpenInteraction =
-      isBookingModalOpen || isPriceModalOpen || isOccupancyActionsOpen;
+      isBookingModalOpen ||
+      isPriceModalOpen ||
+      isDuplicatePricesModalOpen ||
+      isOccupancyActionsOpen;
 
     document.body.classList.toggle("dashboard-interaction-open", hasOpenInteraction);
 
     return () => {
       document.body.classList.remove("dashboard-interaction-open");
     };
-  }, [avoidDashboardBottomNav, isBookingModalOpen, isOccupancyActionsOpen, isPriceModalOpen]);
+  }, [
+    avoidDashboardBottomNav,
+    isBookingModalOpen,
+    isDuplicatePricesModalOpen,
+    isOccupancyActionsOpen,
+    isPriceModalOpen,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -755,8 +927,7 @@ export function PropertyChessboardWorkspace({
 
     function syncVisibleDaysCount() {
       const styles = window.getComputedStyle(scrollerElement);
-      const sidebarWidthPx =
-        Number.parseFloat(styles.getPropertyValue("--cb-sidebar-w")) || 0;
+      const sidebarWidthPx = Number.parseFloat(styles.getPropertyValue("--cb-sidebar-w")) || 0;
       const resolvedCellWidthPx =
         Number.parseFloat(styles.getPropertyValue("--cb-cell-w")) || dayCellWidthPx;
 
@@ -799,7 +970,7 @@ export function PropertyChessboardWorkspace({
 
   useEffect(() => {
     setDragSelection(null);
-  }, [boardMode, selectedPropertyId, periodStartIso]);
+  }, [boardMode, selectedPropertyId, periodEndIso, periodStartIso]);
 
   const openModalFromSelection = useCallback(
     (selection: DragSelectionState) => {
@@ -864,9 +1035,13 @@ export function PropertyChessboardWorkspace({
     };
   }, [dragSelection, isCoarsePointer, openModalFromSelection]);
 
+  const periodDaysCount = useMemo(() => {
+    const daysCount = getInclusiveDateRangeDays(periodStartIso, periodEndIso);
+    return Math.min(Math.max(1, daysCount || minVisibleDaysCount), maxBoardRangeDaysCount);
+  }, [periodEndIso, periodStartIso]);
   const visibleDays = useMemo(
-    () => buildVisibleDays(periodStartIso, visibleDaysCount),
-    [periodStartIso, visibleDaysCount],
+    () => buildVisibleDays(periodStartIso, periodDaysCount),
+    [periodDaysCount, periodStartIso],
   );
   const periodHeaderLabel = useMemo(() => formatPeriodHeader(visibleDays), [visibleDays]);
   const visibleMonthSegments = useMemo(() => buildMonthSegments(visibleDays), [visibleDays]);
@@ -886,21 +1061,10 @@ export function PropertyChessboardWorkspace({
   }, [dragSelection]);
 
   const groupedRooms = useMemo<GroupedRoomBucket[]>(() => {
-    const normalizedRooms = [...rooms].sort((left, right) =>
-      left.title.localeCompare(right.title, "ru"),
-    );
-    const grouped = new Map<string, SerializedChessboardRoom[]>();
-
-    for (const room of normalizedRooms) {
-      const key = `Категория: ${room.bathroomTypeLabel}`;
-      const list = grouped.get(key) ?? [];
-      list.push(room);
-      grouped.set(key, list);
-    }
-
-    return Array.from(grouped.entries()).map(([groupLabel, items]) => ({
-      groupLabel,
-      items,
+    return [...rooms].sort(compareRoomsForChessboard).map((room) => ({
+      key: `room:${room.id}`,
+      groupLabel: `Категория: ${room.bathroomTypeLabel}`,
+      items: [room],
     }));
   }, [rooms]);
 
@@ -927,17 +1091,11 @@ export function PropertyChessboardWorkspace({
 
     const start = mobileRoomPage * mobileRoomsPerPage;
     const slice = roomPagerEntries.slice(start, start + mobileRoomsPerPage);
-    const regrouped = new Map<string, SerializedChessboardRoom[]>();
 
-    for (const entry of slice) {
-      const list = regrouped.get(entry.groupLabel) ?? [];
-      list.push(entry.room);
-      regrouped.set(entry.groupLabel, list);
-    }
-
-    return Array.from(regrouped.entries()).map(([groupLabel, items]) => ({
-      groupLabel,
-      items,
+    return slice.map((entry) => ({
+      key: `mobile:${entry.room.id}`,
+      groupLabel: entry.groupLabel,
+      items: [entry.room],
     }));
   }, [groupedRooms, isMobilePortrait, mobileRoomPage, roomPagerEntries]);
 
@@ -1030,7 +1188,7 @@ export function PropertyChessboardWorkspace({
 
   useEffect(() => {
     setExpandedMobileRailKey(null);
-  }, [boardMode, mobileRoomPage, periodStartIso, selectedPropertyId]);
+  }, [boardMode, mobileRoomPage, periodEndIso, periodStartIso, selectedPropertyId]);
 
   useEffect(() => {
     if (!isBookingModalOpen || !bookingForm?.roomId) {
@@ -1230,6 +1388,74 @@ export function PropertyChessboardWorkspace({
     setPriceForm((prev) => (prev ? { ...prev, ...patch } : prev));
   }
 
+  function openDuplicatePricesModal() {
+    const sourceRoomId = rooms[0]?.id ?? "";
+    setDuplicatePricesForm({
+      sourceRoomId,
+      targetRoomIds: rooms.filter((room) => room.id !== sourceRoomId).map((room) => room.id),
+      dateFrom: periodFromIso,
+      dateTo: periodToIso,
+    });
+    setDuplicatePricesError("");
+    setIsDuplicatePricesModalOpen(true);
+  }
+
+  function closeDuplicatePricesModal() {
+    setIsDuplicatePricesModalOpen(false);
+    setDuplicatePricesForm(null);
+    setDuplicatePricesError("");
+  }
+
+  function updateDuplicatePricesForm(patch: Partial<DuplicatePricesFormState>) {
+    setDuplicatePricesForm((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
+  function updateDuplicateSourceRoom(roomId: string) {
+    setDuplicatePricesForm((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        sourceRoomId: roomId,
+        targetRoomIds: prev.targetRoomIds.filter((targetRoomId) => targetRoomId !== roomId),
+      };
+    });
+  }
+
+  function toggleDuplicateTargetRoom(roomId: string) {
+    setDuplicatePricesForm((prev) => {
+      if (!prev || prev.sourceRoomId === roomId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        targetRoomIds: prev.targetRoomIds.includes(roomId)
+          ? prev.targetRoomIds.filter((targetRoomId) => targetRoomId !== roomId)
+          : [...prev.targetRoomIds, roomId],
+      };
+    });
+  }
+
+  function selectAllDuplicateTargetRooms() {
+    setDuplicatePricesForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            targetRoomIds: rooms
+              .filter((room) => room.id !== prev.sourceRoomId)
+              .map((room) => room.id),
+          }
+        : prev,
+    );
+  }
+
+  function clearDuplicateTargetRooms() {
+    updateDuplicatePricesForm({ targetRoomIds: [] });
+  }
+
   function beginDragSelection(roomId: string, dayIso: string) {
     setExpandedMobileRailKey(null);
     setDragSelection({
@@ -1261,10 +1487,47 @@ export function PropertyChessboardWorkspace({
     });
   }
 
-  function jumpToDate(dateIso: string) {
-    setPeriodStartIso(dateIso);
+  function applyBoardPeriodRange(dateFromIso: string, dateToIso: string) {
+    if (!parseIsoDate(dateFromIso) || !parseIsoDate(dateToIso)) {
+      return;
+    }
+
+    const normalizedDateTo = compareIsoDates(dateToIso, dateFromIso) < 0 ? dateFromIso : dateToIso;
+    const clamped = clampPeriodEndIso(dateFromIso, normalizedDateTo);
+
+    if (clamped.wasClamped) {
+      setMessageError(`Диапазон шахматки ограничен ${maxBoardRangeDaysCount} днями`);
+    }
+
+    setPeriodStartIso(dateFromIso);
+    setPeriodEndIso(clamped.dateToIso);
     setDragSelection(null);
     scrollBoardToPeriodStart();
+  }
+
+  function updatePeriodStart(nextStartIso: string) {
+    if (!parseIsoDate(nextStartIso)) {
+      return;
+    }
+
+    const nextEndIso =
+      compareIsoDates(nextStartIso, periodEndIso) > 0 ? nextStartIso : periodEndIso;
+    applyBoardPeriodRange(nextStartIso, nextEndIso);
+  }
+
+  function updatePeriodEnd(nextEndIso: string) {
+    if (!parseIsoDate(nextEndIso)) {
+      return;
+    }
+
+    const nextStartIso =
+      compareIsoDates(nextEndIso, periodStartIso) < 0 ? nextEndIso : periodStartIso;
+    applyBoardPeriodRange(nextStartIso, nextEndIso);
+  }
+
+  function jumpToDate(dateIso: string) {
+    const nextRangeLength = Math.max(1, periodDaysCount || visibleDaysCount);
+    applyBoardPeriodRange(dateIso, addDaysToIsoDate(dateIso, nextRangeLength - 1));
   }
 
   function shiftVisiblePeriod(days: number) {
@@ -1272,8 +1535,9 @@ export function PropertyChessboardWorkspace({
     if (!parsed) {
       return;
     }
-    const next = toIsoDate(addDays(parsed, days));
-    jumpToDate(next);
+    const nextStartIso = toIsoDate(addDays(parsed, days));
+    const nextEndIso = addDaysToIsoDate(periodEndIso, days);
+    applyBoardPeriodRange(nextStartIso, nextEndIso);
   }
 
   const showFloatingQuickAdd = isCoarsePointer && rooms.length > 0;
@@ -1635,6 +1899,122 @@ export function PropertyChessboardWorkspace({
     }
   }
 
+  async function duplicatePricePeriods() {
+    if (!selectedPropertyId || !duplicatePricesForm) {
+      return;
+    }
+
+    const sourceRoom = roomLookupById.get(duplicatePricesForm.sourceRoomId) ?? null;
+    if (!sourceRoom) {
+      setDuplicatePricesError("Выберите номер, из которого нужно копировать цены");
+      return;
+    }
+
+    const dateFrom = parseIsoDate(duplicatePricesForm.dateFrom);
+    const dateTo = parseIsoDate(duplicatePricesForm.dateTo);
+
+    if (!dateFrom || !dateTo || dateTo < dateFrom) {
+      setDuplicatePricesError("Проверьте диапазон: дата окончания не может быть раньше начала");
+      return;
+    }
+
+    const targetRoomIds = duplicatePricesForm.targetRoomIds.filter(
+      (roomId) => roomId !== duplicatePricesForm.sourceRoomId && roomLookupById.has(roomId),
+    );
+
+    if (targetRoomIds.length === 0) {
+      setDuplicatePricesError("Выберите хотя бы один номер, куда копировать цены");
+      return;
+    }
+
+    const periodsToCopy = sourceRoom.prices
+      .filter(
+        (price) =>
+          compareIsoDates(price.dateFrom, duplicatePricesForm.dateTo) <= 0 &&
+          compareIsoDates(price.dateTo, duplicatePricesForm.dateFrom) >= 0,
+      )
+      .map((price) => ({
+        dateFrom: maxIsoDate(price.dateFrom, duplicatePricesForm.dateFrom),
+        dateTo: minIsoDate(price.dateTo, duplicatePricesForm.dateTo),
+        price: price.price,
+        minGuests: price.minGuests,
+        currency: price.currency,
+      }));
+
+    if (periodsToCopy.length === 0) {
+      setDuplicatePricesError("В выбранном диапазоне у исходного номера нет цен для копирования");
+      return;
+    }
+
+    setIsDuplicatingPrices(true);
+    setDuplicatePricesError("");
+
+    try {
+      const requests = targetRoomIds.flatMap((targetRoomId) =>
+        periodsToCopy.map((period) => ({
+          targetRoomId,
+          targetRoom: roomLookupById.get(targetRoomId),
+          period,
+        })),
+      );
+
+      const results = await Promise.all(
+        requests.map(async ({ targetRoomId, targetRoom, period }) => {
+          const response = await fetch(
+            `/api/properties/${selectedPropertyId}/rooms/${targetRoomId}/prices`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(period),
+            },
+          );
+
+          let body: unknown = {};
+          try {
+            body = await response.json();
+          } catch {
+            body = {};
+          }
+
+          return {
+            ok: response.ok,
+            roomTitle: targetRoom?.title ?? "Номер",
+            periodLabel: formatDateRangeLabel(period.dateFrom, period.dateTo),
+            error: readResponseError(body, "Не удалось создать период цены"),
+          };
+        }),
+      );
+
+      const failures = results.filter((result) => !result.ok);
+      const copiedCount = results.length - failures.length;
+
+      await refreshRooms();
+
+      if (failures.length > 0) {
+        const failurePreview = failures
+          .slice(0, 4)
+          .map((failure) => `${failure.roomTitle}, ${failure.periodLabel}: ${failure.error}`)
+          .join("; ");
+        setDuplicatePricesError(
+          copiedCount > 0
+            ? `Часть цен скопирована (${copiedCount}), но есть конфликты: ${failurePreview}`
+            : `Цены не скопированы: ${failurePreview}`,
+        );
+        return;
+      }
+
+      setMessageSuccess(
+        `Цены скопированы: ${periodsToCopy.length} периодов в ${targetRoomIds.length} номеров`,
+      );
+      setMessageError("");
+      closeDuplicatePricesModal();
+    } catch {
+      setDuplicatePricesError("Не удалось продублировать цены");
+    } finally {
+      setIsDuplicatingPrices(false);
+    }
+  }
+
   const selectedBookingRoom = bookingForm ? (roomLookupById.get(bookingForm.roomId) ?? null) : null;
   const visibleBookingRoomEntries = useMemo(
     () =>
@@ -1645,6 +2025,36 @@ export function PropertyChessboardWorkspace({
     [bookingRoomPage, roomPagerEntries],
   );
   const selectedPriceRoom = priceForm ? (roomLookupById.get(priceForm.roomId) ?? null) : null;
+  const duplicateSourceRoom = duplicatePricesForm
+    ? (roomLookupById.get(duplicatePricesForm.sourceRoomId) ?? null)
+    : null;
+  const duplicateTargetRooms = duplicatePricesForm
+    ? duplicatePricesForm.targetRoomIds
+        .map((roomId) => roomLookupById.get(roomId) ?? null)
+        .filter((room): room is SerializedChessboardRoom => room !== null)
+    : [];
+  const duplicatePricePeriodsPreview = useMemo(() => {
+    if (!duplicatePricesForm) {
+      return [];
+    }
+
+    const sourceRoom = roomLookupById.get(duplicatePricesForm.sourceRoomId);
+    if (!sourceRoom) {
+      return [];
+    }
+
+    return sourceRoom.prices
+      .filter(
+        (price) =>
+          compareIsoDates(price.dateFrom, duplicatePricesForm.dateTo) <= 0 &&
+          compareIsoDates(price.dateTo, duplicatePricesForm.dateFrom) >= 0,
+      )
+      .map((price) => ({
+        ...price,
+        dateFrom: maxIsoDate(price.dateFrom, duplicatePricesForm.dateFrom),
+        dateTo: minIsoDate(price.dateTo, duplicatePricesForm.dateTo),
+      }));
+  }, [duplicatePricesForm, roomLookupById]);
   const bookingStatusLabel = bookingForm?.status === "CHECKED_IN" ? "Заселен" : "Подтверждено";
   const bookingCreatedAtLabel = bookingForm?.createdAt
     ? new Date(bookingForm.createdAt).toLocaleString("ru-RU")
@@ -1672,7 +2082,9 @@ export function PropertyChessboardWorkspace({
   const activeOccupancyGuestsLabel = activeOccupancy
     ? formatGuestPartyLabel(activeOccupancy.adultsCount, activeOccupancy.childrenCount)
     : "—";
-  const activeOccupancyColorLabel = activeOccupancy ? getBookingColorLabel(activeOccupancy.color) : "—";
+  const activeOccupancyColorLabel = activeOccupancy
+    ? getBookingColorLabel(activeOccupancy.color)
+    : "—";
 
   return (
     <div className="chessboard-workspace space-y-2.5">
@@ -1776,13 +2188,23 @@ export function PropertyChessboardWorkspace({
                   + Бронь
                 </Button>
               ) : (
-                <Button
-                  className={cn(compactToolbarPrimaryButtonClass, "shrink-0")}
-                  onClick={() => openPriceModal()}
-                  disabled={!canManageCalendar}
-                >
-                  + Цена
-                </Button>
+                <>
+                  <Button
+                    className={cn(compactToolbarPrimaryButtonClass, "shrink-0")}
+                    onClick={() => openPriceModal()}
+                    disabled={!canManageCalendar}
+                  >
+                    + Цена
+                  </Button>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0")}
+                    onClick={openDuplicatePricesModal}
+                    disabled={!canManageCalendar || rooms.length < 2}
+                  >
+                    Дублировать цены
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1797,24 +2219,42 @@ export function PropertyChessboardWorkspace({
                   if (!parseIsoDate(nextValue)) {
                     return;
                   }
-                  jumpToDate(nextValue);
+                  updatePeriodStart(nextValue);
                 }}
-                placeholder="К дате"
-                helperText="Выберите дату перехода"
-                buttonLabel="К дате"
+                placeholder="Начало"
+                helperText="Дата начала диапазона"
                 showAdornment={false}
                 allowClear={false}
+                monthCount={24}
                 desktopPanelStyle="dialog"
                 desktopPopoverAlign="left"
                 rootClassName="shrink-0"
-                buttonClassName={cn(compactToolbarButtonClass, "w-auto min-w-[92px]")}
+                buttonClassName={cn(compactToolbarButtonClass, "w-auto min-w-[126px]")}
+              />
+              <SingleDatePopoverField
+                value={periodEndIso}
+                onChange={(nextValue) => {
+                  if (!parseIsoDate(nextValue)) {
+                    return;
+                  }
+                  updatePeriodEnd(nextValue);
+                }}
+                placeholder="Конец"
+                helperText="Дата конца диапазона"
+                showAdornment={false}
+                allowClear={false}
+                monthCount={24}
+                desktopPanelStyle="dialog"
+                desktopPopoverAlign="left"
+                rootClassName="shrink-0"
+                buttonClassName={cn(compactToolbarButtonClass, "w-auto min-w-[126px]")}
               />
               {selectedPropertyId && properties.length > 0 ? (
                 <div className={cn(compactToolbarNavShellClass, "shrink-0 sm:ml-auto")}>
                   <button
                     type="button"
                     className="inline-flex h-full w-8 items-center justify-center rounded-md border border-olive/14 bg-white text-olive/60 transition hover:bg-cream hover:text-olive"
-                    onClick={() => shiftVisiblePeriod(-visibleDaysCount)}
+                    onClick={() => shiftVisiblePeriod(-periodDaysCount)}
                     aria-label="Назад"
                   >
                     <AppIcon
@@ -1828,7 +2268,7 @@ export function PropertyChessboardWorkspace({
                   <button
                     type="button"
                     className="inline-flex h-full w-8 items-center justify-center rounded-md border border-olive/14 bg-white text-olive/60 transition hover:bg-cream hover:text-olive"
-                    onClick={() => shiftVisiblePeriod(visibleDaysCount)}
+                    onClick={() => shiftVisiblePeriod(periodDaysCount)}
                     aria-label="Вперед"
                   >
                     <AppIcon
@@ -1967,9 +2407,9 @@ export function PropertyChessboardWorkspace({
                                 ? "bg-[#f1f8f7]"
                                 : day.isMonthStart
                                   ? "bg-[linear-gradient(180deg,#f4ebe1,#fffaf5)]"
-                                : day.isWeekend
-                                  ? "bg-[#f7f3ed]"
-                                  : "bg-white",
+                                  : day.isWeekend
+                                    ? "bg-[#f7f3ed]"
+                                    : "bg-white",
                               day.isMonthStart
                                 ? "border-l-2 border-l-terra/40 shadow-[inset_1px_0_0_rgba(154,98,69,0.14)]"
                                 : day.isWeekStart
@@ -2015,7 +2455,7 @@ export function PropertyChessboardWorkspace({
                   <tbody>
                     {groupedRoomsWithOffset.map((group) => (
                       <FragmentByGroup
-                        key={group.groupLabel}
+                        key={group.key}
                         groupLabel={group.groupLabel}
                         rooms={group.items}
                         visibleDays={visibleDays}
@@ -2348,9 +2788,7 @@ export function PropertyChessboardWorkspace({
               </section>
 
               <section className={modalSectionClass}>
-                <p className="text-sm font-semibold text-olive sm:text-[15px]">
-                  Номер телефона
-                </p>
+                <p className="text-sm font-semibold text-olive sm:text-[15px]">Номер телефона</p>
                 <div className="mt-3">
                   <Input
                     className={modalTextInputClass}
@@ -2706,11 +3144,201 @@ export function PropertyChessboardWorkspace({
         </div>
       ) : null}
 
+      {isDuplicatePricesModalOpen && duplicatePricesForm ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-midnight/45 backdrop-blur-[6px] p-1.5 pt-2 sm:items-center sm:p-4 [@media(orientation:landscape)_and_(max-height:560px)]:p-0.5">
+          <div className="popover-enter glass-booking flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-[28px] sm:max-h-[88vh] sm:max-w-xl lg:max-w-3xl [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[92dvh] [@media(orientation:landscape)_and_(max-height:560px)]:max-w-[84vw] [@media(orientation:landscape)_and_(max-height:560px)]:rounded-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-olive/10 bg-white/80 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <div>
+                <h2 className="text-base font-semibold text-olive sm:text-xl [@media(orientation:landscape)_and_(max-height:560px)]:text-base">
+                  Дублировать цены
+                </h2>
+                <p className="mt-0.5 text-xs text-olive/60">
+                  Скопируйте периоды из одного номера в выбранные номера.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-olive/10 bg-white/85 text-olive/70 transition hover:scale-[1.03] hover:bg-cream hover:text-olive [@media(orientation:landscape)_and_(max-height:560px)]:h-8 [@media(orientation:landscape)_and_(max-height:560px)]:w-8"
+                onClick={closeDuplicatePricesModal}
+                aria-label="Закрыть"
+              >
+                <AppIcon icon={X} className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-2 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <section className={modalSectionClass}>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-semibold text-olive">Копировать из номера</span>
+                    <select
+                      className={modalSelectClass}
+                      value={duplicatePricesForm.sourceRoomId}
+                      onChange={(event) => updateDuplicateSourceRoom(event.target.value)}
+                    >
+                      {rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-2xl border border-olive/12 bg-white/86 p-3">
+                    <p className={modalMetaLabelClass}>Найдено периодов</p>
+                    <p className="mt-1 text-sm font-semibold text-olive">
+                      {duplicatePricePeriodsPreview.length}
+                    </p>
+                    <p className="mt-1 text-xs text-olive/60">
+                      {duplicateSourceRoom?.title ?? "Выберите исходный номер"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <SingleDatePopoverField
+                    value={duplicatePricesForm.dateFrom}
+                    onChange={(value) => updateDuplicatePricesForm({ dateFrom: value })}
+                    mobilePanelStyle="dialog"
+                    monthCount={24}
+                    placeholder="Дата начала"
+                    helperText="Копировать цены с даты"
+                  />
+                  <SingleDatePopoverField
+                    value={duplicatePricesForm.dateTo}
+                    onChange={(value) => updateDuplicatePricesForm({ dateTo: value })}
+                    mobilePanelStyle="dialog"
+                    monthCount={24}
+                    placeholder="Дата окончания"
+                    helperText="Копировать цены до даты"
+                  />
+                </div>
+              </section>
+
+              <section className={modalSectionClass}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Куда копировать</p>
+                    <p className="mt-0.5 text-xs text-olive/60">
+                      Выбрано номеров: {duplicateTargetRooms.length}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-2 text-xs"
+                      onClick={selectAllDuplicateTargetRooms}
+                      disabled={rooms.length < 2}
+                    >
+                      Все
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="px-3 py-2 text-xs"
+                      onClick={clearDuplicateTargetRooms}
+                    >
+                      Снять
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {rooms
+                    .filter((room) => room.id !== duplicatePricesForm.sourceRoomId)
+                    .map((room) => {
+                      const isSelected = duplicatePricesForm.targetRoomIds.includes(room.id);
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          className={cn(
+                            "rounded-[18px] border p-3 text-left transition-all duration-200",
+                            isSelected
+                              ? "border-primary/28 bg-[linear-gradient(135deg,rgba(15,118,110,0.13),rgba(255,255,255,0.98))] shadow-[0_18px_34px_-28px_rgba(15,118,110,0.65)]"
+                              : "border-olive/10 bg-white/88 hover:border-primary/15 hover:bg-white",
+                          )}
+                          onClick={() => toggleDuplicateTargetRoom(room.id)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-olive">
+                                {room.title}
+                              </p>
+                              <p className="mt-1 text-xs text-olive/60">{formatRoomMeta(room)}</p>
+                            </div>
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                                isSelected ? "bg-primary text-white" : "bg-cream text-olive/55",
+                              )}
+                            >
+                              {isSelected ? "Выбран" : "Выбрать"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </section>
+
+              {duplicatePricePeriodsPreview.length > 0 ? (
+                <section className={modalSectionClass}>
+                  <p className="text-sm font-semibold text-olive">Периоды для копирования</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {duplicatePricePeriodsPreview.slice(0, 6).map((price) => (
+                      <div
+                        key={`${price.id}-${price.dateFrom}-${price.dateTo}`}
+                        className="rounded-2xl border border-olive/10 bg-white/86 p-3"
+                      >
+                        <p className="text-sm font-semibold text-olive">
+                          {formatPriceLabel(price)}
+                        </p>
+                        <p className="mt-1 text-xs text-olive/62">
+                          {formatDateRangeLabel(price.dateFrom, price.dateTo)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {duplicatePricePeriodsPreview.length > 6 ? (
+                    <p className="mt-2 text-xs text-olive/60">
+                      И еще {duplicatePricePeriodsPreview.length - 6} периодов.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {duplicatePricesError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {duplicatePricesError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="glass-mobile-bar sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-olive/10 bg-white/80 px-3 py-3 sm:px-4 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <Button
+                variant="ghost"
+                className="px-3 py-2 text-xs sm:text-sm"
+                onClick={closeDuplicatePricesModal}
+              >
+                Закрыть
+              </Button>
+              <Button
+                className="px-3 py-2 text-xs sm:text-sm"
+                onClick={() => void duplicatePricePeriods()}
+                disabled={isDuplicatingPrices}
+              >
+                {isDuplicatingPrices ? "Копирование..." : "Продублировать цены"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Floating action button for mobile quick add */}
       {showFloatingQuickAdd &&
       canManageCalendar &&
       !isBookingModalOpen &&
       !isPriceModalOpen &&
+      !isDuplicatePricesModalOpen &&
       !isOccupancyActionsOpen ? (
         <button
           type="button"
@@ -2902,7 +3530,6 @@ function FragmentByGroup({
   const firstVisibleIso = visibleDays[0]?.iso ?? null;
   const lastVisibleIso = visibleDays[visibleDays.length - 1]?.iso ?? null;
   const dayIndexByIso = new Map(visibleDays.map((day, index) => [day.iso, index]));
-  const halfDayCellWidthPx = dayCellWidthPx / 2;
 
   return (
     <>
@@ -2912,8 +3539,8 @@ function FragmentByGroup({
           <tr key={room.id} className="align-top">
             <th
               className={cn(
-                `sticky left-0 z-30 border-b border-r border-olive/10 px-2 py-1.5 text-left align-middle ${LS}:px-1.5 ${LS}:py-0.5`,
-                isEvenRow ? "bg-white/96" : "bg-cream/62",
+                `sticky left-0 z-50 border-b border-r border-olive/10 px-2 py-1.5 text-left align-middle shadow-[8px_0_18px_-20px_rgba(58,43,35,0.55)] ${LS}:px-1.5 ${LS}:py-0.5`,
+                isEvenRow ? "bg-white" : "bg-[#faf7ef]",
               )}
               style={{
                 width: "var(--cb-sidebar-w)",
@@ -2974,8 +3601,8 @@ function FragmentByGroup({
                         return null;
                       }
 
-                      const startOffsetPx = startsWithinVisible ? halfDayCellWidthPx : 0;
-                      const endOffsetPx = endsWithinVisible ? halfDayCellWidthPx : dayCellWidthPx;
+                      const startOffsetPx = 0;
+                      const endOffsetPx = dayCellWidthPx;
                       const widthPx = Math.max(
                         12,
                         (rangeEndIndex - rangeStartIndex) * dayCellWidthPx +
@@ -3092,13 +3719,13 @@ function FragmentByGroup({
                           ? isEvenRow
                             ? "bg-[linear-gradient(180deg,rgba(249,244,236,0.95),rgba(255,255,255,0.96))]"
                             : "bg-[linear-gradient(180deg,rgba(245,239,230,0.92),rgba(255,255,255,0.94))]"
-                        : day.isWeekend
-                          ? isEvenRow
-                            ? "bg-sand/32"
-                            : "bg-sand/18"
-                          : isEvenRow
-                            ? "bg-cream/28"
-                            : "bg-white/96",
+                          : day.isWeekend
+                            ? isEvenRow
+                              ? "bg-sand/32"
+                              : "bg-sand/18"
+                            : isEvenRow
+                              ? "bg-cream/28"
+                              : "bg-white/96",
                     day.isMonthStart
                       ? "border-l-2 border-l-terra/40 shadow-[inset_1px_0_0_rgba(154,98,69,0.12)]"
                       : day.isWeekStart
