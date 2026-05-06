@@ -251,7 +251,10 @@ export default async function PublicPropertyPage({
         ownerUserId={item.owner.id}
       />
 
-      <PublicPropertyBottomSections item={item} />
+      <PublicPropertyBottomSections
+        item={item}
+        showPublishedWithoutRegistryNotice={!isPreview}
+      />
 
       <Suspense fallback={null}>
         <NearbyPropertiesSectionServer

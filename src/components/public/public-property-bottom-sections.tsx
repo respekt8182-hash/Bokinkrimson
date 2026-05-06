@@ -9,13 +9,18 @@ import type { PublicPropertyCard } from "@/lib/public-properties";
 
 type PublicPropertyBottomSectionsProps = {
   item: Pick<PublicPropertyCard, "amenityHighlights" | "amenityGroups" | "faqItems" | "classification">;
+  showPublishedWithoutRegistryNotice?: boolean;
 };
 
-export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSectionsProps) {
+export function PublicPropertyBottomSections({
+  item,
+  showPublishedWithoutRegistryNotice = false,
+}: PublicPropertyBottomSectionsProps) {
   const [isRegistryOpen, setIsRegistryOpen] = useState(false);
 
   const registryNumber = item.classification.registryNumber?.trim() ?? "";
   const hasRegistryNumber = registryNumber.length > 0;
+  const showRegistryFallbackNotice = showPublishedWithoutRegistryNotice && !hasRegistryNumber;
   const registryLink = useMemo(() => {
     const rawValue = item.classification.registryDetails?.trim() ?? "";
     if (/^https?:\/\//i.test(rawValue)) {
@@ -25,7 +30,7 @@ export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSecti
     return "https://tourism.fsa.gov.ru/";
   }, [item.classification.registryDetails]);
 
-  if (item.faqItems.length === 0 && !hasRegistryNumber) {
+  if (item.faqItems.length === 0 && !hasRegistryNumber && !showRegistryFallbackNotice) {
     return null;
   }
 
@@ -88,6 +93,19 @@ export function PublicPropertyBottomSections({ item }: PublicPropertyBottomSecti
               </a>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {showRegistryFallbackNotice ? (
+        <section className="rounded-3xl border border-amber-200/70 bg-amber-50/80 p-5 shadow-[0_12px_30px_rgba(120,53,15,0.08)] md:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <AppIcon icon={CircleHelp} className="h-5 w-5" />
+            </span>
+            <p className="pt-1 text-sm font-medium leading-6 text-olive">
+              Не является предложением услуг средства размещения, но предлагает похожие условия
+            </p>
+          </div>
         </section>
       ) : null}
     </div>
