@@ -62,6 +62,7 @@ import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { buildWebsiteFaviconUrl } from "@/lib/website-favicon";
@@ -1275,7 +1276,7 @@ export function ExcursionEditor({
       contactPhone2: normalizeNullableText(contactPhone2),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
-      whatsappUrl: normalizeNullableText(whatsappUrl),
+      whatsappUrl: normalizeWhatsappUrl(whatsappUrl),
       telegramUrl: normalizeTelegramProfileUrl(telegramUrl),
       vkUrl: normalizeVkProfileUrl(vkUrl),
       maxUrl: normalizeMaxProfileUrl(maxUrl),
@@ -2287,7 +2288,7 @@ export function ExcursionEditor({
       contactPhone2: normalizeNullableText(contactPhone2),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
-      whatsappUrl: normalizeNullableText(whatsappUrl),
+      whatsappUrl: normalizeWhatsappUrl(whatsappUrl),
       telegramUrl: normalizeTelegramProfileUrl(telegramUrl),
       vkUrl: normalizeVkProfileUrl(vkUrl),
       maxUrl: normalizeMaxProfileUrl(maxUrl),
@@ -5451,10 +5452,13 @@ export function ExcursionEditor({
                       <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
                     </span>
                     <Input
-                      type="url"
+                      type="text"
                       value={whatsappUrl}
                       onChange={(event) => setWhatsappUrl(event.target.value)}
-                      placeholder="WhatsApp URL"
+                      onBlur={() =>
+                        setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
+                      }
+                      placeholder="WhatsApp: номер или ссылка"
                       aria-label="WhatsApp"
                       className="pl-10 pr-10"
                     />
@@ -5481,6 +5485,11 @@ export function ExcursionEditor({
                       type="text"
                       value={telegramUrl}
                       onChange={(event) => setTelegramUrl(event.target.value)}
+                      onBlur={() =>
+                        setTelegramUrl(
+                          (value) => normalizeTelegramProfileUrl(value) ?? value.trim(),
+                        )
+                      }
                       placeholder="Telegram: @username или username"
                       aria-label="Telegram"
                       className="pl-10 pr-10"

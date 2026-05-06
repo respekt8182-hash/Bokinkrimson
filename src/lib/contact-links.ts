@@ -21,6 +21,24 @@ function parseHttpUrl(value: string | null | undefined): URL | null {
   }
 }
 
+function normalizeWhatsappPhoneNumber(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length < 10 || digits.length > 15) {
+    return null;
+  }
+
+  if (digits.length === 10) {
+    return `7${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith("8")) {
+    return `7${digits.slice(1)}`;
+  }
+
+  return digits;
+}
+
 function hasAsciiProfilePath(url: URL): boolean {
   const decodedPath = decodeURIComponent(url.pathname).replace(/^\/+|\/+$/g, "");
   if (!decodedPath) {
@@ -52,12 +70,26 @@ function normalizeProfileUrl(
 }
 
 export function normalizeWhatsappUrl(value: string | null | undefined): string | null {
-  const url = parseHttpUrl(value);
-  if (!url) {
+  if (typeof value !== "string") {
     return null;
   }
 
-  return url.toString();
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const url = parseHttpUrl(trimmed);
+  if (url) {
+    return url.toString();
+  }
+
+  const phoneNumber = normalizeWhatsappPhoneNumber(trimmed);
+  if (!phoneNumber) {
+    return null;
+  }
+
+  return `https://wa.me/${phoneNumber}`;
 }
 
 export function normalizeVkProfileUrl(value: string | null | undefined): string | null {

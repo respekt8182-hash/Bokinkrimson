@@ -31,6 +31,7 @@ import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import type { SerializedProperty } from "@/lib/properties";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -680,7 +681,7 @@ export function ObjectAboutPage({
         contactPersonName: normalizedContactPersonName,
         contactPersonRole: contactPersonRole.trim(),
         listingChannels: listingChannels.trim(),
-        whatsappUrl: whatsappUrl.trim(),
+        whatsappUrl: normalizeWhatsappUrl(whatsappUrl) ?? "",
         telegramUrl: normalizeTelegramProfileUrl(telegramUrl) ?? "",
         vkUrl: normalizeVkProfileUrl(vkUrl) ?? "",
         maxUrl: normalizeMaxProfileUrl(maxUrl) ?? "",
@@ -1569,7 +1570,10 @@ export function ObjectAboutPage({
                   <Input
                     value={whatsappUrl}
                     onChange={(event) => setWhatsappUrl(event.target.value)}
-                    placeholder="WhatsApp URL"
+                    onBlur={() =>
+                      setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
+                    }
+                    placeholder="WhatsApp: номер или ссылка"
                     className="pl-10 pr-10"
                   />
                   <button
@@ -1592,6 +1596,9 @@ export function ObjectAboutPage({
                   <Input
                     value={telegramUrl}
                     onChange={(event) => setTelegramUrl(event.target.value)}
+                    onBlur={() =>
+                      setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim())
+                    }
                     placeholder="Telegram: @username или username"
                     className="pl-10 pr-10"
                   />

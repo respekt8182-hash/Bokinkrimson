@@ -18,6 +18,7 @@ import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import { isManagedPublicUrl } from "@/lib/storage";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -145,6 +146,17 @@ function optionalTelegramUrlSchema(fieldLabel: string) {
   }, optionalHttpUrlSchema(fieldLabel));
 }
 
+function optionalWhatsappUrlSchema(fieldLabel: string) {
+  return z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const normalized = normalizeWhatsappUrl(value);
+    return normalized ?? value.trim();
+  }, optionalHttpUrlSchema(fieldLabel));
+}
+
 function optionalNormalizedProfileUrlSchema(
   fieldLabel: string,
   normalizer: (value: string | null | undefined) => string | null,
@@ -251,7 +263,7 @@ export const propertyStep4Schema = z.object({
     .max(500, "Поле о площадках размещения слишком длинное")
     .optional()
     .or(z.literal("")),
-  whatsappUrl: optionalHttpUrlSchema("WhatsApp"),
+  whatsappUrl: optionalWhatsappUrlSchema("WhatsApp"),
   telegramUrl: optionalTelegramUrlSchema("Telegram"),
   vkUrl: optionalNormalizedProfileUrlSchema("VK", normalizeVkProfileUrl, "https://vk.com/username"),
   maxUrl: optionalNormalizedProfileUrlSchema(
@@ -1172,7 +1184,7 @@ export const updateExcursionSchema = z
       .nullable()
       .optional(),
     websiteUrl: optionalHttpUrlSchema("Сайт").nullable().optional(),
-    whatsappUrl: optionalHttpUrlSchema("WhatsApp").nullable().optional(),
+    whatsappUrl: optionalWhatsappUrlSchema("WhatsApp").nullable().optional(),
     telegramUrl: optionalTelegramUrlSchema("Telegram").nullable().optional(),
     vkUrl: optionalNormalizedProfileUrlSchema(
       "VK",

@@ -30,6 +30,7 @@ import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
+  normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import type { SerializedProperty } from "@/lib/properties";
 import type { SerializedRoom } from "@/lib/rooms";
@@ -555,7 +556,7 @@ export function ObjectWizard({
         contactPersonName: contactPersonName.trim(),
         contactPersonRole: contactPersonRole.trim(),
         listingChannels: listingChannels.trim(),
-        whatsappUrl: whatsappUrl.trim(),
+        whatsappUrl: normalizeWhatsappUrl(whatsappUrl) ?? "",
         telegramUrl: normalizeTelegramProfileUrl(telegramUrl) ?? "",
         vkUrl: normalizeVkProfileUrl(vkUrl) ?? "",
         maxUrl: normalizeMaxProfileUrl(maxUrl) ?? "",
@@ -1119,7 +1120,9 @@ export function ObjectWizard({
             </div>
           </div>
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-olive">Дополнительный телефон 2 (необязательно)</p>
+            <p className="text-sm font-semibold text-olive">
+              Дополнительный телефон 2 (необязательно)
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-olive">Номер телефона</p>
@@ -1141,7 +1144,9 @@ export function ObjectWizard({
             </div>
           </div>
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-olive">Дополнительный телефон 3 (необязательно)</p>
+            <p className="text-sm font-semibold text-olive">
+              Дополнительный телефон 3 (необязательно)
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-olive">Номер телефона</p>
@@ -1211,10 +1216,13 @@ export function ObjectWizard({
             <div className="space-y-1">
               <p className="text-sm font-medium text-olive">WhatsApp (необязательно)</p>
               <Input
-                type="url"
+                type="text"
                 value={whatsappUrl}
                 onChange={(event) => setWhatsappUrl(event.target.value)}
-                placeholder="https://wa.me/79991234567"
+                onBlur={() =>
+                  setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
+                }
+                placeholder="+7 999 123-45-67 или https://wa.me/79991234567"
               />
             </div>
             <div className="space-y-1">
@@ -1223,6 +1231,9 @@ export function ObjectWizard({
                 type="text"
                 value={telegramUrl}
                 onChange={(event) => setTelegramUrl(event.target.value)}
+                onBlur={() =>
+                  setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim())
+                }
                 placeholder="@username или username"
               />
             </div>
@@ -1664,9 +1675,7 @@ export function ObjectWizard({
             </div>
 
             <div className="mt-3 rounded-xl bg-cream p-3 text-sm text-olive/80">
-              <p>
-                Населенный пункт: {mapDraftLocationName || "еще не определен"}
-              </p>
+              <p>Населенный пункт: {mapDraftLocationName || "еще не определен"}</p>
               <p>
                 Выбрано:{" "}
                 {mapDraftLatitude !== null && mapDraftLongitude !== null

@@ -100,6 +100,11 @@ type DragSelectionState = {
   endIso: string;
 };
 
+type DragPointer = {
+  clientX: number;
+  clientY: number;
+};
+
 type PriceFormState = {
   roomId: string;
   dateFrom: string;
@@ -141,6 +146,12 @@ const dayCellWidthPortraitPx = 40;
 const dayCellWidthMobilePx = 40;
 const dayCellWidthLandscapePx = 36;
 const LS = "[@media(orientation:landscape)_and_(max-height:560px)]";
+const dragAutoScrollEdgePx = 72;
+const dragAutoScrollMaxStepPx = 18;
+const dragAutoExtendDays = 7;
+const dragAutoExtendIntervalMs = 180;
+const dragAutoExtendScrollEpsilonPx = 4;
+
 function resolveDayCellWidthPx(): number {
   if (typeof window === "undefined") {
     return dayCellWidthDesktopPx;
@@ -391,6 +402,21 @@ function clampPeriodEndIso(
 
   return {
     dateToIso: addDaysToIsoDate(dateFromIso, maxBoardRangeDaysCount - 1),
+    wasClamped: true,
+  };
+}
+
+function clampPeriodStartIso(
+  dateFromIso: string,
+  dateToIso: string,
+): { dateFromIso: string; wasClamped: boolean } {
+  const daysCount = getInclusiveDateRangeDays(dateFromIso, dateToIso);
+  if (daysCount <= maxBoardRangeDaysCount) {
+    return { dateFromIso, wasClamped: false };
+  }
+
+  return {
+    dateFromIso: addDaysToIsoDate(dateToIso, -(maxBoardRangeDaysCount - 1)),
     wasClamped: true,
   };
 }
@@ -841,11 +867,34 @@ export function PropertyChessboardWorkspace({
   const [visibleDaysCount, setVisibleDaysCount] = useState(minVisibleDaysCount);
   const objectMenuRef = useRef<HTMLDivElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const dragSelectionRef = useRef<DragSelectionState | null>(null);
+  const dragAutoScrollPointerRef = useRef<DragPointer | null>(null);
+  const dragAutoExtendAtRef = useRef(0);
+  const isAutoExtendingDragPeriodRef = useRef(false);
+  const dragBoardContextRef = useRef({
+    boardMode,
+    periodStartIso,
+    periodEndIso,
+    dayCellWidthPx,
+  });
 
   useEffect(() => {
     setBoardMode(initialBoardMode);
     setDragSelection(null);
   }, [initialBoardMode]);
+
+  useEffect(() => {
+    dragSelectionRef.current = dragSelection;
+  }, [dragSelection]);
+
+  useEffect(() => {
+    dragBoardContextRef.current = {
+      boardMode,
+      periodStartIso,
+      periodEndIso,
+      dayCellWidthPx,
+    };
+  }, [boardMode, dayCellWidthPx, periodEndIso, periodStartIso]);
 
   useEffect(() => {
     if (properties.length === 0) {
@@ -978,6 +1027,12 @@ export function PropertyChessboardWorkspace({
   }, [dayCellWidthPx, rooms.length, selectedPropertyId]);
 
   useEffect(() => {
+    if (isAutoExtendingDragPeriodRef.current) {
+      isAutoExtendingDragPeriodRef.current = false;
+      return;
+    }
+
+    dragAutoScrollPointerRef.current = null;
     setDragSelection(null);
   }, [boardMode, selectedPropertyId, periodEndIso, periodStartIso]);
 
@@ -1026,23 +1081,198 @@ export function PropertyChessboardWorkspace({
     [boardMode, rooms],
   );
 
+  const hasDragSelection = dragSelection !== null;
+
   // Desktop flow: drag with mouse and release to open modal.
   useEffect(() => {
-    const selection = dragSelection;
-    if (!selection || isCoarsePointer) {
+    if (!hasDragSelection || isCoarsePointer) {
       return;
     }
-    const activeSelection: DragSelectionState = selection;
 
     function handleMouseUp() {
-      openModalFromSelection(activeSelection);
+      const activeSelection = dragSelectionRef.current;
+      dragAutoScrollPointerRef.current = null;
+      if (activeSelection) {
+        openModalFromSelection(activeSelection);
+      }
     }
 
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragSelection, isCoarsePointer, openModalFromSelection]);
+  }, [hasDragSelection, isCoarsePointer, openModalFromSelection]);
+
+  useEffect(() => {
+    if (!hasDragSelection || isCoarsePointer || typeof window === "undefined") {
+      return;
+    }
+
+    let animationFrameId = 0;
+
+    function getScrollerMetric(scroller: HTMLDivElement, propertyName: string, fallback: number) {
+      const parsed = Number.parseFloat(
+        window.getComputedStyle(scroller).getPropertyValue(propertyName),
+      );
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function extendSelectionFromPointer(pointer: DragPointer) {
+      const target = document.elementFromPoint(pointer.clientX, pointer.clientY);
+      const cell = target instanceof Element ? target.closest('[data-chess-cell="1"]') : null;
+      if (!(cell instanceof HTMLElement) || cell.dataset.interactive !== "1") {
+        return;
+      }
+
+      const activeSelection = dragSelectionRef.current;
+      const roomId = cell.dataset.roomId;
+      const dayIso = cell.dataset.dayIso;
+      if (!activeSelection || !roomId || !dayIso || activeSelection.roomId !== roomId) {
+        return;
+      }
+
+      if (
+        dragBoardContextRef.current.boardMode === "occupancy" &&
+        cell.dataset.hasOccupancy === "1"
+      ) {
+        return;
+      }
+
+      setDragSelection((prev) => {
+        if (!prev || prev.roomId !== roomId || prev.endIso === dayIso) {
+          return prev;
+        }
+
+        return { ...prev, endIso: dayIso };
+      });
+    }
+
+    function extendVisiblePeriod(direction: "left" | "right", now: number) {
+      if (now - dragAutoExtendAtRef.current < dragAutoExtendIntervalMs) {
+        return;
+      }
+
+      const context = dragBoardContextRef.current;
+      const activeSelection = dragSelectionRef.current;
+      if (!activeSelection) {
+        return;
+      }
+
+      if (direction === "right") {
+        const nextEndCandidate = addDaysToIsoDate(context.periodEndIso, dragAutoExtendDays);
+        const clamped = clampPeriodEndIso(context.periodStartIso, nextEndCandidate);
+        if (clamped.dateToIso === context.periodEndIso) {
+          return;
+        }
+
+        dragAutoExtendAtRef.current = now;
+        isAutoExtendingDragPeriodRef.current = true;
+        dragBoardContextRef.current = {
+          ...context,
+          periodEndIso: clamped.dateToIso,
+        };
+        setPeriodEndIso(clamped.dateToIso);
+        setDragSelection((prev) =>
+          prev && prev.roomId === activeSelection.roomId
+            ? { ...prev, endIso: maxIsoDate(prev.endIso, clamped.dateToIso) }
+            : prev,
+        );
+        return;
+      }
+
+      const nextStartCandidate = addDaysToIsoDate(context.periodStartIso, -dragAutoExtendDays);
+      const clamped = clampPeriodStartIso(nextStartCandidate, context.periodEndIso);
+      if (clamped.dateFromIso === context.periodStartIso) {
+        return;
+      }
+
+      dragAutoExtendAtRef.current = now;
+      isAutoExtendingDragPeriodRef.current = true;
+      dragBoardContextRef.current = {
+        ...context,
+        periodStartIso: clamped.dateFromIso,
+      };
+      setPeriodStartIso(clamped.dateFromIso);
+      setDragSelection((prev) =>
+        prev && prev.roomId === activeSelection.roomId
+          ? { ...prev, endIso: minIsoDate(prev.endIso, clamped.dateFromIso) }
+          : prev,
+      );
+    }
+
+    function tick(now: number) {
+      const scroller = boardScrollRef.current;
+      const pointer = dragAutoScrollPointerRef.current;
+      const activeSelection = dragSelectionRef.current;
+
+      if (scroller && pointer && activeSelection) {
+        const rect = scroller.getBoundingClientRect();
+        const sidebarWidthPx = getScrollerMetric(scroller, "--cb-sidebar-w", 0);
+        const horizontalLeftEdge = Math.min(rect.right, rect.left + sidebarWidthPx);
+        const horizontalRightEdge = rect.right;
+        const verticalTopEdge = rect.top;
+        const verticalBottomEdge = rect.bottom;
+        let scrollLeftDelta = 0;
+        let scrollTopDelta = 0;
+
+        if (pointer.clientX > horizontalRightEdge - dragAutoScrollEdgePx) {
+          const strength =
+            (pointer.clientX - (horizontalRightEdge - dragAutoScrollEdgePx)) / dragAutoScrollEdgePx;
+          scrollLeftDelta = Math.ceil(Math.min(1, Math.max(0, strength)) * dragAutoScrollMaxStepPx);
+        } else if (pointer.clientX < horizontalLeftEdge + dragAutoScrollEdgePx) {
+          const strength =
+            (horizontalLeftEdge + dragAutoScrollEdgePx - pointer.clientX) / dragAutoScrollEdgePx;
+          scrollLeftDelta = -Math.ceil(
+            Math.min(1, Math.max(0, strength)) * dragAutoScrollMaxStepPx,
+          );
+        }
+
+        if (pointer.clientY > verticalBottomEdge - dragAutoScrollEdgePx) {
+          const strength =
+            (pointer.clientY - (verticalBottomEdge - dragAutoScrollEdgePx)) / dragAutoScrollEdgePx;
+          scrollTopDelta = Math.ceil(Math.min(1, Math.max(0, strength)) * dragAutoScrollMaxStepPx);
+        } else if (pointer.clientY < verticalTopEdge + dragAutoScrollEdgePx) {
+          const strength =
+            (verticalTopEdge + dragAutoScrollEdgePx - pointer.clientY) / dragAutoScrollEdgePx;
+          scrollTopDelta = -Math.ceil(Math.min(1, Math.max(0, strength)) * dragAutoScrollMaxStepPx);
+        }
+
+        if (scrollLeftDelta !== 0 || scrollTopDelta !== 0) {
+          scroller.scrollBy({ left: scrollLeftDelta, top: scrollTopDelta });
+        }
+
+        extendSelectionFromPointer(pointer);
+
+        const atLeftEnd = scroller.scrollLeft <= dragAutoExtendScrollEpsilonPx;
+        const atRightEnd =
+          scroller.scrollLeft + scroller.clientWidth >=
+          scroller.scrollWidth - dragAutoExtendScrollEpsilonPx;
+
+        if (scrollLeftDelta > 0 && atRightEnd) {
+          extendVisiblePeriod("right", now);
+        } else if (scrollLeftDelta < 0 && atLeftEnd) {
+          extendVisiblePeriod("left", now);
+        }
+      }
+
+      animationFrameId = window.requestAnimationFrame(tick);
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      dragAutoScrollPointerRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    animationFrameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [hasDragSelection, isCoarsePointer]);
 
   const periodDaysCount = useMemo(() => {
     const daysCount = getInclusiveDateRangeDays(periodStartIso, periodEndIso);
@@ -1437,8 +1667,10 @@ export function PropertyChessboardWorkspace({
     updateDuplicatePricesForm({ targetRoomIds: [] });
   }
 
-  function beginDragSelection(roomId: string, dayIso: string) {
+  function beginDragSelection(roomId: string, dayIso: string, pointer?: DragPointer) {
     setExpandedMobileRailKey(null);
+    dragAutoScrollPointerRef.current = pointer ?? null;
+    dragAutoExtendAtRef.current = 0;
     setDragSelection({
       roomId,
       startIso: dayIso,
@@ -2448,11 +2680,11 @@ export function PropertyChessboardWorkspace({
                         onToggleMobileRail={(key) =>
                           setExpandedMobileRailKey((prev) => (prev === key ? null : key))
                         }
-                        onCellMouseDown={(roomId, dayIso, hasOccupancy) => {
+                        onCellMouseDown={(roomId, dayIso, hasOccupancy, pointer) => {
                           if (boardMode === "occupancy" && hasOccupancy) {
                             return;
                           }
-                          beginDragSelection(roomId, dayIso);
+                          beginDragSelection(roomId, dayIso, pointer);
                         }}
                         onCellMouseEnter={(roomId, dayIso, hasOccupancy) => {
                           if (!dragSelection || dragSelection.roomId !== roomId) {
@@ -3341,7 +3573,12 @@ type FragmentByGroupProps = {
   priceLookup: Map<string, Map<string, SerializedRoomPrice>>;
   onDismissMobileRail: () => void;
   onToggleMobileRail: (key: string) => void;
-  onCellMouseDown: (roomId: string, dayIso: string, hasOccupancy: boolean) => void;
+  onCellMouseDown: (
+    roomId: string,
+    dayIso: string,
+    hasOccupancy: boolean,
+    pointer: DragPointer,
+  ) => void;
   onCellMouseEnter: (roomId: string, dayIso: string, hasOccupancy: boolean) => void;
   onPriceClick: (price: SerializedRoomPrice) => void;
   onOccupancyClick: (occupancy: SerializedRoomOccupancy) => void;
@@ -3822,7 +4059,10 @@ function FragmentByGroup({
                       }
                       event.preventDefault();
                       onDismissMobileRail();
-                      onCellMouseDown(room.id, day.iso, Boolean(occupancy));
+                      onCellMouseDown(room.id, day.iso, Boolean(occupancy), {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
                     }}
                     onMouseEnter={() => {
                       if (!isInteractive || isCoarsePointer) {

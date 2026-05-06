@@ -26,7 +26,9 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { normalizeWhatsappUrl } from "@/lib/contact-links";
 import type { SerializedPayment } from "@/lib/payments";
+import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import {
   buildTransferTitleSuggestion,
   deriveTransferSummaryFromFleet,
@@ -689,6 +691,7 @@ export function TransferEditorPage({
     name,
     value,
     onChange,
+    onBlur,
   }: {
     shown: boolean;
     onHide: () => void;
@@ -698,6 +701,7 @@ export function TransferEditorPage({
     name: string;
     value: string;
     onChange: (value: string) => void;
+    onBlur?: () => void;
   }) {
     if (!shown) {
       return null;
@@ -716,6 +720,7 @@ export function TransferEditorPage({
           name={name}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
           placeholder={placeholder}
           className="pl-10 pr-10"
         />
@@ -1298,10 +1303,11 @@ export function TransferEditorPage({
                 setShowWhatsapp(false);
               },
               brand: "whatsapp",
-              placeholder: "WhatsApp: ссылка",
+              placeholder: "WhatsApp: номер или ссылка",
               name: "whatsappUrl",
               value: whatsappUrl,
               onChange: setWhatsappUrl,
+              onBlur: () => setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim()),
             })}
             {removableField({
               shown: showTelegram,
@@ -1314,6 +1320,8 @@ export function TransferEditorPage({
               name: "telegramUrl",
               value: telegramUrl,
               onChange: setTelegramUrl,
+              onBlur: () =>
+                setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim()),
             })}
             {removableField({
               shown: showVk,
