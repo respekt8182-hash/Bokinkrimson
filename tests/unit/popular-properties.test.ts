@@ -9,7 +9,7 @@ const prismaErrorMocks = vi.hoisted(() => ({
 }));
 
 const dbMocks = vi.hoisted(() => ({
-  propertyFindMany: vi.fn<() => Promise<unknown[]>>(),
+  propertyFindMany: vi.fn<(args?: unknown) => Promise<unknown[]>>(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -76,6 +76,59 @@ describe("popular properties fallback", () => {
     expect(prismaErrorMocks.logDatabaseFallbackOnce).toHaveBeenCalledWith(
       "popular-properties",
       "Database is unavailable or credentials are invalid. Popular properties section will stay hidden.",
+    );
+  });
+
+  it("requests the latest published object-level photo listings", async () => {
+    dbMocks.propertyFindMany.mockResolvedValue([
+      {
+        id: "new-property",
+        name: "New property",
+        locationId: null,
+        locationName: "Yalta",
+        address: null,
+        media: [{ url: "/uploads/new.webp" }],
+        rooms: [
+          {
+            prices: [
+              {
+                price: 2500,
+                currency: "RUB",
+                dateFrom: new Date("2026-06-01T00:00:00.000Z"),
+                dateTo: new Date("2026-06-30T00:00:00.000Z"),
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const getPopularProperties = await loadGetPopularProperties();
+
+    await expect(getPopularProperties()).resolves.toMatchObject([
+      {
+        id: "new-property",
+        imageUrls: ["/uploads/new.webp"],
+        minNightPrice: 2500,
+      },
+    ]);
+    expect(dbMocks.propertyFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          media: { some: { type: "IMAGE", roomId: null } },
+        }),
+        select: expect.objectContaining({
+          media: expect.objectContaining({
+            where: { type: "IMAGE", roomId: null },
+          }),
+        }),
+        orderBy: [
+          { moderatedAt: { sort: "desc", nulls: "last" } },
+          { createdAt: "desc" },
+          { updatedAt: "desc" },
+        ],
+        take: 12,
+      }),
     );
   });
 });

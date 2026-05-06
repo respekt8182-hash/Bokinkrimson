@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { normalizeLegacyFotoImageUrl } from "@/lib/media";
 import {
@@ -57,14 +56,10 @@ function buildLocationLine(
 }
 
 async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
-  const today = new Date();
-
-  // Fetch published properties with at least one image, ordered randomly via raw SQL seed
-  // We pick more than 12 to allow filtering, then slice
   const properties = await db.property.findMany({
     where: {
       ...buildPublishedPropertyVisibilityWhere(),
-      media: { some: { type: "IMAGE" } },
+      media: { some: { type: "IMAGE", roomId: null } },
     },
     select: {
       id: true,
@@ -73,7 +68,7 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
       locationName: true,
       address: true,
       media: {
-        where: { type: "IMAGE", propertyId: { not: undefined } },
+        where: { type: "IMAGE", roomId: null },
         orderBy: { sortOrder: "asc" },
         take: 8,
         select: { url: true },
@@ -94,25 +89,15 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
         },
       },
     },
-    take: 100,
+    orderBy: [
+      { moderatedAt: { sort: "desc", nulls: "last" } },
+      { createdAt: "desc" },
+      { updatedAt: "desc" },
+    ],
+    take: 12,
   });
 
-  // Shuffle deterministically per day (simple Fisher-Yates with day-based seed)
-  const daySeed =
-    today.getFullYear() * 10000 +
-    (today.getMonth() + 1) * 100 +
-    today.getDate();
-  const shuffled = [...properties];
-  let seed = daySeed;
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    seed = (seed * 16807 + 0) % 2147483647;
-    const j = seed % (i + 1);
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  const selected = shuffled.slice(0, 12);
-
-  return selected.map((p) => {
+  return properties.map((p) => {
     const imageUrls = p.media.map((m) => normalizeLegacyFotoImageUrl(m.url));
 
     // Find the minimum price and determine which month it applies to
@@ -157,12 +142,6 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
   });
 }
 
-const getCachedPopularProperties = unstable_cache(
-  fetchPopularProperties,
-  ["popular-properties-v1"],
-  { revalidate: 86400 },
-);
-
 export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
   const canUseFallback = process.env.NODE_ENV !== "production";
 
@@ -175,7 +154,7 @@ export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
   }
 
   try {
-    return await getCachedPopularProperties();
+    return await fetchPopularProperties();
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;
