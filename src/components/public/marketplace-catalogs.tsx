@@ -13,10 +13,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { Fragment } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { ExcursionPhotoGallery } from "@/components/excursions/excursion-photo-gallery";
 import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
+import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
@@ -1156,9 +1158,23 @@ export function TransferCatalog({
             <TransferEmptyCatalogContent />
           ) : (
             <div className="space-y-4">
-              {result.items.map((item, index) => (
-                <TransferCard key={item.id} item={item} eagerImage={index < 2} />
-              ))}
+              {result.items.map((item, index) => {
+                const showNearbyNote =
+                  item.searchMatchKind === "nearby" &&
+                  (index === 0 || result.items[index - 1]?.searchMatchKind !== "nearby");
+
+                return (
+                  <Fragment key={item.id}>
+                    {showNearbyNote ? (
+                      <CatalogNearbyContinuationNote
+                        locationName={result.filters.locationName}
+                        radiusKm={result.filters.nearbyRadiusKm}
+                      />
+                    ) : null}
+                    <TransferCard item={item} eagerImage={index < 2} />
+                  </Fragment>
+                );
+              })}
             </div>
           )}
           {pagination}

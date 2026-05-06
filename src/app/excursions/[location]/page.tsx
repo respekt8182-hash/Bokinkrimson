@@ -68,9 +68,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function ExcursionsByLocationPage({
-  params,
-}: ExcursionsByLocationPageProps) {
+export default async function ExcursionsByLocationPage({ params }: ExcursionsByLocationPageProps) {
   const { location } = await params;
   const resolvedLocation = await getResolvedExcursionLocationBySlug(location);
 
@@ -81,7 +79,7 @@ export default async function ExcursionsByLocationPage({
   const [result, directory] = await Promise.all([
     getPublicExcursionCatalog({
       locationId: resolvedLocation.slug,
-      radiusKm: 35,
+      radiusKm: 20,
       pageSize: 24,
     }),
     getExcursionSeoDirectoryData(),
@@ -89,7 +87,7 @@ export default async function ExcursionsByLocationPage({
   const locationPhrase =
     formatLocationInPrepositional(resolvedLocation.name) ?? `в городе ${resolvedLocation.name}`;
   const title = `Экскурсии ${locationPhrase}`;
-  const description = `Собрали экскурсии с отправлением ${locationPhrase}, а также маршруты по соседним локациям в радиусе 35 км.`;
+  const description = `Собрали экскурсии с отправлением ${locationPhrase}, а также маршруты по соседним локациям в радиусе 20 км.`;
   const path = `/excursions/${resolvedLocation.slug}`;
   const breadcrumbs = [
     { name: "Главная", path: "/" },

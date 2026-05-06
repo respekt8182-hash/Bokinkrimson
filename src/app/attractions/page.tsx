@@ -24,7 +24,7 @@ function pick(value: string | string[] | undefined): string {
 
 export default async function AttractionsPage({ searchParams }: AttractionsPageProps) {
   const params = await searchParams;
-  const radiusKm = Number.parseFloat(pick(params.radiusKm) || "30");
+  const radiusKm = Number.parseFloat(pick(params.radiusKm) || "20");
   const page = Number.parseInt(pick(params.page) || "1", 10);
   const sortRaw = pick(params.sort);
   const sort =

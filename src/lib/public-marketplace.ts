@@ -9,7 +9,13 @@ import {
 import { db } from "@/lib/db";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { resolveExcursionLocation } from "@/lib/excursion-directory";
-import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/catalog-radius";
+import {
+  calculateDistanceKm,
+  isWithinRadiusKm,
+  parseNearbyCatalogRadiusKm,
+  roundDistanceKm,
+  type CatalogSearchMatchKind,
+} from "@/lib/catalog-radius";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import {
   isDatabaseFallbackEligibleError,
@@ -124,6 +130,7 @@ export type PublicTransferCatalogItem = {
   photoUrls: string[];
   coverImageUrl: string | null;
   distanceKm: number | null;
+  searchMatchKind: CatalogSearchMatchKind;
   contacts: {
     contactName: string | null;
     phone: string | null;
@@ -183,6 +190,7 @@ export type PublicTransferCatalogResult = {
       | "rating_desc"
       | "popular_desc"
       | "newest";
+    nearbyRadiusKm: number | null;
   };
 };
 
@@ -311,7 +319,7 @@ function parsePageSize(value: number | undefined, allowLargePageSize = false): n
 }
 
 function parseRadiusKm(value: number | undefined): number {
-  return Number.isFinite(value) ? Math.max(5, Math.min(100, Math.round(value ?? 30))) : 30;
+  return parseNearbyCatalogRadiusKm(value);
 }
 
 function parseMoney(value: number | undefined): number | null {
@@ -371,6 +379,10 @@ function containsQuery(query: string, candidates: Array<string | null | undefine
   }
 
   return candidates.some((candidate) => normalizeText(candidate).includes(normalizedQuery));
+}
+
+function getSearchMatchKindRank(kind: CatalogSearchMatchKind): number {
+  return kind === "primary" ? 0 : 1;
 }
 
 function buildFallbackSlug(prefix: string): string {
@@ -493,10 +505,10 @@ function mapAttractionCatalogItem(
 function mapTransferCatalogItem(
   row: TransferRow,
   distanceKm: number | null,
+  searchMatchKind: CatalogSearchMatchKind = "primary",
 ): PublicTransferCatalogItem {
   const fallbackContactName = formatPublicPersonName(row.owner, "");
-  const contactName =
-    formatPublicContactName(row.contactName, fallbackContactName) || null;
+  const contactName = formatPublicContactName(row.contactName, fallbackContactName) || null;
   const fleetSummary = deriveTransferSummaryFromFleet(row);
   const serviceTags = cleanPublicTextList(normalizeTransferServiceTags(row.serviceTags), {
     minLength: 2,
@@ -588,6 +600,7 @@ function mapTransferCatalogItem(
       row.photoUrls.length > 0 ? row.photoUrls : fleetSummary.photoUrls,
     ),
     distanceKm: roundDistanceKm(distanceKm),
+    searchMatchKind,
     contacts: {
       contactName,
       phone: row.phone ?? row.owner.phone,
@@ -701,6 +714,7 @@ export async function getPublicTransferCatalog(
         minPrice,
         maxPrice,
         sort,
+        nearbyRadiusKm: locationQuery ? radiusKm : null,
       },
     };
   }
@@ -746,11 +760,13 @@ export async function getPublicTransferCatalog(
         row.serviceArea,
         row.routeExamples,
       ]);
-      const locationMatch =
-        !locationQuery ||
-        (center
-          ? isWithinRadiusKm(distanceKm, radiusKm)
-          : resolvedLocationMatch || textLocationMatch);
+      const primaryLocationMatch =
+        Boolean(locationQuery) && (resolvedLocationMatch || textLocationMatch);
+      const nearbyLocationMatch =
+        Boolean(locationQuery) && center !== null && isWithinRadiusKm(distanceKm, radiusKm);
+      const locationMatch = !locationQuery || primaryLocationMatch || nearbyLocationMatch;
+      const searchMatchKind: CatalogSearchMatchKind =
+        locationQuery && !primaryLocationMatch ? "nearby" : "primary";
 
       if (!locationMatch) {
         return null;
@@ -803,7 +819,7 @@ export async function getPublicTransferCatalog(
       const relevance = searchScore * 70 + distanceScore + exactLocationScore;
       const catalogRank = getTransferCatalogRankScore(row);
 
-      return { row, distanceKm, relevance, priceFrom, catalogRank };
+      return { row, distanceKm, searchMatchKind, relevance, priceFrom, catalogRank };
     })
     .filter(
       (
@@ -811,6 +827,7 @@ export async function getPublicTransferCatalog(
       ): item is {
         row: TransferRow;
         distanceKm: number | null;
+        searchMatchKind: CatalogSearchMatchKind;
         relevance: number;
         priceFrom: number | null;
         catalogRank: number;
@@ -818,6 +835,12 @@ export async function getPublicTransferCatalog(
     );
 
   filtered.sort((left, right) => {
+    if (locationQuery && left.searchMatchKind !== right.searchMatchKind) {
+      return (
+        getSearchMatchKindRank(left.searchMatchKind) - getSearchMatchKindRank(right.searchMatchKind)
+      );
+    }
+
     if (sort === "distance_asc") {
       if (left.distanceKm === null && right.distanceKm === null) return 0;
       if (left.distanceKm === null) return 1;
@@ -874,7 +897,9 @@ export async function getPublicTransferCatalog(
   const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return {
-    items: paged.map(({ row, distanceKm }) => mapTransferCatalogItem(row, distanceKm)),
+    items: paged.map(({ row, distanceKm, searchMatchKind }) =>
+      mapTransferCatalogItem(row, distanceKm, searchMatchKind),
+    ),
     total,
     page: safePage,
     pageSize,
@@ -889,6 +914,7 @@ export async function getPublicTransferCatalog(
       minPrice,
       maxPrice,
       sort,
+      nearbyRadiusKm: locationQuery ? radiusKm : null,
     },
   };
 }

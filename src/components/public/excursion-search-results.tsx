@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Fragment,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type UIEvent as ReactUIEvent,
@@ -34,6 +35,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
@@ -160,6 +162,7 @@ function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): Mobile
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const ruPluralRules = new Intl.PluralRules("ru-RU");
+const DEFAULT_NEARBY_RADIUS_KM = 20;
 
 function formatRuCount(value: number, one: string, few: string, many: string): string {
   const plural = ruPluralRules.select(Math.abs(value));
@@ -193,7 +196,7 @@ function buildSearchUrl(direction: "excursions" | "tours", params: Record<string
       return false;
     }
 
-    if (key === "radiusKm" && value === "30") {
+    if (key === "radiusKm" && value === String(DEFAULT_NEARBY_RADIUS_KM)) {
       return false;
     }
 
@@ -438,7 +441,7 @@ function getLocationFilterChipLabel(locationName: string | null, radiusKm: numbe
     return "Весь Крым";
   }
 
-  if (radiusKm !== 30) {
+  if (radiusKm !== DEFAULT_NEARBY_RADIUS_KM) {
     return `${locationName} · ${radiusKm} км`;
   }
 
@@ -1989,14 +1992,14 @@ export function ExcursionSearchResults({
       chips.push({
         key: "location",
         label: filters.locationName,
-        onClear: () => applyFilters({ location: "", radiusKm: "30" }),
+        onClear: () => applyFilters({ location: "", radiusKm: String(DEFAULT_NEARBY_RADIUS_KM) }),
       });
     }
-    if (filters.locationName && filters.radiusKm !== 30) {
+    if (filters.locationName && filters.radiusKm !== DEFAULT_NEARBY_RADIUS_KM) {
       chips.push({
         key: "radius",
         label: `${filters.radiusKm} км`,
-        onClear: () => applyFilters({ radiusKm: "30" }),
+        onClear: () => applyFilters({ radiusKm: String(DEFAULT_NEARBY_RADIUS_KM) }),
       });
     }
     if (filters.districtName) {
@@ -2309,7 +2312,11 @@ export function ExcursionSearchResults({
                   }
                   onClear={
                     filters.locationName
-                      ? () => applyFilters({ location: "", radiusKm: "30" })
+                      ? () =>
+                          applyFilters({
+                            location: "",
+                            radiusKm: String(DEFAULT_NEARBY_RADIUS_KM),
+                          })
                       : undefined
                   }
                 />
@@ -2322,10 +2329,10 @@ export function ExcursionSearchResults({
                   }}
                   onClear={() => {
                     setLocation("");
-                    setRadiusKm("30");
+                    setRadiusKm(String(DEFAULT_NEARBY_RADIUS_KM));
                     setActiveLocationDropdown(null);
                     setActiveLocationSuggestionIndex(-1);
-                    applyFilters({ location: "", radiusKm: "30" });
+                    applyFilters({ location: "", radiusKm: String(DEFAULT_NEARBY_RADIUS_KM) });
                   }}
                   applyLabel="Показать варианты"
                 />
@@ -2454,13 +2461,13 @@ export function ExcursionSearchResults({
                     <div className="flex items-center justify-between text-xs text-olive/60">
                       <span>5 км</span>
                       <span className="text-sm font-semibold text-olive">{radiusKm} км</span>
-                      <span>100 км</span>
+                      <span>20 км</span>
                     </div>
                     <input
                       name="radiusKm"
                       type="range"
                       min={5}
-                      max={100}
+                      max={20}
                       step={5}
                       value={radiusKm}
                       onChange={(event) => setRadiusKm(event.target.value)}
@@ -2885,22 +2892,35 @@ export function ExcursionSearchResults({
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {displayItems.map((item) => (
-                        <ExcursionCard
-                          key={item.id}
-                          item={item}
-                          isHighlighted={hoveredPinId === item.id || activePointId === item.id}
-                          onMouseEnter={() => {
-                            setActivePointId(null);
-                            setHoveredCardId(item.id);
-                          }}
-                          onMouseLeave={() => setHoveredCardId(null)}
-                          cardRef={(el) => {
-                            if (el) cardRefsMap.current.set(item.id, el);
-                            else cardRefsMap.current.delete(item.id);
-                          }}
-                        />
-                      ))}
+                      {displayItems.map((item, index) => {
+                        const showNearbyNote =
+                          item.searchMatchKind === "nearby" &&
+                          (index === 0 || displayItems[index - 1]?.searchMatchKind !== "nearby");
+
+                        return (
+                          <Fragment key={item.id}>
+                            {showNearbyNote ? (
+                              <CatalogNearbyContinuationNote
+                                locationName={filters.locationName}
+                                radiusKm={filters.nearbyRadiusKm}
+                              />
+                            ) : null}
+                            <ExcursionCard
+                              item={item}
+                              isHighlighted={hoveredPinId === item.id || activePointId === item.id}
+                              onMouseEnter={() => {
+                                setActivePointId(null);
+                                setHoveredCardId(item.id);
+                              }}
+                              onMouseLeave={() => setHoveredCardId(null)}
+                              cardRef={(el) => {
+                                if (el) cardRefsMap.current.set(item.id, el);
+                                else cardRefsMap.current.delete(item.id);
+                              }}
+                            />
+                          </Fragment>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -3074,22 +3094,35 @@ export function ExcursionSearchResults({
             </div>
           ) : (
             <div className="space-y-4">
-              {displayItems.map((item) => (
-                <ExcursionCard
-                  key={item.id}
-                  item={item}
-                  isHighlighted={hoveredPinId === item.id || activePointId === item.id}
-                  onMouseEnter={() => {
-                    setActivePointId(null);
-                    setHoveredCardId(item.id);
-                  }}
-                  onMouseLeave={() => setHoveredCardId(null)}
-                  cardRef={(el) => {
-                    if (el) cardRefsMap.current.set(item.id, el);
-                    else cardRefsMap.current.delete(item.id);
-                  }}
-                />
-              ))}
+              {displayItems.map((item, index) => {
+                const showNearbyNote =
+                  item.searchMatchKind === "nearby" &&
+                  (index === 0 || displayItems[index - 1]?.searchMatchKind !== "nearby");
+
+                return (
+                  <Fragment key={item.id}>
+                    {showNearbyNote ? (
+                      <CatalogNearbyContinuationNote
+                        locationName={filters.locationName}
+                        radiusKm={filters.nearbyRadiusKm}
+                      />
+                    ) : null}
+                    <ExcursionCard
+                      item={item}
+                      isHighlighted={hoveredPinId === item.id || activePointId === item.id}
+                      onMouseEnter={() => {
+                        setActivePointId(null);
+                        setHoveredCardId(item.id);
+                      }}
+                      onMouseLeave={() => setHoveredCardId(null)}
+                      cardRef={(el) => {
+                        if (el) cardRefsMap.current.set(item.id, el);
+                        else cardRefsMap.current.delete(item.id);
+                      }}
+                    />
+                  </Fragment>
+                );
+              })}
             </div>
           )}
 

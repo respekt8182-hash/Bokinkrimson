@@ -58,7 +58,7 @@ type LocationSuggestionItem = {
   searchTerms: string[];
 };
 
-const DEFAULT_RADIUS_KM = "30";
+const DEFAULT_RADIUS_KM = "20";
 const PRICE_MIN_BOUND = 0;
 const PRICE_MAX_BOUND = 100_000;
 const PRICE_STEP = 500;
@@ -671,13 +671,13 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
               <div className="flex items-center justify-between text-xs text-olive/60">
                 <span>5 км</span>
                 <span className="text-sm font-semibold text-olive">{radiusKm} км</span>
-                <span>100 км</span>
+                <span>20 км</span>
               </div>
               <input
                 name="radiusKm"
                 type="range"
                 min={5}
-                max={100}
+                max={20}
                 step={5}
                 value={radiusKm}
                 onChange={(event) => setRadiusKm(event.target.value)}

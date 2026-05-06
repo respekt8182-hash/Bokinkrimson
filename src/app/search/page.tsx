@@ -104,7 +104,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasReviewsRaw = pick(params.hasReviews);
   const familyFriendlyRaw = pick(params.familyFriendly) || pick(params.kidsFriendly);
   const petsAllowedRaw = pick(params.petsAllowed);
-  const radiusKm = pick(params.radiusKm) || "30";
+  const radiusKm = pick(params.radiusKm) || "20";
   const compactDates = parseDateRangeParam(pick(params.dates));
   const checkIn =
     pick(params.checkIn) || pick(params.dateFrom) || pick(params.date) || compactDates.checkIn;
@@ -157,7 +157,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       dateFrom: checkIn || undefined,
       dateTo: checkOut || undefined,
       people: Number.isFinite(peopleRaw) ? Math.max(1, peopleRaw) : undefined,
-      radiusKm: Number.parseFloat(radiusKm) || 30,
+      radiusKm: Number.parseFloat(radiusKm) || 20,
       page,
       pageSize: 30,
     });

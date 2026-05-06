@@ -4,6 +4,7 @@
 import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import {
   type CSSProperties,
+  Fragment,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type UIEvent as ReactUIEvent,
@@ -21,6 +22,7 @@ import {
   type YandexMapViewport,
 } from "@/components/maps/yandex-map-multi-viewer";
 import { AppIcon } from "@/components/ui/app-icon";
+import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import {
   MapPropertyPopupCard,
   type MapPopupPropertyItem,
@@ -28,6 +30,7 @@ import {
 import { PublicPropertySearchCard } from "@/components/public/public-property-search-card";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
+import { NEARBY_CATALOG_RADIUS_KM } from "@/lib/catalog-radius";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 import {
   setPublicMobileBottomNavForceHidden,
@@ -911,7 +914,10 @@ export function PublicHousingResultsWithMap({
       aria-expanded={mobileSheetSnap !== "collapsed"}
       aria-controls="catalog-results"
     >
-      <span className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80" aria-hidden="true" />
+      <span
+        className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
+        aria-hidden="true"
+      />
       <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
         Найдено {foundCountLabel}
         <AppIcon
@@ -938,6 +944,9 @@ export function PublicHousingResultsWithMap({
             ? emptyContent
             : items.map((item, index) => {
                 const isHighlighted = item.id === activePointId || item.id === hoveredPointId;
+                const showNearbyNote =
+                  item.searchMatchKind === "nearby" &&
+                  (index === 0 || items[index - 1]?.searchMatchKind !== "nearby");
                 const delayBase = index < 10 ? index * 50 : 0;
                 const animationStyle: CSSProperties = {
                   animationDelay: `${delayBase}ms`,
@@ -951,42 +960,49 @@ export function PublicHousingResultsWithMap({
                 };
 
                 return (
-                  <div
-                    key={item.id}
-                    ref={(node) => {
-                      if (node) {
-                        cardRefs.current.set(item.id, node);
-                        return;
-                      }
+                  <Fragment key={item.id}>
+                    {showNearbyNote ? (
+                      <CatalogNearbyContinuationNote
+                        locationName={selectedLocation}
+                        radiusKm={NEARBY_CATALOG_RADIUS_KM}
+                      />
+                    ) : null}
+                    <div
+                      ref={(node) => {
+                        if (node) {
+                          cardRefs.current.set(item.id, node);
+                          return;
+                        }
 
-                      cardRefs.current.delete(item.id);
-                    }}
-                    className="catalog-card-enter"
-                    style={animationStyle}
-                    onMouseEnter={() => {
-                      if (!mapPointById.has(item.id)) {
-                        return;
-                      }
+                        cardRefs.current.delete(item.id);
+                      }}
+                      className="catalog-card-enter"
+                      style={animationStyle}
+                      onMouseEnter={() => {
+                        if (!mapPointById.has(item.id)) {
+                          return;
+                        }
 
-                      setActivePointId(null);
-                      setHoveredPointId(null);
-                      setHoveredCardId(item.id);
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredCardId((current) => (current === item.id ? null : current));
-                    }}
-                  >
-                    <PublicPropertySearchCard
-                      item={item}
-                      initialIsFavorite={false}
-                      view={view}
-                      prioritizeImage={index < eagerImageCount}
-                      searchGuests={searchGuestsCount}
-                      isHighlighted={isHighlighted}
-                      isNew={newIdsSet.has(item.id)}
-                      onWishlistToggle={onWishlistToggle}
-                    />
-                  </div>
+                        setActivePointId(null);
+                        setHoveredPointId(null);
+                        setHoveredCardId(item.id);
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredCardId((current) => (current === item.id ? null : current));
+                      }}
+                    >
+                      <PublicPropertySearchCard
+                        item={item}
+                        initialIsFavorite={false}
+                        view={view}
+                        prioritizeImage={index < eagerImageCount}
+                        searchGuests={searchGuestsCount}
+                        isHighlighted={isHighlighted}
+                        isNew={newIdsSet.has(item.id)}
+                        onWishlistToggle={onWishlistToggle}
+                      />
+                    </div>
+                  </Fragment>
                 );
               })}
       </div>

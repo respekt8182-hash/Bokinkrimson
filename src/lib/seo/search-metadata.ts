@@ -317,7 +317,7 @@ export async function getSearchSeoState(searchParams: SearchParamsInput): Promis
   if (direction === "tours") {
     const hasNoise = hasMeaningfulNoise(searchParams, excursionNoiseKeys, {
       page: "1",
-      radiuskm: "30",
+      radiuskm: "20",
       offertype: "tour",
     });
     const canonicalPath = location ? buildToursHubPath({ location }) : toursHubPath;
@@ -352,7 +352,7 @@ export async function getSearchSeoState(searchParams: SearchParamsInput): Promis
     : null;
   const hasNoise = hasMeaningfulNoise(searchParams, excursionNoiseKeys, {
     page: "1",
-    radiuskm: "30",
+    radiuskm: "20",
     offertype: "excursion",
   });
   const stableTaxonomyCount = [location, category, district].filter(Boolean).length;

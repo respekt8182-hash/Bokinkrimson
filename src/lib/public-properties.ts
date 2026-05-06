@@ -13,6 +13,16 @@ import {
   propertyTypeById,
   propertyTypes,
 } from "@/lib/constants";
+import {
+  calculateDistanceKm,
+  isWithinRadiusKm,
+  NEARBY_CATALOG_RADIUS_KM,
+  roundDistanceKm,
+  type CatalogGeoPoint,
+  type CatalogSearchMatchKind,
+} from "@/lib/catalog-radius";
+import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
+import { getKnownCrimeaLocationCenter } from "@/lib/crimea-location-coordinates";
 import { findCrimeaSettlementById, findCrimeaSettlementByName } from "@/lib/crimea-settlements";
 import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
@@ -86,6 +96,8 @@ export type PublicCatalogItem = {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  distanceKm: number | null;
+  searchMatchKind: CatalogSearchMatchKind;
   checkInFrom: string | null;
   childrenAllowed: boolean;
   petsPolicy: PetsPolicy | null;
@@ -145,6 +157,7 @@ export type PublicCatalogResult = {
     familyFriendly: boolean;
     petsAllowed: boolean;
     sort: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
+    nearbyRadiusKm: number | null;
   };
 };
 
@@ -284,6 +297,41 @@ function normalizeSearchText(value: string): string {
     .replace(/[^a-z0-9а-я\s-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isSameCatalogLocation(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const leftKey = normalizeLocationName(left ?? "");
+  const rightKey = normalizeLocationName(right ?? "");
+  return Boolean(leftKey && rightKey && leftKey === rightKey);
+}
+
+function getCatalogLocationPoint(input: {
+  latitude: number | null;
+  longitude: number | null;
+  locationId: string | null;
+  locationName: string | null;
+}): CatalogGeoPoint | null {
+  if (
+    input.latitude !== null &&
+    input.longitude !== null &&
+    Number.isFinite(input.latitude) &&
+    Number.isFinite(input.longitude)
+  ) {
+    return { latitude: input.latitude, longitude: input.longitude };
+  }
+
+  const knownCenter =
+    getKnownCrimeaLocationCenter(input.locationName) ??
+    getKnownCrimeaLocationCenter(input.locationId);
+
+  return knownCenter ? { latitude: knownCenter.latitude, longitude: knownCenter.longitude } : null;
+}
+
+function getSearchMatchKindRank(kind: CatalogSearchMatchKind): number {
+  return kind === "primary" ? 0 : 1;
 }
 
 function normalizeAddressSearchText(value: string): string {
@@ -1266,6 +1314,18 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     query.type && propertyTypes.some((propertyType) => propertyType.id === query.type)
       ? query.type
       : null;
+  const resolvedLocationCenter = hasExplicitLocationFilter
+    ? await resolveCrimeaLocationCenter(
+        resolvedLocation?.name ?? query.location ?? query.locationId ?? null,
+      )
+    : null;
+  const locationCenterPoint: CatalogGeoPoint | null = resolvedLocationCenter
+    ? {
+        latitude: resolvedLocationCenter.latitude,
+        longitude: resolvedLocationCenter.longitude,
+      }
+    : null;
+  const hasLocationSearchScope = Boolean(resolvedLocation || locationCenterPoint);
 
   const where: Prisma.PropertyWhereInput = {
     ...buildPublishedPropertyVisibilityWhere(),
@@ -1400,7 +1460,25 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         return null;
       }
 
-      if (resolvedLocation && displayState.locationId !== resolvedLocation.id) {
+      const exactLocationMatch = resolvedLocation
+        ? isSameCatalogLocation(displayState.locationId, resolvedLocation.id) ||
+          isSameCatalogLocation(displayState.locationName, resolvedLocation.name)
+        : false;
+      const distanceKm = calculateDistanceKm(
+        locationCenterPoint,
+        getCatalogLocationPoint({
+          latitude: displayState.latitude,
+          longitude: displayState.longitude,
+          locationId: displayState.locationId,
+          locationName: displayState.locationName,
+        }),
+      );
+      const nearbyLocationMatch =
+        !exactLocationMatch && isWithinRadiusKm(distanceKm, NEARBY_CATALOG_RADIUS_KM);
+      const searchMatchKind: CatalogSearchMatchKind =
+        hasLocationSearchScope && !exactLocationMatch ? "nearby" : "primary";
+
+      if (hasLocationSearchScope && !exactLocationMatch && !nearbyLocationMatch) {
         return null;
       }
       if (type && displayState.type !== type) {
@@ -1438,6 +1516,8 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         displayState,
         minNightPrice,
         currency,
+        distanceKm,
+        searchMatchKind,
         // Multi-factor catalog rank: rating, reviews, engagement signals, freshness, rotation.
         catalogRank: getCatalogRankScore(property),
         searchScore: searchScoreMap.get(property.id) ?? 0,
@@ -1451,11 +1531,20 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         displayState: ReturnType<typeof resolvePublicCatalogDisplayState>;
         minNightPrice: number | null;
         currency: string | null;
+        distanceKm: number | null;
+        searchMatchKind: CatalogSearchMatchKind;
         catalogRank: number;
         searchScore: number;
       } => Boolean(item),
     )
     .sort((left, right) => {
+      if (hasLocationSearchScope && left.searchMatchKind !== right.searchMatchKind) {
+        return (
+          getSearchMatchKindRank(left.searchMatchKind) -
+          getSearchMatchKindRank(right.searchMatchKind)
+        );
+      }
+
       if (sort === "price_asc") {
         if (left.minNightPrice === null && right.minNightPrice === null) return 0;
         if (left.minNightPrice === null) return 1;
@@ -1697,6 +1786,8 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       address: displayState.address ?? null,
       latitude: displayState.latitude,
       longitude: displayState.longitude,
+      distanceKm: roundDistanceKm(entry.distanceKm),
+      searchMatchKind: entry.searchMatchKind,
       checkInFrom: displayState.checkInFrom,
       childrenAllowed: displayState.childrenAllowed === true,
       petsPolicy: displayState.petsPolicy as PetsPolicy | null,
@@ -1741,6 +1832,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       familyFriendly,
       petsAllowed,
       sort,
+      nearbyRadiusKm: hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
     },
   };
 }
