@@ -39,7 +39,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
     select: {
       id: true,
       firstName: true,
-      lastName: true,
       phone: true,
       email: true,
       role: true,
@@ -99,7 +98,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
     item: {
       id: user.id,
       firstName: user.firstName,
-      lastName: user.lastName,
       phone: user.phone,
       deletedAt: now.toISOString(),
       deletionExpiresAt: deletionExpiresAt.toISOString(),

@@ -47,7 +47,6 @@ export async function PUT(request: Request, context: RouteContext) {
       user: {
         select: {
           firstName: true,
-          lastName: true,
           avatarUrl: true,
         },
       },
@@ -163,7 +162,6 @@ export async function PUT(request: Request, context: RouteContext) {
       user: {
         select: {
           firstName: true,
-          lastName: true,
           avatarUrl: true,
         },
       },

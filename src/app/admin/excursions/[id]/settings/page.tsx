@@ -54,7 +54,7 @@ export default async function AdminExcursionSettingsPage({
       const excursion = await db.excursion.findUnique({
         where: { id },
         include: {
-          owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          owner: { select: { id: true, firstName: true, phone: true } },
           mainLocation: { select: { id: true, name: true } },
           category: { select: { id: true, name: true } },
           district: { select: { id: true, name: true } },
@@ -77,7 +77,7 @@ export default async function AdminExcursionSettingsPage({
           db.user.findMany({
             where: { role: "USER", deletedAt: null },
             orderBy: [{ firstName: "asc" }],
-            select: { id: true, firstName: true, lastName: true, phone: true },
+            select: { id: true, firstName: true, phone: true },
           }),
           db.excursionLocation.findMany({
             orderBy: [{ name: "asc" }],

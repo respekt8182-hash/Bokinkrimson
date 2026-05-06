@@ -1,5 +1,6 @@
 // Domain/service module for applications.
 import { ApplicationEntityType, ApplicationStatus } from "@prisma/client";
+import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 
 export type SerializedApplication = {
   id: string;
@@ -75,7 +76,7 @@ export function serializeApplication(application: {
   property?: { name: string | null } | null;
   excursion?: { title: string | null } | null;
   room?: { title: string } | null;
-  guestUser?: { firstName: string; lastName: string };
+  guestUser?: { firstName: string; lastName?: string | null };
 }): SerializedApplication {
   const entityTitle =
     application.entityType === ApplicationEntityType.PROPERTY
@@ -95,13 +96,13 @@ export function serializeApplication(application: {
     roomTitle: application.room?.title ?? null,
     guestUserId: application.guestUserId,
     guestName: application.guestUser
-      ? `${application.guestUser.firstName} ${application.guestUser.lastName}`
+      ? formatPublicPersonName(application.guestUser, "Гость")
       : "Гость",
     dateFrom: toIsoDate(application.dateFrom),
     dateTo: toIsoDate(application.dateTo),
     guestsCount: application.guestsCount,
     message: application.message,
-    contactName: application.contactName,
+    contactName: formatPublicContactName(application.contactName, application.contactName),
     contactPhone: application.contactPhone,
     contactEmail: application.contactEmail,
     status: application.status,

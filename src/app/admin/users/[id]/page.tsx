@@ -85,7 +85,7 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl text-olive">
-                {user.firstName} {user.lastName}
+                {user.firstName}
               </h1>
               {isPendingDeletion ? (
                 <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
@@ -103,7 +103,7 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
             deleteEndpoint={`/api/admin/users/${user.id}`}
             restoreEndpoint={`/api/admin/users/${user.id}/restore`}
             entityLabel="профиль"
-            entityName={`${user.firstName} ${user.lastName}`}
+            entityName={user.firstName}
             isPendingDeletion={isPendingDeletion}
             restoreUntil={user.deletionExpiresAt?.toISOString() ?? null}
             deleteButtonLabel="Удалить профиль"

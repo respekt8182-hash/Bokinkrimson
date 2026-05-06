@@ -33,7 +33,6 @@ type ChatPreview = {
   user: {
     id: string;
     firstName: string;
-    lastName: string;
     phone: string;
     avatarUrl: string | null;
   };
@@ -60,7 +59,6 @@ type ChatDetail = {
   user: {
     id: string;
     firstName: string;
-    lastName: string;
     phone: string;
     avatarUrl: string | null;
   };
@@ -189,8 +187,8 @@ function playNotification() {
   } catch {}
 }
 
-function getUserFullName(user: { firstName: string; lastName: string }) {
-  return [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+function getUserFullName(user: { firstName: string }) {
+  return user.firstName.trim();
 }
 
 function formatChatUpdatedAt(value: string) {

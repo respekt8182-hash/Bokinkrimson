@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
     data: {
       chatId: chat.id,
       senderType: "user",
-      senderName: `${session.firstName} ${session.lastName}`.trim(),
+      senderName: session.firstName.trim(),
       text: trimmedText,
       imageUrl,
     },

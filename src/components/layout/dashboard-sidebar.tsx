@@ -26,6 +26,7 @@ import { useMemo, useState } from "react";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
+import { formatPublicPersonName } from "@/lib/public-display-name";
 
 // Desktop sidebar:
 // - global dashboard navigation
@@ -39,7 +40,6 @@ type SidebarPropertyItem = {
 
 type DashboardSidebarProps = {
   firstName: string;
-  lastName: string;
   avatarUrl: string | null;
   initials: string;
   properties: SidebarPropertyItem[];
@@ -166,7 +166,6 @@ function SidebarIconShell({
 
 export function DashboardSidebar({
   firstName,
-  lastName,
   avatarUrl,
   initials,
   properties,
@@ -196,7 +195,7 @@ export function DashboardSidebar({
   const isObjectContextVisible = Boolean(selectedProperty);
   const isObjectsActive = safePathname.startsWith("/dashboard/objects");
 
-  const displayName = `${firstName} ${lastName}`.trim();
+  const displayName = formatPublicPersonName({ firstName }, "Пользователь");
 
   return (
     <aside className="rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10">

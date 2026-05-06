@@ -113,7 +113,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     db.transfer.findUnique({
       where: { id },
       include: {
-        owner: { select: { firstName: true, lastName: true, phone: true, avatarUrl: true } },
+        owner: { select: { firstName: true, phone: true, avatarUrl: true } },
         location: { select: { id: true, name: true } },
       },
     }),
@@ -130,7 +130,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
           orderBy: [{ createdAt: "desc" }],
           include: {
             user: {
-              select: { firstName: true, lastName: true, avatarUrl: true },
+              select: { firstName: true, avatarUrl: true },
             },
           },
           take: 50,
@@ -281,8 +281,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     transfer.status === TransferStatus.PUBLISHED && transfer.isPublishedVisible
       ? buildPublicTransferPath({ id: transfer.id, title: publicTransfer.title })
       : null;
-  const contactName =
-    transfer.contactName ?? `${transfer.owner.firstName} ${transfer.owner.lastName}`.trim();
+  const contactName = transfer.contactName ?? transfer.owner.firstName;
   const hasReviews = transfer.reviewsCount > 0 && Number(transfer.avgRating) > 0;
   const latestPayment = payments[0] ?? null;
   const succeededPayment =
@@ -307,7 +306,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
           <h1 className="mt-2 text-3xl text-olive">{transfer.title || "Трансфер без названия"}</h1>
           <p className="mt-1 text-sm text-olive/64">
             Статус: {getTransferStatusLabel(transfer.status, transfer.pendingEditStatus ?? null)}.
-            Владелец: {transfer.owner.firstName} {transfer.owner.lastName}
+            Владелец: {transfer.owner.firstName}
             {transfer.owner.phone ? `, ${transfer.owner.phone}` : ""}.
           </p>
         </div>
@@ -701,7 +700,7 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
               <div className="flex items-start justify-between gap-4">
                 <dt className="text-olive/45">Владелец</dt>
                 <dd className="text-right font-semibold text-olive">
-                  {transfer.owner.firstName} {transfer.owner.lastName}
+                  {transfer.owner.firstName}
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-4">

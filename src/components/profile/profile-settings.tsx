@@ -148,10 +148,9 @@ function detectSupportedAvatarUploadType(file: File): SupportedAvatarUploadType 
   return null;
 }
 
-function getInitials(input: { firstName: string; lastName: string }): string {
+function getInitials(input: { firstName: string }): string {
   const first = input.firstName.trim().slice(0, 1);
-  const fallback = input.lastName.trim().slice(0, 1);
-  return (first || fallback || "?").toUpperCase();
+  return (first || "?").toUpperCase();
 }
 
 function formatPhoneForInput(value: string | null | undefined): string {
@@ -336,8 +335,8 @@ export function ProfileSettings({
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null);
 
   const initials = useMemo(
-    () => getInitials({ firstName: profile.firstName, lastName: profile.lastName }),
-    [profile.firstName, profile.lastName],
+    () => getInitials({ firstName: profile.firstName }),
+    [profile.firstName],
   );
   const isPasswordSectionDisabled = !passwordChangeAvailable;
 

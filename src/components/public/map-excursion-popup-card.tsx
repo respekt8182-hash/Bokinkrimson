@@ -8,6 +8,7 @@ import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
 import { formatProgramDuration, formatProgramPrice } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
+import { formatPublicPersonName, getPublicPersonInitial } from "@/lib/public-display-name";
 import type { PublicExcursionCatalogItem } from "@/lib/public-excursions";
 import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
@@ -61,10 +62,8 @@ export function MapExcursionPopupCard({
           ? "Есть места"
           : "Программа по запросу";
 
-  const ownerName = [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "?";
-  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
-    .trim()
-    .toUpperCase();
+  const ownerName = formatPublicPersonName(item.owner, "?");
+  const ownerInitials = getPublicPersonInitial(item.owner);
 
   if (variant === "compact") {
     return (

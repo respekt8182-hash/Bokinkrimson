@@ -78,7 +78,7 @@ export default async function DashboardTransfersPage() {
     const created = await createTransferDraft({
       ownerId: currentSession.id,
       title: (formData.get("title") as string | null)?.trim() || null,
-      contactName: `${currentSession.firstName} ${currentSession.lastName}`.trim(),
+      contactName: currentSession.firstName.trim(),
       phone: currentSession.phone,
     });
 

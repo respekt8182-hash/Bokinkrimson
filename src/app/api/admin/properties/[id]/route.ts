@@ -31,7 +31,6 @@ const adminPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       id: true,
       email: true,
       firstName: true,
-      lastName: true,
       role: true,
       createdAt: true,
     },
@@ -65,7 +64,6 @@ const adminPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       user: {
         select: {
           firstName: true,
-          lastName: true,
         },
       },
     },
@@ -97,7 +95,6 @@ export async function GET(_request: Request, context: RouteContext) {
       owner: {
         id: property.owner.id,
         firstName: property.owner.firstName,
-        lastName: property.owner.lastName,
         email: property.owner.email,
         role: property.owner.role,
         createdAt: property.owner.createdAt.toISOString(),

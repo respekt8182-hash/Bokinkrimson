@@ -52,15 +52,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   await purgeDashboardDraftsSafely(session.id);
 
   const firstName = session.firstName;
-  const lastName = session.lastName;
   const avatarUrl = session.avatarUrl ?? null;
-  const initials = (firstName.trim().slice(0, 1) || lastName.trim().slice(0, 1) || "?").toUpperCase();
+  const initials = (firstName.trim().slice(0, 1) || "?").toUpperCase();
 
   return (
     <DashboardAppShell
       user={{
         firstName,
-        lastName,
         avatarUrl,
         initials,
       }}

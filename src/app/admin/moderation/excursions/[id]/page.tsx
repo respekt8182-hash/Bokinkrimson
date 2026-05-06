@@ -49,7 +49,6 @@ export default async function AdminModerationExcursionPage({
           owner: {
             select: {
               firstName: true,
-              lastName: true,
               email: true,
             },
           },
@@ -60,7 +59,6 @@ export default async function AdminModerationExcursionPage({
               user: {
                 select: {
                   firstName: true,
-                  lastName: true,
                 },
               },
             },
@@ -93,12 +91,8 @@ export default async function AdminModerationExcursionPage({
     title: excursion.title,
   });
   const ownerEmail = optionalText(excursion.owner.email);
-  const contactName = [
-    optionalText(excursion.contactFirstName) ?? optionalText(excursion.owner.firstName),
-    optionalText(excursion.contactLastName) ?? optionalText(excursion.owner.lastName),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const contactName =
+    optionalText(excursion.contactFirstName) ?? optionalText(excursion.owner.firstName);
   const contactRows = [
     { label: "Имя", value: contactName || null },
     { label: "Телефон", value: optionalText(excursion.contactPhone) },
@@ -155,7 +149,7 @@ export default async function AdminModerationExcursionPage({
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Организатор</dt>
             <dd className="font-medium text-olive">
-              {excursion.owner.firstName} {excursion.owner.lastName}
+              {excursion.owner.firstName}
             </dd>
             {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>

@@ -25,6 +25,7 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import { cn } from "@/lib/cn";
+import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 import {
   setPublicMobileBottomNavForceHidden,
   setPublicMobileBottomNavProgress,
@@ -421,8 +422,10 @@ function TransferMapPopupCard({
   onClose: () => void;
   variant?: "default" | "compact";
 }) {
-  const contactLabel =
-    item.contacts.contactName || `${item.owner.firstName} ${item.owner.lastName}`.trim();
+  const contactLabel = formatPublicContactName(
+    item.contacts.contactName,
+    formatPublicPersonName(item.owner, "Водитель"),
+  );
   const locationLabel = item.locationName || item.districtName || item.serviceArea || "Крым";
   const vehicleLabel = getTransferVehicleLabel(item);
   const metaLabel =

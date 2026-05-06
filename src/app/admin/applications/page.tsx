@@ -101,7 +101,6 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           owner: {
             select: {
               firstName: true,
-              lastName: true,
               email: true,
             },
           },
@@ -115,14 +114,13 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
           owner: {
             select: {
               firstName: true,
-              lastName: true,
               email: true,
             },
           },
         },
       },
       room: { select: { title: true } },
-      guestUser: { select: { firstName: true, lastName: true, email: true } },
+      guestUser: { select: { firstName: true, email: true } },
     },
   });
 
@@ -140,13 +138,13 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
             item.excursion?.title,
             item.property?.locationName,
             item.excursion?.locationName,
-            item.guestUser ? `${item.guestUser.firstName} ${item.guestUser.lastName}` : null,
+            item.guestUser ? item.guestUser.firstName : null,
             item.guestUser?.email,
             item.property
-              ? `${item.property.owner.firstName} ${item.property.owner.lastName} ${item.property.owner.email}`
+              ? `${item.property.owner.firstName} ${item.property.owner.email}`
               : null,
             item.excursion
-              ? `${item.excursion.owner.firstName} ${item.excursion.owner.lastName} ${item.excursion.owner.email}`
+              ? `${item.excursion.owner.firstName} ${item.excursion.owner.email}`
               : null,
           ],
           { limit: rows.length, minScore: 0.08 },
@@ -247,9 +245,9 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
             const normalized = serializeApplication(item);
             const ownerLabel =
               item.entityType === ApplicationEntityType.PROPERTY && item.property
-                ? `${item.property.owner.firstName} ${item.property.owner.lastName}`
+                ? item.property.owner.firstName
                 : item.entityType === ApplicationEntityType.EXCURSION && item.excursion
-                  ? `${item.excursion.owner.firstName} ${item.excursion.owner.lastName}`
+                  ? item.excursion.owner.firstName
                   : "Не определен";
             const ownerEmail =
               item.entityType === ApplicationEntityType.PROPERTY && item.property
@@ -322,7 +320,7 @@ export default async function AdminApplicationsPage({ searchParams }: AdminAppli
                   </p>
                   <p>
                     <span className="font-semibold text-olive">Гость в системе:</span>{" "}
-                    {item.guestUser ? `${item.guestUser.firstName} ${item.guestUser.lastName}` : "Не определен"}{" "}
+                    {item.guestUser ? item.guestUser.firstName : "Не определен"}{" "}
                     ({item.guestUser?.email ?? "-"})
                   </p>
                   <p className="mt-2">

@@ -53,7 +53,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     where: { id },
     include: {
       user: {
-        select: { firstName: true, lastName: true, avatarUrl: true },
+        select: { firstName: true, avatarUrl: true },
       },
       property: {
         select: { ownerId: true },
@@ -108,7 +108,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     },
     include: {
       user: {
-        select: { firstName: true, lastName: true, avatarUrl: true },
+        select: { firstName: true, avatarUrl: true },
       },
     },
   });

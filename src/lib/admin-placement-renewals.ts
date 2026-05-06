@@ -308,8 +308,8 @@ function compactStrings(values: Array<string | null | undefined>): string[] {
   return result;
 }
 
-function ownerName(owner: { firstName: string; lastName: string }): string {
-  return compactStrings([owner.firstName, owner.lastName]).join(" ") || "Владелец без имени";
+function ownerName(owner: { firstName: string }): string {
+  return owner.firstName.trim() || "Владелец без имени";
 }
 
 function contactName(...values: Array<string | null | undefined>): string | null {

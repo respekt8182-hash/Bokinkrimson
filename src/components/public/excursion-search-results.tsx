@@ -50,6 +50,7 @@ import { UnifiedGuestsEditor } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import { cn } from "@/lib/cn";
+import { formatPublicPersonName, getPublicPersonInitial } from "@/lib/public-display-name";
 import {
   setPublicMobileBottomNavForceHidden,
   setPublicMobileBottomNavProgress,
@@ -3276,11 +3277,8 @@ function ExcursionCard({
   const duration = formatProgramDuration(item);
   const priceLabel = formatProgramPrice(item);
   const titleId = `excursion-card-title-${item.id}`;
-  const ownerName =
-    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "Организатор";
-  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
-    .trim()
-    .toUpperCase();
+  const ownerName = formatPublicPersonName(item.owner, "Организатор");
+  const ownerInitials = getPublicPersonInitial(item.owner);
   const detailsHref = useMemo(() => stripSearchParamsFromPath(item.path), [item.path]);
 
   return (

@@ -7,11 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
+import { formatPublicPersonName } from "@/lib/public-display-name";
 
 type SiteHeaderUserMenuProps = {
   user: {
     firstName: string;
-    lastName: string;
     role: "USER" | "ADMIN";
     avatarUrl: string | null;
     initials: string;
@@ -26,6 +26,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
   const [isMenuMounted, setIsMenuMounted] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const userMenuTransitionMs = 200;
+  const displayName = formatPublicPersonName(user, "Пользователь");
 
   const dashboardHref = user.role === "ADMIN" ? "/admin" : "/dashboard";
   const menuItems =
@@ -166,7 +167,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
           >
             <div className="border-b border-olive/10 px-3 py-2.5">
               <p className="truncate text-sm font-semibold text-olive">
-                {[user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Пользователь"}
+                {displayName}
               </p>
             </div>
 

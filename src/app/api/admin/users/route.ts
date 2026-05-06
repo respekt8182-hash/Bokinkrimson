@@ -49,7 +49,6 @@ export async function GET(request: Request) {
     items: users.map((user) => ({
       id: user.id,
       firstName: user.firstName,
-      lastName: user.lastName,
       email: user.email,
       role: user.role,
       deletedAt: user.deletedAt?.toISOString() ?? null,

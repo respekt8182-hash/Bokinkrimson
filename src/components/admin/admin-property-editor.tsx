@@ -35,7 +35,7 @@ type PropertyData = {
   longitude: number | null;
 };
 
-type User = { id: string; firstName: string; lastName: string; phone: string };
+type User = { id: string; firstName: string; phone: string };
 type Location = { id: string; name: string };
 
 type Props = {
@@ -140,7 +140,7 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
           <select name="ownerId" defaultValue={property.ownerId} className={select}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.firstName} {u.lastName} ({u.phone})
+                {u.firstName} ({u.phone})
               </option>
             ))}
           </select>

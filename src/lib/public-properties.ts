@@ -1278,7 +1278,6 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       select: {
         id: true,
         firstName: true,
-        lastName: true,
         avatarUrl: true,
       },
     },
@@ -1717,7 +1716,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       owner: {
         id: property.owner.id,
         firstName: property.owner.firstName,
-        lastName: property.owner.lastName,
+        lastName: "",
         avatarUrl: property.owner.avatarUrl,
       },
     };
@@ -1752,7 +1751,6 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       id: true,
       email: true,
       firstName: true,
-      lastName: true,
       avatarUrl: true,
     },
   },
@@ -1790,7 +1788,6 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       user: {
         select: {
           firstName: true,
-          lastName: true,
           avatarUrl: true,
         },
       },
@@ -2098,7 +2095,7 @@ function buildPublicPropertyCardFromRecord(
     owner: {
       id: property.owner.id,
       firstName: property.owner.firstName,
-      lastName: property.owner.lastName,
+      lastName: "",
       avatarUrl: property.owner.avatarUrl,
     },
   };

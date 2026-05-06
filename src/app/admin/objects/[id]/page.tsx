@@ -30,7 +30,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
   const property = await db.property.findUnique({
     where: { id },
     include: {
-      owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      owner: { select: { id: true, firstName: true, phone: true } },
       rooms: {
         where: { isActive: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -45,7 +45,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
     db.user.findMany({
       where: { role: "USER", deletedAt: null },
       orderBy: [{ firstName: "asc" }],
-      select: { id: true, firstName: true, lastName: true, phone: true },
+      select: { id: true, firstName: true, phone: true },
     }),
     getLocationDirectoryItems(),
   ]);

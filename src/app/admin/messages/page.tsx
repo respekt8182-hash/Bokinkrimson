@@ -20,7 +20,6 @@ export default async function AdminMessagesPage() {
         select: {
           id: true,
           firstName: true,
-          lastName: true,
           email: true,
         },
       },
@@ -74,7 +73,7 @@ export default async function AdminMessagesPage() {
                     <p className="text-xs text-olive/60">ID: {item.id}</p>
                     <h2 className="text-lg text-olive">{item.sourceTypeLabel}: {contextLabel}</h2>
                     <p className="text-sm text-olive/70">
-                      От: {item.sender.firstName} {item.sender.lastName} ({item.sender.email})
+                      От: {item.sender.firstName} ({item.sender.email})
                     </p>
                   </div>
                   <div className="text-right">

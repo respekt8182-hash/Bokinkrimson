@@ -104,7 +104,7 @@ export default async function TransferDetailPage({
         take: 9,
         include: {
           user: {
-            select: { firstName: true, lastName: true, avatarUrl: true },
+            select: { firstName: true, avatarUrl: true },
           },
           ...(session
             ? {

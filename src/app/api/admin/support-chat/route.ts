@@ -60,7 +60,6 @@ export async function GET(req: NextRequest) {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
               phone: true,
               avatarUrl: true,
               deletedAt: true,
@@ -75,7 +74,6 @@ export async function GET(req: NextRequest) {
       const user = {
         id: chat.user.id,
         firstName: chat.user.firstName,
-        lastName: chat.user.lastName,
         phone: chat.user.phone,
         avatarUrl: chat.user.avatarUrl,
       };
@@ -90,7 +88,7 @@ export async function GET(req: NextRequest) {
       orderBy: { updatedAt: "desc" },
       include: {
         user: {
-          select: { id: true, firstName: true, lastName: true, phone: true, avatarUrl: true },
+          select: { id: true, firstName: true, phone: true, avatarUrl: true },
         },
         messages: { orderBy: { createdAt: "desc" }, take: 1 },
       },

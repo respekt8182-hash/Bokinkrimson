@@ -6,6 +6,7 @@ import {
   ReviewStatus,
 } from "@prisma/client";
 import type { DbTransactionClient } from "@/lib/db";
+import { formatPublicPersonName } from "@/lib/public-display-name";
 
 export type SerializedReview = {
   id: string;
@@ -48,7 +49,7 @@ export function serializeReview(review: {
   deletedAt: Date | null;
   currentUserReaction?: ReviewReactionValue | null;
   reactions?: Array<{ value: ReviewReactionValue }> | null;
-  user?: { firstName: string; lastName: string; avatarUrl?: string | null } | null;
+  user?: { firstName: string; lastName?: string | null; avatarUrl?: string | null } | null;
 }): SerializedReview {
   const currentUserReaction =
     review.currentUserReaction ?? review.reactions?.[0]?.value ?? null;
@@ -60,7 +61,7 @@ export function serializeReview(review: {
     excursionId: review.excursionId,
     transferId: review.transferId ?? null,
     userId: review.userId,
-    userName: review.user ? `${review.user.firstName} ${review.user.lastName}` : "Пользователь",
+    userName: review.user ? formatPublicPersonName(review.user, "Пользователь") : "Пользователь",
     userAvatarUrl: review.user?.avatarUrl ?? null,
     rating: Number(review.rating),
     text: review.text,

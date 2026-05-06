@@ -41,7 +41,7 @@ type ExcursionData = {
   moderationNotes: string | null;
 };
 
-type User = { id: string; firstName: string; lastName: string; phone: string };
+type User = { id: string; firstName: string; phone: string };
 type Ref = { id: string; name: string };
 
 type Props = {
@@ -153,7 +153,7 @@ export function AdminExcursionEditor({
           <select name="ownerId" defaultValue={excursion.ownerId} className={select}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.firstName} {u.lastName} ({u.phone})
+                {u.firstName} ({u.phone})
               </option>
             ))}
           </select>

@@ -6,7 +6,6 @@ import { useRef, useState } from "react";
 type User = {
   id: string;
   firstName: string;
-  lastName: string;
   phone: string;
 };
 
@@ -61,7 +60,7 @@ export function AdminCreatePropertyForm({ users, action, errorMessage }: Props) 
           <option value="">Выберите пользователя...</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>
-              {u.firstName} {u.lastName} ({u.phone})
+              {u.firstName} ({u.phone})
             </option>
           ))}
         </select>

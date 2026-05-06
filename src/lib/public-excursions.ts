@@ -1004,7 +1004,6 @@ export async function getPublicExcursionCatalog(
       owner: {
         select: {
           firstName: true,
-          lastName: true,
           avatarUrl: true,
         },
       },
@@ -1444,7 +1443,7 @@ export async function getPublicExcursionCatalog(
           Boolean(display.accommodationNights && display.accommodationNights > 0),
         owner: {
           firstName: item.owner.firstName,
-          lastName: item.owner.lastName,
+          lastName: "",
           avatarUrl: item.owner.avatarUrl,
         },
       };
@@ -1573,7 +1572,6 @@ async function getExcursionCardByIdentifier(input: {
         select: {
           id: true,
           firstName: true,
-          lastName: true,
           phone: true,
           email: true,
           avatarUrl: true,
@@ -1588,7 +1586,7 @@ async function getExcursionCardByIdentifier(input: {
         take: 9,
         include: {
           user: {
-            select: { firstName: true, lastName: true, avatarUrl: true },
+            select: { firstName: true, avatarUrl: true },
           },
           ...(input.viewerUserId
             ? {
@@ -1848,7 +1846,7 @@ async function getExcursionCardByIdentifier(input: {
     reviewsCount: excursion.reviewsCount,
     contacts: {
       firstName: display.contactFirstName ?? excursion.owner.firstName,
-      lastName: display.contactLastName ?? excursion.owner.lastName,
+      lastName: null,
       phone: display.contactPhone ?? excursion.owner.phone,
       phone2: display.contactPhone2,
       email: display.contactEmail ?? excursion.owner.email,
@@ -1862,7 +1860,7 @@ async function getExcursionCardByIdentifier(input: {
     owner: {
       id: excursion.owner.id,
       firstName: excursion.owner.firstName,
-      lastName: excursion.owner.lastName,
+      lastName: "",
       avatarUrl: excursion.owner.avatarUrl,
     },
     sessions: displaySessions.map((session) => ({

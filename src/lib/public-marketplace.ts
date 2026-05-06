@@ -17,6 +17,7 @@ import {
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
+import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import {
   createStaticAttractionDraft,
@@ -198,7 +199,6 @@ const transferInclude = {
     select: {
       id: true,
       firstName: true,
-      lastName: true,
       phone: true,
       avatarUrl: true,
     },
@@ -494,7 +494,9 @@ function mapTransferCatalogItem(
   row: TransferRow,
   distanceKm: number | null,
 ): PublicTransferCatalogItem {
-  const fallbackContactName = `${row.owner.firstName} ${row.owner.lastName}`.trim();
+  const fallbackContactName = formatPublicPersonName(row.owner, "");
+  const contactName =
+    formatPublicContactName(row.contactName, fallbackContactName) || null;
   const fleetSummary = deriveTransferSummaryFromFleet(row);
   const serviceTags = cleanPublicTextList(normalizeTransferServiceTags(row.serviceTags), {
     minLength: 2,
@@ -587,7 +589,7 @@ function mapTransferCatalogItem(
     ),
     distanceKm: roundDistanceKm(distanceKm),
     contacts: {
-      contactName: row.contactName ?? fallbackContactName,
+      contactName,
       phone: row.phone ?? row.owner.phone,
       phone2: row.phone2,
       websiteUrl: row.websiteUrl,
@@ -600,7 +602,7 @@ function mapTransferCatalogItem(
     owner: {
       id: row.owner.id,
       firstName: row.owner.firstName,
-      lastName: row.owner.lastName,
+      lastName: "",
       avatarUrl: row.owner.avatarUrl,
     },
   };

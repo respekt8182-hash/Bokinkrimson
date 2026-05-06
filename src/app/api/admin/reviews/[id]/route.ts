@@ -50,7 +50,7 @@ async function moderateReviewByAction(input: {
     where: { id: input.id },
     include: {
       user: {
-        select: { firstName: true, lastName: true },
+        select: { firstName: true },
       },
     },
   });
@@ -82,7 +82,7 @@ async function moderateReviewByAction(input: {
       },
       include: {
         user: {
-          select: { firstName: true, lastName: true },
+          select: { firstName: true },
         },
       },
     });

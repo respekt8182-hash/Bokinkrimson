@@ -45,7 +45,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
   const rows = await db.transfer.findMany({
     orderBy: [{ updatedAt: "desc" }],
     include: {
-      owner: { select: { firstName: true, lastName: true, phone: true, avatarUrl: true } },
+      owner: { select: { firstName: true, phone: true, avatarUrl: true } },
       location: { select: { name: true } },
       district: { select: { name: true } },
     },
@@ -81,7 +81,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
             item.location?.name,
             item.locationName,
             item.routeExamples,
-            `${item.owner.firstName} ${item.owner.lastName}`,
+            item.owner.firstName,
             item.owner.phone,
           ],
           { limit: statusFiltered.length, minScore: 0.08 },
@@ -213,7 +213,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                         ) : null}
                       </div>
                       <p className="mt-1 text-sm text-olive/58">
-                        {item.owner.firstName} {item.owner.lastName}
+                        {item.owner.firstName}
                         {item.owner.phone ? ` • ${item.owner.phone}` : ""}
                       </p>
                       <p className="mt-1 text-sm text-olive/58">

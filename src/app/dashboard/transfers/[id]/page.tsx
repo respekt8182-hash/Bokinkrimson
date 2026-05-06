@@ -699,7 +699,7 @@ export default async function DashboardTransferEditPage({
         routeExamples: transfer.routeExamples ?? "",
         latitude: transfer.latitude ? Number(transfer.latitude).toString() : "",
         longitude: transfer.longitude ? Number(transfer.longitude).toString() : "",
-        contactName: transfer.contactName ?? `${session.firstName} ${session.lastName}`.trim(),
+        contactName: transfer.contactName ?? session.firstName.trim(),
         phone: transfer.phone ?? session.phone,
         phone2: transfer.phone2 ?? "",
         websiteUrl: transfer.websiteUrl ?? "",

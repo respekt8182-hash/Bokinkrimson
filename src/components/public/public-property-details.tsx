@@ -39,6 +39,7 @@ import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gend
 import { cn } from "@/lib/cn";
 import { buildPropertyLeadMessage } from "@/lib/lead-message-author";
 import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
+import { formatPublicPersonName } from "@/lib/public-display-name";
 import {
   parseMealOptionsValue,
   parseParkingInfoValue,
@@ -852,8 +853,7 @@ export function PublicPropertyDetails({
     hasRegistryNumber ? "Проверено в реестре" : null,
     seaDistanceLabel,
   ].filter((badge): badge is string => Boolean(badge));
-  const ownerDisplayName =
-    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "Владелец";
+  const ownerDisplayName = formatPublicPersonName(item.owner, "Владелец");
   const ownerVerificationLabel = "Владелец проверен";
   const rankedRooms = useMemo(() => {
     return item.rooms

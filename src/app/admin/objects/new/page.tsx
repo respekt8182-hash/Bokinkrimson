@@ -29,7 +29,7 @@ export default async function AdminCreatePropertyPage({
   const users = await db.user.findMany({
     where: { role: "USER", deletedAt: null },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    select: { id: true, firstName: true, lastName: true, phone: true },
+    select: { id: true, firstName: true, phone: true },
   });
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const errorMessage = getErrorMessage(resolvedSearchParams.error);

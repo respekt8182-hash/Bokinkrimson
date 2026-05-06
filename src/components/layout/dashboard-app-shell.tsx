@@ -24,6 +24,7 @@ import {
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
+import { formatPublicPersonName } from "@/lib/public-display-name";
 
 // Global owner-dashboard shell:
 // - top desktop nav
@@ -31,7 +32,6 @@ import { cn } from "@/lib/cn";
 // - shared profile/menu framing
 type DashboardUser = {
   firstName: string;
-  lastName: string;
   avatarUrl: string | null;
   initials: string;
 };
@@ -194,8 +194,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
 
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
-  const displayName =
-    [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Пользователь";
+  const displayName = formatPublicPersonName(user, "Пользователь");
 
   function closeDrawer() {
     setIsDrawerOpen(false);

@@ -105,7 +105,6 @@ export default async function ExcursionModerationQueuePage({
           owner: {
             select: {
               firstName: true,
-              lastName: true,
               email: true,
             },
           },
@@ -132,7 +131,7 @@ export default async function ExcursionModerationQueuePage({
             item.startPoint,
             item.description,
             item.routeDescription,
-            `${item.owner.firstName} ${item.owner.lastName}`,
+            item.owner.firstName,
             item.owner.email,
           ],
           { limit: filteredRows.length, minScore: 0.08 },
@@ -335,7 +334,7 @@ export default async function ExcursionModerationQueuePage({
                   <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Организатор</dt>
                     <dd className="font-medium text-olive">
-                      {item.owner.firstName} {item.owner.lastName}
+                      {item.owner.firstName}
                     </dd>
                   </div>
                   {ownerEmail ? (

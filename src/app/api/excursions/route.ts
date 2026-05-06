@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     ownerId: session.id,
     offerType,
     contactFirstName: session.firstName,
-    contactLastName: session.lastName,
+    contactLastName: "",
     contactEmail: "",
   });
 

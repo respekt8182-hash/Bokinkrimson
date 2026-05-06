@@ -35,7 +35,6 @@ export async function POST(_request: Request, context: RouteContext) {
     select: {
       id: true,
       firstName: true,
-      lastName: true,
       phone: true,
       role: true,
       deletedAt: true,
@@ -97,7 +96,6 @@ export async function POST(_request: Request, context: RouteContext) {
     item: {
       id: user.id,
       firstName: user.firstName,
-      lastName: user.lastName,
       phone: user.phone,
       restoredAt: now.toISOString(),
     },

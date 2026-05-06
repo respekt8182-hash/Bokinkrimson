@@ -10,7 +10,6 @@ export type SerializedAdminMessage = {
   sender: {
     id: string;
     firstName: string;
-    lastName: string;
     email: string | null;
   };
   context: {
@@ -40,7 +39,6 @@ export function serializeAdminMessage(message: {
   senderUser: {
     id: string;
     firstName: string;
-    lastName: string;
     email: string | null;
   };
   property?: {
@@ -61,7 +59,6 @@ export function serializeAdminMessage(message: {
     sender: {
       id: message.senderUser.id,
       firstName: message.senderUser.firstName,
-      lastName: message.senderUser.lastName,
       email: message.senderUser.email,
     },
     context: {

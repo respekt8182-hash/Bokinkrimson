@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       skip: pagination.offset,
       take: pagination.limit,
       include: {
-        owner: { select: { firstName: true, lastName: true, phone: true } },
+        owner: { select: { firstName: true, phone: true } },
         mainLocation: { select: { name: true } },
         category: { select: { name: true } },
       },
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       locationName: e.mainLocation?.name ?? e.locationName,
       categoryName: e.category?.name,
       priceFrom: e.priceFrom ? Number(e.priceFrom) : null,
-      owner: `${e.owner.firstName} ${e.owner.lastName}`,
+      owner: e.owner.firstName,
       isPublishedVisible: e.isPublishedVisible,
       deletedAt: e.deletedAt?.toISOString() ?? null,
       deletionExpiresAt: e.deletionExpiresAt?.toISOString() ?? null,

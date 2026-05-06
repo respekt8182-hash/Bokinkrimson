@@ -21,12 +21,7 @@ import {
 export async function SiteHeader() {
   const session = await getSession();
   const firstName = session?.firstName ?? "";
-  const lastName = session?.lastName ?? "";
-  const initials = (
-    firstName.trim().slice(0, 1) ||
-    lastName.trim().slice(0, 1) ||
-    "?"
-  ).toUpperCase();
+  const initials = (firstName.trim().slice(0, 1) || "?").toUpperCase();
   const accountHref = session
     ? session.role === "ADMIN"
       ? "/admin"
@@ -109,7 +104,6 @@ export async function SiteHeader() {
               <SiteHeaderUserMenu
                 user={{
                   firstName,
-                  lastName,
                   role: session.role,
                   avatarUrl: session.avatarUrl ?? null,
                   initials,

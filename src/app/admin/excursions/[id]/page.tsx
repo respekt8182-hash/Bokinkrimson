@@ -56,7 +56,6 @@ export default async function AdminExcursionEditPage({
             owner: {
               select: {
                 firstName: true,
-                lastName: true,
                 phone: true,
                 email: true,
               },
@@ -131,7 +130,7 @@ export default async function AdminExcursionEditPage({
       <AdminPageHeader
         eyebrow="Каталог экскурсий"
         title={excursion.title ?? "Экскурсия без названия"}
-        description={`Статус: ${statusBits.join(" • ")}. Владелец: ${excursion.owner.firstName} ${excursion.owner.lastName}${excursion.owner.phone ? `, ${excursion.owner.phone}` : ""}`}
+        description={`Статус: ${statusBits.join(" • ")}. Владелец: ${excursion.owner.firstName}${excursion.owner.phone ? `, ${excursion.owner.phone}` : ""}`}
         actions={
           <>
             <Link

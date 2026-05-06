@@ -76,7 +76,7 @@ export async function GET(request: Request, context: RouteContext) {
     take: limit,
     include: {
       user: {
-        select: { firstName: true, lastName: true, avatarUrl: true },
+        select: { firstName: true, avatarUrl: true },
       },
       ...(session
         ? {
@@ -232,7 +232,7 @@ export async function POST(request: Request, context: RouteContext) {
       },
       include: {
         user: {
-          select: { firstName: true, lastName: true, avatarUrl: true },
+          select: { firstName: true, avatarUrl: true },
         },
       },
     });

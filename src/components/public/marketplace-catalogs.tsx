@@ -32,6 +32,11 @@ import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-bra
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { cn } from "@/lib/cn";
 import {
+  formatPublicContactName,
+  formatPublicPersonName,
+  getPublicPersonInitial,
+} from "@/lib/public-display-name";
+import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
@@ -859,9 +864,9 @@ function TransferCard({
   const vehicleOverview = formatTransferVehicleOverview(item, fleetCountLabel);
   const passengerCapacityLabel = formatPassengerCapacityLabel(item.fleet, item.seats);
   const luggageCapacityLabel = formatLuggageCapacityLabel(item.fleet, item.luggage);
-  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
-    .trim()
-    .toUpperCase();
+  const ownerName = formatPublicPersonName(item.owner, "Водитель");
+  const ownerInitials = getPublicPersonInitial(item.owner);
+  const contactName = formatPublicContactName(item.contacts.contactName, ownerName);
   const hasReviews = item.reviewsCount > 0 && item.avgRating > 0;
   const priceLabel = formatPrice(item.priceFrom, item.priceUnitLabel);
 
@@ -907,12 +912,12 @@ function TransferCard({
               <span className="inline-flex items-center gap-2 rounded-xl bg-cream/78 py-1 pl-1 pr-2.5 text-xs font-semibold text-olive/70 ring-1 ring-olive/8">
                 <OwnerAvatar
                   src={item.owner.avatarUrl}
-                  alt={item.contacts.contactName ?? item.title}
+                  alt={contactName}
                   initials={ownerInitials}
                   className="h-8 w-8"
                   fallbackClassName="text-[11px] text-olive/60"
                 />
-                {item.contacts.contactName ?? `${item.owner.firstName} ${item.owner.lastName}`}
+                {contactName}
               </span>
               <span className="rounded-lg border border-dashed border-olive/18 px-2.5 py-1.5 text-xs font-semibold text-olive/42 md:hidden">
                 {hasReviews
@@ -1457,11 +1462,10 @@ const transferContactPanelText = {
 
 export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
   const phoneHref = telHref(item.contacts.phone);
-  const ownerInitials = `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
-    .trim()
-    .toUpperCase();
+  const ownerName = formatPublicPersonName(item.owner, "Водитель");
+  const ownerInitials = getPublicPersonInitial(item.owner);
   const hasReviews = item.reviewsCount > 0 && item.avgRating > 0;
-  const contactName = item.contacts.contactName ?? `${item.owner.firstName} ${item.owner.lastName}`;
+  const contactName = formatPublicContactName(item.contacts.contactName, ownerName);
   const priceLabel = formatPrice(item.priceFrom, item.priceUnitLabel);
   const fleetCountLabel =
     item.fleet.length > 0

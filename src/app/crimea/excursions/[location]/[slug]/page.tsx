@@ -67,6 +67,7 @@ import {
   getOwnerPreviewExcursionByIdentifier,
   getPublicExcursionByIdentifier,
 } from "@/lib/public-excursions";
+import { getPublicFirstName } from "@/lib/public-display-name";
 import { buildSeoDescription, buildWebPageMetadata } from "@/lib/seo/metadata";
 import {
   buildExcursionsHubPath,
@@ -1185,9 +1186,7 @@ export default async function PublicExcursionPage({
     okUrl,
   );
   const organizerName =
-    [item.contacts.firstName ?? item.owner.firstName, item.contacts.lastName ?? item.owner.lastName]
-      .filter(Boolean)
-      .join(" ") || "Организатор";
+    getPublicFirstName(item.contacts.firstName ?? item.owner.firstName) ?? "Организатор";
   const effectiveBookingAction = item.offerType === "TOUR" ? bookingAction : excursionBookingAction;
   const showLeadForm = !effectiveBookingAction.disabled && directContactActions;
   const leadRequestActionLabel = "Отправить запрос";

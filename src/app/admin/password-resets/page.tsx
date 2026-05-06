@@ -15,7 +15,7 @@ export default async function AdminPasswordResetsPage() {
       orderBy: { createdAt: "desc" },
       include: {
         user: {
-          select: { id: true, firstName: true, lastName: true, email: true },
+          select: { id: true, firstName: true, email: true },
         },
       },
     }),
@@ -25,7 +25,7 @@ export default async function AdminPasswordResetsPage() {
       take: 50,
       include: {
         user: {
-          select: { id: true, firstName: true, lastName: true, email: true },
+          select: { id: true, firstName: true, email: true },
         },
       },
     }),
@@ -61,7 +61,7 @@ export default async function AdminPasswordResetsPage() {
               >
                 <div className="mb-3">
                   <p className="font-semibold text-olive">
-                    {req.user.firstName} {req.user.lastName}
+                    {req.user.firstName}
                   </p>
                   <p className="text-xs text-olive/65">{req.user.email}</p>
                   <p className="mt-1 text-xs text-olive/50">
@@ -97,7 +97,7 @@ export default async function AdminPasswordResetsPage() {
                       {new Date(req.createdAt).toLocaleString("ru-RU")}
                     </td>
                     <td className="px-3 py-2 text-olive">
-                      {req.user.firstName} {req.user.lastName}
+                      {req.user.firstName}
                       <p className="text-xs text-olive/60">{req.user.email}</p>
                     </td>
                     <td className="px-3 py-2 text-olive/70">

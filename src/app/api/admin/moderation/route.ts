@@ -65,7 +65,6 @@ export async function GET(request: Request) {
         select: {
           id: true,
           firstName: true,
-          lastName: true,
           email: true,
         },
       },
@@ -88,7 +87,7 @@ export async function GET(request: Request) {
             item.address,
             item.description,
             item.type,
-            `${item.owner.firstName} ${item.owner.lastName}`,
+            item.owner.firstName,
             item.owner.email,
           ],
           { limit: rows.length, minScore: 0.08 },
@@ -115,7 +114,7 @@ export async function GET(request: Request) {
       reviewsCount: item.reviewsCount,
       owner: {
         id: item.owner.id,
-        name: `${item.owner.firstName} ${item.owner.lastName}`,
+        name: item.owner.firstName,
         email: item.owner.email,
       },
       activeRoomsCount: item.rooms.length,

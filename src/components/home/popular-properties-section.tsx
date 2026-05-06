@@ -110,11 +110,6 @@ function PopularPropertyCard({
   const priceLabel = item.minNightPrice
     ? `от ${formatMoney(item.minNightPrice, item.currency ?? "RUB")}`
     : null;
-  const priceSubLabel = item.minNightPrice
-    ? item.priceType === "per_room"
-      ? "за объект в сутки"
-      : "за номер в сутки"
-    : null;
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -225,10 +220,6 @@ function PopularPropertyCard({
           {priceLabel ? (
             <>
               <p className="text-sm font-bold text-olive sm:text-base">{priceLabel}</p>
-              <p className="text-[11px] leading-tight text-olive/68 sm:text-xs">
-                {priceSubLabel}
-                {item.priceMonth && <span className="ml-1 text-olive/72">{item.priceMonth}</span>}
-              </p>
             </>
           ) : (
             <p className="text-xs text-olive/68 sm:text-sm">

@@ -9,6 +9,7 @@ import {
   getOfferTypeLabel,
 } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
+import { formatPublicPersonName, getPublicPersonInitial } from "@/lib/public-display-name";
 import type { PublicExcursionCatalogResult } from "@/lib/public-excursions";
 import Link from "next/link";
 
@@ -46,12 +47,8 @@ export function PublicExcursionList({
       ) : (
         <section className="grid gap-4">
           {result.items.map((item) => {
-            const ownerName =
-              [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || "?";
-            const ownerInitials =
-              `${item.owner.firstName.slice(0, 1)}${item.owner.lastName.slice(0, 1)}`
-                .trim()
-                .toUpperCase();
+            const ownerName = formatPublicPersonName(item.owner, "?");
+            const ownerInitials = getPublicPersonInitial(item.owner);
 
             return (
               <article key={item.id} className="rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10">

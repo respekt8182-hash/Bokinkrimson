@@ -106,7 +106,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
             },
           },
           owner: {
-            select: { firstName: true, lastName: true, phone: true },
+            select: { firstName: true, phone: true },
           },
           mainLocation: { select: { name: true } },
           category: { select: { name: true } },
@@ -142,7 +142,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
             item.title,
             item.locationName,
             item.description,
-            `${item.owner.firstName} ${item.owner.lastName}`,
+            item.owner.firstName,
           ],
           { limit: filteredRows.length, minScore: 0.08 },
         )
@@ -327,7 +327,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Владелец</dt>
                     <dd className="font-medium text-olive">
-                      {item.owner.firstName} {item.owner.lastName}
+                      {item.owner.firstName}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">

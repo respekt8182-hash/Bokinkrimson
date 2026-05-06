@@ -102,7 +102,6 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
           owner: {
             select: {
               firstName: true,
-              lastName: true,
               email: true,
             },
           },
@@ -133,7 +132,7 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
             item.address,
             item.description,
             item.type,
-            `${item.owner.firstName} ${item.owner.lastName}`,
+            item.owner.firstName,
             item.owner.email,
           ],
           { limit: filteredRows.length, minScore: 0.08 },
@@ -336,7 +335,7 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                   <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Владелец</dt>
                     <dd className="font-medium text-olive">
-                      {item.owner.firstName} {item.owner.lastName}
+                      {item.owner.firstName}
                     </dd>
                   </div>
                   {ownerEmail ? (

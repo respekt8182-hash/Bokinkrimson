@@ -42,7 +42,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       ...(transferPaymentsSupported
         ? { transfer: { select: { id: true, title: true, status: true } } }
         : {}),
-      owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      owner: { select: { id: true, firstName: true, phone: true } },
     },
   });
 

@@ -32,7 +32,6 @@ const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
     select: {
       id: true,
       firstName: true,
-      lastName: true,
       email: true,
     },
   },
@@ -65,7 +64,6 @@ const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       user: {
         select: {
           firstName: true,
-          lastName: true,
         },
       },
     },
@@ -208,7 +206,7 @@ export default async function AdminModerationObjectPage({
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Владелец</dt>
             <dd className="font-medium text-olive">
-              {property.owner.firstName} {property.owner.lastName}
+              {property.owner.firstName}
             </dd>
             {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>
