@@ -1,6 +1,6 @@
 "use client";
 
-import { Bath, BedDouble, Image as ImageIcon } from "lucide-react";
+import { Bath, BedDouble, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RoomMediaManager } from "@/components/media/room-media-manager";
@@ -355,6 +355,7 @@ export function RoomFundManager({
   const [error, setError] = useState("");
   const [roomsLoadError, setRoomsLoadError] = useState("");
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
+  const [isReorderingRooms, setIsReorderingRooms] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [openedRoomMenuId, setOpenedRoomMenuId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(initialCreateMode);
@@ -863,13 +864,16 @@ export function RoomFundManager({
 
       const body = (await response.json()) as { item: SerializedRoom };
       const savedRoom = body.item;
+      const nextRoomsCount = rooms.some((item) => item.id === savedRoom.id)
+        ? rooms.length
+        : rooms.length + 1;
 
       setRooms((prev) =>
         prev.some((item) => item.id === savedRoom.id)
           ? prev.map((item) => (item.id === savedRoom.id ? savedRoom : item))
-          : [savedRoom, ...prev],
+          : [...prev, savedRoom],
       );
-      setCurrentRoomsPage(1);
+      setCurrentRoomsPage(Math.max(1, Math.ceil(nextRoomsCount / roomsPerPage)));
       startEdit(savedRoom);
       await notifyChanged();
     } catch {
@@ -882,7 +886,7 @@ export function RoomFundManager({
         setIsCreatingRoom(false);
       }
     }
-  }, [notifyChanged, propertyId, resetForm, scrollToEditor, startEdit]);
+  }, [notifyChanged, propertyId, resetForm, rooms, roomsPerPage, scrollToEditor, startEdit]);
 
   const openCreateForm = useCallback(() => {
     void createRoomDraft();
@@ -1240,6 +1244,89 @@ export function RoomFundManager({
     }
 
     await notifyChanged();
+  }
+
+  async function reorderRooms(nextRooms: SerializedRoom[]) {
+    if (isReorderingRooms) {
+      return;
+    }
+
+    const previousRooms = rooms;
+    const normalizedRooms = nextRooms.map((room, index) => ({
+      ...room,
+      sortOrder: index + 1,
+    }));
+
+    setError("");
+    setOpenedRoomMenuId(null);
+    setIsReorderingRooms(true);
+    setRooms(normalizedRooms);
+
+    try {
+      const response = await fetch(`/api/properties/${propertyId}/rooms/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderedIds: normalizedRooms.map((room) => room.id),
+        }),
+      });
+
+      const body = (await response.json()) as { items?: SerializedRoom[]; error?: string };
+
+      if (!response.ok) {
+        setRooms(previousRooms);
+        setError(body.error ?? "Не удалось изменить порядок номеров");
+        return;
+      }
+
+      if (body.items) {
+        setRooms(body.items);
+      }
+
+      await notifyChanged();
+    } catch {
+      setRooms(previousRooms);
+      setError("Не удалось изменить порядок номеров");
+    } finally {
+      setIsReorderingRooms(false);
+    }
+  }
+
+  function moveRoom(roomId: string, direction: -1 | 1) {
+    const currentIndex = rooms.findIndex((room) => room.id === roomId);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= rooms.length) {
+      return;
+    }
+
+    const nextRooms = [...rooms];
+    const [movedRoom] = nextRooms.splice(currentIndex, 1);
+    if (!movedRoom) {
+      return;
+    }
+    nextRooms.splice(nextIndex, 0, movedRoom);
+    void reorderRooms(nextRooms);
+  }
+
+  function moveRoomToPosition(roomId: string, position: number) {
+    const currentIndex = rooms.findIndex((room) => room.id === roomId);
+    const nextIndex = Math.max(0, Math.min(rooms.length - 1, position - 1));
+
+    if (currentIndex < 0 || currentIndex === nextIndex) {
+      return;
+    }
+
+    const nextRooms = [...rooms];
+    const [movedRoom] = nextRooms.splice(currentIndex, 1);
+    if (!movedRoom) {
+      return;
+    }
+    nextRooms.splice(nextIndex, 0, movedRoom);
+    void reorderRooms(nextRooms);
   }
 
   function getRoomCardDetails(room: SerializedRoom, roomMeta: RoomMeta): RoomCardDetails {
@@ -2134,6 +2221,9 @@ export function RoomFundManager({
                 <p className="mt-1 text-xs text-olive/60">
                   Показаны {roomsRangeStart}-{roomsRangeEnd} из {roomCards.length}
                 </p>
+                {isReorderingRooms ? (
+                  <p className="mt-1 text-xs font-medium text-primary">Сохраняем порядок...</p>
+                ) : null}
               </div>
 
               {totalRoomsPages > 1 ? (
@@ -2182,12 +2272,15 @@ export function RoomFundManager({
           <div className="grid gap-4 md:grid-cols-2">
             {paginatedRoomCards.map((roomCard) => {
               const { room, cardDetails, instanceNumber } = roomCard;
+              const globalRoomIndex = rooms.findIndex((item) => item.id === room.id);
               const firstImage = room.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
               const roomInstanceLabel = instanceNumber === null ? null : `Номер ${instanceNumber}`;
               const deleteLabel =
                 roomInstanceLabel === null
                   ? cardDetails.title
                   : `${cardDetails.title}, ${roomInstanceLabel.toLowerCase()}`;
+              const isFirstRoom = globalRoomIndex <= 0;
+              const isLastRoom = globalRoomIndex < 0 || globalRoomIndex >= rooms.length - 1;
 
               return (
                 <article
@@ -2266,11 +2359,56 @@ export function RoomFundManager({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      {roomInstanceLabel ? (
+                      <div
+                        className="flex flex-wrap items-center gap-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                          {roomInstanceLabel}
+                          Позиция {globalRoomIndex + 1}
                         </span>
-                      ) : null}
+                        {roomInstanceLabel ? (
+                          <span className="inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
+                            {roomInstanceLabel}
+                          </span>
+                        ) : null}
+                        <div className="inline-flex overflow-hidden rounded-lg border border-olive/15 bg-white">
+                          <button
+                            type="button"
+                            onClick={() => moveRoom(room.id, -1)}
+                            disabled={isFirstRoom || isReorderingRooms}
+                            aria-label="Поднять номер выше"
+                            title="Поднять выше"
+                            className="inline-flex h-8 w-8 items-center justify-center text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <AppIcon icon={ChevronUp} className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveRoom(room.id, 1)}
+                            disabled={isLastRoom || isReorderingRooms}
+                            aria-label="Опустить номер ниже"
+                            title="Опустить ниже"
+                            className="inline-flex h-8 w-8 items-center justify-center border-l border-olive/10 text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <AppIcon icon={ChevronDown} className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <select
+                          value={globalRoomIndex + 1}
+                          onChange={(event) =>
+                            moveRoomToPosition(room.id, Number.parseInt(event.target.value, 10))
+                          }
+                          disabled={isReorderingRooms}
+                          aria-label="Позиция номера в карточке объекта"
+                          className="h-8 rounded-lg border border-olive/15 bg-white px-2 text-xs font-semibold text-olive outline-none transition hover:bg-cream focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-55"
+                        >
+                          {rooms.map((item, index) => (
+                            <option key={item.id} value={index + 1}>
+                              {index + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <h4
                         title={cardDetails.title}
                         className="mt-2 overflow-hidden pr-2 text-base font-semibold leading-5 text-olive text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere]"

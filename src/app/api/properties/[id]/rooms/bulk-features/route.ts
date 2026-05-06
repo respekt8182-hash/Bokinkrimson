@@ -165,7 +165,7 @@ export async function POST(request: Request, context: RouteContext) {
       propertyId: property.id,
       isActive: true,
     },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   });
 

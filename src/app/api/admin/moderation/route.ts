@@ -71,6 +71,7 @@ export async function GET(request: Request) {
       },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: { id: true },
       },
     },

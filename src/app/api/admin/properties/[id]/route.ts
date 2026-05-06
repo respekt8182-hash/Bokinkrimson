@@ -42,7 +42,7 @@ const adminPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   },
   rooms: {
     where: { isActive: true },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   },
   amenities: {

@@ -30,6 +30,7 @@ export default async function AdminObjectRulesPage({ params }: AdminObjectRulesP
       },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
           prices: {

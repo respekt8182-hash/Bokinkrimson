@@ -63,7 +63,7 @@ export default async function AdminObjectRoomCategoriesPage({
         propertyId: id,
         isActive: true,
       },
-      orderBy: [{ updatedAt: "desc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       include: roomInclude,
     }),
     db.property.findMany({

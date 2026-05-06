@@ -1289,6 +1289,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     },
     rooms: {
       where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         title: true,
@@ -1553,6 +1554,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             },
             rooms: {
               where: { isActive: true },
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
               select: {
                 features: {
                   select: {
@@ -1796,7 +1798,7 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   },
   rooms: {
     where: { isActive: true },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   },
 });

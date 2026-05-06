@@ -40,6 +40,7 @@ export default async function DashboardChessboardPage({
         include: {
           rooms: {
             where: { isActive: true },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
             select: { id: true },
           },
         },

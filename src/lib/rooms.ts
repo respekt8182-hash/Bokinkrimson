@@ -31,6 +31,7 @@ export type SerializedRoom = {
   bathroomType: BathroomType;
   bathroomTypeLabel: string;
   meta: RoomMeta | null;
+  sortOrder: number;
   isActive: boolean;
   featureIds: string[];
   features: Array<{ id: string; name: string; category: string }>;
@@ -55,6 +56,7 @@ export type SerializedChessboardRoom = {
   areaSqm: number | null;
   bathroomType: BathroomType;
   bathroomTypeLabel: string;
+  sortOrder: number;
   isActive: boolean;
   prices: SerializedRoomPrice[];
 };
@@ -128,6 +130,7 @@ export function serializeRoom(room: {
   areaSqm: Prisma.Decimal | null;
   bathroomType: BathroomType;
   meta?: Prisma.JsonValue | null;
+  sortOrder: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -186,6 +189,7 @@ export function serializeRoom(room: {
     bathroomType: room.bathroomType,
     bathroomTypeLabel: getBathroomTypeLabel(room.bathroomType),
     meta,
+    sortOrder: room.sortOrder,
     isActive: room.isActive,
     featureIds,
     features,
@@ -207,6 +211,7 @@ export function serializeRoomForChessboard(room: {
   roomsCount: number;
   areaSqm: Prisma.Decimal | null;
   bathroomType: BathroomType;
+  sortOrder: number;
   isActive: boolean;
   prices?: Array<{
     id: string;
@@ -230,6 +235,7 @@ export function serializeRoomForChessboard(room: {
     areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
     bathroomType: room.bathroomType,
     bathroomTypeLabel: getBathroomTypeLabel(room.bathroomType),
+    sortOrder: room.sortOrder,
     isActive: room.isActive,
     prices: room.prices?.map(serializeRoomPrice) ?? [],
   };

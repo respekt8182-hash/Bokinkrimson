@@ -638,7 +638,7 @@ export function PropertyMediaManager({
 
   const mediaCountLabel =
     media.length === 0
-      ? "Фотографий пока нет"
+      ? "Фотографий и видео пока нет"
       : `${counts.images} фото${counts.videos > 0 ? `, ${counts.videos} видео` : ""}`;
 
   return (
@@ -652,7 +652,7 @@ export function PropertyMediaManager({
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cream px-4 py-2.5 text-sm font-semibold text-olive transition hover:bg-sand/70 focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55"
         >
           <AppIcon icon={Plus} className="h-4 w-4" />
-          <span>{isUploading ? "Загрузка..." : "Добавить фото"}</span>
+          <span>{isUploading ? "Загрузка..." : "Добавить фото или видео"}</span>
         </button>
         <input
           ref={fileInputRef}

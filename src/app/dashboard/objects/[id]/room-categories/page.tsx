@@ -40,7 +40,7 @@ export default async function DashboardObjectRoomCategoriesPage({
         propertyId: id,
         isActive: true,
       },
-      orderBy: [{ updatedAt: "desc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       include: roomInclude,
     }),
     db.property.findMany({

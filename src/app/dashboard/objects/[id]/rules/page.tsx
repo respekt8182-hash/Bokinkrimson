@@ -28,6 +28,7 @@ export default async function DashboardObjectRulesPage({ params }: DashboardObje
         },
         rooms: {
           where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           select: {
             id: true,
             prices: {

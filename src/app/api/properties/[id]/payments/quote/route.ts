@@ -27,6 +27,7 @@ export async function GET(_request: Request, context: RouteContext) {
       },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
           prices: {

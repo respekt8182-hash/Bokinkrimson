@@ -63,6 +63,7 @@ export default async function AdminObjectAboutPage({
       },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
           prices: {

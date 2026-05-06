@@ -16,6 +16,7 @@ import {
   Phone,
   Star,
   TriangleAlert,
+  TvMinimalPlay,
   User,
   X,
 } from "lucide-react";
@@ -82,6 +83,7 @@ type HouseRuleChipConfig = {
 };
 
 type RoomMedia = PublicPropertyCard["rooms"][number]["media"][number];
+type PropertyMedia = PublicPropertyCard["media"][number];
 
 type MobilePhoneOption = {
   key: string;
@@ -282,8 +284,57 @@ function MediaPreview({ media, alt, className, loading = "lazy" }: MediaPreviewP
     );
   }
 
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={media.url} alt={alt} loading={loading} decoding="async" className={className} />;
+  return (
+    <video
+      src={media.url}
+      aria-label={alt}
+      controls
+      playsInline
+      preload="metadata"
+      className={className}
+    />
+  );
+}
+
+function PropertyVideoSection({ videos, title }: { videos: PropertyMedia[]; title: string }) {
+  if (videos.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      id="videos"
+      className="scroll-mt-[132px] rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_14px_36px_rgba(58,43,35,0.05)] md:scroll-mt-[152px] md:p-6"
+    >
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+          <AppIcon icon={TvMinimalPlay} className="h-5 w-5" />
+        </span>
+        <div>
+          <h2 className="text-2xl text-olive md:text-[1.85rem]">Видео объекта</h2>
+          <p className="mt-1 text-sm text-olive/68">{title}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {videos.map((video, index) => (
+          <div
+            key={video.id}
+            className="overflow-hidden rounded-2xl border border-olive/10 bg-black shadow-[0_12px_28px_rgba(58,43,35,0.08)]"
+          >
+            <video
+              src={video.url}
+              controls
+              playsInline
+              preload="metadata"
+              className="aspect-video w-full bg-black object-contain"
+              aria-label={`Видео объекта ${index + 1}`}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function toPetsLabel(value: "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null): string {
@@ -705,6 +756,11 @@ export function PublicPropertyDetails({
     () => item.media.filter((media) => media.type === "IMAGE").slice(0, 10),
     [item.media],
   );
+  const propertyVideos = useMemo(
+    () => item.media.filter((media) => media.type === "VIDEO").slice(0, 2),
+    [item.media],
+  );
+  const hasAnyVideo = propertyVideos.length > 0;
   const totalGuests = adults + childrenAges.length;
   const selectedNights = checkIn && checkOut ? getNights(checkIn, checkOut) : 0;
   const allAmenities =
@@ -1202,6 +1258,7 @@ export function PublicPropertyDetails({
             <div className="flex min-w-max snap-x snap-mandatory items-center gap-1.5 pb-1">
               {[
                 { href: "#room-fund", label: "Варианты размещения" },
+                ...(hasAnyVideo ? [{ href: "#videos", label: "Видео" }] : []),
                 { href: "#description-panel", label: "Описание" },
                 { href: "#amenities", label: "Удобства" },
                 { href: "#house-rules", label: "Правила" },
@@ -1285,7 +1342,7 @@ export function PublicPropertyDetails({
               <div className="relative mt-5 space-y-4">
                 {sortedRooms.map(({ room }) => {
                   const roomMedia = room.media
-                    .filter((media) => media.type === "IMAGE")
+                    .filter((media) => media.type === "IMAGE" || media.type === "VIDEO")
                     .slice(0, 10);
                   const roomIndex = Math.min(
                     roomMediaIndexByRoom[room.id] ?? 0,
@@ -1354,6 +1411,12 @@ export function PublicPropertyDetails({
                                 {roomMedia.length > 1 ? (
                                   <span className="absolute left-2 bottom-2 z-10 inline-flex items-center rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
                                     {roomIndex + 1} / {roomMedia.length}
+                                  </span>
+                                ) : null}
+                                {activeRoomMedia?.type === "VIDEO" ? (
+                                  <span className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                                    <AppIcon icon={TvMinimalPlay} className="h-3.5 w-3.5" />
+                                    Видео
                                   </span>
                                 ) : null}
                                 <div className="room-media-stage relative overflow-hidden bg-[#ebe5d8]">
@@ -1649,6 +1712,8 @@ export function PublicPropertyDetails({
               </div>
             )}
           </section>
+
+          <PropertyVideoSection videos={propertyVideos} title={item.name ?? "Объект"} />
 
           <section
             id="description-panel"

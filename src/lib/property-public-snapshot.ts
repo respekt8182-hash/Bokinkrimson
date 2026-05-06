@@ -87,7 +87,7 @@ export const propertyPublicSnapshotInclude = Prisma.validator<Prisma.PropertyInc
   },
   rooms: {
     where: { isActive: true },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   },
 });

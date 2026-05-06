@@ -1,7 +1,15 @@
 // UI component for room media manager in the media module.
 "use client";
 
-import { ChevronLeft, ChevronRight, ImageIcon, MoreVertical, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ImageIcon,
+  MoreVertical,
+  Plus,
+  Trash2,
+  TvMinimalPlay,
+} from "lucide-react";
 import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
@@ -14,7 +22,13 @@ import { createPortal } from "react-dom";
 import { AppIcon } from "@/components/ui/app-icon";
 import { mediaLimits } from "@/lib/constants";
 import { cn } from "@/lib/cn";
-import type { SerializedMedia } from "@/lib/media";
+import {
+  accommodationVideoUploadDurationLimitSeconds,
+  accommodationVideoUploadSizeLimitBytes,
+  getAccommodationVideoUploadDurationError,
+  getAccommodationVideoUploadSizeError,
+  type SerializedMedia,
+} from "@/lib/media";
 import {
   accommodationPhotoUploadAccept,
   detectSupportedPhotoUploadType,
@@ -22,6 +36,7 @@ import {
   getAccommodationPhotoUploadSizeError,
   getMediaLimitExceededError,
   getUnsupportedAccommodationPhotoFormatError,
+  getUploadFileExtension,
 } from "@/lib/photo-upload";
 
 type RoomMediaManagerProps = {
@@ -43,7 +58,49 @@ type PointerDragState = {
 };
 
 const MEDIA_IMAGE: MediaTypeValue = "IMAGE";
-const roomPhotoAccept = accommodationPhotoUploadAccept;
+const MEDIA_VIDEO: MediaTypeValue = "VIDEO";
+const roomMediaAccept = `${accommodationPhotoUploadAccept},video/*`;
+
+function detectFileMediaType(file: File): MediaTypeValue | null {
+  if (file.type.startsWith("image/")) return MEDIA_IMAGE;
+  if (file.type.startsWith("video/")) return MEDIA_VIDEO;
+
+  const ext = getUploadFileExtension(file.name);
+  if (["jpg", "jpeg", "png", "heic", "heif", "webp"].includes(ext)) return MEDIA_IMAGE;
+  if (["mp4", "mov", "webm", "m4v", "avi", "mkv"].includes(ext)) return MEDIA_VIDEO;
+  return null;
+}
+
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      cleanup();
+
+      if (!Number.isFinite(duration)) {
+        reject(new Error("unknown-video-duration"));
+        return;
+      }
+
+      resolve(duration);
+    };
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("video-metadata-read-failed"));
+    };
+    video.src = objectUrl;
+  });
+}
 
 function getImageMedia(items: SerializedMedia[]): SerializedMedia[] {
   return items.filter((item) => item.type === MEDIA_IMAGE);
@@ -78,7 +135,7 @@ function replaceImageMedia(
   });
 }
 
-function moveImageById(
+function moveMediaById(
   items: SerializedMedia[],
   draggedId: string,
   targetId: string,
@@ -87,48 +144,21 @@ function moveImageById(
     return items;
   }
 
-  const images = getImageMedia(items);
-  const fromIndex = images.findIndex((item) => item.id === draggedId);
-  const toIndex = images.findIndex((item) => item.id === targetId);
+  const fromIndex = items.findIndex((item) => item.id === draggedId);
+  const toIndex = items.findIndex((item) => item.id === targetId);
 
   if (fromIndex === -1 || toIndex === -1) {
     return items;
   }
 
-  const orderedImages = [...images];
-  const [moved] = orderedImages.splice(fromIndex, 1);
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
   if (!moved) {
     return items;
   }
 
-  orderedImages.splice(toIndex, 0, moved);
-  return normalizeMediaSortOrder(replaceImageMedia(items, orderedImages));
-}
-
-function moveImageStepById(
-  items: SerializedMedia[],
-  mediaId: string,
-  direction: "left" | "right",
-): SerializedMedia[] {
-  const images = getImageMedia(items);
-  const currentIndex = images.findIndex((item) => item.id === mediaId);
-  if (currentIndex === -1) {
-    return items;
-  }
-
-  const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
-  if (targetIndex < 0 || targetIndex >= images.length) {
-    return items;
-  }
-
-  const orderedImages = [...images];
-  const [moved] = orderedImages.splice(currentIndex, 1);
-  if (!moved) {
-    return items;
-  }
-
-  orderedImages.splice(targetIndex, 0, moved);
-  return normalizeMediaSortOrder(replaceImageMedia(items, orderedImages));
+  next.splice(toIndex, 0, moved);
+  return normalizeMediaSortOrder(next);
 }
 
 function moveImageToCover(items: SerializedMedia[], mediaId: string): SerializedMedia[] {
@@ -146,6 +176,10 @@ function moveImageToCover(items: SerializedMedia[], mediaId: string): Serialized
 
   const orderedImages = [selected, ...images.filter((item) => item.id !== mediaId)];
   return normalizeMediaSortOrder(replaceImageMedia(items, orderedImages));
+}
+
+function getMediaLabel(item: SerializedMedia, index: number): string {
+  return `${item.type === MEDIA_IMAGE ? "Фото" : "Видео"} ${index + 1}`;
 }
 
 export function RoomMediaManager({
@@ -198,14 +232,24 @@ export function RoomMediaManager({
 
   const imageMedia = useMemo(() => getImageMedia(media), [media]);
   const coverImageId = imageMedia[0]?.id ?? null;
-  const imageCount = imageMedia.length;
+  const counts = useMemo(
+    () => ({
+      images: imageMedia.length,
+      videos: media.filter((item) => item.type === MEDIA_VIDEO).length,
+    }),
+    [imageMedia.length, media],
+  );
   const isBusy = isUploading || isReordering || removingMediaId !== null;
   const activeMenuItem = openMenuId
-    ? (imageMedia.find((item) => item.id === openMenuId) ?? null)
+    ? (media.find((item) => item.id === openMenuId) ?? null)
     : null;
   const activeMenuItemIsCover = activeMenuItem?.id === coverImageId;
   const mediaCountLabel =
-    imageCount === 0 ? "Фотографий пока нет" : `${imageCount} из ${mediaLimits.room.images} фото`;
+    media.length === 0
+      ? "Фотографий и видео пока нет"
+      : `${counts.images} из ${mediaLimits.room.images} фото${
+          counts.videos > 0 ? `, ${counts.videos} из ${mediaLimits.room.videos} видео` : ""
+        }`;
 
   async function sync() {
     if (onChanged) {
@@ -216,6 +260,13 @@ export function RoomMediaManager({
   function setMediaOrder(nextMedia: SerializedMedia[]) {
     latestMediaRef.current = nextMedia;
     setMedia(nextMedia);
+  }
+
+  function getCounts(items: SerializedMedia[]) {
+    return {
+      images: items.filter((item) => item.type === MEDIA_IMAGE).length,
+      videos: items.filter((item) => item.type === MEDIA_VIDEO).length,
+    };
   }
 
   function openFilePicker() {
@@ -236,37 +287,73 @@ export function RoomMediaManager({
     setOpenMenuId(null);
 
     try {
-      let localMedia = [...media];
-      let localImageCount = getImageMedia(localMedia).length;
+      const localCounts = getCounts(media);
 
       for (const file of files) {
-        const uploadType = detectSupportedPhotoUploadType({
-          mimeType: file.type,
-          fileName: file.name,
-        });
-
-        if (!uploadType) {
-          setError(getUnsupportedAccommodationPhotoFormatError());
+        const mediaType = detectFileMediaType(file);
+        if (!mediaType) {
+          setError("Поддерживаются только изображения и видео");
           continue;
         }
 
-        if (
-          file.size >
-          getAccommodationPhotoUploadSizeLimitBytes({
+        if (mediaType === MEDIA_IMAGE) {
+          const uploadType = detectSupportedPhotoUploadType({
             mimeType: file.type,
             fileName: file.name,
-          })
-        ) {
-          setError(getAccommodationPhotoUploadSizeError());
-          continue;
+          });
+
+          if (!uploadType) {
+            setError(getUnsupportedAccommodationPhotoFormatError());
+            continue;
+          }
+
+          if (
+            file.size >
+            getAccommodationPhotoUploadSizeLimitBytes({
+              mimeType: file.type,
+              fileName: file.name,
+            })
+          ) {
+            setError(getAccommodationPhotoUploadSizeError());
+            continue;
+          }
         }
 
-        if (localImageCount >= mediaLimits.room.images) {
+        if (mediaType === MEDIA_VIDEO) {
+          if (file.size > accommodationVideoUploadSizeLimitBytes) {
+            setError(getAccommodationVideoUploadSizeError());
+            continue;
+          }
+
+          try {
+            const duration = await getVideoDuration(file);
+            if (duration > accommodationVideoUploadDurationLimitSeconds) {
+              setError(getAccommodationVideoUploadDurationError());
+              continue;
+            }
+          } catch {
+            setError("Не удалось определить длительность видео. Попробуйте другой файл.");
+            continue;
+          }
+        }
+
+        if (mediaType === MEDIA_IMAGE && localCounts.images >= mediaLimits.room.images) {
           setError(
             getMediaLimitExceededError({
               owner: "room",
               mediaType: MEDIA_IMAGE,
               limit: mediaLimits.room.images,
+            }),
+          );
+          continue;
+        }
+
+        if (mediaType === MEDIA_VIDEO && localCounts.videos >= mediaLimits.room.videos) {
+          setError(
+            getMediaLimitExceededError({
+              owner: "room",
+              mediaType: MEDIA_VIDEO,
+              limit: mediaLimits.room.videos,
             }),
           );
           continue;
@@ -287,8 +374,8 @@ export function RoomMediaManager({
         }
 
         const body = (await response.json()) as { items: SerializedMedia[] };
-        localMedia = body.items;
-        localImageCount = getImageMedia(body.items).length;
+        localCounts.images = body.items.filter((item) => item.type === MEDIA_IMAGE).length;
+        localCounts.videos = body.items.filter((item) => item.type === MEDIA_VIDEO).length;
         setMediaOrder(body.items);
       }
 
@@ -382,21 +469,38 @@ export function RoomMediaManager({
     await persistOrder(next, previous);
   }
 
-  async function moveImageStep(mediaId: string, direction: "left" | "right") {
+  async function moveMediaStep(mediaId: string, direction: "left" | "right") {
     if (isBusy) {
       return;
     }
 
     const previous = latestMediaRef.current;
-    const next = moveImageStepById(previous, mediaId, direction);
+    const currentIndex = previous.findIndex((item) => item.id === mediaId);
+    if (currentIndex === -1) {
+      return;
+    }
 
-    if (hasSameOrder(previous, next)) {
+    const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= previous.length) {
+      return;
+    }
+
+    const next = [...previous];
+    const [moved] = next.splice(currentIndex, 1);
+    if (!moved) {
+      return;
+    }
+
+    next.splice(targetIndex, 0, moved);
+    const normalized = normalizeMediaSortOrder(next);
+
+    if (hasSameOrder(previous, normalized)) {
       return;
     }
 
     setOpenMenuId(null);
-    setMediaOrder(next);
-    await persistOrder(next, previous);
+    setMediaOrder(normalized);
+    await persistOrder(normalized, previous);
   }
 
   function applyDragTarget(targetId: string) {
@@ -407,7 +511,7 @@ export function RoomMediaManager({
 
     setDragOverMediaId(targetId);
     setMedia((previous) => {
-      const next = moveImageById(previous, draggedId, targetId);
+      const next = moveMediaById(previous, draggedId, targetId);
       latestMediaRef.current = next;
       return next;
     });
@@ -558,7 +662,7 @@ export function RoomMediaManager({
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cream px-4 py-2.5 text-sm font-semibold text-olive transition hover:bg-sand/70 focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55"
         >
           <AppIcon icon={Plus} className="h-4 w-4" />
-          <span>{isUploading ? "Загрузка..." : "Добавить фото"}</span>
+          <span>{isUploading ? "Загрузка..." : "Добавить фото или видео"}</span>
         </button>
       </div>
 
@@ -566,7 +670,7 @@ export function RoomMediaManager({
         ref={fileInputRef}
         type="file"
         multiple
-        accept={roomPhotoAccept}
+        accept={roomMediaAccept}
         onChange={(event) => {
           void uploadFiles(event.target.files);
           event.currentTarget.value = "";
@@ -579,14 +683,14 @@ export function RoomMediaManager({
         <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       ) : null}
 
-      {imageCount > 0 ? (
+      {media.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] lg:gap-4">
-          {imageMedia.map((item, index) => {
+          {media.map((item, index) => {
             const isCover = item.id === coverImageId;
             const isDragging = item.id === draggedMediaId;
             const isDragTarget = item.id === dragOverMediaId && !isDragging;
             const isRemoving = item.id === removingMediaId;
-            const label = `Фото ${index + 1}`;
+            const label = getMediaLabel(item, index);
 
             return (
               <article
@@ -621,19 +725,36 @@ export function RoomMediaManager({
                 aria-label={`${label}. Перетащите, чтобы изменить порядок.`}
               >
                 <div className="absolute inset-0 overflow-hidden rounded-2xl bg-cream">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.url}
-                    alt={item.originalName ?? label}
-                    className="h-full w-full object-cover"
-                    draggable={false}
-                  />
+                  {item.type === MEDIA_IMAGE ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.url}
+                      alt={item.originalName ?? label}
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <video
+                      src={item.url}
+                      className="h-full w-full bg-black object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  )}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/22 via-transparent to-black/12 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100" />
                 </div>
 
                 {isCover ? (
                   <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-white px-3 py-1 text-xs font-semibold text-olive shadow-sm ring-1 ring-olive/10">
                     Обложка
+                  </span>
+                ) : null}
+
+                {item.type === MEDIA_VIDEO ? (
+                  <span className="pointer-events-none absolute left-3 top-3 z-10 inline-flex items-center gap-1 rounded-full bg-black/58 px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
+                    <AppIcon icon={TvMinimalPlay} className="h-3.5 w-3.5" />
+                    Видео
                   </span>
                 ) : null}
 
@@ -646,7 +767,7 @@ export function RoomMediaManager({
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
-                      void moveImageStep(item.id, "left");
+                      void moveMediaStep(item.id, "left");
                     }}
                     disabled={index === 0 || isBusy}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-olive shadow-sm ring-1 ring-olive/10 transition hover:bg-cream focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-45"
@@ -655,16 +776,16 @@ export function RoomMediaManager({
                     <AppIcon icon={ChevronLeft} className="h-4 w-4" />
                   </button>
                   <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-full bg-black/58 px-2 text-xs font-semibold text-white shadow-sm">
-                    {index + 1}/{imageMedia.length}
+                    {index + 1}/{media.length}
                   </span>
                   <button
                     type="button"
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
-                      void moveImageStep(item.id, "right");
+                      void moveMediaStep(item.id, "right");
                     }}
-                    disabled={index === imageMedia.length - 1 || isBusy}
+                    disabled={index === media.length - 1 || isBusy}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-olive shadow-sm ring-1 ring-olive/10 transition hover:bg-cream focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-45"
                     aria-label={`Переместить фото ${index + 1} правее`}
                   >
@@ -702,7 +823,7 @@ export function RoomMediaManager({
                           event.stopPropagation();
                           void makeCover(item.id);
                         }}
-                        disabled={isCover || isBusy}
+                        disabled={item.type === MEDIA_VIDEO || isCover || isBusy}
                         className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />
@@ -763,7 +884,7 @@ export function RoomMediaManager({
                     event.stopPropagation();
                     void makeCover(activeMenuItem.id);
                   }}
-                  disabled={activeMenuItemIsCover || isBusy}
+                  disabled={activeMenuItem.type === MEDIA_VIDEO || activeMenuItemIsCover || isBusy}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <AppIcon icon={ImageIcon} className="h-4 w-4 text-olive/70" />

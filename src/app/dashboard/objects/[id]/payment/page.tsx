@@ -29,6 +29,7 @@ const paymentReadinessInclude = Prisma.validator<Prisma.PropertyInclude>()({
   },
   rooms: {
     where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       prices: {

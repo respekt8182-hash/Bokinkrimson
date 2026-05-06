@@ -77,7 +77,7 @@ export async function GET(request: Request, context: RouteContext) {
         propertyId: property.id,
         isActive: true,
       },
-      orderBy: [{ updatedAt: "desc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         propertyId: true,
@@ -87,6 +87,7 @@ export async function GET(request: Request, context: RouteContext) {
         roomsCount: true,
         areaSqm: true,
         bathroomType: true,
+        sortOrder: true,
         isActive: true,
         prices: {
           orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
@@ -116,7 +117,7 @@ export async function GET(request: Request, context: RouteContext) {
       propertyId: property.id,
       isActive: true,
     },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   });
 
@@ -189,6 +190,16 @@ export async function POST(request: Request, context: RouteContext) {
   await preparePropertyForPublishedOwnerEdit(db, property.id);
 
   const created = await db.$transaction(async (tx) => {
+    const maxSortOrder =
+      (
+        await tx.room.aggregate({
+          where: {
+            propertyId: property.id,
+          },
+          _max: { sortOrder: true },
+        })
+      )._max.sortOrder ?? 0;
+
     const room = await tx.room.create({
       data: {
         propertyId: property.id,
@@ -199,6 +210,7 @@ export async function POST(request: Request, context: RouteContext) {
         areaSqm: data.areaSqm,
         bathroomType: normalizedBathroomType,
         meta: data.meta,
+        sortOrder: maxSortOrder + 1,
       },
     });
 

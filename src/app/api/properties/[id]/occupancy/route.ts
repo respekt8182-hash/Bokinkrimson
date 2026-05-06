@@ -69,6 +69,7 @@ export async function GET(request: Request, context: RouteContext) {
       propertyId: property.id,
       isActive: true,
     },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: { id: true },
   });
 

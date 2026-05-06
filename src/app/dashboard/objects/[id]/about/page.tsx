@@ -47,6 +47,7 @@ export default async function DashboardObjectAboutPage({
         },
         rooms: {
           where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
           select: {
             id: true,
             prices: {

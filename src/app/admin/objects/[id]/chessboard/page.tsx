@@ -24,6 +24,7 @@ export default async function AdminObjectChessboardPage({
     include: {
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: { id: true },
       },
     },

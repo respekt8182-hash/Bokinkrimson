@@ -46,7 +46,7 @@ const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   customAmenities: true,
   rooms: {
     where: { isActive: true },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   },
   payments: {

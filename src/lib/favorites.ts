@@ -99,6 +99,7 @@ export async function getUserFavoriteProperties(userId: string): Promise<Favorit
           },
           rooms: {
             where: { isActive: true },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
             select: {
               id: true,
               prices: {

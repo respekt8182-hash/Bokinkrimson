@@ -49,6 +49,7 @@ const TRANSFER_COMPAT_COLUMNS = [
   "pendingEditStatus",
   "publishedSnapshot",
 ] as const;
+const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
 const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
 const PAYMENT_COMPAT_COLUMNS = ["transferId"] as const;
 
@@ -117,6 +118,14 @@ const SCHEMA_COMPAT_MODELS = {
     },
     logContext: "transfer-schema-compat",
     label: "Transfer",
+  },
+  Room: {
+    columns: ROOM_COMPAT_COLUMNS,
+    defaults: {
+      sortOrder: 0,
+    },
+    logContext: "room-schema-compat",
+    label: "Room",
   },
   Review: {
     columns: REVIEW_COMPAT_COLUMNS,

@@ -33,6 +33,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: { id: true, title: true },
       },
     },

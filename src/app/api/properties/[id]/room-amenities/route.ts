@@ -94,7 +94,7 @@ export async function GET(_request: Request, context: RouteContext) {
         propertyId: property.id,
         isActive: true,
       },
-      orderBy: [{ updatedAt: "desc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         title: true,
@@ -299,6 +299,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       propertyId: property.id,
       isActive: true,
     },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
     },

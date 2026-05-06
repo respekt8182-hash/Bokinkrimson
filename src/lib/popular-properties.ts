@@ -75,6 +75,7 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
       },
       rooms: {
         where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: {
           prices: {
             orderBy: { price: "asc" },
