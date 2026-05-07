@@ -22,6 +22,7 @@ import {
 } from "@/lib/rate-limit";
 import { registerSchema } from "@/lib/schemas/auth";
 import { getRequestIp } from "@/lib/security";
+import { markUserLogin } from "@/lib/user-activity";
 import { buildUserPhoneLookupCandidates, normalizeUserPhone } from "@/lib/user-phone";
 
 const registerLimiter = createRateLimiter({
@@ -119,6 +120,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ ok: true, user: sessionUser }, { status: 201 });
     response.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+    await markUserLogin(sessionUser.id);
 
     return response;
   } catch (error) {

@@ -1,0 +1,7 @@
+ALTER TABLE "User"
+ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "lastLogoutAt" TIMESTAMP(3);
+
+CREATE INDEX IF NOT EXISTS "User_lastSeenAt_idx" ON "User"("lastSeenAt");
+CREATE INDEX IF NOT EXISTS "User_lastLoginAt_idx" ON "User"("lastLoginAt");

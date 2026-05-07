@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
+import type { PlacementPriceResult } from "@/lib/placement-pricing";
 
 type ManagerPayment = {
   id: string;
@@ -33,6 +34,7 @@ type ManagerPayment = {
   managerNotes: string | null;
   confirmedById: string | null;
   includeInMonthlyRevenue: boolean;
+  placementPricing: PlacementPriceResult | null;
   transferPayment: {
     paymentReason: "publication" | "fleet_topup" | null;
     vehicleCount: number | null;
@@ -155,8 +157,13 @@ function getTariffLabel(tariffCode: string): string {
     object_yearly: "Годовое размещение",
     object_demo: "Демо до 20 июня",
     excursion_standard: "Публикация карточки экскурсии",
+    excursion_year: "Годовое размещение экскурсии",
+    excursion_season: "Сезонное размещение экскурсии",
     tour_standard: "Публикация карточки тура",
+    tour_year: "Годовое размещение тура",
+    tour_season: "Сезонное размещение тура",
     transfer_standard: "Публикация карточки трансфера",
+    transfer_year: "Годовое размещение трансфера",
   };
 
   return labels[baseCode] ?? baseCode;
@@ -209,7 +216,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
   const entityType = payment.property
     ? "Объект размещения"
     : payment.excursion
-      ? tariffCode === "tour_standard"
+      ? tariffCode === "tour_standard" || tariffCode === "tour_year" || tariffCode === "tour_season"
         ? "Тур"
         : "Экскурсия"
       : payment.transfer
@@ -218,7 +225,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
   const entityLabel = payment.transfer
     ? "Карточка трансфера"
     : payment.excursion
-      ? tariffCode === "tour_standard"
+      ? tariffCode === "tour_standard" || tariffCode === "tour_year" || tariffCode === "tour_season"
         ? "Карточка тура"
         : "Карточка экскурсии"
       : payment.property
@@ -414,6 +421,39 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
             ) : null}
           </div>
         </div>
+        {payment.placementPricing ? (
+          <div className="mt-2 rounded-xl border border-olive/10 bg-white/70 px-3 py-2 text-xs leading-5 text-olive/70">
+            <p className="font-semibold text-olive">Расчёт цены</p>
+            <p>
+              Категория: {payment.placementPricing.category} • период:{" "}
+              {payment.placementPricing.period}
+            </p>
+            <p>
+              Базовая цена: {formatMoney(payment.placementPricing.basePrice)} • итоговая цена:{" "}
+              {formatMoney(payment.placementPricing.totalPrice)}
+            </p>
+            <p>
+              Скидка:{" "}
+              {payment.placementPricing.discountLabel ??
+                (payment.placementPricing.discountPercent > 0
+                  ? `${payment.placementPricing.discountPercent}%`
+                  : "нет")}
+            </p>
+            <p>Причина: {payment.placementPricing.discountReason}</p>
+            {payment.placementPricing.additionalOptionsPrice > 0 ? (
+              <p>
+                Дополнительные опции:{" "}
+                {formatMoney(payment.placementPricing.additionalOptionsPrice)}
+              </p>
+            ) : null}
+            {payment.placementPricing.freePeriodActive ? (
+              <p>
+                Бесплатный период активен. Цена после бесплатного периода:{" "}
+                {formatMoney(payment.placementPricing.priceAfterFreePeriod)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Owner info */}

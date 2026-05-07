@@ -224,6 +224,14 @@ function getRoomAmenityCategory(name: string): RoomAmenityItem["category"] {
   return "equipment";
 }
 
+function formatBathroomSectionLabel(bathroomTypeLabel?: string | null): string {
+  if (!bathroomTypeLabel) {
+    return "Ванная комната";
+  }
+
+  return `Ванная комната · ${bathroomTypeLabel.toLowerCase()}`;
+}
+
 function formatTime(value: string | null): string {
   if (!value) return "Не указано";
   const [hours = "", minutes = ""] = value.split(":");
@@ -1480,19 +1488,6 @@ export function PublicPropertyDetails({
                                   {room.extraBeds > 0 ? ` места + ${room.extraBeds} доп.` : " мест"}
                                 </span>
                               </div>
-                              {room.roomsCount > 0 ? (
-                                <div className="flex items-center gap-2 text-[13px] text-olive/75">
-                                  <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
-                                  <span>
-                                    {room.roomsCount}{" "}
-                                    {room.roomsCount === 1
-                                      ? "комната"
-                                      : room.roomsCount >= 2 && room.roomsCount <= 4
-                                        ? "комнаты"
-                                        : "комнат"}
-                                  </span>
-                                </div>
-                              ) : null}
                               {room.bathroomTypeLabel ? (
                                 <div className="flex items-center gap-2 text-[13px] text-olive/75">
                                   <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
@@ -1643,7 +1638,7 @@ export function PublicPropertyDetails({
                                         cat === "beds"
                                           ? "Спальные места"
                                           : cat === "bathroom"
-                                            ? "Ванная комната"
+                                            ? formatBathroomSectionLabel(room.bathroomTypeLabel)
                                             : "Оснащение и удобства";
                                       return (
                                         <div key={cat}>

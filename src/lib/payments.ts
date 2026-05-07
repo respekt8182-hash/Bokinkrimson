@@ -29,9 +29,18 @@ import {
   type PlacementPromoPayload,
   type PlacementPromoPrice,
 } from "@/lib/placement-promo";
+import {
+  buildPlacementPricingPayload,
+  parsePlacementPricingPayload,
+  type PlacementPriceResult,
+} from "@/lib/placement-tariffs";
 
 export type PlacementTariff =
-  SerializedObjectPlacementTariffOption;
+  SerializedObjectPlacementTariffOption & {
+    baseAmountRub?: number;
+    finalAmountRub?: number;
+    placementPricing?: PlacementPriceResult;
+  };
 export type LegacyRoomCountPlacementTariff =
   (typeof placementTariffsByGroup)[keyof typeof placementTariffsByGroup][number];
 
@@ -40,7 +49,7 @@ export type TariffQuote = {
   pricingGroup: PlacementPricingGroup;
   propertyType: string | null;
   roomCount: number;
-  availableTariffs: SerializedObjectPlacementTariffOption[];
+  availableTariffs: PlacementTariff[];
   tariffType: ObjectPlacementTariffType;
   paidFrom: string;
   paidUntil: string;
@@ -50,6 +59,7 @@ export type TariffQuote = {
   originalAmount: number;
   amount: number;
   promo: PlacementPromoPrice | null;
+  placementPricing: PlacementPriceResult | null;
   currency: "RUB";
 };
 
@@ -79,6 +89,7 @@ export type SerializedPayment = {
   propertyName: string | null;
   excursionName: string | null;
   transferName: string | null;
+  placementPricing: PlacementPriceResult | null;
 };
 
 export type TransferPaymentPayload = {
@@ -320,6 +331,7 @@ export function buildFreePlacementPaymentPayload(input: {
   discountedAmountRub?: number;
   now?: Date;
   context?: Prisma.InputJsonObject;
+  placementPricing?: PlacementPriceResult | null;
 }): Prisma.InputJsonObject {
   const placementPromo = buildPlacementPromoPayload({
     originalAmountRub: input.originalAmountRub,
@@ -335,6 +347,7 @@ export function buildFreePlacementPaymentPayload(input: {
     placementDemoEndsAtIso: PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
     includeInAdminRevenue: false,
     ...(placementPromo ? { placementPromo } : {}),
+    ...(input.placementPricing ? buildPlacementPricingPayload(input.placementPricing) : {}),
   };
 }
 
@@ -404,6 +417,7 @@ export function getTariffQuote(input: {
   propertyType: string | null;
   tariffType?: string | null;
   now?: Date;
+  placementPricesByTariffType?: Partial<Record<ObjectPlacementTariffType, PlacementPriceResult>>;
 }): TariffQuote {
   const normalizedRoomCount = Math.max(1, input.roomCount);
   const pricingGroup = getPlacementPricingGroupByType(input.propertyType);
@@ -420,11 +434,32 @@ export function getTariffQuote(input: {
     throw new Error("No object placement tariff is available for the current date.");
   }
 
-  const tariff = serializeObjectPlacementTariffOption(tariffOption);
-  const availableTariffs = getObjectPlacementTariffOptions(now).map(
-    serializeObjectPlacementTariffOption,
-  );
-  const promoPrice = getPlacementPromoPrice(tariff.amountRub, now);
+  const selectedPlacementPricing = input.placementPricesByTariffType?.[tariffOption.type] ?? null;
+  const tariff: PlacementTariff = {
+    ...serializeObjectPlacementTariffOption(tariffOption),
+    ...(selectedPlacementPricing
+      ? {
+          baseAmountRub: selectedPlacementPricing.basePrice,
+          finalAmountRub: selectedPlacementPricing.totalPrice,
+          placementPricing: selectedPlacementPricing,
+        }
+      : {}),
+  };
+  const availableTariffs = getObjectPlacementTariffOptions(now).map((option) => {
+    const placementPricing = input.placementPricesByTariffType?.[option.type] ?? null;
+    return {
+      ...serializeObjectPlacementTariffOption(option),
+      ...(placementPricing
+        ? {
+            baseAmountRub: placementPricing.basePrice,
+            finalAmountRub: placementPricing.totalPrice,
+            placementPricing,
+          }
+        : {}),
+    };
+  });
+  const amountBeforePromo = selectedPlacementPricing?.totalPrice ?? tariff.amountRub;
+  const promoPrice = getPlacementPromoPrice(amountBeforePromo, now);
 
   return {
     tariff,
@@ -441,6 +476,7 @@ export function getTariffQuote(input: {
     originalAmount: promoPrice.originalAmountRub,
     amount: promoPrice.finalAmountRub,
     promo: promoPrice.isDiscounted ? promoPrice : null,
+    placementPricing: selectedPlacementPricing,
     currency: "RUB",
   };
 }
@@ -490,6 +526,7 @@ export function serializePayment(payment: {
     normalizedTariffType,
     payment.tariffCode,
   );
+  const placementPricing = parsePlacementPricingPayload(payment.providerPayload);
 
   return {
     id: payment.id,
@@ -516,6 +553,7 @@ export function serializePayment(payment: {
     propertyName: payment.property?.name ?? null,
     excursionName: payment.excursion?.title ?? null,
     transferName: payment.transfer?.title ?? transferReference?.transferTitle ?? null,
+    placementPricing,
     originalCoverageAmount: getPlacementPromoOriginalCoverageAmount(
       payment.providerPayload,
       Number(payment.amount),

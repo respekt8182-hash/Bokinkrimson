@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { UserActivityTracker } from "@/components/auth/user-activity-tracker";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { cn } from "@/lib/cn";
@@ -310,6 +311,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
 
   return (
     <div className="min-h-screen">
+      <UserActivityTracker />
       <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-olive/10 bg-cream/92 text-olive backdrop-blur">
         <div className="mx-auto flex h-full w-full max-w-[1600px] items-center gap-3 px-3 md:px-6">
           <Link href="/dashboard" className="flex items-center gap-3 min-w-0 lg:flex-none">

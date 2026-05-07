@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getTariffQuote } from "@/lib/payments";
+import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { getPropertyProgress } from "@/lib/properties";
 
 type RouteContext = {
@@ -53,7 +53,8 @@ export async function GET(request: Request, context: RouteContext) {
   const { searchParams } = new URL(request.url);
   const quote =
     roomCount > 0
-      ? getTariffQuote({
+      ? await getPersonalTariffQuote({
+          userId: session.id,
           roomCount,
           propertyType: property.type,
           tariffType: searchParams.get("tariffType"),

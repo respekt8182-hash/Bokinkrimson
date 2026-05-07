@@ -1,12 +1,11 @@
 import Link from "next/link";
 
+import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { cn } from "@/lib/cn";
-import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import {
   additionalServiceRows,
   annualTariffBenefitText,
   publicObjectTariffCards,
-  publicTariffHighlights,
   publicServiceTariffRows,
 } from "@/lib/site-tariffs";
 
@@ -15,6 +14,10 @@ type ServicesAndTariffsSectionProps = {
   className?: string;
   id?: string;
 };
+
+function formatRub(value: number): string {
+  return `${value.toLocaleString("ru-RU")} ₽`;
+}
 
 export function ServicesAndTariffsSection({
   variant = "page",
@@ -47,20 +50,13 @@ export function ServicesAndTariffsSection({
         </h2>
       )}
       <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
-        Сейчас размещение на сайте бесплатно до 20 июня 2026 включительно. Дальше оплачивается не
-        количество номеров, а период размещения одного объекта.
+        Сейчас размещение на сайте бесплатно до 20 июня 2026 включительно. После бесплатного
+        периода персональная цена отображается в личном кабинете после входа или регистрации.
       </p>
       <PlacementPromoNotice className="mt-5" />
       <div className="mt-5 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm font-semibold leading-6 text-olive">
         {annualTariffBenefitText}
       </div>
-      <ul className="mt-5 grid gap-2 text-sm leading-6 text-olive/72 md:grid-cols-2">
-        {publicTariffHighlights.map((item) => (
-          <li key={item} className="rounded-2xl bg-cream/72 px-4 py-3 ring-1 ring-olive/10">
-            {item}
-          </li>
-        ))}
-      </ul>
 
       <div className="mt-6 grid gap-3 lg:grid-cols-3">
         {publicObjectTariffCards.map((card) => (
@@ -91,9 +87,7 @@ export function ServicesAndTariffsSection({
                     className="flex items-center justify-between border-b border-olive/8 px-3 py-2 text-sm last:border-b-0"
                   >
                     <span className="text-olive/65">{row.label}</span>
-                    <span className="font-semibold text-olive">
-                      {row.amountRub.toLocaleString("ru-RU")} ₽
-                    </span>
+                    <span className="font-semibold text-olive">{formatRub(row.amountRub)}</span>
                   </div>
                 ))}
               </div>
@@ -123,16 +117,21 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-8 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">
         <div className="border-b border-olive/10 bg-white/85 px-4 py-3">
-          <p className="text-sm font-semibold text-olive">Другие форматы размещения</p>
+          <p className="text-sm font-semibold text-olive">Экскурсии, туры и трансферы</p>
+          <p className="mt-1 text-xs leading-5 text-olive/60">
+            Размещайте свои услуги на сайте и получайте обращения от туристов напрямую. Комиссию с
+            заказов мы не берём.
+          </p>
         </div>
         <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-olive/10 bg-white/90 text-left text-xs font-semibold uppercase tracking-[0.18em] text-olive/55">
                 <th className="px-4 py-3">Услуга</th>
-                <th className="px-4 py-3">Стоимость</th>
+                <th className="px-4 py-3">Сезон до 31 октября</th>
+                <th className="px-4 py-3">Год</th>
+                <th className="px-4 py-3">Первое годовое</th>
                 <th className="px-4 py-3">Условия</th>
-                <th className="px-4 py-3">Срок размещения</th>
               </tr>
             </thead>
             <tbody>
@@ -142,11 +141,19 @@ export function ServicesAndTariffsSection({
                     <p className="font-semibold text-olive">{row.serviceName}</p>
                     <p className="mt-1 text-xs leading-5 text-olive/60">{row.serviceNote}</p>
                   </td>
-                  <td className="px-4 py-4 align-top">
-                    <PlacementPromoPrice originalAmountRub={row.priceRub} />
+                  <td className="px-4 py-4 align-top text-olive/75">
+                    {row.seasonPriceRub ? formatRub(row.seasonPriceRub) : "-"}
                   </td>
-                  <td className="px-4 py-4 align-top text-olive/75">{row.conditionsLabel}</td>
-                  <td className="px-4 py-4 align-top text-olive/75">{row.durationLabel}</td>
+                  <td className="px-4 py-4 align-top font-semibold text-olive">
+                    {formatRub(row.priceRub)}
+                  </td>
+                  <td className="px-4 py-4 align-top font-semibold text-emerald-700">
+                    {row.firstYearPriceRub ? `от ${formatRub(row.firstYearPriceRub)}` : "-"}
+                  </td>
+                  <td className="px-4 py-4 align-top text-olive/75">
+                    {row.conditionsLabel}
+                    {row.extraLabel ? <p className="mt-1 text-xs">{row.extraLabel}</p> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -163,18 +170,27 @@ export function ServicesAndTariffsSection({
               <p className="mt-1 text-sm leading-6 text-olive/65">{row.serviceNote}</p>
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <dt className="text-olive/55">Стоимость</dt>
-                  <dd className="text-right">
-                    <PlacementPromoPrice originalAmountRub={row.priceRub} align="right" />
+                  <dt className="text-olive/55">Сезон</dt>
+                  <dd className="text-right text-olive/75">
+                    {row.seasonPriceRub ? formatRub(row.seasonPriceRub) : "-"}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-olive/55">Год</dt>
+                  <dd className="text-right font-semibold text-olive">{formatRub(row.priceRub)}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-olive/55">Первое годовое</dt>
+                  <dd className="text-right font-semibold text-emerald-700">
+                    {row.firstYearPriceRub ? `от ${formatRub(row.firstYearPriceRub)}` : "-"}
                   </dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <dt className="text-olive/55">Условия</dt>
-                  <dd className="text-right text-olive/75">{row.conditionsLabel}</dd>
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <dt className="text-olive/55">Срок</dt>
-                  <dd className="text-right text-olive/75">{row.durationLabel}</dd>
+                  <dd className="text-right text-olive/75">
+                    {row.conditionsLabel}
+                    {row.extraLabel ? <p className="mt-1">{row.extraLabel}</p> : null}
+                  </dd>
                 </div>
               </dl>
             </article>
@@ -182,13 +198,22 @@ export function ServicesAndTariffsSection({
         </div>
       </div>
 
-      {/* ---------- Дополнительные услуги ---------- */}
+      <div className="mt-4 rounded-2xl border border-olive/10 bg-white/80 px-4 py-3 text-sm leading-6 text-olive/70">
+        <p>
+          Стартовая цена доступна при первом годовом размещении в выбранной категории.
+          Персональная цена отображается в личном кабинете после входа или регистрации.
+        </p>
+        <p className="mt-1">
+          Скидка действует отдельно для каждой категории: объект, экскурсия, тур и трансфер.
+        </p>
+      </div>
+
       <p className="mt-10 text-xs font-semibold uppercase tracking-[0.24em] text-olive/45">
         Дополнительные услуги
       </p>
       <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
-        Если вам нужна помощь с оформлением карточки или качественные фотографии номеров — мы можем
-        сделать это за вас. Фотосъёмку организуем через проверенных фотографов в вашем городе.
+        Если вам нужна помощь с оформлением карточки или качественные фотографии номеров, мы можем
+        сделать это за вас.
       </p>
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">
@@ -208,7 +233,7 @@ export function ServicesAndTariffsSection({
                     <p className="font-semibold text-olive">{row.serviceName}</p>
                     <p className="mt-1 text-xs leading-5 text-olive/60">{row.serviceNote}</p>
                   </td>
-                  <td className="px-4 py-4 align-top font-semibold text-olive whitespace-nowrap">
+                  <td className="whitespace-nowrap px-4 py-4 align-top font-semibold text-olive">
                     {row.priceLabel}
                   </td>
                   <td className="px-4 py-4 align-top text-olive/75">{row.conditionsLabel}</td>

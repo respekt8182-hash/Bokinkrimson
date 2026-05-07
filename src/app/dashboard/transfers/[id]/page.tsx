@@ -20,9 +20,6 @@ import {
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
 import {
   TRANSFER_EXTRA_VEHICLE_FEE_RUB,
-  TRANSFER_PUBLICATION_FEE_RUB,
-  calculateTransferPublicationFeeRub,
-  calculateTransferPublicationOriginalFeeRub,
 } from "@/lib/site-tariffs";
 import {
   buildPlacementPromoMetadata,
@@ -30,6 +27,7 @@ import {
   getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
 } from "@/lib/placement-promo";
+import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import {
   applyPublishedTransferSnapshotToRow,
@@ -313,8 +311,16 @@ export default async function DashboardTransferEditPage({
       await ensurePublishedTransferSnapshotBeforeOwnerEdit(db, id);
     }
 
-    const publicationFeeRub = calculateTransferPublicationFeeRub(fleet.length);
-    const originalPublicationFeeRub = calculateTransferPublicationOriginalFeeRub(fleet.length);
+    const transferPlacementPricing = await getPlacementPrice({
+      userId: currentSession.id,
+      category: "transfer",
+      period: "year",
+      additionalOptions: { additionalCars: Math.max(0, fleet.length - 1) },
+    });
+    const publicationFeeRub = getPlacementPromoPrice(transferPlacementPricing.totalPrice)
+      .finalAmountRub;
+    const originalPublicationFeeRub =
+      transferPlacementPricing.basePrice + transferPlacementPricing.additionalOptionsPrice;
     const shouldPreparePayment = intent === "submit" && publishReady;
     const transferPaymentsSupported = shouldPreparePayment
       ? await areDatabaseColumnsAvailable("Payment", ["transferId"])
@@ -460,6 +466,7 @@ export default async function DashboardTransferEditPage({
                 originalAmountRub: originalPublicationFeeRub,
                 now,
                 context: freeTransferPaymentPayload,
+                placementPricing: transferPlacementPricing,
               }),
             },
           });
@@ -506,6 +513,7 @@ export default async function DashboardTransferEditPage({
         requiredAmountRub: requiredPaymentAmount,
         placementPromo,
       });
+      const placementPricingPayload = buildPlacementPricingPayload(transferPlacementPricing);
 
       const openPayment =
         payments.find(
@@ -520,7 +528,7 @@ export default async function DashboardTransferEditPage({
               data: {
                 amount: requiredPaymentAmount,
                 roomCount: fleet.length,
-                providerPayload: transferPaymentPayload,
+                providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
                 placementValidUntil: transferPaymentCoverage.paidUntil
                   ? new Date(transferPaymentCoverage.paidUntil)
                   : null,
@@ -549,7 +557,7 @@ export default async function DashboardTransferEditPage({
             status: PaymentStatus.PENDING,
             provider: PaymentProvider.MANAGER,
             idempotenceKey,
-            providerPayload: transferPaymentPayload,
+            providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
             placementValidUntil: transferPaymentCoverage.paidUntil
               ? new Date(transferPaymentCoverage.paidUntil)
               : null,
@@ -577,7 +585,7 @@ export default async function DashboardTransferEditPage({
           status: PaymentStatus.CREATED,
           provider: PaymentProvider.YOOKASSA,
           idempotenceKey,
-          providerPayload: transferPaymentPayload,
+          providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
           placementValidUntil: transferPaymentCoverage.paidUntil
             ? new Date(transferPaymentCoverage.paidUntil)
             : null,
@@ -603,6 +611,7 @@ export default async function DashboardTransferEditPage({
         const providerPayload = {
           ...yooPayment,
           metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
+          ...placementPricingPayload,
         };
 
         const updated = await db.payment.update({
@@ -680,7 +689,13 @@ export default async function DashboardTransferEditPage({
         }
       : undefined,
   });
-  const transferPublicationPrice = getPlacementPromoPrice(TRANSFER_PUBLICATION_FEE_RUB);
+  const initialTransferPlacementPricing = await getPlacementPrice({
+    userId: session.id,
+    category: "transfer",
+    period: "year",
+    additionalOptions: { additionalCars: Math.max(0, fleet.length - 1) },
+  });
+  const transferPublicationPrice = getPlacementPromoPrice(initialTransferPlacementPricing.finalPrice);
 
   return (
     <TransferEditorPage
@@ -717,7 +732,7 @@ export default async function DashboardTransferEditPage({
       initialServiceTags={serviceTags}
       publicPath={publicPath}
       publicationFeeRub={transferPublicationPrice.finalAmountRub}
-      originalPublicationFeeRub={transferPublicationPrice.originalAmountRub}
+      originalPublicationFeeRub={initialTransferPlacementPricing.basePrice}
       extraVehicleFeeRub={TRANSFER_EXTRA_VEHICLE_FEE_RUB}
       initialPayments={payments.map(serializePayment)}
       saved={saved}

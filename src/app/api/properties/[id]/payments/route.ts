@@ -8,9 +8,10 @@ import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildFreePlacementPaymentPayload,
   getPlacementCoverageState,
-  getTariffQuote,
   serializePayment,
 } from "@/lib/payments";
+import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
+import { buildPlacementPricingPayload } from "@/lib/placement-pricing";
 import {
   buildPlacementPromoMetadata,
   buildPlacementPromoPayload,
@@ -57,8 +58,9 @@ async function getOwnedPropertyForPayment(propertyId: string) {
   });
 }
 
-function buildReadiness(
+async function buildReadiness(
   property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
+  ownerId: string,
   tariffType?: string | null,
 ) {
   const progress = getPropertyProgress(property);
@@ -81,7 +83,8 @@ function buildReadiness(
     roomCount,
     quote:
       roomCount > 0
-        ? getTariffQuote({
+        ? await getPersonalTariffQuote({
+            userId: ownerId,
             roomCount,
             propertyType: property.type,
             tariffType,
@@ -139,7 +142,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   const payments = await listPropertyPayments(property.id, session.id);
   const { searchParams } = new URL(request.url);
-  const readiness = buildReadiness(property, searchParams.get("tariffType"));
+  const readiness = await buildReadiness(property, session.id, searchParams.get("tariffType"));
   const placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -187,7 +190,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const readiness = buildReadiness(property, body.tariffType);
+  const readiness = await buildReadiness(property, session.id, body.tariffType);
 
   if (!readiness.ready || !readiness.quote) {
     return NextResponse.json(
@@ -243,6 +246,7 @@ export async function POST(request: Request, context: RouteContext) {
         providerPayload: buildFreePlacementPaymentPayload({
           originalAmountRub: originalAmount,
           now,
+          placementPricing: readiness.quote.placementPricing,
         }),
       },
       include: {
@@ -310,7 +314,12 @@ export async function POST(request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom,
         placementValidUntil: paidUntil,
-        ...(placementPromo ? { providerPayload: { placementPromo } } : {}),
+        providerPayload: {
+          ...(placementPromo ? { placementPromo } : {}),
+          ...(readiness.quote.placementPricing
+            ? buildPlacementPricingPayload(readiness.quote.placementPricing)
+            : {}),
+        },
       },
       include: {
         property: { select: { name: true } },
@@ -344,6 +353,9 @@ export async function POST(request: Request, context: RouteContext) {
       idempotenceKey,
       paidFrom,
       placementValidUntil: paidUntil,
+      providerPayload: readiness.quote.placementPricing
+        ? buildPlacementPricingPayload(readiness.quote.placementPricing)
+        : undefined,
     },
     include: {
       property: { select: { name: true } },
@@ -367,7 +379,12 @@ export async function POST(request: Request, context: RouteContext) {
       data: {
         providerPaymentId: yooPayment.id,
         confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload,
+        providerPayload: {
+          ...providerPayload,
+          ...(readiness.quote.placementPricing
+            ? buildPlacementPricingPayload(readiness.quote.placementPricing)
+            : {}),
+        },
         status: PaymentStatus.PENDING,
       },
       include: {

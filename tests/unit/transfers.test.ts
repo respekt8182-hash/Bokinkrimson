@@ -101,8 +101,8 @@ describe("transfer fleet normalization", () => {
 
     expect(calculateTransferPublicationFeeRub(1, duringPromo)).toBe(0);
     expect(calculateTransferPublicationFeeRub(3, duringPromo)).toBe(0);
-    expect(calculateTransferPublicationFeeRub(1, afterPromo)).toBe(1900);
-    expect(calculateTransferPublicationOriginalFeeRub(3)).toBe(2900);
+    expect(calculateTransferPublicationFeeRub(1, afterPromo)).toBe(1490);
+    expect(calculateTransferPublicationOriginalFeeRub(3)).toBe(2470);
   });
 
   it("uses pending edit status as transfer workflow status for published cards", () => {

@@ -6,9 +6,9 @@ import { db } from "@/lib/db";
 import {
   buildFreePlacementPaymentPayload,
   getPlacementCoverageState,
-  getTariffQuote,
   serializePayment,
 } from "@/lib/payments";
+import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { getPlacementPromoDemoValidUntil } from "@/lib/placement-promo";
 import {
   getPropertyPaymentReadinessIssues,
@@ -51,8 +51,9 @@ async function getOwnedPropertyForPayment(propertyId: string) {
   });
 }
 
-function buildReadiness(
+async function buildReadiness(
   property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
+  ownerId: string,
 ) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
@@ -67,7 +68,8 @@ function buildReadiness(
     roomCount,
     quote:
       roomCount > 0
-        ? getTariffQuote({
+        ? await getPersonalTariffQuote({
+            userId: ownerId,
             roomCount,
             propertyType: property.type,
           })
@@ -105,7 +107,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const readiness = buildReadiness(property);
+  const readiness = await buildReadiness(property, session.id);
   if (!readiness.ready || !readiness.quote) {
     return NextResponse.json(
       {
@@ -154,6 +156,7 @@ export async function POST(_request: Request, context: RouteContext) {
         providerPayload: buildFreePlacementPaymentPayload({
           originalAmountRub: readiness.quote.originalAmount,
           now,
+          placementPricing: readiness.quote.placementPricing,
         }),
       },
       include: {

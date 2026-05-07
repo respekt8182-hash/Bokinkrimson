@@ -18,6 +18,7 @@ import { createFailedLoginLockout } from "@/lib/login-lockout";
 import { logger } from "@/lib/logger";
 import { loginSchema } from "@/lib/schemas/auth";
 import { getRequestIp } from "@/lib/security";
+import { markUserLogin } from "@/lib/user-activity";
 import { buildUserPhoneLookupCandidates } from "@/lib/user-phone";
 
 const failedLoginLockout = createFailedLoginLockout({
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ ok: true, user: sessionUser });
     response.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+    await markUserLogin(user.id);
     failedLoginLockout.reset(ip);
 
     return response;

@@ -9,6 +9,7 @@ import {
   resolvePaymentPlacementValidUntil,
   serializePayment,
 } from "@/lib/payments";
+import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
 import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildPlacementPromoMetadata,
@@ -16,7 +17,7 @@ import {
   getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
 } from "@/lib/placement-promo";
-import { EXCURSION_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
@@ -26,6 +27,7 @@ type RouteContext = {
 
 const createPaymentSchema = z.object({
   provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("MANAGER"),
+  period: z.enum(["season", "year"]).optional().default("year"),
 });
 
 async function getOwnedExcursion(excursionId: string) {
@@ -91,6 +93,25 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const payments = await listExcursionPayments(excursion.id, session.id);
   const now = new Date();
+  const category = excursion.offerType === ExcursionOfferType.TOUR ? "tour" : "excursion";
+  const [yearPrice, seasonPrice] = await Promise.all([
+    getPlacementPrice({
+      userId: session.id,
+      category,
+      period: "year",
+      basePrice:
+        excursion.offerType === ExcursionOfferType.TOUR
+          ? TOUR_PUBLICATION_FEE_RUB
+          : EXCURSION_PUBLICATION_FEE_RUB,
+      now,
+    }),
+    getPlacementPrice({
+      userId: session.id,
+      category,
+      period: "season",
+      now,
+    }),
+  ]);
   const latestOpenPayment =
     payments.find(
       (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
@@ -106,6 +127,8 @@ export async function GET(_request: Request, context: RouteContext) {
         resolvePaymentPlacementValidUntil(item).getTime() > now.getTime(),
     ),
     hasPendingManagerPayment: latestOpenPayment?.provider === PaymentProvider.MANAGER,
+    quote: yearPrice,
+    availablePrices: [seasonPrice, yearPrice],
   });
 }
 
@@ -115,7 +138,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
-  let body: z.infer<typeof createPaymentSchema> = { provider: "MANAGER" };
+  let body: z.infer<typeof createPaymentSchema> = { provider: "MANAGER", period: "year" };
   try {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
@@ -166,9 +189,28 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const idempotenceKey = crypto.randomUUID();
+  const category = excursion.offerType === ExcursionOfferType.TOUR ? "tour" : "excursion";
   const tariffCode =
-    excursion.offerType === ExcursionOfferType.TOUR ? "tour_standard" : "excursion_standard";
-  const publicationPrice = getPlacementPromoPrice(EXCURSION_PUBLICATION_FEE_RUB);
+    body.period === "season"
+      ? excursion.offerType === ExcursionOfferType.TOUR
+        ? "tour_season"
+        : "excursion_season"
+      : excursion.offerType === ExcursionOfferType.TOUR
+        ? "tour_year"
+        : "excursion_year";
+  const placementPricing = await getPlacementPrice({
+    userId: session.id,
+    category,
+    period: body.period,
+    basePrice:
+      body.period === "year"
+        ? excursion.offerType === ExcursionOfferType.TOUR
+          ? TOUR_PUBLICATION_FEE_RUB
+          : EXCURSION_PUBLICATION_FEE_RUB
+        : undefined,
+    now,
+  });
+  const publicationPrice = getPlacementPromoPrice(placementPricing.totalPrice);
   const amount = publicationPrice.finalAmountRub;
   const placementPromo = buildPlacementPromoPayload({
     originalAmountRub: publicationPrice.originalAmountRub,
@@ -196,6 +238,7 @@ export async function POST(request: Request, context: RouteContext) {
         providerPayload: buildFreePlacementPaymentPayload({
           originalAmountRub: publicationPrice.originalAmountRub,
           now,
+          placementPricing,
         }),
       },
       include: {
@@ -234,7 +277,10 @@ export async function POST(request: Request, context: RouteContext) {
         status: PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey,
-        ...(placementPromo ? { providerPayload: { placementPromo } } : {}),
+        providerPayload: {
+          ...(placementPromo ? { placementPromo } : {}),
+          ...buildPlacementPricingPayload(placementPricing),
+        },
       },
       include: {
         excursion: {
@@ -269,6 +315,7 @@ export async function POST(request: Request, context: RouteContext) {
       status: PaymentStatus.CREATED,
       provider: PaymentProvider.YOOKASSA,
       idempotenceKey,
+      providerPayload: buildPlacementPricingPayload(placementPricing),
     },
     include: {
       excursion: {
@@ -302,7 +349,10 @@ export async function POST(request: Request, context: RouteContext) {
       data: {
         providerPaymentId: yooPayment.id,
         confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload,
+        providerPayload: {
+          ...providerPayload,
+          ...buildPlacementPricingPayload(placementPricing),
+        },
         status: PaymentStatus.PENDING,
       },
       include: {

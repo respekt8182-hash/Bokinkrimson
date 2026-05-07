@@ -10,6 +10,7 @@ import {
   getTransferPaymentReference,
   shouldCountPaymentInAdminRevenue,
 } from "@/lib/payments";
+import { parsePlacementPricingPayload } from "@/lib/placement-pricing";
 import { ManagerPaymentsList } from "@/components/admin/manager-payments-list";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,7 @@ export default async function AdminPaymentsPage() {
       managerNotes: p.managerNotes,
       confirmedById: p.confirmedById,
       includeInMonthlyRevenue: shouldCountPaymentInAdminRevenue(p.providerPayload),
+      placementPricing: parsePlacementPricingPayload(p.providerPayload),
       transferPayment: transferPayload
         ? {
             paymentReason: transferPayload.paymentReason ?? null,

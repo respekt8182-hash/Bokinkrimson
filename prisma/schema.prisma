@@ -213,6 +213,9 @@ model User {
   emailVerifiedAt           DateTime?
   passwordChangedAt         DateTime?
   sessionVersion            Int                    @default(0)
+  lastLoginAt               DateTime?
+  lastSeenAt                DateTime?
+  lastLogoutAt              DateTime?
   role                      UserRole               @default(USER)
   deletedAt                 DateTime?
   deletionExpiresAt         DateTime?
@@ -235,6 +238,8 @@ model User {
   supportChat               SupportChat?
 
   @@index([deletedAt, deletionExpiresAt, createdAt])
+  @@index([lastSeenAt])
+  @@index([lastLoginAt])
   @@index([pendingEmail])
 }
 

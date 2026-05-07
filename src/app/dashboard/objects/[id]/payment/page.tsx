@@ -7,9 +7,9 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   getPlacementCoverageState,
-  getTariffQuote,
   serializePayment,
 } from "@/lib/payments";
+import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { getPropertyPaymentReadinessIssues, getPropertyProgress } from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
 
@@ -90,7 +90,8 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
   const readinessReasons = readinessIssues.map((issue) => issue.reason);
   const quote =
     roomCount > 0
-      ? getTariffQuote({
+      ? await getPersonalTariffQuote({
+          userId: session.id,
           roomCount,
           propertyType: property.type,
         })

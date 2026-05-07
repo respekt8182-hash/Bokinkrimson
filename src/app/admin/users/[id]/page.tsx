@@ -6,7 +6,12 @@ import { AdminResetPasswordAction } from "@/components/admin/admin-reset-passwor
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { AdminNotice } from "@/components/admin/admin-ui";
 import { purgeExpiredDeletedUsers } from "@/lib/admin-entity-lifecycle";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import {
+  formatUserActivityTime,
+  getUserActivityStatus,
+  USER_ACTIVITY_COLUMNS,
+} from "@/lib/user-activity";
 
 type AdminUserProfilePageProps = {
   params: Promise<{ id: string }>;
@@ -23,9 +28,23 @@ function getStatusLabel(status: PasswordResetRequestStatus): string {
   }
 }
 
+function formatAbsoluteActivityDate(date: Date | null | undefined): string {
+  return date
+    ? date.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+}
+
 export default async function AdminUserProfilePage({ params }: AdminUserProfilePageProps) {
   const { id } = await params;
-  await purgeExpiredDeletedUsers(db, new Date());
+  const now = new Date();
+  const isUserActivityAvailable = await areDatabaseColumnsAvailable("User", USER_ACTIVITY_COLUMNS);
+  await purgeExpiredDeletedUsers(db, now);
 
   const user = await db.user.findFirst({
     where: { id, role: "USER" },
@@ -62,6 +81,7 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
     (request) => request.status === PasswordResetRequestStatus.PENDING,
   ).length;
   const isPendingDeletion = Boolean(user.deletedAt);
+  const activityStatus = getUserActivityStatus(user.lastSeenAt, now);
 
   return (
     <div className="space-y-4">
@@ -118,6 +138,49 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
             Запросов на сброс: {user._count.passwordResetRequests}
           </span>
           <span className="rounded-full bg-cream px-2 py-1">Ожидает: {pendingResetCount}</span>
+        </div>
+        {!isUserActivityAvailable ? (
+          <AdminNotice className="mt-4" tone="warning">
+            Статистика активности появится после применения миграции базы данных.
+          </AdminNotice>
+        ) : null}
+        <div className="mt-4 rounded-2xl border border-olive/10 bg-cream/70 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${activityStatus.toneClassName}`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${activityStatus.dotClassName}`}
+                aria-hidden="true"
+              />
+              {isUserActivityAvailable ? activityStatus.label : "Нет данных"}
+            </span>
+            <span className="text-xs text-olive/55">
+              {isUserActivityAvailable
+                ? activityStatus.description
+                : "Нужно применить миграцию для записи активности"}
+            </span>
+          </div>
+          <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <dt className="text-olive/50">Последний визит</dt>
+              <dd className="mt-0.5 font-semibold text-olive">
+                {formatUserActivityTime(user.lastSeenAt, now)}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <dt className="text-olive/50">Последний вход</dt>
+              <dd className="mt-0.5 font-semibold text-olive">
+                {formatAbsoluteActivityDate(user.lastLoginAt)}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <dt className="text-olive/50">Последний выход</dt>
+              <dd className="mt-0.5 font-semibold text-olive">
+                {formatAbsoluteActivityDate(user.lastLogoutAt)}
+              </dd>
+            </div>
+          </dl>
         </div>
         <div className="mt-3 grid gap-2 text-sm text-olive/85 sm:grid-cols-3">
           <p>Объекты: {user._count.properties}</p>

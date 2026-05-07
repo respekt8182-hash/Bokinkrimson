@@ -55,6 +55,9 @@ export async function GET(request: Request) {
       deletionExpiresAt: user.deletionExpiresAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      lastSeenAt: user.lastSeenAt?.toISOString() ?? null,
+      lastLogoutAt: user.lastLogoutAt?.toISOString() ?? null,
       counts: {
         properties: user._count.properties,
         excursions: user._count.excursions,

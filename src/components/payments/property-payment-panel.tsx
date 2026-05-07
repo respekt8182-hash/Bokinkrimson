@@ -153,15 +153,19 @@ export function PropertyPaymentPanel({
     readiness.quote?.tariff ??
     tariffOptions[0] ??
     null;
+  const selectedPlacementPricing = selectedTariff?.placementPricing ?? null;
+  const selectedBaseAmount = selectedTariff?.baseAmountRub ?? selectedTariff?.amountRub ?? 0;
+  const selectedFinalBeforePromo =
+    selectedTariff?.finalAmountRub ?? selectedTariff?.amountRub ?? selectedBaseAmount;
   const selectedTariffPrice = selectedTariff
-    ? getPlacementPromoPrice(selectedTariff.amountRub)
+    ? getPlacementPromoPrice(selectedFinalBeforePromo)
     : null;
   const amountDue = selectedTariff
     ? hasActivePlacement
       ? 0
-      : (selectedTariffPrice?.finalAmountRub ?? selectedTariff.amountRub)
+      : (selectedTariffPrice?.finalAmountRub ?? selectedFinalBeforePromo)
     : 0;
-  const originalAmountDue = selectedTariff ? selectedTariff.amountRub : 0;
+  const originalAmountDue = selectedTariff ? selectedBaseAmount : 0;
   const hasFreePlacementCoverage = Boolean(selectedTariff) && !hasActivePlacement && amountDue <= 0;
   const workflowStatus = useMemo(
     () => getWorkflowStatus(propertyStatus, pendingEditStatus),
@@ -544,11 +548,17 @@ export function PropertyPaymentPanel({
 
           {selectedTariff && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              <p className="font-semibold">Размещение бесплатно</p>
+              <p className="font-semibold">Сейчас размещение бесплатно до 20 июня 2026.</p>
               <p className="mt-1">
-                До 20 июня 2026 включительно можно отправить карточку на модерацию без оплаты. Мы
-                переведем размещение в демо-режим до 20 июня и сохраним скидку 20% на дальнейшее
-                продление.
+                После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
+                <strong>{formatMoney(selectedFinalBeforePromo)}</strong>
+                {selectedPlacementPricing?.isDiscountApplied
+                  ? ` вместо ${formatMoney(selectedPlacementPricing.basePrice)}.`
+                  : "."}
+              </p>
+              <p className="mt-1">
+                {selectedPlacementPricing?.discountText ??
+                  "Скидки 20% и 10% применяются только к годовому размещению."}
               </p>
             </div>
           ) : null}
@@ -557,6 +567,9 @@ export function PropertyPaymentPanel({
             <div className="grid gap-3 md:grid-cols-3">
               {tariffOptions.map((option) => {
                 const isSelected = selectedTariff?.type === option.type;
+                const optionBaseAmount = option.baseAmountRub ?? option.amountRub;
+                const optionFinalAmount = option.finalAmountRub ?? option.amountRub;
+                const optionPromoPrice = getPlacementPromoPrice(optionFinalAmount);
                 return (
                   <button
                     key={option.type}
@@ -575,10 +588,16 @@ export function PropertyPaymentPanel({
                     ) : null}
                     <p className="pr-20 text-sm font-semibold text-olive">{option.shortTitle}</p>
                     <PlacementPromoPrice
-                      originalAmountRub={option.amountRub}
+                      originalAmountRub={optionBaseAmount}
+                      finalAmountRub={optionPromoPrice.finalAmountRub}
                       className="mt-2"
                       finalClassName="text-2xl"
                     />
+                    {option.placementPricing?.discountLabel ? (
+                      <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                        {option.placementPricing.discountLabel}
+                      </p>
+                    ) : null}
                     <p className="mt-2 text-xs leading-5 text-olive/65">{option.periodLabel}</p>
                     <p className="mt-1 text-xs font-semibold text-olive/70">
                       {option.monthlyLabel}
@@ -628,6 +647,16 @@ export function PropertyPaymentPanel({
                   <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                     Экономия {formatMoney(selectedTariff.savingsRub)} по сравнению с оплатой сезона
                     и межсезонья отдельно.
+                  </div>
+                ) : null}
+                {selectedPlacementPricing ? (
+                  <div className="rounded-xl bg-white/70 px-3 py-2 text-xs leading-5 text-olive/70">
+                    {selectedPlacementPricing.discountLabel ? (
+                      <p className="font-semibold text-emerald-700">
+                        {selectedPlacementPricing.discountLabel}
+                      </p>
+                    ) : null}
+                    <p>{selectedPlacementPricing.discountText}</p>
                   </div>
                 ) : null}
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">

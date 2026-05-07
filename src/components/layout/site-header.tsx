@@ -8,6 +8,7 @@ import {
 } from "@/components/layout/site-header-context-actions";
 import { SiteHeaderMobileDrawer } from "@/components/layout/site-header-mobile-drawer";
 import { SiteHeaderUserMenu } from "@/components/layout/site-header-user-menu";
+import { UserActivityTracker } from "@/components/auth/user-activity-tracker";
 import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
 import {
@@ -35,6 +36,7 @@ export async function SiteHeader() {
 
   return (
     <>
+      {session?.role === "USER" ? <UserActivityTracker /> : null}
       <header className="sticky top-0 z-50 border-b border-olive/10 bg-cream/92 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 md:px-6 md:py-4">
           <SiteHeaderBackButton />

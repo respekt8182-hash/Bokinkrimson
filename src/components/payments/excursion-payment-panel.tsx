@@ -17,8 +17,9 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import type { SerializedPayment } from "@/lib/payments";
+import type { PlacementPriceResult } from "@/lib/placement-pricing";
 import { getPlacementPromoPrice } from "@/lib/placement-promo";
-import { EXCURSION_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
+import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 
 type ExcursionOfferTypeValue = "EXCURSION" | "TOUR";
 type ExcursionStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "NEEDS_FIX" | "REJECTED";
@@ -47,6 +48,8 @@ type ExcursionPaymentsApiResponse = {
   items: SerializedPayment[];
   hasPaid: boolean;
   hasPendingManagerPayment: boolean;
+  quote?: PlacementPriceResult;
+  availablePrices?: PlacementPriceResult[];
 };
 
 function toStatusLabel(status: ExcursionStatusValue): string {
@@ -167,6 +170,8 @@ export function ExcursionPaymentPanel({
   );
   const [payments, setPayments] = useState<SerializedPayment[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
+  const [selectedPeriod, setSelectedPeriod] = useState<"year" | "season">("year");
+  const [availablePrices, setAvailablePrices] = useState<PlacementPriceResult[]>([]);
   const [managerRequested, setManagerRequested] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -186,7 +191,15 @@ export function ExcursionPaymentPanel({
   const latestPayment = payments[0] ?? null;
   const hasPaid = payments.some((item) => item.status === "SUCCEEDED");
   const hasOpenPayment = isOpenPayment(latestPayment);
-  const publicationPrice = getPlacementPromoPrice(EXCURSION_PUBLICATION_FEE_RUB);
+  const fallbackYearPrice =
+    offerType === "TOUR" ? TOUR_PUBLICATION_FEE_RUB : EXCURSION_PUBLICATION_FEE_RUB;
+  const selectedPlacementPrice =
+    availablePrices.find((item) => item.period === selectedPeriod) ??
+    availablePrices.find((item) => item.period === "year") ??
+    null;
+  const publicationPrice = getPlacementPromoPrice(
+    selectedPlacementPrice?.totalPrice ?? fallbackYearPrice,
+  );
   const isFreePublication = publicationPrice.finalAmountRub <= 0;
   const canPay =
     !adminMode &&
@@ -278,6 +291,7 @@ export function ExcursionPaymentPanel({
       }
 
       setPayments(body.items);
+      setAvailablePrices(body.availablePrices ?? []);
       setStatus(body.status);
       setPendingEditStatus(body.pendingEditStatus);
       setManagerRequested(body.hasPendingManagerPayment);
@@ -407,7 +421,7 @@ export function ExcursionPaymentPanel({
       const response = await fetch(`/api/excursions/${excursionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: paymentMethod }),
+        body: JSON.stringify({ provider: paymentMethod, period: selectedPeriod }),
       });
 
       const body = (await response.json()) as {
@@ -499,9 +513,15 @@ export function ExcursionPaymentPanel({
             ) : (
               <>
                 <PlacementPromoPrice
-                  originalAmountRub={EXCURSION_PUBLICATION_FEE_RUB}
+                  originalAmountRub={selectedPlacementPrice?.basePrice ?? fallbackYearPrice}
+                  finalAmountRub={publicationPrice.finalAmountRub}
                   finalClassName="text-2xl"
                 />
+                {selectedPlacementPrice?.discountLabel ? (
+                  <p className="mt-1 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                    {selectedPlacementPrice.discountLabel}
+                  </p>
+                ) : null}
                 <p className="text-xs text-olive/55">
                   {isFreePublication
                     ? `Бесплатное размещение ${copy.genitive} до 20 июня`
@@ -511,6 +531,44 @@ export function ExcursionPaymentPanel({
             )}
           </div>
         </div>
+
+        {!adminMode && availablePrices.length > 0 ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {availablePrices.map((price) => {
+              const isSelected = selectedPeriod === price.period;
+              const promoPrice = getPlacementPromoPrice(price.totalPrice);
+              return (
+                <button
+                  key={price.period}
+                  type="button"
+                  onClick={() => setSelectedPeriod(price.period === "season" ? "season" : "year")}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition",
+                    isSelected
+                      ? "border-primary bg-primary/5"
+                      : "border-olive/15 bg-white hover:border-primary/25",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-olive">
+                    {price.period === "season" ? "Сезон до 31 октября" : "Годовое размещение"}
+                  </p>
+                  <PlacementPromoPrice
+                    originalAmountRub={price.basePrice}
+                    finalAmountRub={promoPrice.finalAmountRub}
+                    className="mt-1"
+                    finalClassName="text-xl"
+                  />
+                  {price.discountLabel ? (
+                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                      {price.discountLabel}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xs leading-5 text-olive/60">{price.discountText}</p>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="mt-3 space-y-1.5 rounded-xl bg-olive/4 px-3 py-2.5 text-xs text-olive/65">
           {adminMode ? (
@@ -574,10 +632,19 @@ export function ExcursionPaymentPanel({
           <div className="mt-4 space-y-3">
             {isFreePublication ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                <p className="font-semibold">Размещение бесплатно</p>
+                <p className="font-semibold">Сейчас размещение бесплатно до 20 июня 2026.</p>
                 <p className="mt-1">
-                  До 20 июня 2026 включительно карточку можно отправить на модерацию без оплаты.
-                  Размещение перейдет в демо-режим до 20 июня, а на продление сохранится скидка 20%.
+                  После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
+                  <strong>
+                    {formatMoney(selectedPlacementPrice?.totalPrice ?? fallbackYearPrice)}
+                  </strong>
+                  {selectedPlacementPrice?.isDiscountApplied
+                    ? ` вместо ${formatMoney(selectedPlacementPrice.basePrice)}.`
+                    : "."}
+                </p>
+                <p className="mt-1">
+                  {selectedPlacementPrice?.discountText ??
+                    "Скидки 20% и 10% применяются только к годовому размещению."}
                 </p>
               </div>
             ) : null}
