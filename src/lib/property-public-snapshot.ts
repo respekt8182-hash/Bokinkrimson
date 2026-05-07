@@ -8,7 +8,12 @@ import {
 } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
 import { serializeMedia, type SerializedMedia } from "@/lib/media";
-import { roomInclude, serializeRoom, type SerializedRoom } from "@/lib/rooms";
+import {
+  normalizeSerializedRoomBathroom,
+  roomInclude,
+  serializeRoom,
+  type SerializedRoom,
+} from "@/lib/rooms";
 import type { FaqItem } from "@/types/excursions";
 
 export type PublishedPropertySnapshot = {
@@ -169,7 +174,11 @@ export function parsePublishedPropertySnapshot(
     return null;
   }
 
-  return candidate as PublishedPropertySnapshot;
+  const snapshot = candidate as PublishedPropertySnapshot;
+  return {
+    ...snapshot,
+    rooms: snapshot.rooms.map(normalizeSerializedRoomBathroom),
+  };
 }
 
 export function shouldUsePublishedSnapshot(input: {

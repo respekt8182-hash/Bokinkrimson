@@ -817,14 +817,14 @@ export function RoomFundManager({
       setBedSets(buildBedSetsFromMeta(meta, meta.roomType));
       setHasAdditionalPlaces(meta.hasAdditionalPlaces);
       setSelectedAdditionalPlaceTypes(meta.additionalPlaceTypes);
-      setHasPrivateBathroom(true);
-      setPrivateBathroomLocations(["in_room"]);
-      setPrivateToiletLocations(["in_bathroom"]);
-      setPrivateBathroomCount(1);
-      setHasSharedBathroom(false);
-      setSharedBathroomLocations([]);
-      setSharedToiletLocations([]);
-      setIsBathroomSectionEnabled(true);
+      setHasPrivateBathroom(meta.hasPrivateBathroom);
+      setPrivateBathroomLocations(meta.privateBathroomLocations);
+      setPrivateToiletLocations(meta.privateToiletLocations);
+      setPrivateBathroomCount(meta.privateBathroomCount ?? 1);
+      setHasSharedBathroom(meta.hasSharedBathroom);
+      setSharedBathroomLocations(meta.sharedBathroomLocations);
+      setSharedToiletLocations(meta.sharedToiletLocations);
+      setIsBathroomSectionEnabled(meta.hasPrivateBathroom || meta.hasSharedBathroom);
       setError("");
       scrollToEditor();
     },
@@ -1070,7 +1070,35 @@ export function RoomFundManager({
   }
 
   function resolveBathroomType(): "IN_ROOM" | "ON_FLOOR" | "OUTSIDE" {
-    return "IN_ROOM";
+    const privateLocations = hasPrivateBathroom
+      ? [...privateBathroomLocations, ...privateToiletLocations]
+      : [];
+    const sharedLocations = hasSharedBathroom
+      ? [...sharedBathroomLocations, ...sharedToiletLocations]
+      : [];
+    const allLocations = [...privateLocations, ...sharedLocations];
+    const hasOnlyInRoomPrivateBathroom =
+      hasPrivateBathroom &&
+      privateLocations.length > 0 &&
+      privateLocations.every((location) => location === "in_room" || location === "in_bathroom");
+
+    if (hasOnlyInRoomPrivateBathroom) {
+      return "IN_ROOM";
+    }
+
+    if (allLocations.includes("outside")) {
+      return "OUTSIDE";
+    }
+
+    if (allLocations.some((location) => location !== "in_room" && location !== "in_bathroom")) {
+      return "ON_FLOOR";
+    }
+
+    if (hasPrivateBathroom) {
+      return "IN_ROOM";
+    }
+
+    return "ON_FLOOR";
   }
 
   async function saveRoom() {
@@ -1165,6 +1193,29 @@ export function RoomFundManager({
       return;
     }
 
+    if (!isBathroomSectionEnabled || (!hasPrivateBathroom && !hasSharedBathroom)) {
+      setError("Укажите, где находится душ и туалет");
+      return;
+    }
+
+    if (
+      hasPrivateBathroom &&
+      (privateBathroomLocations.length === 0 ||
+        privateToiletLocations.length === 0 ||
+        privateBathroomCount < 1)
+    ) {
+      setError("Для собственного санузла укажите локацию и количество");
+      return;
+    }
+
+    if (
+      hasSharedBathroom &&
+      (sharedBathroomLocations.length === 0 || sharedToiletLocations.length === 0)
+    ) {
+      setError("Для общего санузла укажите, где находятся душ и туалет");
+      return;
+    }
+
     const payload = {
       title,
       beds,
@@ -1185,13 +1236,13 @@ export function RoomFundManager({
         bedSets: bedSetsMeta,
         hasAdditionalPlaces,
         additionalPlaceTypes: hasAdditionalPlaces ? selectedAdditionalPlaceTypes : [],
-        hasPrivateBathroom: true,
-        privateBathroomLocations: ["in_room"],
-        privateToiletLocations: ["in_bathroom"],
-        hasSharedBathroom: false,
-        sharedBathroomLocations: [],
-        sharedToiletLocations: [],
-        privateBathroomCount: 1,
+        hasPrivateBathroom,
+        privateBathroomLocations: hasPrivateBathroom ? privateBathroomLocations : [],
+        privateToiletLocations: hasPrivateBathroom ? privateToiletLocations : [],
+        hasSharedBathroom,
+        sharedBathroomLocations: hasSharedBathroom ? sharedBathroomLocations : [],
+        sharedToiletLocations: hasSharedBathroom ? sharedToiletLocations : [],
+        privateBathroomCount: hasPrivateBathroom ? privateBathroomCount : null,
       },
     };
 

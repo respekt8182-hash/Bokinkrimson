@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
+  BarChart3,
   Compass,
   Car,
   Clock3,
@@ -43,6 +44,7 @@ const MANAGER_PAY_SEEN_KEY = "boking_admin_manager_payments_seen_at";
 
 const menu: MenuItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
+  { href: "/admin/statistics", label: "Статистика", icon: BarChart3 },
   { href: "/admin/moderation", label: "Модерация жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
   { href: "/admin/objects", label: "Жильё и размещение", icon: House },
@@ -105,6 +107,10 @@ function getPageTitle(pathname: string): string {
 
   if (pathname.startsWith("/admin/moderation")) {
     return "Модерация жилья";
+  }
+
+  if (pathname.startsWith("/admin/statistics")) {
+    return "Статистика";
   }
 
   if (pathname.startsWith("/admin/objects")) {

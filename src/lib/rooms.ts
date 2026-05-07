@@ -61,6 +61,10 @@ export type SerializedChessboardRoom = {
   prices: SerializedRoomPrice[];
 };
 
+function isInRoomBathroomLocation(location: string): boolean {
+  return location === "in_room" || location === "in_bathroom";
+}
+
 export function getBathroomTypeLabel(type: BathroomType): string {
   switch (type) {
     case "IN_ROOM":
@@ -78,6 +82,8 @@ export function resolveBathroomTypeFromMeta(
   meta:
     | {
         hasPrivateBathroom?: boolean;
+        privateBathroomLocations?: string[];
+        privateToiletLocations?: string[];
         hasSharedBathroom?: boolean;
         sharedBathroomLocations?: string[];
         sharedToiletLocations?: string[];
@@ -89,16 +95,28 @@ export function resolveBathroomTypeFromMeta(
     return fallback;
   }
 
-  if (meta.hasPrivateBathroom) {
+  const privateLocations = meta.hasPrivateBathroom
+    ? [...(meta.privateBathroomLocations ?? []), ...(meta.privateToiletLocations ?? [])]
+    : [];
+  const sharedLocations = meta.hasSharedBathroom
+    ? [...(meta.sharedBathroomLocations ?? []), ...(meta.sharedToiletLocations ?? [])]
+    : [];
+  const allLocations = [...privateLocations, ...sharedLocations];
+
+  if (meta.hasPrivateBathroom && privateLocations.length > 0 && privateLocations.every(isInRoomBathroomLocation)) {
     return "IN_ROOM";
   }
 
-  if (
-    meta.hasSharedBathroom &&
-    (meta.sharedBathroomLocations?.includes("outside") ||
-      meta.sharedToiletLocations?.includes("outside"))
-  ) {
+  if (allLocations.includes("outside")) {
     return "OUTSIDE";
+  }
+
+  if (allLocations.some((location) => !isInRoomBathroomLocation(location))) {
+    return "ON_FLOOR";
+  }
+
+  if (meta.hasPrivateBathroom) {
+    return "IN_ROOM";
   }
 
   if (meta.hasSharedBathroom) {
@@ -106,6 +124,17 @@ export function resolveBathroomTypeFromMeta(
   }
 
   return fallback;
+}
+
+export function normalizeSerializedRoomBathroom<
+  T extends Pick<SerializedRoom, "bathroomType" | "bathroomTypeLabel" | "meta">,
+>(room: T): T {
+  const bathroomType = resolveBathroomTypeFromMeta(room.meta, room.bathroomType);
+  return {
+    ...room,
+    bathroomType,
+    bathroomTypeLabel: getBathroomTypeLabel(bathroomType),
+  };
 }
 
 // Utility for custom room features/services entered manually by owner.
@@ -178,7 +207,7 @@ export function serializeRoom(room: {
   const prices = room.prices?.map(serializeRoomPrice) ?? [];
   const meta = normalizeRoomMeta(room.meta ?? null);
 
-  return {
+  return normalizeSerializedRoomBathroom({
     id: room.id,
     propertyId: room.propertyId,
     title: normalizeRoomTitle(room.title),
@@ -199,7 +228,7 @@ export function serializeRoom(room: {
     prices,
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
-  };
+  });
 }
 
 export function serializeRoomForChessboard(room: {
@@ -211,6 +240,7 @@ export function serializeRoomForChessboard(room: {
   roomsCount: number;
   areaSqm: Prisma.Decimal | null;
   bathroomType: BathroomType;
+  meta?: Prisma.JsonValue | null;
   sortOrder: number;
   isActive: boolean;
   prices?: Array<{
@@ -225,6 +255,9 @@ export function serializeRoomForChessboard(room: {
     updatedAt: Date;
   }>;
 }): SerializedChessboardRoom {
+  const meta = normalizeRoomMeta(room.meta ?? null);
+  const bathroomType = resolveBathroomTypeFromMeta(meta, room.bathroomType);
+
   return {
     id: room.id,
     propertyId: room.propertyId,
@@ -233,8 +266,8 @@ export function serializeRoomForChessboard(room: {
     extraBeds: room.extraBeds,
     roomsCount: room.roomsCount,
     areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
-    bathroomType: room.bathroomType,
-    bathroomTypeLabel: getBathroomTypeLabel(room.bathroomType),
+    bathroomType,
+    bathroomTypeLabel: getBathroomTypeLabel(bathroomType),
     sortOrder: room.sortOrder,
     isActive: room.isActive,
     prices: room.prices?.map(serializeRoomPrice) ?? [],
