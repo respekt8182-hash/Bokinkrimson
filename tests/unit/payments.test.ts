@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildTransferPaymentPayload,
   getPlacementCoverageState,
-  getTariffByRoomCount,
   getTariffQuote,
   getTransferPaymentPayload,
   getTransferPaymentReference,
@@ -128,16 +127,24 @@ describe("payments domain", () => {
     });
   });
 
-  it("selects tariff by room count", () => {
-    expect(getTariffByRoomCount(2, null).code).toBe("MULTI_ROOM_SMALL");
-    expect(getTariffByRoomCount(6, null).code).toBe("MULTI_ROOM_SMALL");
-    expect(getTariffByRoomCount(7, null).code).toBe("MULTI_ROOM_MEDIUM");
-    expect(getTariffByRoomCount(16, null).code).toBe("MULTI_ROOM_MEDIUM");
-    expect(getTariffByRoomCount(17, null).code).toBe("MULTI_ROOM_LARGE");
-    expect(getTariffByRoomCount(25, null).code).toBe("MULTI_ROOM_LARGE");
-    expect(getTariffByRoomCount(26, null).code).toBe("MULTI_ROOM_XL");
-    expect(getTariffByRoomCount(100, null).code).toBe("MULTI_ROOM_XL");
-    expect(getTariffByRoomCount(1, "apartment").code).toBe("UNIT_SINGLE");
+  it("selects object placement tariff by period, not room count", () => {
+    const seasonQuote = getTariffQuote({
+      roomCount: 30,
+      propertyType: "hotel",
+      now: new Date("2026-07-10T09:00:00.000Z"),
+    });
+    const yearlyQuote = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      tariffType: "yearly",
+      now: new Date("2026-07-10T09:00:00.000Z"),
+    });
+
+    expect(seasonQuote.tariff.code).toBe("object_season");
+    expect(seasonQuote.originalAmount).toBe(2800);
+    expect(yearlyQuote.tariff.code).toBe("object_yearly");
+    expect(yearlyQuote.originalAmount).toBe(4500);
+    expect(yearlyQuote.monthlyLabel).toBe("375 ₽ в месяц");
   });
 
   it("applies free placement before June 21 2026", () => {
@@ -147,16 +154,16 @@ describe("payments domain", () => {
       now: new Date("2026-05-10T09:00:00.000Z"),
     });
 
-    expect(quote.originalAmount).toBe(3990);
+    expect(quote.originalAmount).toBe(3000);
     expect(quote.amount).toBe(0);
     expect(quote.promo?.discountPercent).toBe(100);
   });
 
-  it("calculates only the tariff difference for an active placement after room increase", () => {
+  it("keeps active object placement covered after room increase", () => {
     const placement = getPlacementCoverageState({
       payments: [
         {
-          amount: 3990,
+          amount: 3000,
           roomCount: 1,
           status: PaymentStatus.SUCCEEDED,
           paidAt: new Date("2026-03-01T09:00:00.000Z"),
@@ -173,17 +180,17 @@ describe("payments domain", () => {
     });
 
     expect(placement.hasActivePlacement).toBe(true);
-    expect(placement.coveredAmount).toBe(3990);
+    expect(placement.coveredAmount).toBe(3000);
     expect(placement.coveredRoomCount).toBe(1);
-    expect(placement.requiredPaymentAmount).toBe(1000);
-    expect(placement.fullyCovered).toBe(false);
+    expect(placement.requiredPaymentAmount).toBe(0);
+    expect(placement.fullyCovered).toBe(true);
   });
 
-  it("treats successful top-up payments in the same placement cycle as cumulative coverage", () => {
+  it("does not require object top-up payments for additional rooms", () => {
     const placement = getPlacementCoverageState({
       payments: [
         {
-          amount: 3990,
+          amount: 3000,
           roomCount: 1,
           status: PaymentStatus.SUCCEEDED,
           paidAt: new Date("2026-03-01T09:00:00.000Z"),
@@ -191,7 +198,7 @@ describe("payments domain", () => {
           placementValidUntil: new Date("2027-03-01T09:00:00.000Z"),
         },
         {
-          amount: 1000,
+          amount: 0,
           roomCount: 2,
           status: PaymentStatus.SUCCEEDED,
           paidAt: new Date("2026-03-05T09:00:00.000Z"),
@@ -208,7 +215,7 @@ describe("payments domain", () => {
     });
 
     expect(placement.hasActivePlacement).toBe(true);
-    expect(placement.coveredAmount).toBe(4990);
+    expect(placement.coveredAmount).toBe(3000);
     expect(placement.coveredRoomCount).toBe(2);
     expect(placement.requiredPaymentAmount).toBe(0);
     expect(placement.fullyCovered).toBe(true);
@@ -216,7 +223,7 @@ describe("payments domain", () => {
 
   it("treats free launch placement as demo coverage until the campaign end", () => {
     const promoPayload = buildPlacementPromoPayload({
-      originalAmountRub: 3990,
+      originalAmountRub: 3000,
       discountedAmountRub: 0,
       now: new Date("2026-05-10T09:00:00.000Z"),
     });
@@ -244,14 +251,14 @@ describe("payments domain", () => {
     expect(placement.hasActivePlacement).toBe(true);
     expect(placement.paidUntil).toBe("2026-06-20T21:00:00.000Z");
     expect(placement.coveredAmount).toBe(0);
-    expect(placement.coveredOriginalAmount).toBe(3990);
+    expect(placement.coveredOriginalAmount).toBe(3000);
     expect(placement.requiredPaymentAmount).toBe(0);
     expect(placement.fullyCovered).toBe(true);
   });
 
   it("requires paid renewal after free demo placement expires", () => {
     const promoPayload = buildPlacementPromoPayload({
-      originalAmountRub: 3990,
+      originalAmountRub: 3000,
       discountedAmountRub: 0,
       now: new Date("2026-05-10T09:00:00.000Z"),
     });
@@ -277,7 +284,7 @@ describe("payments domain", () => {
     });
 
     expect(placement.hasActivePlacement).toBe(false);
-    expect(placement.requiredPaymentAmount).toBe(3990);
+    expect(placement.requiredPaymentAmount).toBe(2800);
     expect(placement.fullyCovered).toBe(false);
   });
 

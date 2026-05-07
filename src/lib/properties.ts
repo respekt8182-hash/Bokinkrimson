@@ -1,5 +1,7 @@
 import {
   MediaType,
+  ObjectPaymentStatus,
+  ObjectTariffType,
   PaymentStatus,
   PetsPolicy,
   Prisma,
@@ -16,7 +18,16 @@ import {
 } from "@/lib/draft-cleanup";
 import { ensurePublishedPropertySnapshotBeforeOwnerEdit } from "@/lib/property-public-snapshot";
 import { logDatabaseFallbackOnce } from "@/lib/prisma-errors";
-import { getPlacementCoverageState, getTariffQuote } from "@/lib/payments";
+import {
+  getPlacementCoverageState,
+  getTariffQuote,
+  resolvePaymentPlacementValidUntil,
+} from "@/lib/payments";
+import {
+  getObjectTariffTypeFromPaymentTariffCode,
+  type ObjectPlacementPaymentTariffType,
+} from "@/lib/object-placement-tariffs";
+import { isFreePlacementDemoPayload } from "@/lib/placement-promo";
 import { serializeMedia, type SerializedMedia } from "@/lib/media";
 import { deleteFromStorage } from "@/lib/storage";
 import type { FaqItem } from "@/types/excursions";
@@ -925,6 +936,123 @@ type PropertyAutoModerationSource = Prisma.PropertyGetPayload<{
   select: typeof PROPERTY_AUTO_MODERATION_SELECT;
 }>;
 
+type PropertyPlacementPaymentSource = {
+  id?: string;
+  propertyId: string | null;
+  amount: Prisma.Decimal | number;
+  tariffCode: string;
+  tariffType?: ObjectTariffType | null;
+  paidFrom?: Date | null;
+  paidAt: Date | null;
+  createdAt: Date;
+  placementValidUntil?: Date | null;
+  providerPayload?: Prisma.JsonValue | null;
+};
+
+function toPrismaObjectTariffType(
+  tariffType: ObjectPlacementPaymentTariffType | null,
+): ObjectTariffType | null {
+  switch (tariffType) {
+    case "season":
+      return ObjectTariffType.SEASON;
+    case "offseason":
+      return ObjectTariffType.OFFSEASON;
+    case "yearly":
+      return ObjectTariffType.YEARLY;
+    case "demo":
+      return ObjectTariffType.DEMO;
+    default:
+      return null;
+  }
+}
+
+function resolvePropertyTariffTypeFromPayment(
+  payment: Pick<PropertyPlacementPaymentSource, "tariffCode" | "tariffType" | "providerPayload">,
+): ObjectTariffType | null {
+  if (isFreePlacementDemoPayload(payment.providerPayload)) {
+    return ObjectTariffType.DEMO;
+  }
+
+  return payment.tariffType ?? toPrismaObjectTariffType(
+    getObjectTariffTypeFromPaymentTariffCode(payment.tariffCode),
+  );
+}
+
+export function resolvePropertyPaymentStatus(input: {
+  paymentStatus?: ObjectPaymentStatus | null;
+  tariffType?: ObjectTariffType | null;
+  paidFrom?: Date | null;
+  paidUntil?: Date | null;
+  now?: Date;
+}): ObjectPaymentStatus {
+  const now = input.now ?? new Date();
+
+  if (!input.paidUntil) {
+    return ObjectPaymentStatus.UNPAID;
+  }
+
+  if (input.paidUntil.getTime() <= now.getTime()) {
+    return ObjectPaymentStatus.EXPIRED;
+  }
+
+  if (input.paidFrom && input.paidFrom.getTime() > now.getTime()) {
+    return ObjectPaymentStatus.UNPAID;
+  }
+
+  if (
+    input.paymentStatus === ObjectPaymentStatus.DEMO ||
+    input.tariffType === ObjectTariffType.DEMO
+  ) {
+    return ObjectPaymentStatus.DEMO;
+  }
+
+  return ObjectPaymentStatus.PAID;
+}
+
+export async function syncPropertyPlacementFromPayment(
+  client: DbClientLike,
+  payment: PropertyPlacementPaymentSource,
+  now: Date = new Date(),
+): Promise<void> {
+  if (!payment.propertyId) {
+    return;
+  }
+
+  const tariffType = resolvePropertyTariffTypeFromPayment(payment);
+  const paidFrom = payment.paidFrom ?? payment.paidAt ?? payment.createdAt;
+  const paidUntil = resolvePaymentPlacementValidUntil(payment);
+  const paymentStatus = resolvePropertyPaymentStatus({
+    paymentStatus: tariffType === ObjectTariffType.DEMO ? ObjectPaymentStatus.DEMO : ObjectPaymentStatus.PAID,
+    tariffType,
+    paidFrom,
+    paidUntil,
+    now,
+  });
+  const paidAt = payment.paidAt ?? now;
+
+  await client.property.updateMany({
+    where: {
+      id: payment.propertyId,
+      OR: [
+        { paidUntil: null },
+        { paidUntil: { lt: paidUntil } },
+        {
+          paidUntil,
+          OR: [{ paidAt: null }, { paidAt: { lte: paidAt } }],
+        },
+      ],
+    },
+    data: {
+      paymentStatus,
+      tariffType,
+      paidFrom,
+      paidUntil,
+      paidAmount: payment.amount,
+      paidAt,
+    },
+  });
+}
+
 function buildPropertyPaymentReadiness(property: PropertyAutoModerationSource) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
@@ -999,10 +1127,16 @@ export async function autoSubmitPropertyAfterSuccessfulPayment(
       status: PaymentStatus.SUCCEEDED,
     },
     select: {
+      id: true,
+      propertyId: true,
       amount: true,
+      tariffCode: true,
+      tariffType: true,
       roomCount: true,
       status: true,
+      provider: true,
       paidAt: true,
+      paidFrom: true,
       createdAt: true,
       placementValidUntil: true,
       providerPayload: true,
@@ -1016,6 +1150,22 @@ export async function autoSubmitPropertyAfterSuccessfulPayment(
 
   if (!placement.hasActivePlacement || !placement.fullyCovered) {
     return false;
+  }
+
+  const latestPayment = payments.reduce<(typeof payments)[number] | null>((latest, payment) => {
+    if (!latest) return payment;
+    const currentUntil = resolvePaymentPlacementValidUntil(payment);
+    const latestUntil = resolvePaymentPlacementValidUntil(latest);
+    if (currentUntil.getTime() !== latestUntil.getTime()) {
+      return currentUntil.getTime() > latestUntil.getTime() ? payment : latest;
+    }
+    return (payment.paidAt ?? payment.createdAt).getTime() >
+      (latest.paidAt ?? latest.createdAt).getTime()
+      ? payment
+      : latest;
+  }, null);
+  if (latestPayment) {
+    await syncPropertyPlacementFromPayment(client, latestPayment);
   }
 
   const moderationUpdate = getPropertyAutoModerationUpdate(

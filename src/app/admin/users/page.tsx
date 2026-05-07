@@ -10,6 +10,7 @@ import {
 } from "@/components/admin/admin-ui";
 import { purgeExpiredDeletedUsers } from "@/lib/admin-entity-lifecycle";
 import { db } from "@/lib/db";
+import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
 
 export default async function AdminUsersPage() {
   const now = new Date();
@@ -35,6 +36,36 @@ export default async function AdminUsersPage() {
         },
         select: {
           id: true,
+        },
+      },
+      properties: {
+        where: { ownerDeletedAt: null },
+        orderBy: [{ updatedAt: "desc" }],
+        select: {
+          id: true,
+          name: true,
+          locationName: true,
+          paymentStatus: true,
+          tariffType: true,
+          paidFrom: true,
+          paidUntil: true,
+          paidAmount: true,
+          paidAt: true,
+          payments: {
+            where: { status: "SUCCEEDED" },
+            orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+            select: {
+              amount: true,
+              tariffCode: true,
+              tariffType: true,
+              paidFrom: true,
+              paidAt: true,
+              createdAt: true,
+              placementValidUntil: true,
+              providerPayload: true,
+            },
+            take: 1,
+          },
         },
       },
     },
@@ -140,6 +171,56 @@ export default async function AdminUsersPage() {
                 <p className="text-xs text-olive/55">
                   Зарегистрирован: {new Date(user.createdAt).toLocaleString("ru-RU")}
                 </p>
+
+                {user.properties.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/50">
+                      Связанные объекты
+                    </p>
+                    {user.properties.map((property) => {
+                      const payment = getObjectPaymentDisplay({
+                        paymentStatus: property.paymentStatus,
+                        tariffType: property.tariffType,
+                        paidFrom: property.paidFrom,
+                        paidUntil: property.paidUntil,
+                        paidAmount: property.paidAmount,
+                        paidAt: property.paidAt,
+                        latestPayment: property.payments[0] ?? null,
+                        now,
+                      });
+
+                      return (
+                        <div
+                          key={property.id}
+                          className="rounded-2xl border border-olive/10 bg-white/70 px-3 py-3 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Link
+                              href={`/admin/objects/${property.id}`}
+                              className="font-semibold text-olive hover:text-primary"
+                            >
+                              {property.name ?? "Объект без названия"}
+                            </Link>
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${payment.toneClassName}`}
+                            >
+                              {payment.label}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-olive/55">
+                            {property.locationName ?? "Локация не указана"} · {payment.tariffLabel}
+                            {payment.paidUntil
+                              ? ` · до ${payment.paidUntil.toLocaleDateString("ru-RU")}`
+                              : ""}
+                            {payment.paidAmount !== null
+                              ? ` · ${payment.paidAmount.toLocaleString("ru-RU")} ₽`
+                              : ""}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </AdminPanel>
             );
           })}

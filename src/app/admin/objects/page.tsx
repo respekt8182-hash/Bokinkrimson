@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PropertyStatus } from "@prisma/client";
+import { ObjectTariffType, PropertyStatus } from "@prisma/client";
 import { Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
@@ -23,14 +23,16 @@ import { db } from "@/lib/db";
 import { getEmptyDraftExpiresAt } from "@/lib/draft-cleanup";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
-import { resolvePaymentPlacementValidUntil } from "@/lib/payments";
+import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
 import { isPropertyEmptyDraft } from "@/lib/properties";
 
 type Props = {
   searchParams: Promise<{
     status?: string;
+    payment?: string;
     locationId?: string;
     q?: string;
+    sort?: string;
   }>;
 };
 
@@ -46,6 +48,25 @@ const STATUS_COLORS: Record<PropertyStatus, string> = {
   PENDING_MODERATION: "bg-amber-100 text-amber-700",
   PUBLISHED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
+};
+
+const PAYMENT_FILTER_LABELS: Record<string, string> = {
+  paid: "Оплаченные",
+  unpaid: "Неоплаченные",
+  demo: "Демо",
+  expired: "Истекшие",
+  expiring: "Скоро истекают",
+  season: "Сезонные",
+  offseason: "Межсезонные",
+  yearly: "Годовые",
+};
+
+const SORT_LABELS: Record<string, string> = {
+  updated_desc: "по последнему изменению",
+  paid_until_asc: "по окончанию оплаты",
+  created_desc: "по созданию объекта",
+  amount_desc: "по сумме оплаты",
+  payment_status: "по статусу оплаты",
 };
 
 function matchesPropertyWorkflowStatus(
@@ -71,8 +92,10 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
   const filters = await searchParams;
   const now = new Date();
   const selectedStatus = filters.status?.trim() ?? "";
+  const selectedPayment = filters.payment?.trim() ?? "";
   const selectedLocationId = filters.locationId?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const selectedSort = filters.sort?.trim() || "updated_desc";
 
   await purgeExpiredDeletedProperties(db, now);
   const isPropertyVisibilityControlAvailable = await isPropertyPublicationControlAvailable();
@@ -119,7 +142,11 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
             orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
             select: {
               id: true,
+              amount: true,
+              tariffCode: true,
+              tariffType: true,
               paidAt: true,
+              paidFrom: true,
               createdAt: true,
               placementValidUntil: true,
               providerPayload: true,
@@ -145,7 +172,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
         )
       : rows;
 
-  const items =
+  const queriedRows =
     query.length >= 2
       ? rankByTrigram(
           query,
@@ -159,10 +186,57 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
             item.owner.firstName,
             item.owner.lastName,
             item.owner.email,
+            item.owner.phone,
           ],
           { limit: filteredRows.length, minScore: 0.08 },
         )
       : filteredRows;
+
+  const enrichedItems = queriedRows.map((item) => {
+    const latestSucceededPayment = item.payments[0] ?? null;
+    const payment = getObjectPaymentDisplay({
+      paymentStatus: item.paymentStatus,
+      tariffType: item.tariffType,
+      paidFrom: item.paidFrom,
+      paidUntil: item.paidUntil,
+      paidAmount: item.paidAmount,
+      paidAt: item.paidAt,
+      latestPayment: latestSucceededPayment,
+      now,
+    });
+
+    return { item, payment };
+  });
+
+  const paymentFilteredItems = selectedPayment
+    ? enrichedItems.filter(({ payment }) => {
+        if (selectedPayment === "season") return payment.tariffType === ObjectTariffType.SEASON;
+        if (selectedPayment === "offseason") {
+          return payment.tariffType === ObjectTariffType.OFFSEASON;
+        }
+        if (selectedPayment === "yearly") return payment.tariffType === ObjectTariffType.YEARLY;
+        return payment.status === selectedPayment;
+      })
+    : enrichedItems;
+
+  const items = [...paymentFilteredItems].sort((left, right) => {
+    switch (selectedSort) {
+      case "paid_until_asc":
+        return (
+          (left.payment.paidUntil?.getTime() ?? Number.POSITIVE_INFINITY) -
+          (right.payment.paidUntil?.getTime() ?? Number.POSITIVE_INFINITY)
+        );
+      case "created_desc":
+        return right.item.createdAt.getTime() - left.item.createdAt.getTime();
+      case "amount_desc":
+        return (right.payment.paidAmount ?? 0) - (left.payment.paidAmount ?? 0);
+      case "payment_status":
+        return left.payment.label.localeCompare(right.payment.label, "ru");
+      case "updated_desc":
+      default:
+        return right.item.updatedAt.getTime() - left.item.updatedAt.getTime();
+    }
+  });
 
   const statusCounts = Object.values(PropertyStatus).reduce(
     (accumulator, status) => ({
@@ -171,15 +245,35 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
     }),
     {} as Record<PropertyStatus, number>,
   );
+  const paymentCounts = enrichedItems.reduce(
+    (accumulator, { payment }) => {
+      accumulator[payment.status] = (accumulator[payment.status] ?? 0) + 1;
+      if (payment.tariffType === ObjectTariffType.SEASON) {
+        accumulator.season = (accumulator.season ?? 0) + 1;
+      }
+      if (payment.tariffType === ObjectTariffType.OFFSEASON) {
+        accumulator.offseason = (accumulator.offseason ?? 0) + 1;
+      }
+      if (payment.tariffType === ObjectTariffType.YEARLY) {
+        accumulator.yearly = (accumulator.yearly ?? 0) + 1;
+      }
+      return accumulator;
+    },
+    {} as Record<string, number>,
+  );
 
   const buildFilterLink = (overrides: Record<string, string> = {}): string => {
     const params = new URLSearchParams();
     const status = overrides.status ?? selectedStatus;
+    const payment = overrides.payment ?? selectedPayment;
     const locationId = overrides.locationId ?? selectedLocationId;
     const nextQuery = overrides.q ?? query;
+    const sort = overrides.sort ?? selectedSort;
     if (status) params.set("status", status);
+    if (payment) params.set("payment", payment);
     if (locationId) params.set("locationId", locationId);
     if (nextQuery) params.set("q", nextQuery);
+    if (sort && sort !== "updated_desc") params.set("sort", sort);
     const search = params.toString();
     return search ? `/admin/objects?${search}` : "/admin/objects";
   };
@@ -208,7 +302,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
       ) : null}
 
       <AdminPanel title="Фильтры">
-        <form className="grid gap-3 md:grid-cols-3">
+        <form className="grid gap-3 md:grid-cols-5">
           <label className="space-y-1.5">
             <span className="text-sm font-medium text-olive">Статус</span>
             <select name="status" defaultValue={selectedStatus} className={adminInputClass}>
@@ -226,12 +320,36 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
           </label>
 
           <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Оплата</span>
+            <select name="payment" defaultValue={selectedPayment} className={adminInputClass}>
+              <option value="">Все объекты</option>
+              {Object.entries(PAYMENT_FILTER_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                  {paymentCounts[value] ? ` (${paymentCounts[value]})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
             <span className="text-sm font-medium text-olive">Локация</span>
             <select name="locationId" defaultValue={selectedLocationId} className={adminInputClass}>
               <option value="">Все локации</option>
               {locationDirectory.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Сортировка</span>
+            <select name="sort" defaultValue={selectedSort} className={adminInputClass}>
+              {Object.entries(SORT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -250,14 +368,17 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
 
           <button
             type="submit"
-            className="md:col-span-3 inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+            className="md:col-span-5 inline-flex items-center justify-center rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
           >
             Применить фильтры
           </button>
         </form>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <AdminPillLink href={buildFilterLink({ status: "" })} active={!selectedStatus}>
+          <AdminPillLink
+            href={buildFilterLink({ status: "", payment: "" })}
+            active={!selectedStatus && !selectedPayment}
+          >
             Все ({rows.length})
           </AdminPillLink>
           {Object.entries(STATUS_LABELS).map(([value, label]) => {
@@ -270,6 +391,20 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                 key={value}
                 href={buildFilterLink({ status: value })}
                 active={selectedStatus === value}
+              >
+                {label} ({count})
+              </AdminPillLink>
+            );
+          })}
+          {Object.entries(PAYMENT_FILTER_LABELS).map(([value, label]) => {
+            const count = paymentCounts[value] ?? 0;
+            if (count === 0) return null;
+
+            return (
+              <AdminPillLink
+                key={value}
+                href={buildFilterLink({ payment: value })}
+                active={selectedPayment === value}
               >
                 {label} ({count})
               </AdminPillLink>
@@ -289,16 +424,12 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {items.map(({ item, payment }) => {
             const isEmptyDraft =
               item.status === PropertyStatus.DRAFT && isPropertyEmptyDraft(item);
             const cleanupAt = isEmptyDraft ? getEmptyDraftExpiresAt(item.updatedAt) : null;
             const isPublished = item.status === PropertyStatus.PUBLISHED;
             const isPendingDeletion = Boolean(item.ownerDeletedAt);
-            const latestSucceededPayment = item.payments[0] ?? null;
-            const publicationUntil = latestSucceededPayment
-              ? resolvePaymentPlacementValidUntil(latestSucceededPayment)
-              : null;
             const pendingEditLabel = isPublished
               ? getAdminPropertyPendingEditLabel(item.pendingEditStatus, item.moderationNotes)
               : null;
@@ -338,6 +469,11 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                           Удаляется
                         </span>
                       ) : null}
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${payment.toneClassName}`}
+                      >
+                        {payment.label}
+                      </span>
                       {item.type ? (
                         <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs text-olive/60">
                           {item.type}
@@ -353,49 +489,50 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                   </div>
                 </div>
 
-                <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-6">
+                <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-8">
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Владелец</dt>
                     <dd className="font-medium text-olive">
                       {[item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ")}
                     </dd>
+                    <dd className="mt-1 text-xs text-olive/55">
+                      {item.owner.email ?? item.owner.phone}
+                    </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Локация</dt>
+                    <dt className="text-olive/50">Город / регион</dt>
                     <dd className="font-medium text-olive">{item.locationName ?? "Не указана"}</dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Номеров</dt>
-                    <dd className="font-medium text-olive">{item.rooms.length}</dd>
+                    <dt className="text-olive/50">Тариф</dt>
+                    <dd className="font-medium text-olive">{payment.tariffLabel}</dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Размещение</dt>
+                    <dt className="text-olive/50">Статус оплаты</dt>
+                    <dd className="font-medium text-olive">{payment.label}</dd>
+                  </div>
+                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                    <dt className="text-olive/50">Начало</dt>
                     <dd className="font-medium text-olive">
-                      {isPendingDeletion
-                        ? "Удаляется"
-                        : isPublished
-                          ? item.isPublishedVisible
-                            ? "Показывается"
-                            : "Скрыто"
-                          : "Не опубликован"}
+                      {payment.paidFrom ? payment.paidFrom.toLocaleDateString("ru-RU") : "—"}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Оплачено до</dt>
                     <dd className="font-medium text-olive">
-                      {publicationUntil ? publicationUntil.toLocaleDateString("ru-RU") : "—"}
+                      {payment.paidUntil ? payment.paidUntil.toLocaleDateString("ru-RU") : "—"}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Последнее изменение</dt>
+                    <dt className="text-olive/50">Сумма</dt>
                     <dd className="font-medium text-olive">
-                      {new Date(item.updatedAt).toLocaleString("ru-RU")}
+                      {payment.paidAmount !== null ? `${payment.paidAmount.toLocaleString("ru-RU")} ₽` : "—"}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Рейтинг</dt>
+                    <dt className="text-olive/50">Дата оплаты</dt>
                     <dd className="font-medium text-olive">
-                      {Number(item.avgRating).toFixed(1)} ({item.reviewsCount} отз.)
+                      {payment.paidAt ? payment.paidAt.toLocaleString("ru-RU") : "—"}
                     </dd>
                   </div>
                 </dl>

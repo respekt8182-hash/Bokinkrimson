@@ -6,7 +6,7 @@ import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 export const metadata: Metadata = {
   title: "Услуги и тарифы",
   description:
-    "Размещение объектов, экскурсий, туров и трансферов на Крым Вокруг бесплатно до 20 июня 2026 включительно. Участники бесплатного периода получают скидку 20% на дальнейшее продление.",
+    "Тарифы Крым Вокруг: размещение одного объекта по периоду, любое количество номеров внутри объявления, без комиссии с бронирований.",
   alternates: {
     canonical: buildCanonicalPath("/uslugi-i-tarify"),
   },
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Услуги и тарифы",
     description:
-      "Актуальные тарифы на размещение объектов, экскурсий, туров и трансферов на Крым Вокруг.",
+      "Сезонное, межсезонное и годовое размещение объекта на Крым Вокруг без оплаты за количество номеров.",
     url: "/uslugi-i-tarify",
     images: [defaultSocialImageMetadata],
   },

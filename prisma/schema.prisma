@@ -139,6 +139,20 @@ enum PaymentProvider {
   MANAGER  @map("manager")
 }
 
+enum ObjectPaymentStatus {
+  PAID    @map("paid")
+  UNPAID  @map("unpaid")
+  DEMO    @map("demo")
+  EXPIRED @map("expired")
+}
+
+enum ObjectTariffType {
+  SEASON    @map("season")
+  OFFSEASON @map("offseason")
+  YEARLY    @map("yearly")
+  DEMO      @map("demo")
+}
+
 enum OccupancyStatus {
   CONFIRMED  @map("confirmed")
   CHECKED_IN @map("checked_in")
@@ -342,6 +356,12 @@ model Property {
   favoritesCount                Int                        @default(0)
   status                        PropertyStatus             @default(DRAFT)
   isPublishedVisible            Boolean                    @default(true)
+  paymentStatus                 ObjectPaymentStatus        @default(UNPAID)
+  tariffType                    ObjectTariffType?
+  paidFrom                      DateTime?
+  paidUntil                     DateTime?
+  paidAmount                    Decimal?                   @db.Decimal(10, 2)
+  paidAt                        DateTime?
   ownerDeletedAt                DateTime?
   ownerDeletionExpiresAt        DateTime?
   createdAt                     DateTime                   @default(now())
@@ -365,6 +385,8 @@ model Property {
   @@index([ownerId, updatedAt])
   @@index([status, updatedAt])
   @@index([isPublishedVisible, status, updatedAt])
+  @@index([paymentStatus, paidUntil])
+  @@index([tariffType, paidUntil])
   @@index([pendingEditStatus, updatedAt])
   @@index([ownerDeletedAt, ownerDeletionExpiresAt])
 }
@@ -959,6 +981,7 @@ model Payment {
   ownerId             String
   amount              Decimal         @db.Decimal(10, 2)
   tariffCode          String
+  tariffType          ObjectTariffType?
   roomCount           Int
   status              PaymentStatus   @default(CREATED)
   provider            PaymentProvider @default(MOCK)
@@ -966,6 +989,7 @@ model Payment {
   idempotenceKey      String          @unique
   confirmationUrl     String?
   providerPayload     Json?
+  paidFrom            DateTime?
   placementValidUntil DateTime?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -981,6 +1005,7 @@ model Payment {
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
+  @@index([propertyId, tariffType, placementValidUntil])
   @@index([excursionId, status, createdAt])
   @@index([transferId, status, createdAt])
   @@index([ownerId, createdAt])

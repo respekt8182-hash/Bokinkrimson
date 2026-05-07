@@ -1,5 +1,5 @@
 // Owner property payment endpoint: returns readiness/history and creates new placement payment attempts.
-import { PaymentProvider, PaymentStatus } from "@prisma/client";
+import { ObjectTariffType, PaymentProvider, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
@@ -21,6 +21,7 @@ import {
   getPropertyProgress,
   autoSubmitPropertyAfterSuccessfulPayment,
   purgeExpiredPropertyDraftsForOwner,
+  syncPropertyPlacementFromPayment,
 } from "@/lib/properties";
 import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
@@ -58,6 +59,7 @@ async function getOwnedPropertyForPayment(propertyId: string) {
 
 function buildReadiness(
   property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
+  tariffType?: string | null,
 ) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
@@ -82,9 +84,23 @@ function buildReadiness(
         ? getTariffQuote({
             roomCount,
             propertyType: property.type,
+            tariffType,
           })
         : null,
   };
+}
+
+function toPrismaObjectTariffType(tariffType: string): ObjectTariffType {
+  switch (tariffType) {
+    case "season":
+      return ObjectTariffType.SEASON;
+    case "offseason":
+      return ObjectTariffType.OFFSEASON;
+    case "yearly":
+      return ObjectTariffType.YEARLY;
+    default:
+      return ObjectTariffType.YEARLY;
+  }
 }
 
 async function listPropertyPayments(propertyId: string, ownerId: string) {
@@ -105,7 +121,7 @@ async function listPropertyPayments(propertyId: string, ownerId: string) {
   });
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
@@ -122,7 +138,8 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const payments = await listPropertyPayments(property.id, session.id);
-  const readiness = buildReadiness(property);
+  const { searchParams } = new URL(request.url);
+  const readiness = buildReadiness(property, searchParams.get("tariffType"));
   const placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -140,6 +157,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 const createPaymentSchema = z.object({
   provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("MANAGER"),
+  tariffType: z.enum(["season", "offseason", "yearly"]).optional(),
 });
 
 export async function POST(request: Request, context: RouteContext) {
@@ -169,7 +187,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const readiness = buildReadiness(property);
+  const readiness = buildReadiness(property, body.tariffType);
 
   if (!readiness.ready || !readiness.quote) {
     return NextResponse.json(
@@ -212,12 +230,14 @@ export async function POST(request: Request, context: RouteContext) {
         propertyId: property.id,
         ownerId: session.id,
         amount: 0,
-        tariffCode: readiness.quote.tariff.code,
+        tariffCode: "object_demo",
+        tariffType: ObjectTariffType.DEMO,
         roomCount: readiness.quote.roomCount,
         status: PaymentStatus.SUCCEEDED,
         provider: PaymentProvider.MANAGER,
         idempotenceKey: crypto.randomUUID(),
         confirmationUrl: null,
+        paidFrom: now,
         paidAt: now,
         placementValidUntil: getPlacementPromoDemoValidUntil(),
         providerPayload: buildFreePlacementPaymentPayload({
@@ -230,6 +250,7 @@ export async function POST(request: Request, context: RouteContext) {
       },
     });
 
+    await syncPropertyPlacementFromPayment(db, created, now);
     await autoSubmitPropertyAfterSuccessfulPayment(db, property.id);
 
     return NextResponse.json({
@@ -270,6 +291,9 @@ export async function POST(request: Request, context: RouteContext) {
   });
 
   const idempotenceKey = crypto.randomUUID();
+  const paidFrom = new Date(readiness.quote.paidFrom);
+  const paidUntil = new Date(readiness.quote.paidUntil);
+  const selectedTariffType = toPrismaObjectTariffType(readiness.quote.tariffType);
 
   if (body.provider === "MANAGER") {
     const created = await db.payment.create({
@@ -278,12 +302,14 @@ export async function POST(request: Request, context: RouteContext) {
         ownerId: session.id,
         amount,
         tariffCode: readiness.quote.tariff.code,
+        tariffType: selectedTariffType,
         roomCount: readiness.quote.roomCount,
         status: PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey,
         confirmationUrl: null,
-        placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
+        paidFrom,
+        placementValidUntil: paidUntil,
         ...(placementPromo ? { providerPayload: { placementPromo } } : {}),
       },
       include: {
@@ -311,11 +337,13 @@ export async function POST(request: Request, context: RouteContext) {
       ownerId: session.id,
       amount,
       tariffCode: readiness.quote.tariff.code,
+      tariffType: selectedTariffType,
       roomCount: readiness.quote.roomCount,
       status: PaymentStatus.CREATED,
       provider: PaymentProvider.YOOKASSA,
       idempotenceKey,
-      placementValidUntil: placement.paidUntil ? new Date(placement.paidUntil) : null,
+      paidFrom,
+      placementValidUntil: paidUntil,
     },
     include: {
       property: { select: { name: true } },
@@ -326,7 +354,7 @@ export async function POST(request: Request, context: RouteContext) {
     const yooPayment = await createYookassaPayment({
       idempotenceKey,
       amountRub: Number(amount),
-      description: `Размещение объекта «${property.name ?? "Без названия"}» на 365 дней`,
+      description: `${readiness.quote.tariff.title}: «${property.name ?? "Без названия"}»`,
       metadata: { paymentId: created.id, propertyId: property.id, ...promoMetadata },
     });
     const providerPayload = {

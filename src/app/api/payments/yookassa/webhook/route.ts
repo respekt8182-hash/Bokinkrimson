@@ -13,7 +13,10 @@ import {
 import { db, type DbClientLike } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { logger } from "@/lib/logger";
-import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import {
+  autoSubmitPropertyAfterSuccessfulPayment,
+  syncPropertyPlacementFromPayment,
+} from "@/lib/properties";
 import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 import {
   getYookassaPayment,
@@ -206,6 +209,7 @@ export async function POST(request: Request) {
 
   if (!shouldUpdate) {
     if (nextStatus === PaymentStatus.SUCCEEDED && existing.propertyId) {
+      await syncPropertyPlacementFromPayment(db, existing);
       await autoSubmitPropertyAfterSuccessfulPayment(db, existing.propertyId);
     }
     if (nextStatus === PaymentStatus.SUCCEEDED && existing.excursionId) {
@@ -241,6 +245,10 @@ export async function POST(request: Request) {
           nextStatus === PaymentStatus.SUCCEEDED
             ? (existing.paidAt ?? new Date())
             : existing.paidAt,
+        paidFrom:
+          nextStatus === PaymentStatus.SUCCEEDED
+            ? (existing.paidFrom ?? existing.paidAt ?? existing.createdAt)
+            : existing.paidFrom,
         canceledAt:
           nextStatus === PaymentStatus.CANCELED
             ? (existing.canceledAt ?? new Date())
@@ -259,6 +267,7 @@ export async function POST(request: Request) {
     });
 
     if (updated.status === PaymentStatus.SUCCEEDED && updated.propertyId) {
+      await syncPropertyPlacementFromPayment(tx, updated);
       await autoSubmitPropertyAfterSuccessfulPayment(tx, updated.propertyId);
     }
     if (updated.status === PaymentStatus.SUCCEEDED && updated.excursionId) {

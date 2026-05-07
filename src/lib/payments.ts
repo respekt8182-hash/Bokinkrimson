@@ -1,10 +1,22 @@
 // Payment domain helpers: tariff quote calculation, status transitions, placement validity, and API-safe serialization.
-import { PaymentProvider, PaymentStatus, type Prisma } from "@prisma/client";
+import { PaymentProvider, PaymentStatus, type ObjectTariffType, type Prisma } from "@prisma/client";
 import {
   getPlacementPricingGroupByType,
   type PlacementPricingGroup,
   placementTariffsByGroup,
 } from "@/lib/constants";
+import {
+  getDefaultObjectPlacementTariffType,
+  getObjectPlacementTariffOption,
+  getObjectPlacementTariffOptions,
+  getObjectTariffLabel,
+  getObjectTariffTypeFromPaymentTariffCode,
+  isObjectPlacementTariffType,
+  serializeObjectPlacementTariffOption,
+  type ObjectPlacementPaymentTariffType,
+  type ObjectPlacementTariffType,
+  type SerializedObjectPlacementTariffOption,
+} from "@/lib/object-placement-tariffs";
 import {
   PLACEMENT_PROMO_CODE,
   PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
@@ -19,6 +31,8 @@ import {
 } from "@/lib/placement-promo";
 
 export type PlacementTariff =
+  SerializedObjectPlacementTariffOption;
+export type LegacyRoomCountPlacementTariff =
   (typeof placementTariffsByGroup)[keyof typeof placementTariffsByGroup][number];
 
 export type TariffQuote = {
@@ -26,6 +40,13 @@ export type TariffQuote = {
   pricingGroup: PlacementPricingGroup;
   propertyType: string | null;
   roomCount: number;
+  availableTariffs: SerializedObjectPlacementTariffOption[];
+  tariffType: ObjectPlacementTariffType;
+  paidFrom: string;
+  paidUntil: string;
+  periodLabel: string;
+  monthlyLabel: string;
+  savingsRub: number | null;
   originalAmount: number;
   amount: number;
   promo: PlacementPromoPrice | null;
@@ -41,6 +62,8 @@ export type SerializedPayment = {
   amount: number;
   originalCoverageAmount: number;
   tariffCode: string;
+  tariffType: ObjectTariffType | null;
+  tariffLabel: string;
   roomCount: number;
   status: PaymentStatus;
   statusLabel: string;
@@ -50,6 +73,7 @@ export type SerializedPayment = {
   createdAt: string;
   updatedAt: string;
   paidAt: string | null;
+  paidFrom: string | null;
   canceledAt: string | null;
   placementValidUntil: string | null;
   propertyName: string | null;
@@ -203,6 +227,16 @@ function getOptionalNonNegativeNumber(value: unknown): number | undefined {
   return value;
 }
 
+function normalizePrismaObjectTariffType(
+  tariffType: ObjectTariffType | null | undefined,
+): ObjectPlacementPaymentTariffType | null {
+  if (!tariffType) {
+    return null;
+  }
+
+  return tariffType.toLowerCase() as ObjectPlacementPaymentTariffType;
+}
+
 export function getTransferPaymentPayload(value: unknown): TransferPaymentPayload | null {
   if (!isRecord(value) || value.entityType !== "transfer") {
     return null;
@@ -349,7 +383,7 @@ export function resolvePaymentStatusTransition(
 export function getTariffByRoomCount(
   roomCount: number,
   propertyType: string | null,
-): PlacementTariff {
+): LegacyRoomCountPlacementTariff {
   const normalizedRoomCount = Math.max(1, roomCount);
   const pricingGroup = getPlacementPricingGroupByType(propertyType);
   const tariffs = placementTariffsByGroup[pricingGroup];
@@ -368,18 +402,42 @@ export function getTariffByRoomCount(
 export function getTariffQuote(input: {
   roomCount: number;
   propertyType: string | null;
+  tariffType?: string | null;
   now?: Date;
 }): TariffQuote {
   const normalizedRoomCount = Math.max(1, input.roomCount);
   const pricingGroup = getPlacementPricingGroupByType(input.propertyType);
-  const tariff = getTariffByRoomCount(normalizedRoomCount, input.propertyType);
-  const promoPrice = getPlacementPromoPrice(tariff.amountRub, input.now);
+  const now = input.now ?? new Date();
+  const requestedType = isObjectPlacementTariffType(input.tariffType)
+    ? input.tariffType
+    : getDefaultObjectPlacementTariffType(now);
+  const tariffOption =
+    getObjectPlacementTariffOption(requestedType, now) ??
+    getObjectPlacementTariffOption(getDefaultObjectPlacementTariffType(now), now) ??
+    getObjectPlacementTariffOptions(now)[0];
+
+  if (!tariffOption) {
+    throw new Error("No object placement tariff is available for the current date.");
+  }
+
+  const tariff = serializeObjectPlacementTariffOption(tariffOption);
+  const availableTariffs = getObjectPlacementTariffOptions(now).map(
+    serializeObjectPlacementTariffOption,
+  );
+  const promoPrice = getPlacementPromoPrice(tariff.amountRub, now);
 
   return {
     tariff,
     pricingGroup,
     propertyType: input.propertyType,
     roomCount: normalizedRoomCount,
+    availableTariffs,
+    tariffType: tariff.type,
+    paidFrom: tariff.paidFrom,
+    paidUntil: tariff.paidUntil,
+    periodLabel: tariff.periodLabel,
+    monthlyLabel: tariff.monthlyLabel,
+    savingsRub: tariff.savingsRub,
     originalAmount: promoPrice.originalAmountRub,
     amount: promoPrice.finalAmountRub,
     promo: promoPrice.isDiscounted ? promoPrice : null,
@@ -395,6 +453,7 @@ export function serializePayment(payment: {
   ownerId: string;
   amount: Prisma.Decimal;
   tariffCode: string;
+  tariffType?: ObjectTariffType | null;
   roomCount: number;
   status: PaymentStatus;
   provider: PaymentProvider;
@@ -403,6 +462,7 @@ export function serializePayment(payment: {
   createdAt: Date;
   updatedAt: Date;
   paidAt: Date | null;
+  paidFrom?: Date | null;
   canceledAt: Date | null;
   placementValidUntil?: Date | null;
   property?: { name: string | null } | null;
@@ -420,6 +480,16 @@ export function serializePayment(payment: {
     : payment.placementValidUntil
       ? payment.placementValidUntil.toISOString()
       : null;
+  const tariffTypeFromCode = getObjectTariffTypeFromPaymentTariffCode(payment.tariffCode);
+  const resolvedTariffType = isFreePlacementDemoPayload(payment.providerPayload)
+    ? ("DEMO" as ObjectTariffType)
+    : (payment.tariffType ?? null);
+  const normalizedTariffType =
+    normalizePrismaObjectTariffType(resolvedTariffType) ?? tariffTypeFromCode;
+  const tariffLabel = getObjectTariffLabel(
+    normalizedTariffType,
+    payment.tariffCode,
+  );
 
   return {
     id: payment.id,
@@ -429,6 +499,8 @@ export function serializePayment(payment: {
     ownerId: payment.ownerId,
     amount: Number(payment.amount),
     tariffCode: payment.tariffCode,
+    tariffType: resolvedTariffType,
+    tariffLabel,
     roomCount: payment.roomCount,
     status: payment.status,
     statusLabel: getPaymentStatusLabel(payment.status, payment.provider),
@@ -438,6 +510,7 @@ export function serializePayment(payment: {
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
     paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
+    paidFrom: payment.paidFrom ? payment.paidFrom.toISOString() : null,
     canceledAt: payment.canceledAt ? payment.canceledAt.toISOString() : null,
     placementValidUntil: serializedPlacementValidUntil,
     propertyName: payment.property?.name ?? null,
@@ -480,6 +553,7 @@ export function getPlacementCoverageState(input: {
     status: PaymentStatus;
     provider?: PaymentProvider;
     paidAt: Date | null;
+    paidFrom?: Date | null;
     createdAt: Date;
     placementValidUntil?: Date | null;
     providerPayload?: Prisma.JsonValue | null;
@@ -495,13 +569,17 @@ export function getPlacementCoverageState(input: {
     .map((item) => ({
       amount: typeof item.amount === "number" ? item.amount : Number(item.amount),
       roomCount: item.roomCount,
+      paidFrom: item.paidFrom ?? item.paidAt ?? item.createdAt,
       validUntil: resolvePaymentPlacementValidUntil(item),
       originalCoverageAmount: getPlacementPromoOriginalCoverageAmount(
         item.providerPayload,
         typeof item.amount === "number" ? item.amount : Number(item.amount),
       ),
     }))
-    .filter((item) => item.validUntil.getTime() > now.getTime());
+    .filter(
+      (item) =>
+        item.validUntil.getTime() > now.getTime() && item.paidFrom.getTime() <= now.getTime(),
+    );
 
   if (succeededPayments.length === 0) {
     const requiredPaymentAmount = input.quote?.amount ?? 0;
@@ -533,13 +611,6 @@ export function getPlacementCoverageState(input: {
     (max, item) => Math.max(max, item.roomCount),
     0,
   );
-  const activeCoverageAmount = input.quote?.promo ? coveredAmount : coveredOriginalAmount;
-  const requiredPaymentAmount = input.quote
-    ? Math.max(0, input.quote.amount - activeCoverageAmount)
-    : 0;
-  const requiredOriginalPaymentAmount = input.quote
-    ? Math.max(0, input.quote.originalAmount - coveredOriginalAmount)
-    : 0;
 
   return {
     hasActivePlacement: true,
@@ -547,9 +618,9 @@ export function getPlacementCoverageState(input: {
     coveredAmount,
     coveredOriginalAmount,
     coveredRoomCount,
-    requiredPaymentAmount,
-    requiredOriginalPaymentAmount,
-    fullyCovered: requiredPaymentAmount <= 0,
+    requiredPaymentAmount: 0,
+    requiredOriginalPaymentAmount: 0,
+    fullyCovered: true,
   };
 }
 

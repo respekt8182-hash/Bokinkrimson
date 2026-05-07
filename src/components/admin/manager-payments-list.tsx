@@ -150,6 +150,10 @@ function getTariffLabel(tariffCode: string): string {
     MULTI_ROOM_LARGE: "Гостиничный формат · 17–25 номеров",
     MULTI_ROOM_XL: "Гостиничный формат · 26+ номеров",
     UNIT_SINGLE: "Отдельный объект размещения",
+    object_season: "Сезонное размещение до 31 октября",
+    object_offseason: "Межсезонное размещение",
+    object_yearly: "Годовое размещение",
+    object_demo: "Демо до 20 июня",
     excursion_standard: "Публикация карточки экскурсии",
     tour_standard: "Публикация карточки тура",
     transfer_standard: "Публикация карточки трансфера",
@@ -396,7 +400,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
             </p>
             <p className="mt-0.5 text-xs text-olive/48">
               {tariffCode}
-              {payment.property ? ` • ${payment.roomCount} ном.` : ""}
+              {payment.property ? " • номера не влияют на стоимость" : ""}
               {payment.transferPayment?.vehicleCount
                 ? ` • машин: ${payment.transferPayment.vehicleCount}`
                 : ""}

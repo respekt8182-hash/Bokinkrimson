@@ -12,7 +12,10 @@ import {
   getTransferPaymentReference,
   setPaymentAdminRevenueIncluded,
 } from "@/lib/payments";
-import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import {
+  autoSubmitPropertyAfterSuccessfulPayment,
+  syncPropertyPlacementFromPayment,
+} from "@/lib/properties";
 import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
 
 type RouteContext = {
@@ -137,6 +140,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         data: {
           status: PaymentStatus.SUCCEEDED,
           paidAt: now,
+          paidFrom: payment.paidFrom ?? payment.paidAt ?? payment.createdAt,
           placementValidUntil:
             (payment.propertyId || paymentTransferId) && payment.placementValidUntil === null
               ? getPlacementValidUntil(now)
@@ -147,6 +151,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       });
 
       if (payment.propertyId) {
+        await syncPropertyPlacementFromPayment(tx, result, now);
         await autoSubmitPropertyAfterSuccessfulPayment(tx, payment.propertyId);
       }
       if (payment.excursionId) {

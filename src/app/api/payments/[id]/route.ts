@@ -12,7 +12,10 @@ import {
   resolvePaymentStatusTransition,
   serializePayment,
 } from "@/lib/payments";
-import { autoSubmitPropertyAfterSuccessfulPayment } from "@/lib/properties";
+import {
+  autoSubmitPropertyAfterSuccessfulPayment,
+  syncPropertyPlacementFromPayment,
+} from "@/lib/properties";
 import {
   autoSubmitTransferAfterSuccessfulPayment,
 } from "@/lib/transfers";
@@ -128,6 +131,10 @@ export async function GET(_request: Request, context: RouteContext) {
                 nextStatus === PaymentStatus.SUCCEEDED
                   ? (currentPayment.paidAt ?? new Date())
                   : currentPayment.paidAt,
+              paidFrom:
+                nextStatus === PaymentStatus.SUCCEEDED
+                  ? (currentPayment.paidFrom ?? currentPayment.paidAt ?? currentPayment.createdAt)
+                  : currentPayment.paidFrom,
               canceledAt:
                 nextStatus === PaymentStatus.CANCELED
                   ? (currentPayment.canceledAt ?? new Date())
@@ -160,6 +167,7 @@ export async function GET(_request: Request, context: RouteContext) {
           });
 
           if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.propertyId) {
+            await syncPropertyPlacementFromPayment(tx, updated);
             await autoSubmitPropertyAfterSuccessfulPayment(tx, currentPayment.propertyId);
           }
           if (updated.status === PaymentStatus.SUCCEEDED && currentPayment.excursionId) {
@@ -172,6 +180,7 @@ export async function GET(_request: Request, context: RouteContext) {
           return updated;
         });
       } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.propertyId) {
+        await syncPropertyPlacementFromPayment(db, payment);
         await autoSubmitPropertyAfterSuccessfulPayment(db, payment.propertyId);
       } else if (nextStatus === PaymentStatus.SUCCEEDED && payment.excursionId) {
         await autoSubmitExcursionAfterSuccessfulPayment(db, payment.excursionId);

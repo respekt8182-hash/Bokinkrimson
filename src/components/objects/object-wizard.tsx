@@ -911,7 +911,7 @@ export function ObjectWizard({
                 <div className="mt-2 space-y-2 text-sm text-olive/85">
                   <p className="text-base font-semibold text-olive">{selectedTypeInfo.name}</p>
                   <p>
-                    Категория тарифа:{" "}
+                    Формат объекта:{" "}
                     <span className="font-semibold text-olive">
                       {selectedTypePricingInfo.title}
                     </span>
@@ -930,7 +930,7 @@ export function ObjectWizard({
                 </div>
               ) : (
                 <p className="mt-2 text-sm text-olive/70">
-                  Выберите тип объекта слева, чтобы сразу увидеть разъяснение и тарифную логику.
+                  Выберите тип объекта слева, чтобы сразу увидеть разъяснение по размещению.
                 </p>
               )}
             </aside>

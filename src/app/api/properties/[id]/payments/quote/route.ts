@@ -9,7 +9,7 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const session = await getSession();
 
   if (!session) {
@@ -50,11 +50,13 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
+  const { searchParams } = new URL(request.url);
   const quote =
     roomCount > 0
       ? getTariffQuote({
           roomCount,
           propertyType: property.type,
+          tariffType: searchParams.get("tariffType"),
         })
       : null;
 

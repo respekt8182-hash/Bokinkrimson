@@ -1,14 +1,35 @@
 import {
   ExcursionStatus,
+  ObjectPaymentStatus,
+  PaymentProvider,
+  PaymentStatus,
   PropertyStatus,
   TransferStatus,
   type Prisma,
 } from "@prisma/client";
 
-export function buildPublishedPropertyVisibilityWhere(): Prisma.PropertyWhereInput {
+export function buildPublishedPropertyVisibilityWhere(now = new Date()): Prisma.PropertyWhereInput {
   return {
     status: PropertyStatus.PUBLISHED,
     isPublishedVisible: true,
+    OR: [
+      {
+        paymentStatus: {
+          in: [ObjectPaymentStatus.PAID, ObjectPaymentStatus.DEMO],
+        },
+        paidUntil: { gt: now },
+        OR: [{ paidFrom: null }, { paidFrom: { lte: now } }],
+      },
+      {
+        payments: {
+          some: {
+            status: PaymentStatus.SUCCEEDED,
+            provider: { not: PaymentProvider.MOCK },
+            placementValidUntil: { gt: now },
+          },
+        },
+      },
+    ],
     ownerDeletedAt: null,
     owner: {
       is: {

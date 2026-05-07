@@ -1,5 +1,5 @@
 // Owner moderation-submit endpoint: enforces readiness + active paid placement before moving object to moderation.
-import { PaymentProvider, PaymentStatus, PropertyStatus } from "@prisma/client";
+import { ObjectTariffType, PaymentProvider, PaymentStatus, PropertyStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -16,6 +16,7 @@ import {
   getPropertyWorkflowStatusLabel,
   normalizePropertyWorkflowStatus,
   purgeExpiredPropertyDraftsForOwner,
+  syncPropertyPlacementFromPayment,
 } from "@/lib/properties";
 
 type RouteContext = {
@@ -140,12 +141,14 @@ export async function POST(_request: Request, context: RouteContext) {
         propertyId: property.id,
         ownerId: session.id,
         amount: 0,
-        tariffCode: readiness.quote.tariff.code,
+        tariffCode: "object_demo",
+        tariffType: ObjectTariffType.DEMO,
         roomCount: readiness.quote.roomCount,
         status: PaymentStatus.SUCCEEDED,
         provider: PaymentProvider.MANAGER,
         idempotenceKey: crypto.randomUUID(),
         confirmationUrl: null,
+        paidFrom: now,
         paidAt: now,
         placementValidUntil: getPlacementPromoDemoValidUntil(),
         providerPayload: buildFreePlacementPaymentPayload({
@@ -160,6 +163,7 @@ export async function POST(_request: Request, context: RouteContext) {
       },
     });
 
+    await syncPropertyPlacementFromPayment(db, freePayment, now);
     payments = [freePayment, ...payments];
     placement = getPlacementCoverageState({
       payments,
@@ -181,7 +185,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error:
-          "Для текущего количества номеров нужна доплата. Оплатите разницу по тарифу и после этого отправьте объект на модерацию.",
+          "Оплатите выбранный период размещения и после этого отправьте объект на модерацию.",
         requiredPaymentAmount: placement.requiredPaymentAmount,
         paidUntil: placement.paidUntil,
       },

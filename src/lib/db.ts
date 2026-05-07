@@ -49,9 +49,18 @@ const TRANSFER_COMPAT_COLUMNS = [
   "pendingEditStatus",
   "publishedSnapshot",
 ] as const;
+const PROPERTY_COMPAT_COLUMNS = [
+  "isPublishedVisible",
+  "paymentStatus",
+  "tariffType",
+  "paidFrom",
+  "paidUntil",
+  "paidAmount",
+  "paidAt",
+] as const;
 const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
 const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
-const PAYMENT_COMPAT_COLUMNS = ["transferId"] as const;
+const PAYMENT_COMPAT_COLUMNS = ["transferId", "tariffType", "paidFrom"] as const;
 
 const SCHEMA_COMPAT_MODELS = {
   User: {
@@ -71,9 +80,15 @@ const SCHEMA_COMPAT_MODELS = {
     label: "User",
   },
   Property: {
-    columns: ["isPublishedVisible"],
+    columns: PROPERTY_COMPAT_COLUMNS,
     defaults: {
       isPublishedVisible: true,
+      paymentStatus: "UNPAID",
+      tariffType: null,
+      paidFrom: null,
+      paidUntil: null,
+      paidAmount: null,
+      paidAt: null,
     },
     logContext: "property-schema-compat",
     label: "Property",
@@ -139,6 +154,8 @@ const SCHEMA_COMPAT_MODELS = {
     columns: PAYMENT_COMPAT_COLUMNS,
     defaults: {
       transferId: null,
+      tariffType: null,
+      paidFrom: null,
     },
     logContext: "payment-schema-compat",
     label: "Payment",

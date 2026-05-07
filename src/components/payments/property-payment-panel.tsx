@@ -21,6 +21,7 @@ import {
   type TariffQuote,
   type SerializedPayment,
 } from "@/lib/payments";
+import { getPlacementPromoPrice } from "@/lib/placement-promo";
 
 type PaymentStatusValue = "CREATED" | "PENDING" | "SUCCEEDED" | "CANCELED";
 type PropertyStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
@@ -108,14 +109,6 @@ function getWorkflowStatus(
   return status;
 }
 
-function getPricingGroupLabel(group: TariffQuote["pricingGroup"]): string {
-  if (group === "MULTI_ROOM") {
-    return "Гостиничный формат";
-  }
-
-  return "Отдельный объект";
-}
-
 export function PropertyPaymentPanel({
   propertyId,
   propertyName,
@@ -139,6 +132,9 @@ export function PropertyPaymentPanel({
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
+  const [selectedTariffType, setSelectedTariffType] = useState(
+    initialReadiness.quote?.tariffType ?? "yearly",
+  );
   const [managerRequested, setManagerRequested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -151,23 +147,22 @@ export function PropertyPaymentPanel({
   );
   const paidUntilIso = placement.paidUntil ?? latestSucceededPayment?.placementValidUntil ?? null;
   const hasActivePlacement = placement.hasActivePlacement;
-  const hasOutstandingTopUp =
-    readiness.ready &&
-    hasActivePlacement &&
-    !placement.fullyCovered &&
-    placement.requiredPaymentAmount > 0;
-  const amountDue = readiness.quote
+  const tariffOptions = readiness.quote?.availableTariffs ?? [];
+  const selectedTariff =
+    tariffOptions.find((item) => item.type === selectedTariffType) ??
+    readiness.quote?.tariff ??
+    tariffOptions[0] ??
+    null;
+  const selectedTariffPrice = selectedTariff
+    ? getPlacementPromoPrice(selectedTariff.amountRub)
+    : null;
+  const amountDue = selectedTariff
     ? hasActivePlacement
-      ? placement.requiredPaymentAmount
-      : readiness.quote.amount
+      ? 0
+      : (selectedTariffPrice?.finalAmountRub ?? selectedTariff.amountRub)
     : 0;
-  const originalAmountDue = readiness.quote
-    ? hasActivePlacement
-      ? placement.requiredOriginalPaymentAmount
-      : readiness.quote.originalAmount
-    : 0;
-  const hasFreePlacementCoverage =
-    Boolean(readiness.quote) && placement.fullyCovered && amountDue <= 0;
+  const originalAmountDue = selectedTariff ? selectedTariff.amountRub : 0;
+  const hasFreePlacementCoverage = Boolean(selectedTariff) && !hasActivePlacement && amountDue <= 0;
   const workflowStatus = useMemo(
     () => getWorkflowStatus(propertyStatus, pendingEditStatus),
     [pendingEditStatus, propertyStatus],
@@ -187,10 +182,6 @@ export function PropertyPaymentPanel({
 
   const readinessHint = useMemo(() => {
     if (readiness.ready) {
-      if (hasOutstandingTopUp) {
-        return `Размещение уже активно, но для ${readiness.roomCount} номеров нужна доплата ${formatMoney(placement.requiredPaymentAmount)}.`;
-      }
-
       if (hasActivePlacement) {
         return "Оплата уже активна. Карточку можно отправить на модерацию без повторной оплаты.";
       }
@@ -204,10 +195,7 @@ export function PropertyPaymentPanel({
   }, [
     hasActivePlacement,
     hasFreePlacementCoverage,
-    hasOutstandingTopUp,
-    placement.requiredPaymentAmount,
     readiness.ready,
-    readiness.roomCount,
   ]);
 
   function getSuccessfulPaymentMessage(nextState: PaymentsApiResponse | null): string {
@@ -262,7 +250,7 @@ export function PropertyPaymentPanel({
       const response = await fetch(`/api/properties/${propertyId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: paymentMethod }),
+        body: JSON.stringify({ provider: paymentMethod, tariffType: selectedTariff?.type }),
       });
 
       const body = (await response.json()) as PaymentRouteResponse & { managerRequested?: boolean };
@@ -321,7 +309,7 @@ export function PropertyPaymentPanel({
       if (!response.ok || !body.item) {
         if (body.requiredPaymentAmount && body.requiredPaymentAmount > 0) {
           setError(
-            `${body.error ?? "Не удалось отправить объект на модерацию"}. К доплате: ${formatMoney(body.requiredPaymentAmount)}.`,
+            `${body.error ?? "Не удалось отправить объект на модерацию"}. К оплате: ${formatMoney(body.requiredPaymentAmount)}.`,
           );
           return;
         }
@@ -501,7 +489,6 @@ export function PropertyPaymentPanel({
 
           {/* Stats grid */}
           <div className="grid gap-2 sm:grid-cols-3">
-            {/* Active rooms */}
             <div className="rounded-xl bg-cream p-3.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
                 Активных номеров
@@ -513,23 +500,24 @@ export function PropertyPaymentPanel({
               </p>
               <p className="mt-2 text-[11px] text-olive/50">
                 {readiness.roomCount > 0
-                  ? "Влияет на стоимость тарифа"
+                  ? "Стоимость от количества номеров не меняется"
                   : "Создайте номера на вкладке «Номера»"}
               </p>
             </div>
 
-            {/* Tariff */}
             <div className="rounded-xl bg-cream p-3.5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">Тариф</p>
-              <p
-                className={`mt-1.5 text-base font-semibold leading-tight ${readiness.quote ? "text-olive" : "text-olive/35"}`}
-              >
-                {readiness.quote ? readiness.quote.tariff.title : "Не рассчитан"}
+              <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
+                Выбранный тариф
               </p>
-              {readiness.quote ? (
+              <p
+                className={`mt-1.5 text-base font-semibold leading-tight ${selectedTariff ? "text-olive" : "text-olive/35"}`}
+              >
+                {selectedTariff ? selectedTariff.title : "Не рассчитан"}
+              </p>
+              {selectedTariff ? (
                 <PlacementPromoPrice
-                  originalAmountRub={readiness.quote.originalAmount}
-                  finalAmountRub={readiness.quote.amount}
+                  originalAmountRub={originalAmountDue}
+                  finalAmountRub={amountDue}
                   className="mt-1"
                   finalClassName="text-lg"
                 />
@@ -538,28 +526,23 @@ export function PropertyPaymentPanel({
               )}
             </div>
 
-            {/* Pricing group */}
             <div className="rounded-xl bg-cream p-3.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                Категория тарифа
+                Период
               </p>
               <p
-                className={`mt-1.5 text-base font-semibold leading-tight ${readiness.quote ? "text-olive" : "text-olive/35"}`}
+                className={`mt-1.5 text-base font-semibold leading-tight ${selectedTariff ? "text-olive" : "text-olive/35"}`}
               >
-                {readiness.quote
-                  ? getPricingGroupLabel(readiness.quote.pricingGroup)
-                  : "Не определена"}
+                {selectedTariff ? selectedTariff.periodLabel : "Не определён"}
               </p>
               <p className="mt-1 text-[11px] text-olive/50">
-                {readiness.quote
-                  ? "Определяется типом объекта"
-                  : "Зависит от типа объекта и номеров"}
+                {selectedTariff ? selectedTariff.monthlyLabel : "Выберите тариф"}
               </p>
             </div>
           </div>
           <PlacementPromoNotice compact />
 
-          {readiness.quote && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
+          {selectedTariff && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
               <p className="font-semibold">Размещение бесплатно</p>
               <p className="mt-1">
@@ -570,48 +553,82 @@ export function PropertyPaymentPanel({
             </div>
           ) : null}
 
+          {tariffOptions.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              {tariffOptions.map((option) => {
+                const isSelected = selectedTariff?.type === option.type;
+                return (
+                  <button
+                    key={option.type}
+                    type="button"
+                    onClick={() => setSelectedTariffType(option.type)}
+                    className={`relative rounded-2xl border p-4 text-left transition ${
+                      isSelected
+                        ? "border-primary bg-primary/5 shadow-[0_16px_34px_-28px_rgba(15,74,64,0.55)]"
+                        : "border-olive/12 bg-white hover:border-primary/25"
+                    } ${option.recommended ? "ring-1 ring-primary/18" : ""}`}
+                  >
+                    {option.recommended ? (
+                      <span className="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+                        Выгодно
+                      </span>
+                    ) : null}
+                    <p className="pr-20 text-sm font-semibold text-olive">{option.shortTitle}</p>
+                    <PlacementPromoPrice
+                      originalAmountRub={option.amountRub}
+                      className="mt-2"
+                      finalClassName="text-2xl"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-olive/65">{option.periodLabel}</p>
+                    <p className="mt-1 text-xs font-semibold text-olive/70">
+                      {option.monthlyLabel}
+                    </p>
+                    {option.savingsRub ? (
+                      <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                        Экономия {formatMoney(option.savingsRub)}
+                      </p>
+                    ) : null}
+                    <span
+                      className={`mt-3 inline-flex rounded-xl px-3 py-2 text-xs font-semibold ${
+                        isSelected ? "bg-primary text-white" : "bg-cream text-olive/70"
+                      }`}
+                    >
+                      {isSelected ? "Выбран" : option.buttonLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           {/* Payment summary */}
-          {readiness.quote && readiness.ready && amountDue > 0 && (
+          {selectedTariff && readiness.ready && amountDue > 0 && (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <p className="mb-3 text-sm font-semibold text-olive">Счёт к оплате</p>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Категория</span>
+                  <span className="text-olive/65">Тариф</span>
                   <span className="text-right font-medium text-olive">
-                    {readiness.quote.pricingGroup === "MULTI_ROOM"
-                      ? "Гостиничный формат"
-                      : "Отдельный объект"}
+                    {selectedTariff.title}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Тариф</span>
+                  <span className="text-olive/65">Период</span>
                   <span className="text-right font-medium text-olive">
-                    {readiness.quote.tariff.title}
+                    {selectedTariff.periodLabel}
                   </span>
                 </div>
-                {readiness.quote.pricingGroup === "MULTI_ROOM" && (
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-olive/65">Номеров</span>
-                    <span className="font-medium text-olive">{readiness.quote.roomCount}</span>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-olive/65">В месяц</span>
+                  <span className="text-right font-medium text-olive">
+                    {selectedTariff.monthlyLabel}
+                  </span>
+                </div>
+                {selectedTariff.savingsRub ? (
+                  <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                    Экономия {formatMoney(selectedTariff.savingsRub)} по сравнению с оплатой сезона
+                    и межсезонья отдельно.
                   </div>
-                )}
-                {hasOutstandingTopUp ? (
-                  <>
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-olive/65">Уже оплачено</span>
-                      <span className="font-medium text-olive">
-                        {formatMoney(placement.coveredAmount)}
-                      </span>
-                    </div>
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-olive/65">Новый тариф</span>
-                      <PlacementPromoPrice
-                        originalAmountRub={readiness.quote.originalAmount}
-                        finalAmountRub={readiness.quote.amount}
-                        align="right"
-                      />
-                    </div>
-                  </>
                 ) : null}
                 <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
                   <span className="font-semibold text-olive">Итого</span>
@@ -626,15 +643,8 @@ export function PropertyPaymentPanel({
             </div>
           )}
 
-          {hasOutstandingTopUp ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Для текущего количества номеров прежний платёж покрывает размещение не полностью.
-              Система выставит только разницу между уже оплаченным тарифом и новым.
-            </div>
-          ) : null}
-
           {/* Paid-until info */}
-          {readiness.quote && paidUntilIso ? (
+          {selectedTariff && paidUntilIso ? (
             <div
               className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${hasActivePlacement ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
             >
@@ -926,7 +936,7 @@ export function PropertyPaymentPanel({
                     {payment.statusLabel}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-olive/55">Тариф: {payment.tariffCode}</p>
+                <p className="mt-1 text-xs text-olive/55">Тариф: {payment.tariffLabel}</p>
                 <p className="text-xs text-olive/45">{formatDateTime(payment.createdAt)}</p>
               </div>
             ))}
@@ -956,7 +966,7 @@ export function PropertyPaymentPanel({
                     <td className="py-2 pr-4 font-mono text-xs text-olive">
                       {payment.id.slice(0, 12)}...
                     </td>
-                    <td className="py-2 pr-4 text-olive">{payment.tariffCode}</td>
+                    <td className="py-2 pr-4 text-olive">{payment.tariffLabel}</td>
                     <td className="py-2 pr-4 font-medium text-olive">
                       {formatMoney(payment.amount)}
                     </td>
