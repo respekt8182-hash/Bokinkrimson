@@ -99,7 +99,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
         orderBy: [{ updatedAt: "desc" }],
         include: {
           owner: {
-            select: { firstName: true, email: true, phone: true },
+            select: { firstName: true, lastName: true, email: true, phone: true },
           },
           amenities: {
             select: { amenityId: true },
@@ -157,6 +157,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
             item.description,
             item.type,
             item.owner.firstName,
+            item.owner.lastName,
             item.owner.email,
           ],
           { limit: filteredRows.length, minScore: 0.08 },
@@ -356,7 +357,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Владелец</dt>
                     <dd className="font-medium text-olive">
-                      {item.owner.firstName}
+                      {[item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ")}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">

@@ -56,6 +56,7 @@ export default async function AdminUsersPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           {users.map((user) => {
             const isPendingDeletion = Boolean(user.deletedAt);
+            const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ");
 
             return (
               <AdminPanel key={user.id} className="p-5" contentClassName="space-y-4">
@@ -63,7 +64,7 @@ export default async function AdminUsersPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-semibold text-olive">
-                        {user.firstName}
+                        {fullName}
                       </h2>
                       {isPendingDeletion ? (
                         <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
@@ -89,7 +90,7 @@ export default async function AdminUsersPage() {
                       deleteEndpoint={`/api/admin/users/${user.id}`}
                       restoreEndpoint={`/api/admin/users/${user.id}/restore`}
                       entityLabel="профиль"
-                      entityName={user.firstName}
+                      entityName={fullName}
                       isPendingDeletion={isPendingDeletion}
                       restoreUntil={user.deletionExpiresAt?.toISOString() ?? null}
                       deleteButtonLabel="Удалить"

@@ -62,6 +62,7 @@ type ManagerPayment = {
   owner: {
     id: string;
     firstName: string;
+    lastName: string;
     phone: string;
     email: string | null;
   };
@@ -418,7 +419,7 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
           <div className="flex items-center gap-2 text-sm text-olive">
             <AppIcon icon={User} className="h-3.5 w-3.5 text-olive/40" />
             <span className="font-medium">
-              {payment.owner.firstName}
+              {[payment.owner.firstName, payment.owner.lastName].filter(Boolean).join(" ")}
             </span>
           </div>
           <div className="flex items-center gap-2 text-sm text-olive">

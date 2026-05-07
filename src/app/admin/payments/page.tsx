@@ -46,7 +46,7 @@ export default async function AdminPaymentsPage() {
           }
         : {}),
       owner: {
-        select: { id: true, firstName: true, phone: true, email: true },
+        select: { id: true, firstName: true, lastName: true, phone: true, email: true },
       },
     },
   });
@@ -147,6 +147,7 @@ export default async function AdminPaymentsPage() {
       owner: {
         id: p.owner.id,
         firstName: p.owner.firstName,
+        lastName: p.owner.lastName,
         phone: p.owner.phone,
         email: p.owner.email,
       },

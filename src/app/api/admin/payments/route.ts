@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             firstName: true,
+            lastName: true,
             phone: true,
             email: true,
           },
@@ -194,6 +195,7 @@ export async function GET(request: NextRequest) {
         owner: {
           id: p.owner.id,
           firstName: p.owner.firstName,
+          lastName: p.owner.lastName,
           phone: p.owner.phone,
           email: p.owner.email,
         },
