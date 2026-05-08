@@ -73,6 +73,11 @@ enum ExcursionPriceType {
   PER_GROUP  @map("per_group")
 }
 
+enum RoomPriceType {
+  PER_ROOM   @map("per_room")
+  PER_PERSON @map("per_person")
+}
+
 enum ExcursionDifficulty {
   EASY   @map("easy")
   MEDIUM @map("medium")
@@ -1019,16 +1024,17 @@ model Payment {
 }
 
 model RoomPrice {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   roomId    String
-  dateFrom  DateTime @db.Date
-  dateTo    DateTime @db.Date
-  price     Decimal  @db.Decimal(10, 2)
+  dateFrom  DateTime      @db.Date
+  dateTo    DateTime      @db.Date
+  price     Decimal       @db.Decimal(10, 2)
+  priceType RoomPriceType @default(PER_ROOM)
   minGuests Int?
-  currency  String   @default("RUB") @db.VarChar(3)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  currency  String        @default("RUB") @db.VarChar(3)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, dateFrom, dateTo])
   @@index([roomId, createdAt])

@@ -157,6 +157,7 @@ export async function GET(request: Request) {
       latitude: item.latitude,
       longitude: item.longitude,
       pricePerNight: item.stayPrice?.nightly ?? item.minNightPrice,
+      priceType: item.stayPrice?.priceType ?? item.minNightPriceType,
       priceFrom: item.minNightPrice,
       currency: item.stayPrice?.currency ?? item.currency ?? "RUB",
       addressShort: item.locationName ?? "Крым",

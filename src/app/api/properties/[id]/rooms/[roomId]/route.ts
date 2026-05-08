@@ -121,7 +121,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         title: normalizedTitle,
         beds: data.beds,
         extraBeds: data.extraBeds,
-        roomsCount: 1,
+        roomsCount: data.roomsCount,
         areaSqm: data.areaSqm,
         bathroomType: normalizedBathroomType,
         meta: data.meta,

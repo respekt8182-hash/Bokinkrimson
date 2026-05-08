@@ -3,8 +3,6 @@
 import Image from "next/image";
 import {
   BadgeCheck,
-  Bath,
-  BedDouble,
   CalendarDays,
   Check,
   ChevronDown,
@@ -13,11 +11,15 @@ import {
   ChevronUp,
   Copy,
   MapPin,
+  PanelsTopLeft,
   Phone,
+  RulerDimensionLine,
   Star,
+  Toilet,
   TriangleAlert,
   TvMinimalPlay,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
@@ -31,14 +33,23 @@ import { PropertyMediaGallery } from "@/components/public/property-media-gallery
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { AmenityIcon, NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
-import { AppIcon } from "@/components/ui/app-icon";
+import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { parseDetailedGuestsValue } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
 import { cn } from "@/lib/cn";
 import { buildPropertyLeadMessage } from "@/lib/lead-message-author";
-import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
+import {
+  addDays,
+  calculateRoomStayPrice,
+  getRoomPriceNightlySuffix,
+  normalizeRoomPriceType,
+  parseIsoDate,
+  toIsoDate,
+  type RoomPriceCalculationType,
+  type RoomPriceType,
+} from "@/lib/pricing";
 import { formatPublicPersonName } from "@/lib/public-display-name";
 import {
   parseMealOptionsValue,
@@ -71,6 +82,11 @@ type RoomAmenityItem = {
   name: string;
   featureId?: string;
   category: "bathroom" | "equipment" | "beds";
+};
+
+type RoomCardAmenityItem = RoomAmenityItem & {
+  icon?: LucideIcon;
+  isPrimary?: boolean;
 };
 
 type RulePolicyValue = "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null;
@@ -136,6 +152,44 @@ function formatReviewsCountLabel(count: number): string {
   return `${count} отзывов`;
 }
 
+function formatRoomArea(value: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatRoomsCountLabel(value: number): string {
+  const rooms = Math.max(1, Math.floor(value));
+  const abs = rooms % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${rooms} комнат`;
+  if (last === 1) return `${rooms} комната`;
+  if (last >= 2 && last <= 4) return `${rooms} комнаты`;
+  return `${rooms} комнат`;
+}
+
+function formatRoomsCompactLabel(value: number): string {
+  return `${Math.max(1, Math.floor(value))}К`;
+}
+
+function formatPlacesLabel(value: number): string {
+  const places = Math.max(1, Math.floor(value));
+  const abs = places % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${places} мест`;
+  if (last === 1) return `${places} место`;
+  if (last >= 2 && last <= 4) return `${places} места`;
+  return `${places} мест`;
+}
+
+function formatRoomCapacityLabel(beds: number, extraBeds: number): string {
+  const mainPlaces = formatPlacesLabel(beds);
+  return extraBeds > 0 ? `${mainPlaces} + ${extraBeds} доп.` : mainPlaces;
+}
+
+function formatRoomLayoutLabel(areaSqm: number | null, roomsCount: number): string {
+  const roomsLabel = formatRoomsCountLabel(roomsCount);
+  return areaSqm !== null ? `${formatRoomArea(areaSqm)} м² · ${roomsLabel}` : roomsLabel;
+}
+
 function LocationPinIcon({ className }: { className?: string }) {
   return <AppIcon icon={MapPin} className={className} />;
 }
@@ -180,10 +234,6 @@ function AlertIcon({ className }: { className?: string }) {
   return <AppIcon icon={TriangleAlert} className={className} />;
 }
 
-function BedIcon({ className }: { className?: string }) {
-  return <AppIcon icon={BedDouble} className={className} />;
-}
-
 function CalendarSmIcon({ className }: { className?: string }) {
   return <AppIcon icon={CalendarDays} className={className} />;
 }
@@ -210,6 +260,12 @@ function ChevronRightIcon({ className }: { className?: string }) {
 
 function RoomFeatureIcon(props: { name: string; featureId?: string; className?: string }) {
   const { featureId, className } = props;
+  if (featureId === "room_area") {
+    return <AppIcon icon={RulerDimensionLine} className={className} />;
+  }
+  if (featureId === "room_rooms") {
+    return <AppIcon icon={PanelsTopLeft} className={className} />;
+  }
   return <AmenityIcon featureId={featureId} className={className} />;
 }
 
@@ -518,17 +574,28 @@ function getMobileMessengerChipClasses(brand: ContactBrand | "website"): string 
 
 function getRoomBasePrice(room: PublicPropertyCard["rooms"][number]): {
   value: number | null;
+  priceType: RoomPriceType | null;
   currency: string | null;
 } {
   let value: number | null = null;
+  let priceType: RoomPriceType | null = null;
   let currency: string | null = null;
   for (const item of room.prices) {
     if (value === null || item.price < value) {
       value = item.price;
+      priceType = normalizeRoomPriceType(item.priceType);
       currency = item.currency;
     }
   }
-  return { value, currency };
+  return { value, priceType, currency };
+}
+
+function formatNightlyPriceLabel(
+  value: number,
+  currency: string,
+  priceType: RoomPriceCalculationType | null,
+): string {
+  return `${formatMoney(value, currency)} ${getRoomPriceNightlySuffix(priceType)}`;
 }
 
 function getMaxRequiredMinGuests(
@@ -575,12 +642,13 @@ function getRoomPriceSummary(
     const base = getRoomBasePrice(room);
     if (base.value !== null && base.currency) {
       const price = formatMoney(base.value, base.currency);
+      const nightlyLabel = formatNightlyPriceLabel(base.value, base.currency, base.priceType);
       return {
-        text: `от ${price} за ночь`,
+        text: `от ${nightlyLabel}`,
         tone: "ok",
         bigPrice: `от ${price}`,
         sideLabel: null,
-        smallLabel: "/ ночь",
+        smallLabel: getRoomPriceNightlySuffix(base.priceType),
       };
     }
     return {
@@ -597,11 +665,13 @@ function getRoomPriceSummary(
       dateFrom: price.dateFrom,
       dateTo: price.dateTo,
       price: price.price,
+      priceType: price.priceType,
       minGuests: price.minGuests,
       currency: price.currency,
     })),
     checkIn,
     checkOut,
+    guests,
   });
   if (!calculation.ok) {
     return {
@@ -624,19 +694,23 @@ function getRoomPriceSummary(
     };
   }
 
-  const perNight = formatMoney(
-    Math.round(calculation.total / calculation.nights),
+  const perNight = formatNightlyPriceLabel(
+    Math.round(
+      (calculation.priceType === "MIXED" ? calculation.total : calculation.unitTotal) /
+        calculation.nights,
+    ),
     calculation.currency,
+    calculation.priceType,
   );
   const nightsLabel = formatNightsLabel(calculation.nights);
   const sideLabel = `за ${nightsLabel}`;
   return {
     text: `${formatMoney(calculation.total, calculation.currency)} ${sideLabel}`,
-    meta: `${perNight} / ночь`,
+    meta: perNight,
     tone: "ok",
     bigPrice: formatMoney(calculation.total, calculation.currency),
     sideLabel,
-    smallLabel: `${perNight} / ночь`,
+    smallLabel: perNight,
   };
 }
 
@@ -877,6 +951,7 @@ export function PublicPropertyDetails({
         let stayTotal: number | null = null;
         let stayCurrency: string | null = null;
         let stayNightly: number | null = null;
+        let stayPriceType: RoomPriceCalculationType | null = null;
 
         if (checkIn && checkOut && selectedNights > 0) {
           const calculation = calculateRoomStayPrice({
@@ -884,17 +959,23 @@ export function PublicPropertyDetails({
               dateFrom: price.dateFrom,
               dateTo: price.dateTo,
               price: price.price,
+              priceType: price.priceType,
               minGuests: price.minGuests,
               currency: price.currency,
             })),
             checkIn,
             checkOut,
+            guests: totalGuests,
           });
           if (calculation.ok) {
             hasStayPrice = true;
             stayTotal = calculation.total;
             stayCurrency = calculation.currency;
-            stayNightly = Math.round(calculation.total / calculation.nights);
+            stayNightly = Math.round(
+              (calculation.priceType === "MIXED" ? calculation.total : calculation.unitTotal) /
+                calculation.nights,
+            );
+            stayPriceType = calculation.priceType;
           }
         }
 
@@ -909,6 +990,7 @@ export function PublicPropertyDetails({
           stayTotal,
           stayCurrency,
           stayNightly,
+          stayPriceType,
           sortPrice,
           capacityDelta: Math.abs(capacity - totalGuests),
         };
@@ -945,6 +1027,7 @@ export function PublicPropertyDetails({
       currency: string;
       nights: number;
       nightly: number;
+      priceType: RoomPriceCalculationType | null;
       roomTitle: string;
     };
 
@@ -972,13 +1055,14 @@ export function PublicPropertyDetails({
       currency: bestCurrency,
       nights: selectedNights,
       nightly: bestNightly,
+      priceType: bestAutoEntry.stayPriceType,
       roomTitle: bestAutoEntry.room.title,
     } satisfies QuoteResult;
   }, [checkIn, checkOut, rankedRooms, selectedNights]);
   const sortedRooms = rankedRooms;
   const sidebarNightlyLabel = sidebarQuote
-    ? `${formatMoney(sidebarQuote.nightly, sidebarQuote.currency)} / ночь`
-    : `${mainPriceLabel} / ночь`;
+    ? formatNightlyPriceLabel(sidebarQuote.nightly, sidebarQuote.currency, sidebarQuote.priceType)
+    : `${mainPriceLabel} ${getRoomPriceNightlySuffix(item.minNightPriceType)}`;
   const sidebarPriceMeta =
     selectedNights > 0
       ? `${formatNightsLabel(selectedNights)}, гостей: ${totalGuests}`
@@ -1386,6 +1470,22 @@ export function PublicPropertyDetails({
                           : `Спальные места: ${room.beds}`,
                       category: "beds",
                     },
+                    ...(room.areaSqm !== null
+                      ? [
+                          {
+                            key: `${room.id}-area`,
+                            featureId: "room_area",
+                            name: `Площадь: ${formatRoomArea(room.areaSqm)} м²`,
+                            category: "equipment" as const,
+                          },
+                        ]
+                      : []),
+                    {
+                      key: `${room.id}-rooms-count`,
+                      featureId: "room_rooms",
+                      name: `Количество комнат: ${room.roomsCount} (${formatRoomsCompactLabel(room.roomsCount)})`,
+                      category: "equipment",
+                    },
                     ...bedConfigItems,
                     ...room.features.map((feature, index) => ({
                       key: `${room.id}-feature-${index}-${feature.id}`,
@@ -1403,9 +1503,39 @@ export function PublicPropertyDetails({
                     .filter(
                       (amenity) =>
                         !amenity.key.startsWith(`${room.id}-bed-type-`) &&
-                        amenity.key !== `${room.id}-beds-base`,
+                        amenity.key !== `${room.id}-beds-base` &&
+                        amenity.featureId !== "room_area" &&
+                        amenity.featureId !== "room_rooms",
                     )
-                    .slice(0, 6);
+                    .slice(0, 5);
+                  const roomCardAmenities: RoomCardAmenityItem[] = [
+                    {
+                      key: `${room.id}-summary-capacity`,
+                      icon: Users,
+                      name: formatRoomCapacityLabel(room.beds, room.extraBeds),
+                      category: "beds",
+                      isPrimary: true,
+                    },
+                    {
+                      key: `${room.id}-summary-layout`,
+                      icon: RulerDimensionLine,
+                      name: formatRoomLayoutLabel(room.areaSqm, room.roomsCount),
+                      category: "equipment",
+                      isPrimary: true,
+                    },
+                    ...(room.bathroomTypeLabel
+                      ? [
+                          {
+                            key: `${room.id}-summary-bathroom`,
+                            icon: Toilet,
+                            name: room.bathroomTypeLabel,
+                            category: "bathroom" as const,
+                            isPrimary: true,
+                          },
+                        ]
+                      : []),
+                    ...visibleRoomAmenities,
+                  ];
                   const roomDetailsDialogId = `room-details-${room.id}`;
                   const roomDetailsTitleId = `room-details-title-${room.id}`;
                   return (
@@ -1479,42 +1609,43 @@ export function PublicPropertyDetails({
                               {room.title}
                             </h3>
 
-                            {/* Key specs as icon+text rows */}
-                            <div className="mt-2 space-y-1">
-                              <div className="flex items-center gap-2 text-[13px] text-olive/75">
-                                <BedIcon className="h-4 w-4 shrink-0 text-olive/45" />
-                                <span>
-                                  {room.beds}
-                                  {room.extraBeds > 0 ? ` места + ${room.extraBeds} доп.` : " мест"}
-                                </span>
-                              </div>
-                              {room.bathroomTypeLabel ? (
-                                <div className="flex items-center gap-2 text-[13px] text-olive/75">
-                                  <AppIcon icon={Bath} className="h-4 w-4 shrink-0 text-olive/45" />
-                                  <span>{room.bathroomTypeLabel}</span>
-                                </div>
-                              ) : null}
-                            </div>
-
                             {/* Amenities as icon+text pairs in a compact grid */}
-                            {visibleRoomAmenities.length > 0 ? (
-                              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
-                                {visibleRoomAmenities.map((amenity) => (
-                                  <span
-                                    key={amenity.key}
-                                    className="inline-flex items-center gap-1.5 text-[12.5px] text-olive/65"
-                                  >
+                            <div
+                              className="mt-3 flex flex-wrap gap-1.5"
+                              role="list"
+                              aria-label="Краткое оснащение номера"
+                            >
+                              {roomCardAmenities.map((amenity) => (
+                                <span
+                                  key={amenity.key}
+                                  role="listitem"
+                                  title={amenity.name}
+                                  className={cn(
+                                    "inline-flex max-w-full items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] leading-snug ring-1",
+                                    amenity.isPrimary
+                                      ? "bg-primary/7 font-semibold text-olive/80 ring-primary/12"
+                                      : "bg-cream/65 text-olive/68 ring-olive/8",
+                                  )}
+                                >
+                                  {amenity.icon ? (
+                                    <AppIcon
+                                      icon={amenity.icon}
+                                      className={cn(
+                                        "h-3.5 w-3.5 shrink-0",
+                                        amenity.isPrimary ? "text-primary/75" : "text-olive/40",
+                                      )}
+                                    />
+                                  ) : (
                                     <RoomFeatureIcon
                                       name={amenity.name}
                                       featureId={amenity.featureId}
                                       className="h-3.5 w-3.5 shrink-0 text-olive/40"
                                     />
-                                    {amenity.name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-
+                                  )}
+                                  <span className="min-w-0 truncate">{amenity.name}</span>
+                                </span>
+                              ))}
+                            </div>
                             {/* "Подробное описание" link */}
                             <button
                               type="button"
@@ -1533,7 +1664,7 @@ export function PublicPropertyDetails({
                           </div>
 
                           {/* в”Ђв”Ђ PRICE + CTA в”Ђв”Ђ */}
-                          <div className="flex shrink-0 flex-row items-center justify-between gap-3 border-t border-olive/8 pt-3 md:w-[180px] md:flex-col md:items-end md:justify-start md:border-l md:border-t-0 md:pl-4 md:pt-0">
+                          <div className="flex shrink-0 flex-row items-center justify-between gap-3 border-t border-olive/8 pt-3 md:w-[168px] md:flex-col md:items-end md:justify-start md:border-l md:border-t-0 md:pl-3 md:pt-0">
                             {summary.tone === "warn" ? (
                               <div className="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-[13px] text-amber-700">
                                 <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1598,15 +1729,17 @@ export function PublicPropertyDetails({
                                   </p>
                                   <div className="mt-1.5 flex flex-wrap gap-1">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                      {room.beds}
+                                      {formatPlacesLabel(room.beds)}
                                       {room.extraBeds > 0 ? ` + ${room.extraBeds} доп.` : ""}
-                                      &nbsp;мест
                                     </span>
                                     {room.areaSqm !== null ? (
                                       <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                        {room.areaSqm}&nbsp;м²
+                                        {formatRoomArea(room.areaSqm)}&nbsp;м²
                                       </span>
                                     ) : null}
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
+                                      {formatRoomsCountLabel(room.roomsCount)}
+                                    </span>
                                     <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
                                       {room.bathroomTypeLabel}
                                     </span>

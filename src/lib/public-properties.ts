@@ -28,7 +28,14 @@ import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { normalizeLocationName, searchLocationDirectory } from "@/lib/location-directory";
 import { normalizeLegacyFotoImageUrl, serializeMedia } from "@/lib/media";
-import { addDays, calculateRoomStayPrice, parseIsoDate, toIsoDate } from "@/lib/pricing";
+import {
+  addDays,
+  calculateRoomStayPrice,
+  normalizeRoomPriceType,
+  parseIsoDate,
+  toIsoDate,
+  type RoomPriceType,
+} from "@/lib/pricing";
 import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import {
   parsePublishedPropertySnapshot,
@@ -75,9 +82,13 @@ export type PublicCatalogQuery = {
 export type PublicCatalogRoomPreview = {
   id: string;
   title: string;
+  beds: number;
+  extraBeds: number;
+  roomsCount: number;
   areaSqm: number | null;
   maxGuests: number;
   priceFrom: number | null;
+  priceType: RoomPriceType | null;
   currency: string | null;
 };
 
@@ -106,6 +117,7 @@ export type PublicCatalogItem = {
   roomPreviews: PublicCatalogRoomPreview[];
   activeRoomsCount: number;
   minNightPrice: number | null;
+  minNightPriceType: RoomPriceType | null;
   currency: string | null;
   stayContext: {
     checkIn: string;
@@ -118,12 +130,15 @@ export type PublicCatalogItem = {
     currency: string;
     nights: number;
     nightly: number;
+    totalNightly: number;
+    priceType: RoomPriceType | "MIXED";
     roomTitle: string | null;
   } | null;
   roomSnapshot: {
     title: string;
     beds: number;
     extraBeds: number;
+    roomsCount: number;
     areaSqm: number | null;
   } | null;
   amenityHighlights: string[];
@@ -222,6 +237,7 @@ export type PublicPropertyCard = {
   rooms: ReturnType<typeof serializeRoom>[];
   activeRoomsCount: number;
   minNightPrice: number | null;
+  minNightPriceType: RoomPriceType | null;
   currency: string | null;
   avgRating: number;
   reviewsCount: number;
@@ -624,11 +640,17 @@ function getMinPriceByRooms(
   rooms: Array<{
     prices: Array<{
       price: Prisma.Decimal | number;
+      priceType?: RoomPriceType | string | null;
       currency: string;
     }>;
   }>,
-): { minNightPrice: number | null; currency: string | null } {
+): {
+  minNightPrice: number | null;
+  minNightPriceType: RoomPriceType | null;
+  currency: string | null;
+} {
   let minNightPrice: number | null = null;
+  let minNightPriceType: RoomPriceType | null = null;
   let currency: string | null = null;
 
   for (const room of rooms) {
@@ -636,12 +658,13 @@ function getMinPriceByRooms(
       const value = Number(priceItem.price);
       if (minNightPrice === null || value < minNightPrice) {
         minNightPrice = value;
+        minNightPriceType = normalizeRoomPriceType(priceItem.priceType);
         currency = priceItem.currency;
       }
     }
   }
 
-  return { minNightPrice, currency };
+  return { minNightPrice, minNightPriceType, currency };
 }
 
 type CatalogStayRange = {
@@ -655,6 +678,7 @@ type CatalogRoomPricePoint = {
   dateFrom: string;
   dateTo: string;
   price: number;
+  priceType: RoomPriceType;
   minGuests: number | null;
   currency: string;
 };
@@ -668,6 +692,7 @@ type CatalogRoomForStay = {
 
 type CatalogRoomCard = CatalogRoomForStay & {
   id: string;
+  roomsCount: number;
   areaSqm: Prisma.Decimal | number | null;
 };
 
@@ -704,11 +729,13 @@ export function resolvePublicCatalogDisplayState(property: {
     title: string;
     beds: number;
     extraBeds: number;
+    roomsCount?: number | null;
     areaSqm: Prisma.Decimal | number | null;
     prices: Array<{
       dateFrom: Date;
       dateTo: Date;
       price: Prisma.Decimal | number;
+      priceType?: RoomPriceType | string | null;
       minGuests: number | null;
       currency: string;
     }>;
@@ -726,11 +753,13 @@ export function resolvePublicCatalogDisplayState(property: {
         title: normalizeRoomTitle(room.title),
         beds: room.beds,
         extraBeds: room.extraBeds,
+        roomsCount: Math.max(1, room.roomsCount ?? 1),
         areaSqm: room.areaSqm,
         prices: room.prices.map((price) => ({
           dateFrom: price.dateFrom,
           dateTo: price.dateTo,
           price: price.price,
+          priceType: normalizeRoomPriceType(price.priceType),
           minGuests: price.minGuests ?? null,
           currency: price.currency,
         })),
@@ -740,11 +769,13 @@ export function resolvePublicCatalogDisplayState(property: {
         title: normalizeRoomTitle(room.title),
         beds: room.beds,
         extraBeds: room.extraBeds,
+        roomsCount: Math.max(1, room.roomsCount ?? 1),
         areaSqm: room.areaSqm,
         prices: room.prices.map((price) => ({
           dateFrom: toIsoDate(price.dateFrom),
           dateTo: toIsoDate(price.dateTo),
           price: Number(price.price),
+          priceType: normalizeRoomPriceType(price.priceType),
           minGuests: price.minGuests ?? null,
           currency: price.currency,
         })),
@@ -856,6 +887,8 @@ function getBestStayPriceByRooms(input: {
   currency: string;
   nights: number;
   nightly: number;
+  totalNightly: number;
+  priceType: RoomPriceType | "MIXED";
   roomTitle: string | null;
 } | null {
   const guests = Math.max(1, Math.floor(input.guests));
@@ -863,6 +896,8 @@ function getBestStayPriceByRooms(input: {
     total: number;
     currency: string;
     nights: number;
+    unitTotal: number;
+    priceType: RoomPriceType | "MIXED";
     roomTitle: string | null;
   } | null = null;
 
@@ -878,6 +913,7 @@ function getBestStayPriceByRooms(input: {
       prices: room.prices,
       checkIn: input.checkIn,
       checkOut: input.checkOut,
+      guests,
     });
 
     if (!calculation.ok || calculation.nights <= 0) {
@@ -898,6 +934,8 @@ function getBestStayPriceByRooms(input: {
         total: calculation.total,
         currency: calculation.currency,
         nights: calculation.nights,
+        unitTotal: calculation.unitTotal,
+        priceType: calculation.priceType,
         roomTitle: normalizeRoomTitle(room.title) || null,
       };
     }
@@ -911,7 +949,9 @@ function getBestStayPriceByRooms(input: {
     total: best.total,
     currency: best.currency,
     nights: best.nights,
-    nightly: Math.round(best.total / best.nights),
+    nightly: Math.round((best.priceType === "MIXED" ? best.total : best.unitTotal) / best.nights),
+    totalNightly: Math.round(best.total / best.nights),
+    priceType: best.priceType,
     roomTitle: best.roomTitle,
   };
 }
@@ -1131,6 +1171,7 @@ function pickRepresentativeRoom(
     title: string;
     beds: number;
     extraBeds: number;
+    roomsCount?: number | null;
     areaSqm: Prisma.Decimal | number | null;
   }>,
   preferredTitle: string | null,
@@ -1138,6 +1179,7 @@ function pickRepresentativeRoom(
   title: string;
   beds: number;
   extraBeds: number;
+  roomsCount: number;
   areaSqm: number | null;
 } | null {
   if (rooms.length === 0) {
@@ -1157,6 +1199,7 @@ function pickRepresentativeRoom(
     title: normalizeRoomTitle(room.title),
     beds: room.beds,
     extraBeds: room.extraBeds,
+    roomsCount: Math.max(1, room.roomsCount ?? 1),
     areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
   };
 }
@@ -1354,12 +1397,14 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         title: true,
         beds: true,
         extraBeds: true,
+        roomsCount: true,
         areaSqm: true,
         prices: {
           select: {
             dateFrom: true,
             dateTo: true,
             price: true,
+            priceType: true,
             minGuests: true,
             currency: true,
           },
@@ -1499,7 +1544,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         return null;
       }
 
-      const { minNightPrice, currency } = getMinPriceByRooms(
+      const { minNightPrice, minNightPriceType, currency } = getMinPriceByRooms(
         displayState.rooms.map((room) => ({
           prices: room.prices,
         })),
@@ -1515,6 +1560,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         property,
         displayState,
         minNightPrice,
+        minNightPriceType,
         currency,
         distanceKm,
         searchMatchKind,
@@ -1530,6 +1576,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         property: CatalogPropertyRow;
         displayState: ReturnType<typeof resolvePublicCatalogDisplayState>;
         minNightPrice: number | null;
+        minNightPriceType: RoomPriceType | null;
         currency: string | null;
         distanceKm: number | null;
         searchMatchKind: CatalogSearchMatchKind;
@@ -1719,6 +1766,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     const roomPreviews: PublicCatalogRoomPreview[] = displayState.rooms
       .map((room) => {
         let priceFrom: number | null = null;
+        let roomPriceType: RoomPriceType | null = null;
         let roomCurrency: string | null = null;
 
         for (const price of room.prices) {
@@ -1728,6 +1776,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           }
           if (priceFrom === null || value < priceFrom) {
             priceFrom = value;
+            roomPriceType = normalizeRoomPriceType(price.priceType);
             roomCurrency = price.currency;
           }
         }
@@ -1735,9 +1784,13 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         return {
           id: room.id,
           title: normalizeRoomTitle(room.title) || "Номер",
+          beds: room.beds,
+          extraBeds: room.extraBeds,
+          roomsCount: Math.max(1, room.roomsCount),
           areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
           maxGuests: Math.max(1, room.beds + room.extraBeds),
           priceFrom,
+          priceType: roomPriceType,
           currency: roomCurrency,
         };
       })
@@ -1796,6 +1849,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       roomPreviews,
       activeRoomsCount: displayState.rooms.length,
       minNightPrice: entry.minNightPrice,
+      minNightPriceType: entry.minNightPriceType,
       currency: entry.currency,
       stayContext: stayRange,
       stayPrice,
@@ -2047,24 +2101,27 @@ function buildPublicPropertyCardFromRecord(
   ]);
 
   // Min price: snapshot rooms have serialized prices (number), live rooms have Prisma.Decimal.
-  const { minNightPrice, currency } = snap
+  const { minNightPrice, minNightPriceType, currency } = snap
     ? (() => {
         let min: number | null = null;
+        let minType: RoomPriceType | null = null;
         let cur: string | null = null;
         for (const room of snap.rooms) {
           for (const price of room.prices) {
             if (min === null || price.price < min) {
               min = price.price;
+              minType = normalizeRoomPriceType(price.priceType);
               cur = price.currency;
             }
           }
         }
-        return { minNightPrice: min, currency: cur };
+        return { minNightPrice: min, minNightPriceType: minType, currency: cur };
       })()
     : getMinPriceByRooms(
         property.rooms.map((room) => ({
           prices: room.prices.map((priceItem) => ({
             price: priceItem.price,
+            priceType: priceItem.priceType,
             currency: priceItem.currency,
           })),
         })),
@@ -2175,6 +2232,7 @@ function buildPublicPropertyCardFromRecord(
     rooms: displayRooms,
     activeRoomsCount: displayRooms.length,
     minNightPrice,
+    minNightPriceType,
     currency,
     avgRating: Number(property.avgRating),
     reviewsCount: property.reviewsCount,

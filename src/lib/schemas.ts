@@ -20,6 +20,7 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
+import { defaultRoomPriceType, normalizeRoomPriceType, roomPriceTypeValues } from "@/lib/pricing";
 import { isManagedPublicUrl } from "@/lib/storage";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { ITINERARY_ITEM_LABEL_VALUES } from "@/types/excursions";
@@ -615,7 +616,11 @@ const roomBaseSchema = z
       .max(120, "Название номера слишком длинное"),
     beds: z.number().int().min(1, "Количество основных мест не может быть меньше 1").max(20),
     extraBeds: z.number().int().min(0).max(8),
-    roomsCount: z.number().int().min(1, "Количество номеров не может быть меньше 1").max(1),
+    roomsCount: z
+      .number()
+      .int()
+      .min(1, "Количество комнат не может быть меньше 1")
+      .max(20, "Количество комнат не может превышать 20"),
     areaSqm: z
       .number()
       .min(5, "Площадь номера должна быть не меньше 5 м²")
@@ -713,6 +718,13 @@ const roomBaseSchema = z
 export const createRoomSchema = roomBaseSchema;
 export const updateRoomSchema = roomBaseSchema;
 
+const roomPriceTypeSchema = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") {
+    return defaultRoomPriceType;
+  }
+  return normalizeRoomPriceType(value);
+}, z.enum(roomPriceTypeValues));
+
 const roomPriceBaseSchema = z
   .object({
     dateFrom: z.string().trim().regex(isoDateRegex, "Дата начала должна быть в формате YYYY-MM-DD"),
@@ -721,6 +733,7 @@ const roomPriceBaseSchema = z
       .trim()
       .regex(isoDateRegex, "Дата окончания должна быть в формате YYYY-MM-DD"),
     price: z.number().positive("Цена должна быть больше 0").max(1_000_000, "Цена слишком большая"),
+    priceType: roomPriceTypeSchema.default(defaultRoomPriceType),
     minGuests: z
       .number()
       .int()

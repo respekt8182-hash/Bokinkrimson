@@ -64,6 +64,7 @@ export async function GET(request: Request, context: RouteContext) {
         dateFrom: item.dateFrom,
         dateTo: item.dateTo,
         price: item.price,
+        priceType: item.priceType,
         minGuests: item.minGuests,
         currency: item.currency,
       })),
@@ -123,7 +124,10 @@ export async function POST(request: Request, context: RouteContext) {
   });
 
   if (overlap) {
-    return NextResponse.json({ error: "Период пересекается с уже заданной ценой" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Период пересекается с уже заданной ценой" },
+      { status: 409 },
+    );
   }
 
   const created = await db.roomPrice.create({
@@ -132,6 +136,7 @@ export async function POST(request: Request, context: RouteContext) {
       dateFrom,
       dateTo,
       price: data.price,
+      priceType: data.priceType,
       minGuests: data.minGuests ?? null,
       currency: data.currency,
     },

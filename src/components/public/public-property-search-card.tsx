@@ -16,6 +16,7 @@ import {
   Mountain,
   PanelsTopLeft,
   PawPrint,
+  RulerDimensionLine,
   Users,
   Van,
   WashingMachine,
@@ -27,6 +28,7 @@ import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
+import { getRoomPriceNightlySuffix } from "@/lib/pricing";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
@@ -52,6 +54,14 @@ function formatMoney(value: number, currency: string): string {
   return `${amount} ${currency}`;
 }
 
+function formatNightlyPrice(
+  value: number,
+  currency: string,
+  priceType: PublicCatalogItem["minNightPriceType"] | "MIXED",
+): string {
+  return `${formatMoney(value, currency)} ${getRoomPriceNightlySuffix(priceType)}`;
+}
+
 function formatNightsLabel(nights: number): string {
   const abs = Math.abs(nights) % 100;
   const last = abs % 10;
@@ -68,6 +78,34 @@ function formatReviewsLabel(value: number): string {
   if (last === 1) return `${value} отзыв`;
   if (last >= 2 && last <= 4) return `${value} отзыва`;
   return `${value} отзывов`;
+}
+
+function formatRoomArea(value: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatPlacesLabel(value: number): string {
+  const places = Math.max(1, Math.floor(value));
+  const abs = places % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${places} мест`;
+  if (last === 1) return `${places} место`;
+  if (last >= 2 && last <= 4) return `${places} места`;
+  return `${places} мест`;
+}
+
+function formatRoomCapacityLabel(beds: number, extraBeds: number): string {
+  const base = formatPlacesLabel(beds);
+  return extraBeds > 0 ? `${base} + ${extraBeds} доп.` : base;
+}
+
+function formatRoomLayoutLabel(areaSqm: number | null, roomsCount: number): string | null {
+  const parts: string[] = [];
+  if (areaSqm !== null) {
+    parts.push(`${formatRoomArea(areaSqm)} м²`);
+  }
+  parts.push(`${Math.max(1, Math.floor(roomsCount))}К`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function formatSeaDistance(label: string): string {
@@ -131,13 +169,21 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
   if (item.stayPrice) {
     if (hasDates && item.stayPrice.nights > 1) {
       return {
-        primary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за ночь`,
+        primary: formatNightlyPrice(
+          item.stayPrice.nightly,
+          item.stayPrice.currency,
+          item.stayPrice.priceType,
+        ),
         secondary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
         roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
       };
     }
     return {
-      primary: `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} / ночь`,
+      primary: formatNightlyPrice(
+        item.stayPrice.nightly,
+        item.stayPrice.currency,
+        item.stayPrice.priceType,
+      ),
       secondary: null,
       roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
     };
@@ -147,13 +193,13 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
     if (hasDates && nights > 1) {
       const estimatedTotal = item.minNightPrice * nights;
       return {
-        primary: `от ${formatMoney(item.minNightPrice, item.currency)} за ночь`,
+        primary: `от ${formatNightlyPrice(item.minNightPrice, item.currency, item.minNightPriceType)}`,
         secondary: `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
         roomLabel: item.roomSnapshot?.title ? `Номер: ${item.roomSnapshot.title}` : null,
       };
     }
     return {
-      primary: `от ${formatMoney(item.minNightPrice, item.currency)} / ночь`,
+      primary: `от ${formatNightlyPrice(item.minNightPrice, item.currency, item.minNightPriceType)}`,
       secondary: null,
       roomLabel: item.roomSnapshot?.title ? `Номер: ${item.roomSnapshot.title}` : null,
     };
@@ -221,7 +267,8 @@ function resolveStatusBadges(input: PublicCatalogItem): StatusBadge[] {
     input.stayPrice &&
     input.minNightPrice !== null &&
     input.minNightPrice > input.stayPrice.nightly &&
-    input.currency === input.stayPrice.currency
+    input.currency === input.stayPrice.currency &&
+    input.minNightPriceType === input.stayPrice.priceType
   ) {
     const discountPercent = Math.round((1 - input.stayPrice.nightly / input.minNightPrice) * 100);
     badges.push({
@@ -279,13 +326,18 @@ function PublicPropertySearchCardInner({
   const priceSummary = useMemo(() => buildPriceSummary(item), [item]);
   const badges = useMemo(() => resolveStatusBadges(item), [item]);
   const seaDistanceLabel = item.seaDistanceLabel?.trim() || null;
-  const roomCapacity = useMemo(() => {
-    const byRoomPreview = item.roomPreviews.reduce((max, room) => Math.max(max, room.maxGuests), 0);
-    if (byRoomPreview > 0) return byRoomPreview;
-    if (!item.roomSnapshot) return null;
-    const snapshotCapacity = item.roomSnapshot.beds + item.roomSnapshot.extraBeds;
-    return snapshotCapacity > 0 ? snapshotCapacity : null;
+  const representativeRoom = useMemo(() => {
+    if (item.roomSnapshot) {
+      return item.roomSnapshot;
+    }
+    return item.roomPreviews[0] ?? null;
   }, [item.roomPreviews, item.roomSnapshot]);
+  const roomCapacityText = representativeRoom
+    ? formatRoomCapacityLabel(representativeRoom.beds, representativeRoom.extraBeds)
+    : null;
+  const roomLayoutText = representativeRoom
+    ? formatRoomLayoutLabel(representativeRoom.areaSqm, representativeRoom.roomsCount)
+    : null;
   const starCount = Math.max(0, Math.min(5, Math.floor(item.starRating)));
   const isGrid = view === "grid";
 
@@ -518,10 +570,17 @@ function PublicPropertySearchCardInner({
   ) : null;
 
   // ── Capacity tag ──────────────────────────────────────────────────────
-  const capacityTag = roomCapacity ? (
+  const capacityTag = roomCapacityText ? (
     <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
       <AppIcon icon={Users} className="h-3 w-3" />
-      До {roomCapacity} гостей
+      {roomCapacityText}
+    </span>
+  ) : null;
+
+  const roomLayoutTag = roomLayoutText ? (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-sand/70 px-2 py-1 text-[11px] font-semibold text-olive/70">
+      <AppIcon icon={RulerDimensionLine} className="h-3 w-3" />
+      {roomLayoutText}
     </span>
   ) : null;
 
@@ -616,10 +675,11 @@ function PublicPropertySearchCardInner({
             {ratingBlock}
 
             {/* Distance tags */}
-            {(seaTag || capacityTag) && (
+            {(seaTag || capacityTag || roomLayoutTag) && (
               <div className="flex flex-wrap gap-1.5">
                 {seaTag}
                 {capacityTag}
+                {roomLayoutTag}
               </div>
             )}
 
@@ -714,10 +774,11 @@ function PublicPropertySearchCardInner({
             </p>
 
             {/* Distance + capacity tags */}
-            {(seaTag || capacityTag) && (
+            {(seaTag || capacityTag || roomLayoutTag) && (
               <div className="flex flex-wrap gap-1.5">
                 {seaTag}
                 {capacityTag}
+                {roomLayoutTag}
               </div>
             )}
 

@@ -48,4 +48,29 @@ describe("pricing helpers", () => {
       expect(fail.missingDates).toContain("2026-08-02");
     }
   });
+
+  it("multiplies per-person nightly prices by guests", () => {
+    const result = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-08-01",
+          dateTo: "2026-08-03",
+          price: 1200,
+          priceType: "PER_PERSON",
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-08-01",
+      checkOut: "2026-08-03",
+      guests: 3,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.priceType).toBe("PER_PERSON");
+      expect(result.unitTotal).toBe(2400);
+      expect(result.total).toBe(7200);
+      expect(result.breakdown[0]?.totalPrice).toBe(3600);
+    }
+  });
 });

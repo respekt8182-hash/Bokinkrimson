@@ -100,7 +100,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   });
 
   if (overlap) {
-    return NextResponse.json({ error: "Период пересекается с уже заданной ценой" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Период пересекается с уже заданной ценой" },
+      { status: 409 },
+    );
   }
 
   const updated = await db.roomPrice.update({
@@ -109,6 +112,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       dateFrom,
       dateTo,
       price: data.price,
+      priceType: data.priceType,
       minGuests: data.minGuests ?? null,
       currency: data.currency,
     },

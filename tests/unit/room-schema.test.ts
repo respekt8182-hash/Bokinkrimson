@@ -80,9 +80,9 @@ describe("room schema bed logic", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.message.includes("нельзя использовать"))).toBe(
-        true,
-      );
+      expect(
+        result.error.issues.some((issue) => issue.message.includes("нельзя использовать")),
+      ).toBe(true);
     }
   });
 
@@ -102,7 +102,9 @@ describe("room schema bed logic", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(
-        result.error.issues.some((issue) => issue.message.includes("количество основных мест фиксировано")),
+        result.error.issues.some((issue) =>
+          issue.message.includes("количество основных мест фиксировано"),
+        ),
       ).toBe(true);
     }
   });
@@ -135,6 +137,16 @@ describe("room schema bed logic", () => {
     const result = createRoomSchema.safeParse(
       makeRoomPayload({
         areaSqm: null,
+      }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a room category with several rooms inside", () => {
+    const result = createRoomSchema.safeParse(
+      makeRoomPayload({
+        roomsCount: 3,
       }),
     );
 

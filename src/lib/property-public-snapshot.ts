@@ -1,13 +1,8 @@
 // Snapshot helpers that preserve the published property version while the owner edits pending changes.
-import {
-  MediaType,
-  PetsPolicy,
-  Prisma,
-  PropertyStatus,
-  SmokingPolicy,
-} from "@prisma/client";
+import { MediaType, PetsPolicy, Prisma, PropertyStatus, SmokingPolicy } from "@prisma/client";
 import type { DbClientLike } from "@/lib/db";
 import { serializeMedia, type SerializedMedia } from "@/lib/media";
+import { normalizeSerializedRoomPrice } from "@/lib/pricing";
 import {
   normalizeSerializedRoomBathroom,
   roomInclude,
@@ -177,7 +172,13 @@ export function parsePublishedPropertySnapshot(
   const snapshot = candidate as PublishedPropertySnapshot;
   return {
     ...snapshot,
-    rooms: snapshot.rooms.map(normalizeSerializedRoomBathroom),
+    rooms: snapshot.rooms.map((room) =>
+      normalizeSerializedRoomBathroom({
+        ...room,
+        roomsCount: Math.max(1, room.roomsCount ?? 1),
+        prices: room.prices.map(normalizeSerializedRoomPrice),
+      }),
+    ),
   };
 }
 

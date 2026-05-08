@@ -1,6 +1,13 @@
 "use client";
 
-import { Bath, BedDouble, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
+import {
+  Bath,
+  BedDouble,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+  RulerDimensionLine,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RoomMediaManager } from "@/components/media/room-media-manager";
@@ -67,7 +74,7 @@ type RoomEditorSectionId = "general" | "capacity" | "beds" | "extra" | "bathroom
 type RoomCardDetails = {
   title: string;
   bedsText: string;
-  areaText: string | null;
+  layoutText: string;
   duplicateKey: string;
 };
 
@@ -82,9 +89,10 @@ const MAX_BEDS_PER_SET = 20;
 const MAX_BED_ROWS_PER_SET = 10;
 const MAX_BED_SETS = 10;
 const MAX_TOTAL_GUESTS = 20;
+const MAX_ROOMS_IN_ROOM = 20;
 const DEFAULT_BED_TYPE: BedTypeId = "double_queen";
 const MOBILE_ROOMS_PAGE_SIZE = 4;
-const DESKTOP_ROOMS_PAGE_SIZE = 5;
+const DESKTOP_ROOMS_PAGE_SIZE = 6;
 function toFloatOrNull(value: string): number | null {
   const normalized = value.replace(",", ".").trim();
   if (!normalized) {
@@ -105,6 +113,10 @@ function toIntOrNull(value: string): number | null {
 
 function formatAreaSqmForTitle(areaSqm: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(areaSqm);
+}
+
+function formatRoomsCompactLabel(value: number): string {
+  return `${Math.max(1, Math.floor(value))}К`;
 }
 
 function formatBedsLabel(value: number): string {
@@ -383,6 +395,7 @@ export function RoomFundManager({
   const [beds, setBeds] = useState(() => resolveMainPlacesForRoomType(defaultRoomMeta.roomType));
   const [extraBeds, setExtraBeds] = useState(0);
   const [areaSqmInput, setAreaSqmInput] = useState("");
+  const [roomLayoutRoomsCount, setRoomLayoutRoomsCount] = useState(1);
   const [bedSets, setBedSets] = useState<BedSet[]>(() =>
     buildDefaultBedSetsForRoomType(defaultRoomMeta.roomType),
   );
@@ -527,12 +540,19 @@ export function RoomFundManager({
       : parsedAreaSqm !== null && !isAreaSqmValid
         ? "Введите площадь от 5 до 5000 м²."
         : "";
+  const isRoomLayoutRoomsCountValid =
+    roomLayoutRoomsCount >= 1 && roomLayoutRoomsCount <= MAX_ROOMS_IN_ROOM;
   const editingRoom = useMemo(
     () => (editingRoomId ? (rooms.find((room) => room.id === editingRoomId) ?? null) : null),
     [editingRoomId, rooms],
   );
   const canSaveRoom =
-    Boolean(editingRoomId) && !isCreatingRoom && !isSaving && isFloorValid && isAreaSqmValid;
+    Boolean(editingRoomId) &&
+    !isCreatingRoom &&
+    !isSaving &&
+    isFloorValid &&
+    isAreaSqmValid &&
+    isRoomLayoutRoomsCountValid;
   const checklistItems = useMemo<
     Array<{ id: RoomEditorSectionId; label: string; done: boolean }>
   >(() => {
@@ -541,8 +561,10 @@ export function RoomFundManager({
     const areaSqm = toFloatOrNull(areaSqmInput);
     const floorIsValid = roomFloor !== null && roomFloor >= 1 && roomFloor <= 99;
     const areaSqmIsValid = areaSqm !== null && areaSqm >= 5 && areaSqm <= 5000;
+    const roomsCountIsValid =
+      roomLayoutRoomsCount >= 1 && roomLayoutRoomsCount <= MAX_ROOMS_IN_ROOM;
     const generalSettingsDone = Boolean(
-      roomType && roomName.length > 0 && floorIsValid && areaSqmIsValid,
+      roomType && roomName.length > 0 && floorIsValid && areaSqmIsValid && roomsCountIsValid,
     );
     const capacityDone =
       beds >= 1 &&
@@ -599,6 +621,7 @@ export function RoomFundManager({
     sharedBathroomLocations.length,
     sharedToiletLocations.length,
     areaSqmInput,
+    roomLayoutRoomsCount,
   ]);
   const completedChecklistCount = useMemo(
     () => checklistItems.filter((item) => item.done).length,
@@ -750,6 +773,7 @@ export function RoomFundManager({
     setBeds(resolveMainPlacesForRoomType(defaultRoomMeta.roomType));
     setExtraBeds(0);
     setAreaSqmInput("");
+    setRoomLayoutRoomsCount(1);
     setBedSets(buildDefaultBedSetsForRoomType(defaultRoomMeta.roomType));
     setHasAdditionalPlaces(false);
     setSelectedAdditionalPlaceTypes([]);
@@ -814,6 +838,7 @@ export function RoomFundManager({
       setBeds(resolveMainPlacesForRoomType(meta.roomType, room.beds));
       setExtraBeds(room.extraBeds);
       setAreaSqmInput(room.areaSqm === null ? "" : String(room.areaSqm));
+      setRoomLayoutRoomsCount(Math.max(1, Math.min(MAX_ROOMS_IN_ROOM, room.roomsCount)));
       setBedSets(buildBedSetsFromMeta(meta, meta.roomType));
       setHasAdditionalPlaces(meta.hasAdditionalPlaces);
       setSelectedAdditionalPlaceTypes(meta.additionalPlaceTypes);
@@ -864,16 +889,12 @@ export function RoomFundManager({
 
       const body = (await response.json()) as { item: SerializedRoom };
       const savedRoom = body.item;
-      const nextRoomsCount = rooms.some((item) => item.id === savedRoom.id)
-        ? rooms.length
-        : rooms.length + 1;
 
       setRooms((prev) =>
         prev.some((item) => item.id === savedRoom.id)
           ? prev.map((item) => (item.id === savedRoom.id ? savedRoom : item))
           : [...prev, savedRoom],
       );
-      setCurrentRoomsPage(Math.max(1, Math.ceil(nextRoomsCount / roomsPerPage)));
       startEdit(savedRoom);
       await notifyChanged();
     } catch {
@@ -886,7 +907,7 @@ export function RoomFundManager({
         setIsCreatingRoom(false);
       }
     }
-  }, [notifyChanged, propertyId, resetForm, rooms, roomsPerPage, scrollToEditor, startEdit]);
+  }, [notifyChanged, propertyId, resetForm, scrollToEditor, startEdit]);
 
   const openCreateForm = useCallback(() => {
     void createRoomDraft();
@@ -1130,6 +1151,10 @@ export function RoomFundManager({
       setError("Площадь номера должна быть от 5 до 5000 м²");
       return;
     }
+    if (!isRoomLayoutRoomsCountValid) {
+      setError(`Количество комнат должно быть от 1 до ${MAX_ROOMS_IN_ROOM}`);
+      return;
+    }
 
     const title = buildRoomTitle(roomName, roomFloor);
 
@@ -1220,7 +1245,7 @@ export function RoomFundManager({
       title,
       beds,
       extraBeds,
-      roomsCount: 1,
+      roomsCount: roomLayoutRoomsCount,
       areaSqm,
       bathroomType: resolveBathroomType(),
       // Room amenities are managed on the dedicated "Удобства в номерах" screen.
@@ -1265,7 +1290,6 @@ export function RoomFundManager({
       const savedRoom = body.item;
 
       setRooms((prev) => prev.map((item) => (item.id === savedRoom.id ? savedRoom : item)));
-      setCurrentRoomsPage(1);
       closeEditor();
 
       await notifyChanged();
@@ -1388,16 +1412,20 @@ export function RoomFundManager({
       "Номер";
     const areaTitle = room.areaSqm === null ? null : `${formatAreaSqmForTitle(room.areaSqm)} м²`;
     const title = areaTitle ? `${baseTitle} · ${areaTitle}` : baseTitle;
+    const roomsTitle = formatRoomsCompactLabel(room.roomsCount);
     const primaryBedUnits = resolvePrimaryBedUnits(room, roomMeta);
     const bedsText =
       room.extraBeds > 0
         ? `В номере: ${formatBedsLabel(primaryBedUnits)} + ${formatExtraPlacesLabel(room.extraBeds)}`
         : `В номере: ${formatBedsLabel(primaryBedUnits)}`;
-    const areaText = room.areaSqm === null ? "Площадь: не указана" : null;
+    const layoutText =
+      room.areaSqm === null
+        ? `Площадь: не указана · ${roomsTitle}`
+        : `${areaTitle} · ${roomsTitle}`;
 
-    const duplicateKey = `${baseTitle.trim().toLowerCase()}::${room.areaSqm ?? "no-area"}`;
+    const duplicateKey = `${baseTitle.trim().toLowerCase()}::${room.areaSqm ?? "no-area"}::${room.roomsCount}`;
 
-    return { title, bedsText, areaText, duplicateKey };
+    return { title, bedsText, layoutText, duplicateKey };
   }
 
   function openRoomCard(room: SerializedRoom) {
@@ -1544,7 +1572,7 @@ export function RoomFundManager({
                     data-room-editor-section="capacity"
                     className="min-w-0 space-y-3 scroll-mt-32"
                   >
-                    <div className="grid min-w-0 gap-3 md:grid-cols-3">
+                    <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="min-w-0 flex flex-col gap-2 rounded-xl border border-olive/12 bg-white p-3">
                         <p className="text-sm font-semibold text-olive">Основные места</p>
                         <div className="flex items-center gap-1 rounded-lg bg-cream/70 px-2 py-1.5">
@@ -1636,6 +1664,38 @@ export function RoomFundManager({
                           <span className="text-sm text-red-600">{areaSqmErrorText}</span>
                         ) : null}
                       </label>
+
+                      <div className="min-w-0 flex flex-col gap-2 rounded-xl border border-olive/12 bg-white p-3">
+                        <p className="text-sm font-semibold text-olive">Количество комнат</p>
+                        <div className="flex items-center gap-1 rounded-lg bg-cream/70 px-2 py-1.5">
+                          <Button
+                            variant="ghost"
+                            className="h-8 w-8 rounded-lg px-0 py-0 text-lg"
+                            disabled={roomLayoutRoomsCount <= 1}
+                            onClick={() => setRoomLayoutRoomsCount((prev) => Math.max(1, prev - 1))}
+                          >
+                            −
+                          </Button>
+                          <span className="flex-1 text-center text-lg font-bold text-olive">
+                            {roomLayoutRoomsCount}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            className="h-8 w-8 rounded-lg px-0 py-0 text-lg"
+                            disabled={roomLayoutRoomsCount >= MAX_ROOMS_IN_ROOM}
+                            onClick={() =>
+                              setRoomLayoutRoomsCount((prev) =>
+                                Math.min(MAX_ROOMS_IN_ROOM, prev + 1),
+                              )
+                            }
+                          >
+                            +
+                          </Button>
+                        </div>
+                        <p className="text-xs text-olive/55">
+                          {formatRoomsCompactLabel(roomLayoutRoomsCount)}
+                        </p>
+                      </div>
                     </div>
                     <p className="text-sm text-olive/70">
                       Итоговая вместимость номера:{" "}
@@ -2467,9 +2527,13 @@ export function RoomFundManager({
                         {cardDetails.title}
                       </h4>
                       <p className="mt-1 text-sm text-olive/78">{cardDetails.bedsText}</p>
-                      {cardDetails.areaText ? (
-                        <p className="mt-0.5 text-xs text-olive/65">{cardDetails.areaText}</p>
-                      ) : null}
+                      <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-olive/65">
+                        <AppIcon
+                          icon={RulerDimensionLine}
+                          className="h-3.5 w-3.5 shrink-0 text-olive/40"
+                        />
+                        <span>{cardDetails.layoutText}</span>
+                      </p>
                     </div>
                   </div>
                 </article>

@@ -6,12 +6,41 @@ import type { Prisma } from "@prisma/client";
 // - calculates stay total by nightly periods
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+export const roomPriceTypeValues = ["PER_ROOM", "PER_PERSON"] as const;
+export type RoomPriceType = (typeof roomPriceTypeValues)[number];
+export type RoomPriceCalculationType = RoomPriceType | "MIXED";
+
+export const defaultRoomPriceType: RoomPriceType = "PER_ROOM";
+
+export function normalizeRoomPriceType(value: unknown): RoomPriceType {
+  if (value === "PER_PERSON" || value === "per_person") {
+    return "PER_PERSON";
+  }
+
+  return defaultRoomPriceType;
+}
+
+export function getRoomPriceUnitText(priceType: unknown): string {
+  return normalizeRoomPriceType(priceType) === "PER_PERSON" ? "за человека" : "за комнату";
+}
+
+export function getRoomPriceNightlySuffix(
+  priceType: RoomPriceCalculationType | null | undefined,
+): string {
+  return priceType === "PER_PERSON" ? "/ чел/ночь" : "/ ночь";
+}
+
+export function getRoomPriceShortUnit(priceType: unknown): string {
+  return normalizeRoomPriceType(priceType) === "PER_PERSON" ? "чел" : "комн.";
+}
+
 export type SerializedRoomPrice = {
   id: string;
   roomId: string;
   dateFrom: string;
   dateTo: string;
   price: number;
+  priceType: RoomPriceType;
   minGuests: number | null;
   currency: string;
   createdAt: string;
@@ -23,8 +52,16 @@ export type RoomPriceCalculation =
       ok: true;
       nights: number;
       total: number;
+      unitTotal: number;
       currency: string;
-      breakdown: Array<{ date: string; price: number }>;
+      priceType: RoomPriceCalculationType;
+      guests: number;
+      breakdown: Array<{
+        date: string;
+        price: number;
+        priceType: RoomPriceType;
+        totalPrice: number;
+      }>;
     }
   | {
       ok: false;
@@ -70,6 +107,7 @@ export function serializeRoomPrice(price: {
   dateFrom: Date;
   dateTo: Date;
   price: Prisma.Decimal;
+  priceType?: RoomPriceType | string | null;
   minGuests?: number | null;
   currency: string;
   createdAt: Date;
@@ -81,10 +119,18 @@ export function serializeRoomPrice(price: {
     dateFrom: toIsoDate(price.dateFrom),
     dateTo: toIsoDate(price.dateTo),
     price: Number(price.price),
+    priceType: normalizeRoomPriceType(price.priceType),
     minGuests: price.minGuests ?? null,
     currency: price.currency,
     createdAt: price.createdAt.toISOString(),
     updatedAt: price.updatedAt.toISOString(),
+  };
+}
+
+export function normalizeSerializedRoomPrice(price: SerializedRoomPrice): SerializedRoomPrice {
+  return {
+    ...price,
+    priceType: normalizeRoomPriceType(price.priceType),
   };
 }
 
@@ -93,11 +139,13 @@ export function calculateRoomStayPrice(input: {
     dateFrom: string;
     dateTo: string;
     price: number;
+    priceType?: RoomPriceType | string | null;
     minGuests?: number | null;
     currency: string;
   }>;
   checkIn: string;
   checkOut: string;
+  guests?: number;
 }): RoomPriceCalculation {
   const checkInDate = parseIsoDate(input.checkIn);
   const checkOutDate = parseIsoDate(input.checkOut);
@@ -111,15 +159,27 @@ export function calculateRoomStayPrice(input: {
   }
 
   const nights = Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / 86400000);
+  const guests =
+    typeof input.guests === "number" && Number.isFinite(input.guests)
+      ? Math.max(1, Math.floor(input.guests))
+      : 1;
   const normalizedPrices = input.prices.map((price) => ({
     ...price,
     dateFrom: price.dateFrom,
     dateTo: price.dateTo,
+    priceType: normalizeRoomPriceType(price.priceType),
   }));
 
   const missingDates: string[] = [];
-  const breakdown: Array<{ date: string; price: number }> = [];
+  const breakdown: Array<{
+    date: string;
+    price: number;
+    priceType: RoomPriceType;
+    totalPrice: number;
+  }> = [];
+  const priceTypes = new Set<RoomPriceType>();
   let total = 0;
+  let unitTotal = 0;
   let currency = "RUB";
 
   for (let i = 0; i < nights; i += 1) {
@@ -132,9 +192,13 @@ export function calculateRoomStayPrice(input: {
       continue;
     }
 
-    total += matched.price;
+    const priceType = normalizeRoomPriceType(matched.priceType);
+    const totalPrice = priceType === "PER_PERSON" ? matched.price * guests : matched.price;
+    unitTotal += matched.price;
+    total += totalPrice;
     currency = matched.currency;
-    breakdown.push({ date: day, price: matched.price });
+    priceTypes.add(priceType);
+    breakdown.push({ date: day, price: matched.price, priceType, totalPrice });
   }
 
   if (missingDates.length > 0) {
@@ -149,7 +213,10 @@ export function calculateRoomStayPrice(input: {
     ok: true,
     nights,
     total,
+    unitTotal,
     currency,
+    priceType: priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED",
+    guests,
     breakdown,
   };
 }

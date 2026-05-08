@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  defaultRoomPriceType,
+  getRoomPriceShortUnit,
+  getRoomPriceUnitText,
+  type RoomPriceType,
+} from "@/lib/pricing";
 import type { SerializedRoom } from "@/lib/rooms";
 
 // Owner-side UI for step 10:
@@ -39,6 +45,7 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [priceInput, setPriceInput] = useState("");
+  const [priceType, setPriceType] = useState<RoomPriceType>(defaultRoomPriceType);
   const [minGuestsInput, setMinGuestsInput] = useState("");
   const [currency, setCurrency] = useState("RUB");
   const [previewCheckIn, setPreviewCheckIn] = useState("");
@@ -84,6 +91,7 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
     setDateFrom("");
     setDateTo("");
     setPriceInput("");
+    setPriceType(defaultRoomPriceType);
     setMinGuestsInput("");
     setCurrency("RUB");
   }
@@ -140,6 +148,7 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
           dateFrom,
           dateTo,
           price: normalizedPrice,
+          priceType,
           minGuests: normalizedMinGuests,
           currency,
         }),
@@ -243,7 +252,9 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
                 step="0.01"
                 value={priceInput}
                 onChange={(event) => setPriceInput(event.target.value)}
-                placeholder="Цена за ночь"
+                placeholder={
+                  priceType === "PER_PERSON" ? "Цена за человека/ночь" : "Цена за комнату/ночь"
+                }
               />
               <Input
                 type="number"
@@ -259,6 +270,29 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
                 placeholder="RUB"
                 maxLength={3}
               />
+            </div>
+
+            <div className="grid max-w-md grid-cols-2 gap-1 rounded-2xl border border-olive/12 bg-white p-1">
+              {(["PER_ROOM", "PER_PERSON"] as const).map((type) => {
+                const isSelected = priceType === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setPriceType(type)}
+                    className={[
+                      "h-10 rounded-xl px-3 text-xs font-semibold transition sm:text-sm",
+                      isSelected
+                        ? "bg-primary text-white"
+                        : "text-olive/70 hover:bg-cream hover:text-olive",
+                    ].join(" ")}
+                    aria-pressed={isSelected}
+                  >
+                    <span className="hidden sm:inline">{getRoomPriceUnitText(type)}</span>
+                    <span className="sm:hidden">/{getRoomPriceShortUnit(type)}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex flex-wrap gap-2">

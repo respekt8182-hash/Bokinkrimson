@@ -31,6 +31,7 @@ import { PublicPropertySearchCard } from "@/components/public/public-property-se
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import { NEARBY_CATALOG_RADIUS_KM } from "@/lib/catalog-radius";
+import { normalizeRoomPriceType, type RoomPriceCalculationType } from "@/lib/pricing";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 import {
   setPublicMobileBottomNavForceHidden,
@@ -121,13 +122,22 @@ function formatRuCount(value: number, one: string, few: string, many: string): s
   return `${ruNumberFormat.format(value)} ${label}`;
 }
 
-function formatMapPrice(value: number, currency: string | null): string {
+function normalizeMapPriceType(value: unknown): RoomPriceCalculationType {
+  return value === "MIXED" ? "MIXED" : normalizeRoomPriceType(value);
+}
+
+function formatMapPrice(
+  value: number,
+  currency: string | null,
+  priceType: RoomPriceCalculationType | null,
+): string {
   const amount = ruNumberFormat.format(value);
+  const suffix = priceType === "PER_PERSON" ? "/чел" : "";
   if (currency === "RUB") {
-    return `${amount} ₽`;
+    return `${amount} ₽${suffix}`;
   }
 
-  return currency ? `${amount} ${currency}` : amount;
+  return currency ? `${amount} ${currency}${suffix}` : `${amount}${suffix}`;
 }
 
 function sanitizePoint(point: Partial<MapPointResponse>): MapPointResponse {
@@ -159,6 +169,7 @@ function sanitizePoint(point: Partial<MapPointResponse>): MapPointResponse {
     latitude,
     longitude,
     pricePerNight,
+    priceType: normalizeMapPriceType(point.priceType),
     priceFrom,
     currency: typeof point.currency === "string" ? point.currency : "RUB",
     addressShort: typeof point.addressShort === "string" ? point.addressShort : "Крым",
@@ -430,6 +441,7 @@ export function PublicHousingResultsWithMap({
           latitude: item.latitude,
           longitude: item.longitude,
           pricePerNight: item.stayPrice?.nightly ?? item.minNightPrice,
+          priceType: item.stayPrice?.priceType ?? item.minNightPriceType,
           priceFrom: item.minNightPrice,
           currency: item.stayPrice?.currency ?? item.currency,
           addressShort: item.locationName,
@@ -476,7 +488,9 @@ export function PublicHousingResultsWithMap({
         latitude: point.latitude,
         longitude: point.longitude,
         priceLabel:
-          point.pricePerNight !== null ? formatMapPrice(point.pricePerNight, point.currency) : null,
+          point.pricePerNight !== null
+            ? formatMapPrice(point.pricePerNight, point.currency, point.priceType)
+            : null,
         previewImageUrl: point.photos[0] ?? null,
         rating: point.rating,
         reviewsCount: point.reviewsCount,

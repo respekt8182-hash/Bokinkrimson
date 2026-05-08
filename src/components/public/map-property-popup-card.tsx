@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
+import { getRoomPriceNightlySuffix, type RoomPriceCalculationType } from "@/lib/pricing";
 import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
 export type MapPopupPropertyItem = {
@@ -14,6 +15,7 @@ export type MapPopupPropertyItem = {
   title: string;
   path: string;
   pricePerNight: number | null;
+  priceType: RoomPriceCalculationType | null;
   currency: string | null;
   addressShort: string | null;
   photos: string[];
@@ -38,6 +40,10 @@ function formatMoney(value: number, currency: string | null): string {
   }
 
   return currency ? `${amount} ${currency}` : amount;
+}
+
+function formatPriceUnit(priceType: RoomPriceCalculationType | null): string {
+  return priceType === "PER_PERSON" ? getRoomPriceNightlySuffix(priceType) : "за 1 сутки";
 }
 
 function formatReviewsLabel(value: number): string {
@@ -130,7 +136,9 @@ export function MapPropertyPopupCard({
                 ? `${formatMoney(item.pricePerNight, item.currency)}`
                 : "Цена по запросу"}
               {item.pricePerNight !== null ? (
-                <span className="ml-1 text-[11px] font-medium text-olive/48">за 1 сутки</span>
+                <span className="ml-1 text-[11px] font-medium text-olive/48">
+                  {formatPriceUnit(item.priceType)}
+                </span>
               ) : null}
             </p>
           </div>
@@ -228,9 +236,7 @@ export function MapPropertyPopupCard({
           )}
         </div>
 
-        <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-olive">
-          {item.title}
-        </h3>
+        <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-olive">{item.title}</h3>
         <p className="line-clamp-1 text-xs text-olive/58">{item.addressShort ?? "Крым"}</p>
 
         <p className="text-[16px] font-extrabold leading-tight text-olive">
@@ -238,7 +244,9 @@ export function MapPropertyPopupCard({
             ? `${formatMoney(item.pricePerNight, item.currency)}`
             : "Цена по запросу"}
           {item.pricePerNight !== null ? (
-            <span className="ml-1 text-[11px] font-medium text-olive/48">за 1 сутки</span>
+            <span className="ml-1 text-[11px] font-medium text-olive/48">
+              {formatPriceUnit(item.priceType)}
+            </span>
           ) : null}
         </p>
       </div>

@@ -21,7 +21,17 @@ import { Input } from "@/components/ui/input";
 import { SingleDatePopoverField } from "@/components/ui/single-date-popover-field";
 import { cn } from "@/lib/cn";
 import type { SerializedRoomOccupancy } from "@/lib/occupancy";
-import { addDays, parseIsoDate, toIsoDate, type SerializedRoomPrice } from "@/lib/pricing";
+import {
+  addDays,
+  defaultRoomPriceType,
+  getRoomPriceShortUnit,
+  getRoomPriceUnitText,
+  normalizeRoomPriceType,
+  parseIsoDate,
+  toIsoDate,
+  type RoomPriceType,
+  type SerializedRoomPrice,
+} from "@/lib/pricing";
 import type { SerializedChessboardRoom } from "@/lib/rooms";
 
 type ChessboardPropertyItem = {
@@ -110,6 +120,7 @@ type PriceFormState = {
   dateFrom: string;
   dateTo: string;
   priceInput: string;
+  priceType: RoomPriceType;
   currency: string;
   minGuestsInput: string;
   editingPriceId: string | null;
@@ -594,7 +605,8 @@ const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0
 
 function formatPriceLabel(price: SerializedRoomPrice): string {
   const amount = ruNumberFormat.format(price.price);
-  return `${amount} ${price.currency}`;
+  const unitSuffix = normalizeRoomPriceType(price.priceType) === "PER_PERSON" ? "/чел" : "";
+  return `${amount} ${price.currency}${unitSuffix}`;
 }
 
 function truncateToLength(value: string, maxLength: number): string {
@@ -1067,6 +1079,9 @@ export function PropertyChessboardWorkspace({
         dateFrom: sourcePrice?.dateFrom ?? dateFrom,
         dateTo: sourcePrice?.dateTo ?? dateTo,
         priceInput: sourcePrice ? String(sourcePrice.price) : "",
+        priceType: sourcePrice
+          ? normalizeRoomPriceType(sourcePrice.priceType)
+          : defaultRoomPriceType,
         currency: sourcePrice?.currency ?? "RUB",
         minGuestsInput:
           sourcePrice?.minGuests === null || sourcePrice?.minGuests === undefined
@@ -1578,6 +1593,7 @@ export function PropertyChessboardWorkspace({
       dateFrom,
       dateTo,
       priceInput: sourcePrice ? String(sourcePrice.price) : "",
+      priceType: sourcePrice ? normalizeRoomPriceType(sourcePrice.priceType) : defaultRoomPriceType,
       currency: sourcePrice?.currency ?? "RUB",
       minGuestsInput:
         sourcePrice?.minGuests === null || sourcePrice?.minGuests === undefined
@@ -2044,6 +2060,7 @@ export function PropertyChessboardWorkspace({
           dateFrom: priceForm.dateFrom,
           dateTo: priceForm.dateTo,
           price: normalizedPrice,
+          priceType: priceForm.priceType,
           minGuests,
           currency: priceForm.currency.trim().toUpperCase() || "RUB",
         }),
@@ -2150,6 +2167,7 @@ export function PropertyChessboardWorkspace({
         dateFrom: maxIsoDate(price.dateFrom, duplicatePricesForm.dateFrom),
         dateTo: minIsoDate(price.dateTo, duplicatePricesForm.dateTo),
         price: price.price,
+        priceType: price.priceType,
         minGuests: price.minGuests,
         currency: price.currency,
       }));
@@ -3244,7 +3262,11 @@ export function PropertyChessboardWorkspace({
               <section className={modalSectionClass}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1.5">
-                    <span className={modalMetaLabelClass}>Цена за ночь</span>
+                    <span className={modalMetaLabelClass}>
+                      {priceForm.priceType === "PER_PERSON"
+                        ? "Цена за человека/ночь"
+                        : "Цена за комнату/ночь"}
+                    </span>
                     <Input
                       className={modalTextInputClass}
                       type="number"
@@ -3267,6 +3289,31 @@ export function PropertyChessboardWorkspace({
                       maxLength={3}
                     />
                   </label>
+                </div>
+                <div className="mt-3 space-y-1.5">
+                  <span className={modalMetaLabelClass}>Как считать цену</span>
+                  <div className="grid grid-cols-2 gap-1 rounded-2xl border border-olive/12 bg-white p-1 shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]">
+                    {(["PER_ROOM", "PER_PERSON"] as const).map((type) => {
+                      const isSelected = priceForm.priceType === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => updatePriceForm({ priceType: type })}
+                          className={cn(
+                            "h-10 rounded-xl px-3 text-xs font-semibold transition sm:text-sm",
+                            isSelected
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-olive/70 hover:bg-cream hover:text-olive",
+                          )}
+                          aria-pressed={isSelected}
+                        >
+                          <span className="hidden sm:inline">{getRoomPriceUnitText(type)}</span>
+                          <span className="sm:hidden">/{getRoomPriceShortUnit(type)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <label className="mt-3 block space-y-1.5">
                   <span className={modalMetaLabelClass}>Минимум гостей (необязательно)</span>

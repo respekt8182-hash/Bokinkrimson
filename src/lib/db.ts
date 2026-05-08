@@ -62,6 +62,7 @@ const PROPERTY_COMPAT_COLUMNS = [
   "paidAt",
 ] as const;
 const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
+const ROOM_PRICE_COMPAT_COLUMNS = ["priceType"] as const;
 const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
 const PAYMENT_COMPAT_COLUMNS = ["transferId", "tariffType", "paidFrom"] as const;
 
@@ -147,6 +148,14 @@ const SCHEMA_COMPAT_MODELS = {
     },
     logContext: "room-schema-compat",
     label: "Room",
+  },
+  RoomPrice: {
+    columns: ROOM_PRICE_COMPAT_COLUMNS,
+    defaults: {
+      priceType: "PER_ROOM",
+    },
+    logContext: "room-price-schema-compat",
+    label: "RoomPrice",
   },
   Review: {
     columns: REVIEW_COMPAT_COLUMNS,
