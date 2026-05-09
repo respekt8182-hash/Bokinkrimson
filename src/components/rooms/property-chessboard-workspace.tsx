@@ -150,6 +150,7 @@ const monthLabels = [
 ] as const;
 const minVisibleDaysCount = 28;
 const maxBoardRangeDaysCount = 370;
+const mobileBoardRoomsPerPage = 6;
 const mobileRoomsPerPage = 3;
 const dayCellWidthDesktopPx = 44;
 const dayCellWidthTabletPx = 42;
@@ -753,8 +754,11 @@ function compareRoomsForChessboard(
   });
 }
 
-function addGroupOffsets(groups: GroupedRoomBucket[]): GroupedRoomBucketWithOffset[] {
-  let offset = 0;
+function addGroupOffsets(
+  groups: GroupedRoomBucket[],
+  initialOffset = 0,
+): GroupedRoomBucketWithOffset[] {
+  let offset = initialOffset;
 
   return groups.map((group) => {
     const result = { ...group, rowOffset: offset };
@@ -879,6 +883,7 @@ export function PropertyChessboardWorkspace({
   const [isDuplicatingPrices, setIsDuplicatingPrices] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
+  const [mobileBoardRoomPage, setMobileBoardRoomPage] = useState(0);
   const [bookingRoomPage, setBookingRoomPage] = useState(0);
   const [expandedMobileRailKey, setExpandedMobileRailKey] = useState<string | null>(null);
   const [dayCellWidthPx, setDayCellWidthPx] = useState(dayCellWidthDesktopPx);
@@ -1344,11 +1349,47 @@ export function PropertyChessboardWorkspace({
     [roomPagerEntries],
   );
 
-  const visibleRoomGroups = useMemo<GroupedRoomBucket[]>(() => groupedRooms, [groupedRooms]);
+  const mobileBoardRoomPageCount = useMemo(
+    () => Math.max(1, Math.ceil(roomPagerEntries.length / mobileBoardRoomsPerPage)),
+    [roomPagerEntries],
+  );
+  const activeMobileBoardRoomPage = Math.min(
+    mobileBoardRoomPage,
+    Math.max(0, mobileBoardRoomPageCount - 1),
+  );
+  const visibleBoardRoomStartIndex = isMobilePortrait
+    ? activeMobileBoardRoomPage * mobileBoardRoomsPerPage
+    : 0;
+  const visibleBoardRoomEndIndex = isMobilePortrait
+    ? Math.min(roomPagerEntries.length, visibleBoardRoomStartIndex + mobileBoardRoomsPerPage)
+    : roomPagerEntries.length;
+  const visibleBoardRoomEntries = useMemo<RoomPagerEntry[]>(() => {
+    if (!isMobilePortrait) {
+      return roomPagerEntries;
+    }
+
+    return roomPagerEntries.slice(
+      activeMobileBoardRoomPage * mobileBoardRoomsPerPage,
+      activeMobileBoardRoomPage * mobileBoardRoomsPerPage + mobileBoardRoomsPerPage,
+    );
+  }, [activeMobileBoardRoomPage, isMobilePortrait, roomPagerEntries]);
+  const showMobileBoardPager = isMobilePortrait && mobileBoardRoomPageCount > 1;
+
+  const visibleRoomGroups = useMemo<GroupedRoomBucket[]>(() => {
+    if (!isMobilePortrait) {
+      return groupedRooms;
+    }
+
+    return visibleBoardRoomEntries.map((entry) => ({
+      key: `room:${entry.room.id}`,
+      groupLabel: entry.groupLabel,
+      items: [entry.room],
+    }));
+  }, [groupedRooms, isMobilePortrait, visibleBoardRoomEntries]);
 
   const groupedRoomsWithOffset = useMemo<GroupedRoomBucketWithOffset[]>(
-    () => addGroupOffsets(visibleRoomGroups),
-    [visibleRoomGroups],
+    () => addGroupOffsets(visibleRoomGroups, visibleBoardRoomStartIndex),
+    [visibleRoomGroups, visibleBoardRoomStartIndex],
   );
 
   // Fast room/day occupancy lookup used by every rendered calendar cell.
@@ -1407,6 +1448,14 @@ export function PropertyChessboardWorkspace({
   const roomLookupById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
 
   const canManageCalendar = selectedPropertyId !== null && rooms.length > 0;
+
+  useEffect(() => {
+    setMobileBoardRoomPage((prev) => Math.min(prev, Math.max(0, mobileBoardRoomPageCount - 1)));
+  }, [mobileBoardRoomPageCount]);
+
+  useEffect(() => {
+    setMobileBoardRoomPage(0);
+  }, [selectedPropertyId]);
 
   useEffect(() => {
     setBookingRoomPage((prev) => Math.min(prev, Math.max(0, mobileRoomPageCount - 1)));
@@ -1531,7 +1580,8 @@ export function PropertyChessboardWorkspace({
     closeOccupancyActions();
     setExpandedMobileRailKey(null);
     const sourceOccupancy = options?.sourceOccupancy ?? null;
-    const defaultRoomId = options?.roomId ?? sourceOccupancy?.roomId ?? rooms[0]?.id ?? "";
+    const defaultRoomId =
+      options?.roomId ?? sourceOccupancy?.roomId ?? visibleBoardRoomEntries[0]?.room.id ?? "";
     const dateFrom = sourceOccupancy?.dateFrom ?? options?.dateFrom ?? periodFromIso;
     const dateTo = sourceOccupancy?.dateTo ?? options?.dateTo ?? dateFrom;
     const parsedContacts = parseGuestContacts(sourceOccupancy?.guestContacts ?? null);
@@ -1590,7 +1640,8 @@ export function PropertyChessboardWorkspace({
   }) {
     setExpandedMobileRailKey(null);
     const sourcePrice = options?.sourcePrice ?? null;
-    const defaultRoomId = options?.roomId ?? sourcePrice?.roomId ?? rooms[0]?.id ?? "";
+    const defaultRoomId =
+      options?.roomId ?? sourcePrice?.roomId ?? visibleBoardRoomEntries[0]?.room.id ?? "";
     const dateFrom = sourcePrice?.dateFrom ?? options?.dateFrom ?? periodFromIso;
     const dateTo = sourcePrice?.dateTo ?? options?.dateTo ?? dateFrom;
 
@@ -1773,6 +1824,13 @@ export function PropertyChessboardWorkspace({
     const nextStartIso = toIsoDate(addDays(parsed, days));
     const nextEndIso = addDaysToIsoDate(periodEndIso, days);
     applyBoardPeriodRange(nextStartIso, nextEndIso);
+  }
+
+  function changeMobileBoardRoomPage(page: number) {
+    const nextPage = Math.min(Math.max(0, page), Math.max(0, mobileBoardRoomPageCount - 1));
+    setExpandedMobileRailKey(null);
+    setMobileBoardRoomPage(nextPage);
+    boardScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const showFloatingQuickAdd = isCoarsePointer && rooms.length > 0;
@@ -2565,6 +2623,21 @@ export function PropertyChessboardWorkspace({
               <p className="rounded-lg border border-dashed border-olive/30 px-3 py-3 text-sm text-olive/65">
                 В объекте пока нет активных номеров. Добавьте номер в разделе «Номерной фонд».
               </p>
+            ) : null}
+
+            {rooms.length > 0 && showMobileBoardPager ? (
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-olive/10 bg-cream/62 px-2 py-1.5">
+                <span className="shrink-0 text-xs font-semibold text-olive/70">
+                  Номера {visibleBoardRoomStartIndex + 1}-{visibleBoardRoomEndIndex} из{" "}
+                  {roomPagerEntries.length}
+                </span>
+                <CompactPageDots
+                  pageCount={mobileBoardRoomPageCount}
+                  currentPage={activeMobileBoardRoomPage}
+                  onChange={changeMobileBoardRoomPage}
+                  className="ml-auto max-w-full"
+                />
+              </div>
             ) : null}
 
             {rooms.length > 0 ? (

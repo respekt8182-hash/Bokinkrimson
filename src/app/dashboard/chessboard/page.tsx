@@ -76,7 +76,7 @@ export default async function DashboardChessboardPage({
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-16 z-40 overflow-y-auto bg-cream/92 [@media(orientation:landscape)_and_(max-height:560px)]:top-0">
-      <div className="mx-auto w-full max-w-[1560px] space-y-3 px-2.5 py-2.5 md:px-5 md:py-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+      <div className="mx-auto w-full max-w-[1560px] space-y-3 px-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+6.75rem)] pt-2.5 md:px-5 lg:py-3.5 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-1.5 [@media(orientation:landscape)_and_(max-height:560px)]:px-2 [@media(orientation:landscape)_and_(max-height:560px)]:pb-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] [@media(orientation:landscape)_and_(max-height:560px)]:pt-1.5">
         <div className="rounded-xl border border-olive/10 bg-white/94 px-3 py-2.5 shadow-[0_12px_30px_-28px_rgba(58,43,35,0.38)] [@media(orientation:landscape)_and_(max-height:560px)]:hidden">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
