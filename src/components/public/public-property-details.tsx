@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
+  Images,
   MapPin,
   PanelsTopLeft,
   Phone,
@@ -22,7 +23,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { PropertyContactsPanel } from "@/components/contacts/property-contacts-panel";
@@ -774,6 +776,228 @@ function GuestsPlacementField({
     />
   );
 }
+
+type RoomPhotoGalleryState = {
+  roomId: string;
+  index: number;
+};
+
+type RoomPhotoLightboxProps = {
+  room: PublicPropertyCard["rooms"][number];
+  photos: RoomMedia[];
+  activeIndex: number;
+  amenities: RoomCardAmenityItem[];
+  onIndexChange: (index: number) => void;
+  onClose: () => void;
+};
+
+function RoomPhotoLightbox({
+  room,
+  photos,
+  activeIndex,
+  amenities,
+  onIndexChange,
+  onClose,
+}: RoomPhotoLightboxProps) {
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+  const count = photos.length;
+  const safeActiveIndex = count > 0 ? Math.min(Math.max(activeIndex, 0), count - 1) : 0;
+  const activePhoto = photos[safeActiveIndex] ?? null;
+  const titleId = `room-photo-gallery-title-${room.id}`;
+  const featureAmenities = amenities.filter((amenity) => !amenity.isPrimary).slice(0, 4);
+
+  const prev = useCallback(() => {
+    if (count <= 1) return;
+    onIndexChange((safeActiveIndex - 1 + count) % count);
+  }, [count, onIndexChange, safeActiveIndex]);
+
+  const next = useCallback(() => {
+    if (count <= 1) return;
+    onIndexChange((safeActiveIndex + 1) % count);
+  }, [count, onIndexChange, safeActiveIndex]);
+
+  useEffect(() => {
+    if (count === 0) return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      else if (event.key === "ArrowLeft") prev();
+      else if (event.key === "ArrowRight") next();
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [count, next, onClose, prev]);
+
+  useEffect(() => {
+    if (!thumbsRef.current) return;
+
+    const thumb = thumbsRef.current.children[safeActiveIndex] as HTMLElement | undefined;
+    thumb?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [safeActiveIndex]);
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    touchStartX.current = event.touches[0].clientX;
+    touchStartY.current = event.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+
+    const dx = event.changedTouches[0].clientX - touchStartX.current;
+    const dy = event.changedTouches[0].clientY - touchStartY.current;
+
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx < 0) next();
+      else prev();
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  const portalRoot = typeof document === "undefined" ? null : document.body;
+  if (!portalRoot || count === 0 || !activePhoto) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      className="gallery-lightbox room-photo-lightbox"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
+      <div className="gallery-lightbox-content" onClick={(event) => event.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          key={activePhoto.id}
+          src={activePhoto.url}
+          alt={`Фото номера ${room.title}, ${safeActiveIndex + 1} из ${count}`}
+          className="gallery-lightbox-img"
+        />
+      </div>
+
+      <div className="room-photo-lightbox-info" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60">
+              Фото номера
+            </p>
+            <h3 id={titleId} className="mt-1 truncate text-lg font-semibold text-white">
+              {room.title}
+            </h3>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/14 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/82">
+            <AppIcon icon={Images} className="h-3.5 w-3.5" />
+            {count}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/88">
+            <AppIcon icon={Users} className="h-3.5 w-3.5 text-white/68" />
+            {formatRoomCapacityLabel(room.beds, room.extraBeds)}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/88">
+            <AppIcon icon={RulerDimensionLine} className="h-3.5 w-3.5 text-white/68" />
+            {formatRoomLayoutLabel(room.areaSqm, room.roomsCount)}
+          </span>
+          {room.bathroomTypeLabel ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/88">
+              <AppIcon icon={Toilet} className="h-3.5 w-3.5 text-white/68" />
+              {room.bathroomTypeLabel}
+            </span>
+          ) : null}
+        </div>
+
+        {featureAmenities.length > 0 ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {featureAmenities.map((amenity) => (
+              <span
+                key={amenity.key}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.07] px-2 py-1 text-[11px] leading-snug text-white/74"
+                title={amenity.name}
+              >
+                {amenity.icon ? (
+                  <AppIcon icon={amenity.icon} className="h-3.5 w-3.5 shrink-0 text-white/54" />
+                ) : (
+                  <RoomFeatureIcon
+                    name={amenity.name}
+                    featureId={amenity.featureId}
+                    className="h-3.5 w-3.5 shrink-0 text-white/54"
+                  />
+                )}
+                <span className="min-w-0 truncate">{amenity.name}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="gallery-lightbox-counter">
+        {safeActiveIndex + 1} / {count}
+      </div>
+
+      <button className="gallery-lightbox-close" onClick={onClose} aria-label="Закрыть">
+        <CloseIcon className="h-5 w-5" />
+      </button>
+
+      {count > 1 ? (
+        <>
+          <button
+            className="gallery-lightbox-nav gallery-lightbox-prev"
+            onClick={(event) => {
+              event.stopPropagation();
+              prev();
+            }}
+            aria-label="Предыдущее фото"
+          >
+            <ChevronLeftIcon className="h-5 w-5" />
+          </button>
+          <button
+            className="gallery-lightbox-nav gallery-lightbox-next"
+            onClick={(event) => {
+              event.stopPropagation();
+              next();
+            }}
+            aria-label="Следующее фото"
+          >
+            <ChevronRightIcon className="h-5 w-5" />
+          </button>
+        </>
+      ) : null}
+
+      {count > 1 ? (
+        <div
+          className="gallery-lightbox-thumbs"
+          ref={thumbsRef}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {photos.map((photo, index) => (
+            <button
+              key={photo.id}
+              className={`gallery-lightbox-thumb ${index === safeActiveIndex ? "active" : ""}`}
+              onClick={() => onIndexChange(index)}
+              aria-label={`Фото ${index + 1}`}
+              aria-current={index === safeActiveIndex}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.url} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>,
+    portalRoot,
+  );
+}
+
 export function PublicPropertyDetails({
   item,
   initialIsFavorite,
@@ -821,6 +1045,7 @@ export function PublicPropertyDetails({
     normalizedInitialGuestState.childrenAges,
   );
   const [roomMediaIndexByRoom, setRoomMediaIndexByRoom] = useState<Record<string, number>>({});
+  const [roomPhotoGallery, setRoomPhotoGallery] = useState<RoomPhotoGalleryState | null>(null);
   const [activeRoomDetailsId, setActiveRoomDetailsId] = useState<string | null>(null);
   const [isMobileBookingOpen, setIsMobileBookingOpen] = useState(false);
   const [isMobileCallSheetOpen, setIsMobileCallSheetOpen] = useState(false);
@@ -833,7 +1058,13 @@ export function PublicPropertyDetails({
   const [leadCopied, setLeadCopied] = useState(false);
   const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
   useBodyScrollLock(
-    Boolean(activeRoomDetailsId || isMobileBookingOpen || leadModalRoom || isMobileCallSheetOpen),
+    Boolean(
+      activeRoomDetailsId ||
+        roomPhotoGallery ||
+        isMobileBookingOpen ||
+        leadModalRoom ||
+        isMobileCallSheetOpen,
+    ),
   );
   const propertyMedia = useMemo(
     () => item.media.filter((media) => media.type === "IMAGE").slice(0, 10),
@@ -1186,6 +1417,24 @@ export function PublicPropertyDetails({
     });
   }
 
+  const openRoomPhotoGallery = useCallback((roomId: string, index: number) => {
+    setRoomPhotoGallery({ roomId, index: Math.max(0, index) });
+  }, []);
+
+  const closeRoomPhotoGallery = useCallback(() => {
+    setRoomPhotoGallery(null);
+  }, []);
+
+  const setRoomPhotoGalleryIndex = useCallback((roomId: string, index: number) => {
+    setRoomPhotoGallery((current) => {
+      if (!current || current.roomId !== roomId) {
+        return current;
+      }
+
+      return { ...current, index: Math.max(0, index) };
+    });
+  }, []);
+
   function scrollToRoomFund() {
     const roomFundSection = document.getElementById("room-fund");
     if (roomFundSection) {
@@ -1436,6 +1685,9 @@ export function PublicPropertyDetails({
                   const roomMedia = room.media
                     .filter((media) => media.type === "IMAGE" || media.type === "VIDEO")
                     .slice(0, 10);
+                  const roomPhotos = room.media
+                    .filter((media) => media.type === "IMAGE")
+                    .slice(0, 10);
                   const roomIndex = Math.min(
                     roomMediaIndexByRoom[room.id] ?? 0,
                     Math.max(roomMedia.length - 1, 0),
@@ -1538,6 +1790,15 @@ export function PublicPropertyDetails({
                   ];
                   const roomDetailsDialogId = `room-details-${room.id}`;
                   const roomDetailsTitleId = `room-details-title-${room.id}`;
+                  const isRoomPhotoGalleryOpen = roomPhotoGallery?.roomId === room.id;
+                  const openCurrentRoomGallery = () => {
+                    if (roomPhotos.length === 0) return;
+
+                    const activePhotoIndex = activeRoomMedia
+                      ? roomPhotos.findIndex((photo) => photo.id === activeRoomMedia.id)
+                      : -1;
+                    openRoomPhotoGallery(room.id, activePhotoIndex >= 0 ? activePhotoIndex : 0);
+                  };
                   return (
                     <Fragment key={room.id}>
                       <article className="room-card group relative overflow-hidden rounded-[20px] border border-olive/10 bg-white p-3 shadow-[0_2px_12px_rgba(58,43,35,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(58,43,35,0.1)] md:p-4">
@@ -1557,24 +1818,39 @@ export function PublicPropertyDetails({
                                     Видео
                                   </span>
                                 ) : null}
-                                <div className="room-media-stage relative overflow-hidden bg-[#ebe5d8]">
-                                  {activeRoomMedia ? (
-                                    <MediaPreview
-                                      media={activeRoomMedia}
-                                      alt={
-                                        activeRoomMedia.type === "VIDEO"
-                                          ? `${room.title} — видео`
-                                          : room.title
-                                      }
-                                      className={cn(
-                                        "h-full w-full",
-                                        activeRoomMedia.type === "VIDEO"
-                                          ? "bg-black object-cover"
-                                          : "object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]",
-                                      )}
-                                    />
-                                  ) : null}
-                                </div>
+                                {activeRoomMedia ? (
+                                  activeRoomMedia.type === "IMAGE" && roomPhotos.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={openCurrentRoomGallery}
+                                      aria-label={`Смотреть фото номера ${room.title}`}
+                                      className="room-media-stage relative block w-full cursor-zoom-in overflow-hidden bg-[#ebe5d8] text-left"
+                                    >
+                                      <MediaPreview
+                                        media={activeRoomMedia}
+                                        alt={room.title}
+                                        className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+                                      />
+                                    </button>
+                                  ) : (
+                                    <div className="room-media-stage relative overflow-hidden bg-[#ebe5d8]">
+                                      <MediaPreview
+                                        media={activeRoomMedia}
+                                        alt={
+                                          activeRoomMedia.type === "VIDEO"
+                                            ? `${room.title} — видео`
+                                            : room.title
+                                        }
+                                        className={cn(
+                                          "h-full w-full",
+                                          activeRoomMedia.type === "VIDEO"
+                                            ? "bg-black object-cover"
+                                            : "object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]",
+                                        )}
+                                      />
+                                    </div>
+                                  )
+                                ) : null}
                                 {roomMedia.length > 1 ? (
                                   <>
                                     <button
@@ -1606,7 +1882,17 @@ export function PublicPropertyDetails({
                           {/* в”Ђв”Ђ DETAILS в”Ђв”Ђ */}
                           <div className="flex min-w-0 flex-1 flex-col">
                             <h3 className="text-base font-bold leading-snug text-olive md:text-[1.1rem]">
-                              {room.title}
+                              {roomPhotos.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openRoomPhotoGallery(room.id, 0)}
+                                  className="text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+                                >
+                                  {room.title}
+                                </button>
+                              ) : (
+                                room.title
+                              )}
                             </h3>
 
                             {/* Amenities as icon+text pairs in a compact grid */}
@@ -1703,7 +1989,7 @@ export function PublicPropertyDetails({
                             type="button"
                             aria-label="Закрыть подробности номера"
                             onClick={() => setActiveRoomDetailsId(null)}
-                            className="fixed inset-0 z-40 rounded-3xl bg-black/35 backdrop-blur-[1px]"
+                            className="fixed inset-x-0 -top-8 z-[49] h-[calc(100dvh_+_160px)] min-h-[calc(100svh_+_160px)] bg-black/45 backdrop-blur-[1px]"
                           />
                           {/* Bottom sheet on mobile, centered modal on lg+ */}
                           <div
@@ -1833,6 +2119,16 @@ export function PublicPropertyDetails({
                             ) : null}
                           </div>
                         </>
+                      ) : null}
+                      {isRoomPhotoGalleryOpen ? (
+                        <RoomPhotoLightbox
+                          room={room}
+                          photos={roomPhotos}
+                          activeIndex={roomPhotoGallery?.index ?? 0}
+                          amenities={roomCardAmenities}
+                          onIndexChange={(index) => setRoomPhotoGalleryIndex(room.id, index)}
+                          onClose={closeRoomPhotoGallery}
+                        />
                       ) : null}
                     </Fragment>
                   );

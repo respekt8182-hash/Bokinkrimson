@@ -105,7 +105,7 @@ function resolveLocationViewport(value: string | null | undefined): YandexMapVie
     return null;
   }
 
-  return { center: [center.latitude, center.longitude], zoom: center.zoom };
+  return { center: [center.latitude, center.longitude], zoom: Math.min(center.zoom + 1, 14) };
 }
 
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -414,8 +414,8 @@ export function PublicHousingResultsWithMap({
           center: [latitude, longitude],
           zoom:
             typeof body.item?.zoom === "number" && Number.isFinite(body.item.zoom)
-              ? body.item.zoom
-              : 12,
+              ? Math.min(body.item.zoom + 1, 14)
+              : 13,
         });
       } catch {
         if (!controller.signal.aborted) {
@@ -462,9 +462,30 @@ export function PublicHousingResultsWithMap({
   const mapPoints = useMemo(() => {
     const sourcePoints =
       mapState.status === "ready" && mapState.points.length > 0 ? mapState.points : fallbackPoints;
+    const pointById = new Map(sourcePoints.map((point) => [point.id, sanitizePoint(point)]));
 
-    return sourcePoints.map((point) => sanitizePoint(point));
-  }, [fallbackPoints, mapState.points, mapState.status]);
+    if (mapState.status === "ready" && mapState.points.length > 0) {
+      for (const point of fallbackPoints) {
+        if (
+          !pointById.has(point.id) &&
+          (viewedPointIds.has(point.id) || hoveredCardId === point.id || activePointId === point.id)
+        ) {
+          pointById.set(point.id, sanitizePoint(point));
+        }
+      }
+
+      return Array.from(pointById.values());
+    }
+
+    return Array.from(pointById.values());
+  }, [
+    activePointId,
+    fallbackPoints,
+    hoveredCardId,
+    mapState.points,
+    mapState.status,
+    viewedPointIds,
+  ]);
 
   const pointsWithCoordinates = useMemo(
     () =>
@@ -478,6 +499,10 @@ export function PublicHousingResultsWithMap({
   const mapPointById = useMemo(
     () => new Map(pointsWithCoordinates.map((point) => [point.id, point])),
     [pointsWithCoordinates],
+  );
+  const fallbackPointById = useMemo(
+    () => new Map(fallbackPoints.map((point) => [point.id, point])),
+    [fallbackPoints],
   );
 
   const mapViewerPoints = useMemo<YandexMapPoint[]>(
@@ -754,10 +779,7 @@ export function PublicHousingResultsWithMap({
     [mobileSheetSnaps],
   );
 
-  function handleMapPointClick(pointId: string) {
-    setActivePointId(pointId);
-    setHoveredCardId(null);
-    setHoveredPointId(null);
+  const markPointViewed = useCallback((pointId: string) => {
     setViewedPointIds((prev) => {
       if (prev.has(pointId)) {
         return prev;
@@ -767,11 +789,29 @@ export function PublicHousingResultsWithMap({
       next.add(pointId);
       return next;
     });
+  }, []);
+
+  function handleMapPointClick(pointId: string) {
+    setActivePointId(pointId);
+    setHoveredCardId(null);
+    setHoveredPointId(null);
+    markPointViewed(pointId);
 
     if (mapPlacement === "mobile") {
       snapMobileSheet("collapsed");
     }
   }
+
+  const handleMapPointHoverChange = useCallback(
+    (pointId: string | null) => {
+      if (pointId) {
+        markPointViewed(pointId);
+      }
+
+      setHoveredPointId(pointId);
+    },
+    [markPointViewed],
+  );
 
   function openMapFully() {
     setIsMapActivated(true);
@@ -993,10 +1033,11 @@ export function PublicHousingResultsWithMap({
                       className="catalog-card-enter"
                       style={animationStyle}
                       onMouseEnter={() => {
-                        if (!mapPointById.has(item.id)) {
+                        if (!mapPointById.has(item.id) && !fallbackPointById.has(item.id)) {
                           return;
                         }
 
+                        markPointViewed(item.id);
                         setActivePointId(null);
                         setHoveredPointId(null);
                         setHoveredCardId(item.id);
@@ -1072,7 +1113,7 @@ export function PublicHousingResultsWithMap({
                   activePointId={activeMapPointId}
                   hoveredPointId={hoveredPointId}
                   onPointClick={handleMapPointClick}
-                  onPointHoverChange={setHoveredPointId}
+                  onPointHoverChange={handleMapPointHoverChange}
                   initialViewport={locationViewport}
                   viewportKey={viewportKey}
                   controls={[]}
@@ -1183,7 +1224,7 @@ export function PublicHousingResultsWithMap({
                       activePointId={activeMapPointId}
                       hoveredPointId={hoveredPointId}
                       onPointClick={handleMapPointClick}
-                      onPointHoverChange={setHoveredPointId}
+                      onPointHoverChange={handleMapPointHoverChange}
                       initialViewport={locationViewport}
                       viewportKey={viewportKey}
                       showBalloons={false}
@@ -1221,7 +1262,7 @@ export function PublicHousingResultsWithMap({
                           activePointId={activeMapPointId}
                           hoveredPointId={hoveredPointId}
                           onPointClick={handleMapPointClick}
-                          onPointHoverChange={setHoveredPointId}
+                          onPointHoverChange={handleMapPointHoverChange}
                           initialViewport={locationViewport}
                           viewportKey={viewportKey}
                           controls={["zoomControl"]}
@@ -1284,7 +1325,7 @@ export function PublicHousingResultsWithMap({
                 activePointId={activeMapPointId}
                 hoveredPointId={hoveredPointId}
                 onPointClick={handleMapPointClick}
-                onPointHoverChange={setHoveredPointId}
+                onPointHoverChange={handleMapPointHoverChange}
                 initialViewport={locationViewport}
                 viewportKey={viewportKey}
                 controls={["zoomControl"]}
