@@ -44,7 +44,7 @@ import {
 } from "@/lib/property-public-snapshot";
 import { serializeReview } from "@/lib/reviews";
 import { normalizeRoomTitle } from "@/lib/room-title";
-import { serializeRoom, roomInclude } from "@/lib/rooms";
+import { serializeRoom, roomInclude, type SerializedRoom } from "@/lib/rooms";
 import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 import type { FaqItem } from "@/types/excursions";
 
@@ -698,6 +698,48 @@ type CatalogRoomCard = CatalogRoomForStay & {
   areaSqm: Prisma.Decimal | number | null;
 };
 
+type CatalogLiveRoomForPriceOverlay = {
+  id: string;
+  prices: Array<{
+    dateFrom: Date;
+    dateTo: Date;
+    price: Prisma.Decimal | number;
+    priceType?: RoomPriceType | string | null;
+    minGuests: number | null;
+    currency: string;
+  }>;
+};
+
+function getLiveCatalogRoomPricesByRoomId(
+  rooms: CatalogLiveRoomForPriceOverlay[],
+): Map<string, CatalogRoomPricePoint[]> {
+  return new Map(
+    rooms.map((room) => [
+      room.id,
+      room.prices.map((price) => ({
+        dateFrom: toIsoDate(price.dateFrom),
+        dateTo: toIsoDate(price.dateTo),
+        price: Number(price.price),
+        priceType: normalizeRoomPriceType(price.priceType),
+        minGuests: price.minGuests ?? null,
+        currency: price.currency,
+      })),
+    ]),
+  );
+}
+
+function applyLivePricesToSnapshotRooms(
+  snapshotRooms: SerializedRoom[],
+  liveRooms: SerializedRoom[],
+): SerializedRoom[] {
+  const livePricesByRoomId = new Map(liveRooms.map((room) => [room.id, room.prices]));
+
+  return snapshotRooms.map((room) => ({
+    ...room,
+    prices: livePricesByRoomId.get(room.id) ?? room.prices,
+  }));
+}
+
 export function getPublicCatalogSnapshot(input: {
   status: PropertyStatus;
   pendingEditStatus: PropertyStatus | null;
@@ -749,6 +791,7 @@ export function resolvePublicCatalogDisplayState(property: {
     publishedSnapshot: property.publishedSnapshot,
   });
 
+  const livePricesByRoomId = getLiveCatalogRoomPricesByRoomId(property.rooms);
   const rooms: CatalogRoomCard[] = snapshot
     ? snapshot.rooms.map((room) => ({
         id: room.id,
@@ -757,14 +800,16 @@ export function resolvePublicCatalogDisplayState(property: {
         extraBeds: room.extraBeds,
         roomsCount: Math.max(1, room.roomsCount ?? 1),
         areaSqm: room.areaSqm,
-        prices: room.prices.map((price) => ({
-          dateFrom: price.dateFrom,
-          dateTo: price.dateTo,
-          price: price.price,
-          priceType: normalizeRoomPriceType(price.priceType),
-          minGuests: price.minGuests ?? null,
-          currency: price.currency,
-        })),
+        prices:
+          livePricesByRoomId.get(room.id) ??
+          room.prices.map((price) => ({
+            dateFrom: price.dateFrom,
+            dateTo: price.dateTo,
+            price: price.price,
+            priceType: normalizeRoomPriceType(price.priceType),
+            minGuests: price.minGuests ?? null,
+            currency: price.currency,
+          })),
       }))
     : property.rooms.map((room) => ({
         id: room.id,
@@ -2102,7 +2147,10 @@ function buildPublicPropertyCardFromRecord(
     snap ? snap.keyRoomAmenityNames : property.roomAmenitySettings.map((item) => item.feature.name),
     { minLength: 2, maxLength: 80 },
   );
-  const rawDisplayRooms = snap ? snap.rooms : property.rooms.map(serializeRoom);
+  const liveDisplayRooms = property.rooms.map(serializeRoom);
+  const rawDisplayRooms = snap
+    ? applyLivePricesToSnapshotRooms(snap.rooms, liveDisplayRooms)
+    : liveDisplayRooms;
   const displayRooms = rawDisplayRooms.map((room) => ({
     ...room,
     customFeatures: cleanPublicTextList(room.customFeatures, { minLength: 2, maxLength: 80 }),
@@ -2114,32 +2162,15 @@ function buildPublicPropertyCardFromRecord(
     ...room.customFeatures.map((feature) => stripPaidAmenitySuffix(feature)),
   ]);
 
-  // Min price: snapshot rooms have serialized prices (number), live rooms have Prisma.Decimal.
-  const { minNightPrice, minNightPriceType, currency } = snap
-    ? (() => {
-        let min: number | null = null;
-        let minType: RoomPriceType | null = null;
-        let cur: string | null = null;
-        for (const room of snap.rooms) {
-          for (const price of room.prices) {
-            if (min === null || price.price < min) {
-              min = price.price;
-              minType = normalizeRoomPriceType(price.priceType);
-              cur = price.currency;
-            }
-          }
-        }
-        return { minNightPrice: min, minNightPriceType: minType, currency: cur };
-      })()
-    : getMinPriceByRooms(
-        property.rooms.map((room) => ({
-          prices: room.prices.map((priceItem) => ({
-            price: priceItem.price,
-            priceType: priceItem.priceType,
-            currency: priceItem.currency,
-          })),
-        })),
-      );
+  const { minNightPrice, minNightPriceType, currency } = getMinPriceByRooms(
+    displayRooms.map((room) => ({
+      prices: room.prices.map((priceItem) => ({
+        price: priceItem.price,
+        priceType: priceItem.priceType,
+        currency: priceItem.currency,
+      })),
+    })),
+  );
 
   const displayName = sp?.name ?? property.name;
   const displayType = sp?.type ?? property.type;

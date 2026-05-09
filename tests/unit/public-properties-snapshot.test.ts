@@ -145,6 +145,148 @@ describe("public catalog display state", () => {
     expect(state.rooms[0]?.prices[0]?.price).toBe(4200);
   });
 
+  it("uses live chessboard prices for rooms from the approved snapshot", () => {
+    const state = resolvePublicCatalogDisplayState({
+      status: PropertyStatus.PUBLISHED,
+      pendingEditStatus: PropertyStatus.DRAFT,
+      publishedSnapshot: {
+        property: {
+          name: "Approved object",
+          type: "hotel",
+          locationId: "yalta",
+          locationName: "Yalta",
+          address: "Approved address",
+          seaDistance: null,
+          latitude: 44.4952,
+          longitude: 34.1663,
+          description: "Approved public description",
+          faqItems: [],
+          phone: "+7 999 111-11-11",
+          websiteUrl: null,
+          contactEmail: null,
+          showEmail: false,
+          whatsappUrl: null,
+          telegramUrl: null,
+          vkUrl: null,
+          maxUrl: null,
+          okUrl: null,
+          receiveRequests: true,
+          checkInFrom: "14:00",
+          checkOutUntil: "12:00",
+          childrenAllowed: true,
+          childrenMinAge: null,
+          petsPolicy: PetsPolicy.FORBIDDEN,
+          smokingPolicy: "FORBIDDEN",
+          quietHoursEnabled: false,
+          quietHoursFrom: null,
+          quietHoursTo: null,
+          parkingInfo: null,
+          mealOptions: null,
+          prepaymentPolicy: null,
+          classificationApplicable: true,
+          registryNumber: "KSR-1",
+          registryDetails: null,
+          starRating: 3,
+        },
+        media: [
+          {
+            id: "media-approved",
+            propertyId: "property-1",
+            roomId: null,
+            type: "IMAGE",
+            url: "/approved-cover.webp",
+            mimeType: "image/webp",
+            fileSize: 12345,
+            originalName: "approved.jpg",
+            sortOrder: 1,
+            createdAt: "2026-03-01T00:00:00.000Z",
+          },
+        ],
+        amenities: [],
+        customAmenities: [],
+        keyRoomAmenityNames: [],
+        rooms: [
+          {
+            id: "room-approved",
+            propertyId: "property-1",
+            title: "Approved room",
+            beds: 2,
+            extraBeds: 0,
+            roomsCount: 1,
+            areaSqm: 22,
+            bathroomType: "IN_ROOM",
+            bathroomTypeLabel: "In room",
+            meta: null,
+            isActive: true,
+            featureIds: [],
+            features: [],
+            customFeatures: [],
+            media: [],
+            mediaStats: {
+              imageCount: 0,
+              videoCount: 0,
+            },
+            prices: [
+              {
+                id: "price-approved",
+                roomId: "room-approved",
+                dateFrom: "2026-06-01",
+                dateTo: "2026-06-30",
+                price: 4200,
+                priceType: "PER_ROOM",
+                minGuests: null,
+                currency: "RUB",
+                createdAt: "2026-03-01T00:00:00.000Z",
+                updatedAt: "2026-03-01T00:00:00.000Z",
+              },
+            ],
+            createdAt: "2026-03-01T00:00:00.000Z",
+            updatedAt: "2026-03-01T00:00:00.000Z",
+          },
+        ],
+      },
+      name: "Draft object",
+      type: "guest_house",
+      locationId: "sudak",
+      locationName: "Sudak",
+      address: "Draft address",
+      seaDistance: null,
+      latitude: 44.8504,
+      longitude: 34.9747,
+      description: "Draft public description",
+      checkInFrom: "15:00",
+      childrenAllowed: true,
+      petsPolicy: PetsPolicy.ALLOWED,
+      starRating: 5,
+      media: [{ url: "/draft-cover.webp", type: MediaType.IMAGE }],
+      rooms: [
+        {
+          id: "room-approved",
+          title: "Draft room title",
+          beds: 4,
+          extraBeds: 2,
+          areaSqm: 60,
+          prices: [
+            {
+              dateFrom: new Date("2026-06-01T00:00:00.000Z"),
+              dateTo: new Date("2026-06-30T00:00:00.000Z"),
+              price: 9900,
+              priceType: "PER_PERSON",
+              minGuests: 1,
+              currency: "RUB",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(state.name).toBe("Approved object");
+    expect(state.imageUrls).toEqual(["/approved-cover.webp"]);
+    expect(state.rooms[0]?.title).toBe("Approved room");
+    expect(state.rooms[0]?.prices[0]?.price).toBe(9900);
+    expect(state.rooms[0]?.prices[0]?.priceType).toBe("PER_PERSON");
+  });
+
   it("falls back to live data when there is no pending edit snapshot", () => {
     const state = resolvePublicCatalogDisplayState({
       status: PropertyStatus.PUBLISHED,

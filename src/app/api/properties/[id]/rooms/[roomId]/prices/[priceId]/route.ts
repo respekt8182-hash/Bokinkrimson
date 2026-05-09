@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
 import { updateRoomPriceSchema } from "@/lib/schemas";
 
@@ -118,8 +117,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     },
   });
 
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);
-
   return NextResponse.json({ item: serializeRoomPrice(updated) });
 }
 
@@ -138,8 +135,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   await db.roomPrice.delete({ where: { id: existing.id } });
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);
 
   return NextResponse.json({ ok: true });
 }
