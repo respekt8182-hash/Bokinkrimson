@@ -153,6 +153,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function resolveCatalogLocationZoom(radiusKm: number): number {
+  if (radiusKm <= 15) {
+    return 13;
+  }
+
+  if (radiusKm <= 35) {
+    return 12;
+  }
+
+  return 11;
+}
+
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
   return (Object.entries(snaps) as Array<[MobileSheetSnap, number]>).reduce(
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
@@ -787,6 +799,7 @@ export function ExcursionSearchResults({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
   const [mapItems, setMapItems] = useState<PublicExcursionCatalogItem[]>(items);
   const [isMapPointsLoading, setIsMapPointsLoading] = useState(false);
   const [mapPointsError, setMapPointsError] = useState("");
@@ -843,6 +856,7 @@ export function ExcursionSearchResults({
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
+    setViewedPointIds(new Set());
     setIsMobileMapCollapsed(false);
     setMobileSheetSnap("preview");
     setMobileSheetTop(null);
@@ -1418,8 +1432,9 @@ export function ExcursionSearchResults({
         previewImageUrl: item.coverImageUrl,
         rating: item.avgRating > 0 ? item.avgRating : null,
         reviewsCount: item.reviewsCount,
+        isViewed: viewedPointIds.has(item.id),
       }));
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm, mapItems]);
+  }, [filters.centerLat, filters.centerLng, filters.radiusKm, mapItems, viewedPointIds]);
   const visibleMapPointIds = useMemo(
     () => new Set(mapPoints.map((point) => point.id)),
     [mapPoints],
@@ -1480,7 +1495,7 @@ export function ExcursionSearchResults({
     ) {
       return {
         center: [filters.centerLat, filters.centerLng],
-        zoom: filters.radiusKm <= 15 ? 12 : filters.radiusKm <= 35 ? 11 : 10,
+        zoom: resolveCatalogLocationZoom(filters.radiusKm),
       };
     }
 
@@ -1515,8 +1530,17 @@ export function ExcursionSearchResults({
   // ── Navigation on pin click ──────────────────────────────────────────────────
   const handleMapPointClick = useCallback(
     (pointId: string) => {
+      setViewedPointIds((prev) => {
+        if (prev.has(pointId)) {
+          return prev;
+        }
+
+        const next = new Set(prev);
+        next.add(pointId);
+        return next;
+      });
       setActivePointId(pointId);
-      setHoveredPinId(pointId);
+      setHoveredPinId(null);
       if (!mapExpanded) {
         focusCardById(pointId);
       }
@@ -1639,8 +1663,17 @@ export function ExcursionSearchResults({
   );
 
   function handleCatalogMobileMapPointClick(pointId: string) {
+    setViewedPointIds((prev) => {
+      if (prev.has(pointId)) {
+        return prev;
+      }
+
+      const next = new Set(prev);
+      next.add(pointId);
+      return next;
+    });
     setActivePointId(pointId);
-    setHoveredPinId(pointId);
+    setHoveredPinId(null);
     snapMobileSheet("collapsed");
   }
 

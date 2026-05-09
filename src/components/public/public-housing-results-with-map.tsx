@@ -105,7 +105,7 @@ function resolveLocationViewport(value: string | null | undefined): YandexMapVie
     return null;
   }
 
-  return { center: [center.latitude, center.longitude], zoom: Math.min(center.zoom + 1, 14) };
+  return { center: [center.latitude, center.longitude], zoom: Math.min(center.zoom + 2, 15) };
 }
 
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -414,8 +414,8 @@ export function PublicHousingResultsWithMap({
           center: [latitude, longitude],
           zoom:
             typeof body.item?.zoom === "number" && Number.isFinite(body.item.zoom)
-              ? Math.min(body.item.zoom + 1, 14)
-              : 13,
+              ? Math.min(body.item.zoom + 2, 15)
+              : 14,
         });
       } catch {
         if (!controller.signal.aborted) {
@@ -806,13 +806,9 @@ export function PublicHousingResultsWithMap({
 
   const handleMapPointHoverChange = useCallback(
     (pointId: string | null) => {
-      if (pointId) {
-        markPointViewed(pointId);
-      }
-
       setHoveredPointId(pointId);
     },
-    [markPointViewed],
+    [],
   );
 
   function openMapFully() {
@@ -1039,7 +1035,6 @@ export function PublicHousingResultsWithMap({
                           return;
                         }
 
-                        markPointViewed(item.id);
                         setActivePointId(null);
                         setHoveredPointId(null);
                         setHoveredCardId(item.id);

@@ -98,6 +98,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function resolveCatalogLocationZoom(radiusKm: number): number {
+  if (radiusKm <= 15) {
+    return 13;
+  }
+
+  if (radiusKm <= 35) {
+    return 12;
+  }
+
+  return 11;
+}
+
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
   return (Object.entries(snaps) as Array<[MobileSheetSnap, number]>).reduce(
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
@@ -609,6 +621,7 @@ export function MarketplaceCatalogMap({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
   useBodyScrollLock(mapExpanded);
 
   useEffect(() => {
@@ -646,8 +659,12 @@ export function MarketplaceCatalogMap({
           return true;
         },
       )
-      .map((item) => buildMapPoint(kind, item));
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm, items, kind]);
+      .map((item) => buildMapPoint(kind, item))
+      .map((point) => ({
+        ...point,
+        isViewed: viewedPointIds.has(point.id),
+      }));
+  }, [filters.centerLat, filters.centerLng, filters.radiusKm, items, kind, viewedPointIds]);
 
   const visibleMapPointIds = useMemo(
     () => new Set(mapPoints.map((point) => point.id)),
@@ -711,7 +728,7 @@ export function MarketplaceCatalogMap({
     ) {
       return {
         center: [filters.centerLat, filters.centerLng],
-        zoom: filters.radiusKm <= 15 ? 12 : filters.radiusKm <= 35 ? 11 : 10,
+        zoom: resolveCatalogLocationZoom(filters.radiusKm),
       };
     }
 
@@ -867,9 +884,18 @@ export function MarketplaceCatalogMap({
 
   const handlePointClick = useCallback(
     (pointId: string) => {
+      setViewedPointIds((prev) => {
+        if (prev.has(pointId)) {
+          return prev;
+        }
+
+        const next = new Set(prev);
+        next.add(pointId);
+        return next;
+      });
       setActivePointId(pointId);
       setHoveredCardId(null);
-      setHoveredPointId(pointId);
+      setHoveredPointId(null);
 
       if (mapPlacement === "mobile") {
         snapMobileSheet("collapsed");
