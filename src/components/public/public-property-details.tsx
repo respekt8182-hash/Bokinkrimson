@@ -712,10 +712,7 @@ function getRoomPriceSummary(
   const unitNightly = Math.round(calculation.unitTotal / calculation.nights);
   const perNight =
     calculation.priceType === "PER_PERSON"
-      ? `${formatMoney(totalNightly, calculation.currency)} за ночь · ${formatMoney(
-          unitNightly,
-          calculation.currency,
-        )} за человека`
+      ? `${formatMoney(unitNightly, calculation.currency)} за человека`
       : calculation.priceType === "MIXED"
         ? `${formatMoney(totalNightly, calculation.currency)} за ночь`
         : `${formatMoney(totalNightly, calculation.currency)} за номер в сутки`;
