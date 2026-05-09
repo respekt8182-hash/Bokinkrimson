@@ -433,17 +433,19 @@ export function PublicHousingResultsWithMap({
 
   const fallbackPoints = useMemo<MapPointResponse[]>(
     () =>
-      items.map((item) =>
-        sanitizePoint({
+      items.map((item) => {
+        const hasSelectedStay = item.stayContext.mode === "selected" && item.stayPrice !== null;
+
+        return sanitizePoint({
           id: item.id,
           title: item.name,
           path: item.path,
           latitude: item.latitude,
           longitude: item.longitude,
-          pricePerNight: item.stayPrice?.nightly ?? item.minNightPrice,
-          priceType: item.stayPrice?.priceType ?? item.minNightPriceType,
+          pricePerNight: hasSelectedStay ? item.stayPrice?.totalNightly : item.minNightPrice,
+          priceType: hasSelectedStay ? "PER_ROOM" : item.minNightPriceType,
           priceFrom: item.minNightPrice,
-          currency: item.stayPrice?.currency ?? item.currency,
+          currency: hasSelectedStay ? item.stayPrice?.currency : item.currency,
           addressShort: item.locationName,
           photos:
             item.imageUrls.length > 0
@@ -454,8 +456,8 @@ export function PublicHousingResultsWithMap({
           rating: item.reviewsCount > 0 ? Number(item.avgRating.toFixed(1)) : null,
           reviewsCount: item.reviewsCount,
           isFavorite: false,
-        }),
-      ),
+        });
+      }),
     [items],
   );
 

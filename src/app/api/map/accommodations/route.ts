@@ -75,10 +75,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const bounds = parseBoundsParam(searchParams.get("bounds"));
   const page = parseIntParam(searchParams.get("page"), 1, { min: 1, max: 500 });
-  const guests = parseOptionalIntParam(
-    searchParams.get("guests") ?? searchParams.get("adults"),
-    { min: 1, max: 20 },
-  );
+  const guests = parseOptionalIntParam(searchParams.get("guests") ?? searchParams.get("adults"), {
+    min: 1,
+    max: 20,
+  });
   const minPrice = parseOptionalFloatParam(
     searchParams.get("minPrice") ?? searchParams.get("min_price"),
     { min: 0, max: 1_000_000_000 },
@@ -92,15 +92,9 @@ export async function GET(request: Request) {
   const query: PublicCatalogQuery = {
     page,
     pageSize: 24,
-    locationId:
-      searchParams.get("location_id") ??
-      searchParams.get("locationId") ??
-      undefined,
+    locationId: searchParams.get("location_id") ?? searchParams.get("locationId") ?? undefined,
     location: searchParams.get("location") ?? undefined,
-    query:
-      searchParams.get("query") ??
-      searchParams.get("q") ??
-      undefined,
+    query: searchParams.get("query") ?? searchParams.get("q") ?? undefined,
     type:
       pickFirstListValue(searchParams.get("type")) ??
       searchParams.get("propertyType") ??
@@ -149,23 +143,27 @@ export async function GET(request: Request) {
 
       return true;
     })
-    .map((item) => ({
-      id: item.id,
-      title: item.name,
-      url: item.path,
-      path: item.path,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      pricePerNight: item.stayPrice?.nightly ?? item.minNightPrice,
-      priceType: item.stayPrice?.priceType ?? item.minNightPriceType,
-      priceFrom: item.minNightPrice,
-      currency: item.stayPrice?.currency ?? item.currency ?? "RUB",
-      addressShort: item.locationName ?? "Крым",
-      photos: pickPointPhotos(item),
-      rating: item.reviewsCount > 0 ? Number(item.avgRating.toFixed(1)) : null,
-      reviewsCount: item.reviewsCount,
-      isFavorite: favoritePropertyIds.has(item.id),
-    }));
+    .map((item) => {
+      const hasSelectedStay = item.stayContext.mode === "selected" && item.stayPrice !== null;
+
+      return {
+        id: item.id,
+        title: item.name,
+        url: item.path,
+        path: item.path,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        pricePerNight: hasSelectedStay ? item.stayPrice?.totalNightly : item.minNightPrice,
+        priceType: hasSelectedStay ? "PER_ROOM" : item.minNightPriceType,
+        priceFrom: item.minNightPrice,
+        currency: (hasSelectedStay ? item.stayPrice?.currency : item.currency) ?? "RUB",
+        addressShort: item.locationName ?? "Крым",
+        photos: pickPointPhotos(item),
+        rating: item.reviewsCount > 0 ? Number(item.avgRating.toFixed(1)) : null,
+        reviewsCount: item.reviewsCount,
+        isFavorite: favoritePropertyIds.has(item.id),
+      };
+    });
 
   return NextResponse.json({
     total: points.length,

@@ -71,6 +71,16 @@ function formatNightsLabel(nights: number): string {
   return `${nights} ночей`;
 }
 
+function formatGuestsLabel(guests: number): string {
+  const count = Math.max(1, Math.floor(guests));
+  const abs = count % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} гостей`;
+  if (last === 1) return `${count} гость`;
+  if (last >= 2 && last <= 4) return `${count} гостя`;
+  return `${count} гостей`;
+}
+
 function formatReviewsLabel(value: number): string {
   const abs = Math.abs(value) % 100;
   const last = abs % 10;
@@ -165,19 +175,42 @@ type PriceSummary = {
 function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
   const nights = Math.max(1, item.stayContext.nights);
   const hasDates = item.stayContext.mode === "selected";
+  const guests = Math.max(1, Math.floor(item.stayContext.guests));
 
   if (item.stayPrice) {
     if (hasDates && item.stayPrice.nights > 1) {
+      const isPerPerson = item.stayPrice.priceType === "PER_PERSON";
+      const secondaryParts = [
+        `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
+        isPerPerson ? formatGuestsLabel(item.stayPrice.guests) : null,
+        isPerPerson
+          ? `${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за человека`
+          : null,
+      ].filter((part): part is string => Boolean(part));
+
       return {
         primary: formatNightlyPrice(
-          item.stayPrice.nightly,
+          isPerPerson ? item.stayPrice.totalNightly : item.stayPrice.nightly,
           item.stayPrice.currency,
-          item.stayPrice.priceType,
+          isPerPerson ? "PER_ROOM" : item.stayPrice.priceType,
         ),
-        secondary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(item.stayPrice.nights)}`,
+        secondary: secondaryParts.join(" · "),
         roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
       };
     }
+
+    if (hasDates && item.stayPrice.priceType === "PER_PERSON") {
+      return {
+        primary: formatNightlyPrice(
+          item.stayPrice.totalNightly,
+          item.stayPrice.currency,
+          "PER_ROOM",
+        ),
+        secondary: `${formatGuestsLabel(item.stayPrice.guests)} · ${formatMoney(item.stayPrice.nightly, item.stayPrice.currency)} за человека`,
+        roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
+      };
+    }
+
     return {
       primary: formatNightlyPrice(
         item.stayPrice.nightly,
@@ -191,10 +224,22 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
 
   if (item.minNightPrice !== null && item.currency) {
     if (hasDates && nights > 1) {
-      const estimatedTotal = item.minNightPrice * nights;
+      const isPerPerson = item.minNightPriceType === "PER_PERSON";
+      const nightlyEstimate = isPerPerson ? item.minNightPrice * guests : item.minNightPrice;
+      const estimatedTotal = nightlyEstimate * nights;
+      const secondaryParts = [
+        `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
+        isPerPerson ? formatGuestsLabel(guests) : null,
+        isPerPerson ? `${formatMoney(item.minNightPrice, item.currency)} за человека` : null,
+      ].filter((part): part is string => Boolean(part));
+
       return {
-        primary: `от ${formatNightlyPrice(item.minNightPrice, item.currency, item.minNightPriceType)}`,
-        secondary: `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
+        primary: `от ${formatNightlyPrice(
+          nightlyEstimate,
+          item.currency,
+          isPerPerson ? "PER_ROOM" : item.minNightPriceType,
+        )}`,
+        secondary: secondaryParts.join(" · "),
         roomLabel: item.roomSnapshot?.title ? `Номер: ${item.roomSnapshot.title}` : null,
       };
     }

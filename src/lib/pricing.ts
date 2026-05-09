@@ -209,25 +209,14 @@ export function calculateRoomStayPrice(input: {
     };
   }
 
-  const calculationPriceType = priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED";
-  const adjustedBreakdown =
-    calculationPriceType === "PER_PERSON"
-      ? breakdown.map((item) => ({
-          ...item,
-          totalPrice: (item.price * guests) / nights,
-        }))
-      : breakdown;
-  const adjustedTotal =
-    calculationPriceType === "PER_PERSON" ? (unitTotal / nights) * guests : total;
-
   return {
     ok: true,
     nights,
-    total: adjustedTotal,
+    total,
     unitTotal,
     currency,
-    priceType: calculationPriceType,
+    priceType: priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED",
     guests,
-    breakdown: adjustedBreakdown,
+    breakdown,
   };
 }

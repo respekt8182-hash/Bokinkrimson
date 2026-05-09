@@ -145,6 +145,16 @@ function formatNightsLabel(nights: number): string {
   return `${nights} ночей`;
 }
 
+function formatGuestsLabel(guests: number): string {
+  const count = Math.max(1, Math.floor(guests));
+  const abs = count % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} гостей`;
+  if (last === 1) return `${count} гость`;
+  if (last >= 2 && last <= 4) return `${count} гостя`;
+  return `${count} гостей`;
+}
+
 function formatReviewsCountLabel(count: number): string {
   const abs = Math.abs(count) % 100;
   const last = abs % 10;
@@ -645,12 +655,14 @@ function getRoomPriceSummary(
     if (base.value !== null && base.currency) {
       const price = formatMoney(base.value, base.currency);
       const nightlyLabel = formatNightlyPriceLabel(base.value, base.currency, base.priceType);
+      const unitLabel =
+        base.priceType === "PER_PERSON" ? "за человека в сутки" : "за номер в сутки";
       return {
         text: `от ${nightlyLabel}`,
         tone: "ok",
         bigPrice: `от ${price}`,
         sideLabel: null,
-        smallLabel: getRoomPriceNightlySuffix(base.priceType),
+        smallLabel: unitLabel,
       };
     }
     return {
@@ -696,16 +708,22 @@ function getRoomPriceSummary(
     };
   }
 
-  const perNight = formatNightlyPriceLabel(
-    Math.round(
-      (calculation.priceType === "MIXED" ? calculation.total : calculation.unitTotal) /
-        calculation.nights,
-    ),
-    calculation.currency,
-    calculation.priceType,
-  );
+  const totalNightly = Math.round(calculation.total / calculation.nights);
+  const unitNightly = Math.round(calculation.unitTotal / calculation.nights);
+  const perNight =
+    calculation.priceType === "PER_PERSON"
+      ? `${formatMoney(totalNightly, calculation.currency)} за ночь · ${formatMoney(
+          unitNightly,
+          calculation.currency,
+        )} за человека`
+      : calculation.priceType === "MIXED"
+        ? `${formatMoney(totalNightly, calculation.currency)} за ночь`
+        : `${formatMoney(totalNightly, calculation.currency)} за номер в сутки`;
   const nightsLabel = formatNightsLabel(calculation.nights);
-  const sideLabel = `за ${nightsLabel}`;
+  const sideLabel =
+    calculation.priceType === "PER_PERSON"
+      ? `за ${nightsLabel}, ${formatGuestsLabel(guests)}`
+      : `за ${nightsLabel}`;
   return {
     text: `${formatMoney(calculation.total, calculation.currency)} ${sideLabel}`,
     meta: perNight,
@@ -1194,6 +1212,7 @@ export function PublicPropertyDetails({
         let stayTotal: number | null = null;
         let stayCurrency: string | null = null;
         let stayNightly: number | null = null;
+        let stayUnitNightly: number | null = null;
         let stayPriceType: RoomPriceCalculationType | null = null;
 
         if (checkIn && checkOut && selectedNights > 0) {
@@ -1214,10 +1233,8 @@ export function PublicPropertyDetails({
             hasStayPrice = true;
             stayTotal = calculation.total;
             stayCurrency = calculation.currency;
-            stayNightly = Math.round(
-              (calculation.priceType === "MIXED" ? calculation.total : calculation.unitTotal) /
-                calculation.nights,
-            );
+            stayNightly = Math.round(calculation.total / calculation.nights);
+            stayUnitNightly = Math.round(calculation.unitTotal / calculation.nights);
             stayPriceType = calculation.priceType;
           }
         }
@@ -1233,6 +1250,7 @@ export function PublicPropertyDetails({
           stayTotal,
           stayCurrency,
           stayNightly,
+          stayUnitNightly,
           stayPriceType,
           sortPrice,
           capacityDelta: Math.abs(capacity - totalGuests),
@@ -1270,6 +1288,7 @@ export function PublicPropertyDetails({
       currency: string;
       nights: number;
       nightly: number;
+      unitNightly: number | null;
       priceType: RoomPriceCalculationType | null;
       roomTitle: string;
     };
@@ -1298,18 +1317,24 @@ export function PublicPropertyDetails({
       currency: bestCurrency,
       nights: selectedNights,
       nightly: bestNightly,
+      unitNightly: bestAutoEntry.stayUnitNightly,
       priceType: bestAutoEntry.stayPriceType,
       roomTitle: bestAutoEntry.room.title,
     } satisfies QuoteResult;
   }, [checkIn, checkOut, rankedRooms, selectedNights]);
   const sortedRooms = rankedRooms;
   const sidebarNightlyLabel = sidebarQuote
-    ? formatNightlyPriceLabel(sidebarQuote.nightly, sidebarQuote.currency, sidebarQuote.priceType)
+    ? `${formatMoney(sidebarQuote.nightly, sidebarQuote.currency)} за ночь`
     : `${mainPriceLabel} ${getRoomPriceNightlySuffix(item.minNightPriceType)}`;
   const sidebarPriceMeta =
-    selectedNights > 0
-      ? `${formatNightsLabel(selectedNights)}, гостей: ${totalGuests}`
-      : "Выберите даты и состав гостей";
+    sidebarQuote?.priceType === "PER_PERSON" && sidebarQuote.unitNightly !== null
+      ? `${formatNightsLabel(selectedNights)}, ${formatGuestsLabel(totalGuests)} · ${formatMoney(
+          sidebarQuote.unitNightly,
+          sidebarQuote.currency,
+        )} за человека`
+      : selectedNights > 0
+        ? `${formatNightsLabel(selectedNights)}, ${formatGuestsLabel(totalGuests)}`
+        : "Выберите даты и состав гостей";
   const sidebarPriceRoomHint = sidebarQuote ? `Лучший номер: ${sidebarQuote.roomTitle}` : null;
   const checkInRuleValue = item.rules.checkInFrom
     ? `с ${formatTime(item.rules.checkInFrom)}`

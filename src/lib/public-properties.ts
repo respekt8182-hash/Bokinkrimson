@@ -124,6 +124,7 @@ export type PublicCatalogItem = {
     checkOut: string;
     nights: number;
     mode: "selected" | "today";
+    guests: number;
   };
   stayPrice: {
     total: number;
@@ -133,6 +134,7 @@ export type PublicCatalogItem = {
     totalNightly: number;
     priceType: RoomPriceType | "MIXED";
     roomTitle: string | null;
+    guests: number;
   } | null;
   roomSnapshot: {
     title: string;
@@ -890,6 +892,7 @@ function getBestStayPriceByRooms(input: {
   totalNightly: number;
   priceType: RoomPriceType | "MIXED";
   roomTitle: string | null;
+  guests: number;
 } | null {
   const guests = Math.max(1, Math.floor(input.guests));
   let best: {
@@ -953,6 +956,7 @@ function getBestStayPriceByRooms(input: {
     totalNightly: Math.round(best.total / best.nights),
     priceType: best.priceType,
     roomTitle: best.roomTitle,
+    guests,
   };
 }
 
@@ -1549,10 +1553,19 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           prices: room.prices,
         })),
       );
-      if (minPrice !== null && (minNightPrice === null || minNightPrice < minPrice)) {
+      const stayPrice = getBestStayPriceByRooms({
+        rooms: displayState.rooms,
+        checkIn: stayRange.checkIn,
+        checkOut: stayRange.checkOut,
+        guests: guestsCount,
+      });
+      const priceForFilter =
+        stayRange.mode === "selected" && stayPrice ? stayPrice.totalNightly : minNightPrice;
+
+      if (minPrice !== null && (priceForFilter === null || priceForFilter < minPrice)) {
         return null;
       }
-      if (maxPrice !== null && (minNightPrice === null || minNightPrice > maxPrice)) {
+      if (maxPrice !== null && (priceForFilter === null || priceForFilter > maxPrice)) {
         return null;
       }
 
@@ -1562,6 +1575,8 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         minNightPrice,
         minNightPriceType,
         currency,
+        stayPrice,
+        priceForFilter,
         distanceKm,
         searchMatchKind,
         // Multi-factor catalog rank: rating, reviews, engagement signals, freshness, rotation.
@@ -1578,6 +1593,8 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         minNightPrice: number | null;
         minNightPriceType: RoomPriceType | null;
         currency: string | null;
+        stayPrice: ReturnType<typeof getBestStayPriceByRooms>;
+        priceForFilter: number | null;
         distanceKm: number | null;
         searchMatchKind: CatalogSearchMatchKind;
         catalogRank: number;
@@ -1593,16 +1610,16 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       }
 
       if (sort === "price_asc") {
-        if (left.minNightPrice === null && right.minNightPrice === null) return 0;
-        if (left.minNightPrice === null) return 1;
-        if (right.minNightPrice === null) return -1;
-        const byPrice = left.minNightPrice - right.minNightPrice;
+        if (left.priceForFilter === null && right.priceForFilter === null) return 0;
+        if (left.priceForFilter === null) return 1;
+        if (right.priceForFilter === null) return -1;
+        const byPrice = left.priceForFilter - right.priceForFilter;
         if (Math.abs(byPrice) > 0.00001) return byPrice;
       } else if (sort === "price_desc") {
-        if (left.minNightPrice === null && right.minNightPrice === null) return 0;
-        if (left.minNightPrice === null) return 1;
-        if (right.minNightPrice === null) return -1;
-        const byPrice = right.minNightPrice - left.minNightPrice;
+        if (left.priceForFilter === null && right.priceForFilter === null) return 0;
+        if (left.priceForFilter === null) return 1;
+        if (right.priceForFilter === null) return -1;
+        const byPrice = right.priceForFilter - left.priceForFilter;
         if (Math.abs(byPrice) > 0.00001) return byPrice;
       } else if (sort === "rating_desc") {
         const byRating = Number(right.property.avgRating) - Number(left.property.avgRating);
@@ -1720,13 +1737,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     // Use published snapshot for display content when owner edits are under moderation.
     const catalogSnap = displayState.snapshot;
     const imageUrls = displayState.imageUrls;
-    const roomPricing = displayState.rooms;
-    const stayPrice = getBestStayPriceByRooms({
-      rooms: roomPricing,
-      checkIn: stayRange.checkIn,
-      checkOut: stayRange.checkOut,
-      guests: guestsCount,
-    });
+    const stayPrice = entry.stayPrice;
     const roomSnapshot = pickRepresentativeRoom(displayState.rooms, stayPrice?.roomTitle ?? null);
     // Manual "key amenity" configuration has priority; auto-highlights are fallback.
     // When a snapshot is available, prefer its keyRoomAmenityNames for display.
@@ -1851,7 +1862,10 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       minNightPrice: entry.minNightPrice,
       minNightPriceType: entry.minNightPriceType,
       currency: entry.currency,
-      stayContext: stayRange,
+      stayContext: {
+        ...stayRange,
+        guests: guestsCount,
+      },
       stayPrice,
       roomSnapshot,
       amenityHighlights,
