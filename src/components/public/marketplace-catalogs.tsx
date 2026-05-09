@@ -62,6 +62,7 @@ type AttractionCatalogProps = {
   mapItems?: PublicAttractionCatalogItem[];
   categories: string[];
   locationSuggestions: PublicMarketplaceLocationSuggestion[];
+  activeBounds?: string | null;
 };
 
 type TransferCatalogProps = {
@@ -69,6 +70,7 @@ type TransferCatalogProps = {
   mapItems?: PublicTransferCatalogItem[];
   transferTypes: string[];
   locationSuggestions: PublicMarketplaceLocationSuggestion[];
+  activeBounds?: string | null;
 };
 
 type TransferFleet = PublicTransferCatalogItem["fleet"];
@@ -1023,6 +1025,7 @@ export function AttractionCatalog({
   mapItems,
   categories,
   locationSuggestions,
+  activeBounds = null,
 }: AttractionCatalogProps) {
   const params: CatalogParams = {
     q: result.filters.query,
@@ -1030,6 +1033,7 @@ export function AttractionCatalog({
     category: result.filters.category,
     radiusKm: String(result.filters.radiusKm),
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
+    bounds: activeBounds,
   };
   const pagination = (
     <Pagination
@@ -1067,29 +1071,30 @@ export function AttractionCatalog({
         locationSuggestions={locationSuggestions}
       />
 
-      {result.items.length === 0 ? (
-        <EmptyState
-          title="Досуг не найден"
-          description="Попробуйте другой город, увеличьте радиус или очистите поиск."
-          resetHref="/attractions"
-        />
-      ) : (
-        <MarketplaceCatalogMap
-          kind="attractions"
-          items={mapItems ?? result.items}
-          filters={result.filters}
-          mapTitle="Карта мест"
-        >
-          <section className="min-w-0 lg:w-full" id="catalog-results">
+      <MarketplaceCatalogMap
+        kind="attractions"
+        items={mapItems ?? result.items}
+        resultsCount={result.total}
+        filters={result.filters}
+        mapTitle="Карта мест"
+      >
+        <section className="min-w-0 lg:w-full" id="catalog-results">
+          {result.items.length === 0 ? (
+            <EmptyState
+              title="Досуг не найден"
+              description="Попробуйте другой город, увеличьте радиус или очистите поиск."
+              resetHref="/attractions"
+            />
+          ) : (
             <div className="space-y-4">
               {result.items.map((item, index) => (
                 <AttractionCard key={item.id} item={item} eagerImage={index < 2} />
               ))}
             </div>
-            {pagination}
-          </section>
-        </MarketplaceCatalogMap>
-      )}
+          )}
+          {pagination}
+        </section>
+      </MarketplaceCatalogMap>
     </CatalogShell>
   );
 }
@@ -1099,6 +1104,7 @@ export function TransferCatalog({
   mapItems,
   transferTypes,
   locationSuggestions,
+  activeBounds = null,
 }: TransferCatalogProps) {
   const params: CatalogParams = {
     q: result.filters.query,
@@ -1108,6 +1114,7 @@ export function TransferCatalog({
     minPrice: result.filters.minPrice ? String(result.filters.minPrice) : "",
     maxPrice: result.filters.maxPrice ? String(result.filters.maxPrice) : "",
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
+    bounds: activeBounds,
   };
   const pagination = (
     <Pagination
@@ -1150,6 +1157,7 @@ export function TransferCatalog({
       <MarketplaceCatalogMap
         kind="transfers"
         items={mapItems ?? result.items}
+        resultsCount={result.total}
         filters={result.filters}
         mapTitle="Карта трансферов"
       >

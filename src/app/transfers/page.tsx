@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TransferCatalog } from "@/components/public/marketplace-catalogs";
 import { getMarketplaceDirectoryData, getPublicTransferCatalog } from "@/lib/public-marketplace";
+import { parseBoundsParam } from "@/lib/search-contracts";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 
 type TransfersPageProps = {
@@ -21,6 +22,8 @@ function pick(value: string | string[] | undefined): string {
 
 export default async function TransfersPage({ searchParams }: TransfersPageProps) {
   const params = await searchParams;
+  const boundsParam = pick(params.bounds);
+  const bounds = parseBoundsParam(boundsParam);
   const radiusKm = Number.parseFloat(pick(params.radiusKm) || "20");
   const minPrice = Number.parseFloat(pick(params.minPrice));
   const maxPrice = Number.parseFloat(pick(params.maxPrice));
@@ -49,6 +52,7 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
   const [result, mapResult, directory] = await Promise.all([
     getPublicTransferCatalog({
       ...catalogQuery,
+      bounds,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
     }),
@@ -67,6 +71,7 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
       mapItems={mapResult.items}
       transferTypes={directory.transferTypes}
       locationSuggestions={directory.transferLocationSuggestions}
+      activeBounds={boundsParam || null}
     />
   );
 }

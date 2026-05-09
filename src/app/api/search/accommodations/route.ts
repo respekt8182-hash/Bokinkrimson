@@ -85,6 +85,7 @@ export async function GET(request: Request) {
     hasReviews: input.hasReviews === true,
     familyFriendly,
     petsAllowed: input.petsAllowed === true,
+    bounds,
     type:
       pickFirstListValue(searchParams.get("type")) ??
       input.propertyType ??

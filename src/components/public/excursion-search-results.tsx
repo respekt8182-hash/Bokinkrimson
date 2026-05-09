@@ -247,6 +247,63 @@ function buildSearchUrl(direction: "excursions" | "tours", params: Record<string
   ]);
 }
 
+function buildExcursionSearchParams(
+  filters: PublicExcursionCatalogResult["filters"],
+  options?: {
+    page?: number;
+    pageSize?: number;
+    bounds?: string | null;
+  },
+): URLSearchParams {
+  const params = new URLSearchParams();
+
+  if (typeof options?.page === "number") {
+    params.set("page", String(options.page));
+  }
+
+  if (typeof options?.pageSize === "number") {
+    params.set("page_size", String(options.pageSize));
+  }
+
+  if (filters.query) params.set("q", filters.query);
+  if (filters.locationName) params.set("location", filters.locationName);
+  if (filters.offerType) params.set("offerType", filters.offerType);
+  if (filters.districtSlug) params.set("district", filters.districtSlug);
+  if (filters.categorySlug) params.set("category", filters.categorySlug);
+  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) params.set("dateTo", filters.dateTo);
+  if (filters.people) params.set("people", String(filters.people));
+  params.set("radiusKm", String(filters.radiusKm));
+  if (filters.sort && filters.sort !== "relevance") params.set("sort", filters.sort);
+  if (filters.durationBucket) params.set("durationBucket", filters.durationBucket);
+  if (filters.minPrice) params.set("minPrice", String(filters.minPrice));
+  if (filters.maxPrice) params.set("maxPrice", String(filters.maxPrice));
+  if (filters.format) params.set("format", filters.format);
+  if (filters.pickup) params.set("pickup", "1");
+  if (filters.kids) params.set("kids", "1");
+  if (filters.language) params.set("language", filters.language);
+  if (filters.difficulty) params.set("difficulty", filters.difficulty);
+  if (options?.bounds) params.set("bounds", options.bounds);
+
+  return params;
+}
+
+function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | null): string | null {
+  if (!bounds) {
+    return null;
+  }
+
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+  if (![south, west, north, east].every(Number.isFinite)) {
+    return null;
+  }
+
+  return [south, west, north, east].map((value) => value.toFixed(6)).join(",");
+}
+
 const excursionLocationSuggestionsListboxId = "exc-search-suggestions-listbox";
 const mobileExcursionLocationSuggestionsListboxId = "mob-exc-search-suggestions-listbox";
 const excursionLocationRecentStorageKey = "boking.home_search_recent_v1";
@@ -776,9 +833,12 @@ export function ExcursionSearchResults({
   // ── Load-more state ──────────────────────────────────────────────────────────
   const [displayItems, setDisplayItems] = useState<PublicExcursionCatalogItem[]>(items);
   const [loadedPage, setLoadedPage] = useState(pagination.page);
+  const [totalCount, setTotalCount] = useState(pagination.total);
+  const [totalPages, setTotalPages] = useState(pagination.totalPages);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const hasMore = loadedPage < pagination.totalPages;
-  const remaining = pagination.total - displayItems.length;
+  const searchRequestSeqRef = useRef(0);
+  const hasMore = loadedPage < totalPages;
+  const remaining = Math.max(0, totalCount - displayItems.length);
 
   // ── Map state ────────────────────────────────────────────────────────────────
   const mapPlacement = useCatalogMapPlacement();
@@ -790,6 +850,10 @@ export function ExcursionSearchResults({
   const mobileDragHandledRef = useRef(false);
   const mobileResultsScrollTopRef = useRef(0);
   const mobileChromeProgressRef = useRef(0);
+  const mapBoundsFilterRef = useRef<string | null>(null);
+  const mapBoundsRefreshTimerRef = useRef<number | null>(null);
+  const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
+  const mapBoundsBootstrapHandledRef = useRef(false);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [isMobileMapCollapsed, setIsMobileMapCollapsed] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
@@ -803,6 +867,7 @@ export function ExcursionSearchResults({
   const [mapItems, setMapItems] = useState<PublicExcursionCatalogItem[]>(items);
   const [isMapPointsLoading, setIsMapPointsLoading] = useState(false);
   const [mapPointsError, setMapPointsError] = useState("");
+  const [isBoundsRefreshing, setIsBoundsRefreshing] = useState(false);
   useBodyScrollLock(mapExpanded);
 
   // ── Card refs for scroll-to-card on pin hover ────────────────────────────────
@@ -852,6 +917,8 @@ export function ExcursionSearchResults({
   useEffect(() => {
     setDisplayItems(items);
     setLoadedPage(pagination.page);
+    setTotalCount(pagination.total);
+    setTotalPages(pagination.totalPages);
     setIsLoadingMore(false);
     setActivePointId(null);
     setHoveredCardId(null);
@@ -864,8 +931,16 @@ export function ExcursionSearchResults({
     setMapItems(items);
     setIsMapPointsLoading(false);
     setMapPointsError("");
+    setIsBoundsRefreshing(false);
+    mapBoundsFilterRef.current = null;
+    mapBoundsBootstrapHandledRef.current = false;
+    if (mapBoundsRefreshTimerRef.current !== null) {
+      window.clearTimeout(mapBoundsRefreshTimerRef.current);
+      mapBoundsRefreshTimerRef.current = null;
+    }
+    mapBoundsAbortControllerRef.current?.abort();
     cardRefsMap.current.clear();
-  }, [items, pagination.page]);
+  }, [items, pagination.page, pagination.total, pagination.totalPages]);
 
   useEffect(() => {
     if (!mapExpanded) {
@@ -884,6 +959,15 @@ export function ExcursionSearchResults({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [mapExpanded]);
+
+  useEffect(() => {
+    return () => {
+      if (mapBoundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+      }
+      mapBoundsAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   const isLocationQueryMode = location.trim().length > 0;
   const locationDropdownOptions = useMemo<ExcursionLocationDropdownOption[]>(() => {
@@ -1305,48 +1389,8 @@ export function ExcursionSearchResults({
   );
 
   const mapQuery = useMemo(() => {
-    const params = new URLSearchParams({ page: "1" });
-
-    if (filters.query) params.set("q", filters.query);
-    if (filters.locationName) params.set("location", filters.locationName);
-    if (filters.offerType) params.set("offerType", filters.offerType);
-    if (filters.districtSlug) params.set("district", filters.districtSlug);
-    if (filters.categorySlug) params.set("category", filters.categorySlug);
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.people) params.set("people", String(filters.people));
-    params.set("radiusKm", String(filters.radiusKm));
-    if (filters.sort && filters.sort !== "relevance") params.set("sort", filters.sort);
-    if (filters.durationBucket) params.set("durationBucket", filters.durationBucket);
-    if (filters.minPrice) params.set("minPrice", String(filters.minPrice));
-    if (filters.maxPrice) params.set("maxPrice", String(filters.maxPrice));
-    if (filters.format) params.set("format", filters.format);
-    if (filters.pickup) params.set("pickup", "1");
-    if (filters.kids) params.set("kids", "1");
-    if (filters.language) params.set("language", filters.language);
-    if (filters.difficulty) params.set("difficulty", filters.difficulty);
-
-    return params.toString();
-  }, [
-    filters.categorySlug,
-    filters.dateFrom,
-    filters.dateTo,
-    filters.difficulty,
-    filters.districtSlug,
-    filters.durationBucket,
-    filters.format,
-    filters.kids,
-    filters.language,
-    filters.locationName,
-    filters.maxPrice,
-    filters.minPrice,
-    filters.offerType,
-    filters.people,
-    filters.pickup,
-    filters.query,
-    filters.radiusKm,
-    filters.sort,
-  ]);
+    return buildExcursionSearchParams(filters, { page: 1 }).toString();
+  }, [filters]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1447,7 +1491,7 @@ export function ExcursionSearchResults({
     activePointId && visibleMapPointIds.has(activePointId)
       ? (mapItemById.get(activePointId) ?? null)
       : null;
-  const foundProgramsLabel = formatRuCount(pagination.total, "программа", "программы", "программ");
+  const foundProgramsLabel = formatRuCount(totalCount, "программа", "программы", "программ");
   const mobileSheetSnaps = useMemo<MobileSheetSnaps>(() => {
     const height = mobileStageHeight || 640;
     const collapsed = Math.max(
@@ -1527,6 +1571,88 @@ export function ExcursionSearchResults({
     node?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
 
+  const handleMapBoundsFilterChange = useCallback(
+    (bounds: [[number, number], [number, number]] | null) => {
+      const normalizedBounds = formatMapBoundsFilter(bounds);
+
+      if (!mapBoundsBootstrapHandledRef.current && mapBoundsFilterRef.current === null) {
+        mapBoundsBootstrapHandledRef.current = true;
+        return;
+      }
+      mapBoundsBootstrapHandledRef.current = true;
+
+      if (normalizedBounds === mapBoundsFilterRef.current) {
+        return;
+      }
+
+      mapBoundsFilterRef.current = normalizedBounds;
+
+      if (mapBoundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+        mapBoundsRefreshTimerRef.current = null;
+      }
+      mapBoundsAbortControllerRef.current?.abort();
+
+      searchRequestSeqRef.current += 1;
+      const requestId = searchRequestSeqRef.current;
+
+      mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
+        mapBoundsRefreshTimerRef.current = null;
+        const controller = new AbortController();
+        mapBoundsAbortControllerRef.current = controller;
+        setIsBoundsRefreshing(true);
+        setMapPointsError("");
+
+        const params = buildExcursionSearchParams(filters, {
+          page: 1,
+          pageSize: 30,
+          bounds: normalizedBounds,
+        });
+
+        fetch(`/api/search/excursions?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error("bounds_fetch_failed");
+            }
+
+            return (await response.json()) as {
+              items: PublicExcursionCatalogItem[];
+              total: number;
+              page: number;
+              total_pages: number;
+            };
+          })
+          .then((data) => {
+            if (controller.signal.aborted || requestId !== searchRequestSeqRef.current) {
+              return;
+            }
+
+            setDisplayItems(data.items);
+            setLoadedPage(data.page);
+            setTotalCount(data.total);
+            setTotalPages(data.total_pages);
+            setActivePointId(null);
+            setHoveredCardId(null);
+            setHoveredPinId(null);
+          })
+          .catch(() => {
+            if (!controller.signal.aborted && requestId === searchRequestSeqRef.current) {
+              setMapPointsError("Не удалось обновить выдачу по зоне карты. Показаны текущие результаты.");
+            }
+          })
+          .finally(() => {
+            if (requestId === searchRequestSeqRef.current) {
+              setIsBoundsRefreshing(false);
+            }
+          });
+      }, 260);
+    },
+    [filters],
+  );
+
   // ── Navigation on pin click ──────────────────────────────────────────────────
   const handleMapPointClick = useCallback(
     (pointId: string) => {
@@ -1553,30 +1679,24 @@ export function ExcursionSearchResults({
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
     try {
-      // Continue pagination using applied server filters, not draft sidebar values.
-      const p = new URLSearchParams({ page_size: "30", page: String(loadedPage + 1) });
-      if (filters.query) p.set("q", filters.query);
-      if (filters.locationName) p.set("location", filters.locationName);
-      if (filters.offerType) p.set("offerType", filters.offerType);
-      if (filters.districtSlug) p.set("district", filters.districtSlug);
-      if (filters.categorySlug) p.set("category", filters.categorySlug);
-      if (filters.dateFrom) p.set("dateFrom", filters.dateFrom);
-      if (filters.dateTo) p.set("dateTo", filters.dateTo);
-      if (filters.people) p.set("people", String(filters.people));
-      p.set("radiusKm", String(filters.radiusKm));
-      if (filters.sort && filters.sort !== "relevance") p.set("sort", filters.sort);
-      if (filters.durationBucket) p.set("durationBucket", filters.durationBucket);
-      if (filters.minPrice) p.set("minPrice", String(filters.minPrice));
-      if (filters.maxPrice) p.set("maxPrice", String(filters.maxPrice));
-      if (filters.format) p.set("format", filters.format);
-      if (filters.pickup) p.set("pickup", "1");
-      if (filters.kids) p.set("kids", "1");
+      const p = buildExcursionSearchParams(filters, {
+        page: loadedPage + 1,
+        pageSize: 30,
+        bounds: mapBoundsFilterRef.current,
+      });
 
       const response = await fetch(`/api/search/excursions?${p.toString()}`);
       if (!response.ok) throw new Error("fetch_failed");
-      const data = (await response.json()) as { items: PublicExcursionCatalogItem[]; page: number };
+      const data = (await response.json()) as {
+        items: PublicExcursionCatalogItem[];
+        page: number;
+        total: number;
+        total_pages: number;
+      };
       setDisplayItems((prev) => [...prev, ...data.items]);
       setLoadedPage(data.page);
+      setTotalCount(data.total);
+      setTotalPages(data.total_pages);
     } catch {
       // silent — keep button visible for retry
     } finally {
@@ -1587,6 +1707,9 @@ export function ExcursionSearchResults({
   const handlePinHover = useCallback(
     (pointId: string | null) => {
       setHoveredPinId(pointId);
+      if (pointId) {
+        setHoveredCardId(null);
+      }
       if (pointId && !mapExpanded) {
         const el = cardRefsMap.current.get(pointId);
         el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1932,6 +2055,15 @@ export function ExcursionSearchResults({
 
   const mapStatsLabel = `На карте: ${mapPoints.length}`;
   const renderMapStatusOverlay = () => {
+    if (isBoundsRefreshing) {
+      return (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-20 inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
+          Обновляем выдачу по карте
+        </div>
+      );
+    }
+
     if (isMapPointsLoading) {
       return (
         <div className="pointer-events-none absolute bottom-3 left-3 z-20 inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
@@ -2841,16 +2973,18 @@ export function ExcursionSearchResults({
             >
               <YandexMapMultiViewer
                 points={mapPoints}
-                activePointId={activePointId ?? hoveredCardId}
-                hoveredPointId={hoveredPinId}
+                activePointId={activePointId}
+                hoveredPointId={hoveredPinId ?? hoveredCardId}
                 onPointClick={handleCatalogMobileMapPointClick}
                 onPointHoverChange={handlePinHover}
+                onBoundsChange={handleMapBoundsFilterChange}
                 initialViewport={mapViewport}
                 viewportKey={mapViewportKey}
                 radiusCircle={radiusCircle}
                 controls={[]}
                 showBalloons={false}
                 frameless
+                fitPointsOnChange="initial"
                 className="h-full w-full"
               />
             </div>
@@ -2943,6 +3077,7 @@ export function ExcursionSearchResults({
                               isHighlighted={hoveredPinId === item.id || activePointId === item.id}
                               onMouseEnter={() => {
                                 setActivePointId(null);
+                                setHoveredPinId(null);
                                 setHoveredCardId(item.id);
                               }}
                               onMouseLeave={() => setHoveredCardId(null)}
@@ -3006,14 +3141,16 @@ export function ExcursionSearchResults({
           >
             <YandexMapMultiViewer
               points={mapPoints}
-              activePointId={activePointId ?? hoveredCardId}
-              hoveredPointId={hoveredPinId}
+              activePointId={activePointId}
+              hoveredPointId={hoveredPinId ?? hoveredCardId}
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
+              onBoundsChange={handleMapBoundsFilterChange}
               initialViewport={mapViewport}
               viewportKey={mapViewportKey}
               radiusCircle={radiusCircle}
               controls={[]}
+              fitPointsOnChange="initial"
               className="h-full w-full rounded-none border-0"
             />
 
@@ -3048,15 +3185,17 @@ export function ExcursionSearchResults({
           <div className="relative h-[320px] overflow-hidden">
             <YandexMapMultiViewer
               points={mapPoints}
-              activePointId={activePointId ?? hoveredCardId}
-              hoveredPointId={hoveredPinId}
+              activePointId={activePointId}
+              hoveredPointId={hoveredPinId ?? hoveredCardId}
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
+              onBoundsChange={handleMapBoundsFilterChange}
               initialViewport={mapViewport}
               viewportKey={mapViewportKey}
               radiusCircle={radiusCircle}
               showBalloons={false}
               frameless
+              fitPointsOnChange="initial"
               className="h-full w-full"
             />
             <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
@@ -3145,6 +3284,7 @@ export function ExcursionSearchResults({
                       isHighlighted={hoveredPinId === item.id || activePointId === item.id}
                       onMouseEnter={() => {
                         setActivePointId(null);
+                        setHoveredPinId(null);
                         setHoveredCardId(item.id);
                       }}
                       onMouseLeave={() => setHoveredCardId(null)}
@@ -3208,16 +3348,18 @@ export function ExcursionSearchResults({
               <div className="absolute inset-0">
                 <YandexMapMultiViewer
                   points={mapPoints}
-                  activePointId={activePointId ?? hoveredCardId}
-                  hoveredPointId={hoveredPinId}
+                  activePointId={activePointId}
+                  hoveredPointId={hoveredPinId ?? hoveredCardId}
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={handlePinHover}
+                  onBoundsChange={handleMapBoundsFilterChange}
                   initialViewport={mapViewport}
                   viewportKey={mapViewportKey}
                   radiusCircle={radiusCircle}
                   controls={["zoomControl"]}
                   showBalloons={false}
                   frameless
+                  fitPointsOnChange="initial"
                   className="h-full w-full"
                 />
 
@@ -3263,18 +3405,20 @@ export function ExcursionSearchResults({
             <div className="absolute inset-0">
               <YandexMapMultiViewer
                 points={mapPoints}
-                activePointId={activePointId ?? hoveredCardId}
-                hoveredPointId={hoveredPinId}
+                activePointId={activePointId}
+                hoveredPointId={hoveredPinId ?? hoveredCardId}
                 onPointClick={(id) => {
                   handleMapPointClick(id);
                 }}
                 onPointHoverChange={handlePinHover}
+                onBoundsChange={handleMapBoundsFilterChange}
                 initialViewport={mapViewport}
                 viewportKey={mapViewportKey}
                 radiusCircle={radiusCircle}
                 controls={["zoomControl"]}
                 showBalloons={false}
                 frameless
+                fitPointsOnChange="initial"
                 className="h-full min-h-[100dvh] w-full"
               />
             </div>

@@ -153,8 +153,8 @@ const maxBoardRangeDaysCount = 370;
 const mobileRoomsPerPage = 3;
 const dayCellWidthDesktopPx = 44;
 const dayCellWidthTabletPx = 42;
-const dayCellWidthPortraitPx = 40;
-const dayCellWidthMobilePx = 40;
+const dayCellWidthPortraitPx = 36;
+const dayCellWidthMobilePx = 36;
 const dayCellWidthLandscapePx = 36;
 const LS = "[@media(orientation:landscape)_and_(max-height:560px)]";
 const dragAutoScrollEdgePx = 72;
@@ -632,6 +632,11 @@ function getGroupShortLabel(groupLabel: string): string {
 }
 
 function buildCompactPreviewLabel(value: string, maxLetters = 3): string {
+  const explicitRoomNumber = extractExplicitRoomNumber(value);
+  if (explicitRoomNumber !== null) {
+    return `#${explicitRoomNumber}`;
+  }
+
   const normalized = value
     .replace(/[^\p{L}\p{N}\s]+/gu, " ")
     .split(/\s+/)
@@ -645,10 +650,11 @@ function buildCompactPreviewLabel(value: string, maxLetters = 3): string {
       .toUpperCase();
   }
 
-  return Array.from(normalized[0] ?? value.trim())
+  const fallback = Array.from(normalized[0] ?? value.trim())
     .slice(0, maxLetters)
     .join("")
     .toUpperCase();
+  return fallback || "#";
 }
 
 function normalizeRoomSortText(value: string): string {
@@ -2554,7 +2560,7 @@ export function PropertyChessboardWorkspace({
         ) : null}
 
         {selectedPropertyId && properties.length > 0 ? (
-          <div className="rounded-xl border border-olive/10 bg-white/96 p-2 md:p-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
+          <div className="rounded-xl border border-olive/10 bg-white/96 p-1.5 md:p-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
             {rooms.length === 0 && !isLoadingRooms ? (
               <p className="rounded-lg border border-dashed border-olive/30 px-3 py-3 text-sm text-olive/65">
                 В объекте пока нет активных номеров. Добавьте номер в разделе «Номерной фонд».
@@ -2571,7 +2577,7 @@ export function PropertyChessboardWorkspace({
                     <tr>
                       <th
                         className={cn(
-                          `sticky left-0 top-0 z-[70] border-b border-r border-olive/10 bg-[#f7f3eb] px-2 text-left text-[11px] font-semibold text-olive md:px-2.5 md:text-xs ${LS}:px-1.5 ${LS}:text-[10px]`,
+                          `sticky left-0 top-0 z-[70] overflow-hidden border-b border-r border-olive/10 bg-[#f7f3eb] px-1.5 text-left text-[10px] font-semibold text-olive md:px-2.5 md:text-xs ${LS}:px-1.5 ${LS}:text-[10px]`,
                         )}
                         style={{
                           width: "var(--cb-sidebar-w)",
@@ -2579,7 +2585,15 @@ export function PropertyChessboardWorkspace({
                           height: "var(--cb-header-h1)",
                         }}
                       >
-                        {boardMode === "occupancy" ? "Занятость" : "Цены"}
+                        <span className="block truncate">
+                          {isMobilePortrait
+                            ? boardMode === "occupancy"
+                              ? "Брони"
+                              : "Цены"
+                            : boardMode === "occupancy"
+                              ? "Занятость"
+                              : "Цены"}
+                        </span>
                       </th>
                       {visibleMonthSegments.map((segment, segmentIndex) => (
                         <th
@@ -2713,12 +2727,26 @@ export function PropertyChessboardWorkspace({
                           }
                           extendDragSelection(roomId, dayIso);
                         }}
-                        onPriceClick={(price) =>
+                        onCellTap={(roomId, dayIso, hasOccupancy, price) => {
+                          if (boardMode === "occupancy") {
+                            if (hasOccupancy) {
+                              return;
+                            }
+                            openBookingModal({
+                              roomId,
+                              dateFrom: dayIso,
+                              dateTo: dayIso,
+                            });
+                            return;
+                          }
+
                           openPriceModal({
-                            roomId: price.roomId,
+                            roomId,
+                            dateFrom: price?.dateFrom ?? dayIso,
+                            dateTo: price?.dateTo ?? dayIso,
                             sourcePrice: price,
-                          })
-                        }
+                          });
+                        }}
                         onOccupancyClick={(occupancy) => openOccupancyActions(occupancy)}
                       />
                     ))}
@@ -3627,7 +3655,12 @@ type FragmentByGroupProps = {
     pointer: DragPointer,
   ) => void;
   onCellMouseEnter: (roomId: string, dayIso: string, hasOccupancy: boolean) => void;
-  onPriceClick: (price: SerializedRoomPrice) => void;
+  onCellTap: (
+    roomId: string,
+    dayIso: string,
+    hasOccupancy: boolean,
+    price: SerializedRoomPrice | null,
+  ) => void;
   onOccupancyClick: (occupancy: SerializedRoomOccupancy) => void;
 };
 
@@ -3688,6 +3721,7 @@ function CompactPageDots({ pageCount, currentPage, onChange, className }: Compac
 
 type MobileRailPreviewProps = {
   preview: string;
+  ordinal: number;
   title: string;
   subtitle?: string;
   expanded: boolean;
@@ -3697,6 +3731,7 @@ type MobileRailPreviewProps = {
 
 function MobileRailPreview({
   preview,
+  ordinal,
   title,
   subtitle,
   expanded,
@@ -3708,33 +3743,43 @@ function MobileRailPreview({
       <button
         type="button"
         className={cn(
-          "group relative inline-flex min-h-[calc(var(--cb-cell-h)-4px)] w-full items-center rounded-md border border-olive/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96))] px-2 py-1 text-left transition-all duration-200 active:scale-[0.98]",
+          "group relative inline-flex min-h-[calc(var(--cb-cell-h)-4px)] w-full items-center justify-center rounded-md border border-olive/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96))] px-1 py-1 text-center transition-all duration-200 active:scale-[0.98]",
           expanded
             ? "border-primary/20 shadow-[0_16px_30px_-26px_rgba(15,118,110,0.55)] ring-2 ring-primary/10"
             : "shadow-[0_12px_24px_-28px_rgba(58,43,35,0.35)]",
         )}
         onClick={onToggle}
         aria-expanded={expanded}
+        title={title}
         aria-label={`${expanded ? "Свернуть" : "Показать"} ${
           variant === "group" ? "категорию" : "номер"
         } ${title}`}
       >
-        <span className="sr-only">{preview}</span>
-        <span className="truncate text-[11px] font-semibold leading-4 text-olive">{title}</span>
+        <span className="sr-only">{title}</span>
+        <span className="flex min-w-0 items-center justify-center gap-1.5">
+          <span className="shrink-0 text-[9px] font-semibold leading-none text-olive/45">
+            {ordinal}
+          </span>
+          <span className="truncate text-[11px] font-bold leading-4 text-olive">{preview}</span>
+          <span
+            className={cn(
+              "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+              expanded ? "bg-primary" : "bg-olive/28",
+            )}
+            aria-hidden="true"
+          />
+        </span>
       </button>
 
       <div
         className={cn(
-          "pointer-events-none absolute left-full top-1/2 z-30 w-[min(62vw,220px)] -translate-y-1/2 pl-2 transition-all duration-200",
+          "pointer-events-none absolute left-full top-1/2 z-30 w-[min(68vw,260px)] -translate-y-1/2 pl-1.5 transition-all duration-200",
           expanded ? "translate-x-0 opacity-100" : "-translate-x-2 opacity-0",
         )}
       >
         <div className="rounded-lg border border-olive/10 bg-white/96 p-2.5 shadow-[0_18px_36px_-28px_rgba(58,43,35,0.38)] backdrop-blur-sm">
-          <p className="text-xs font-semibold text-olive">{title}</p>
+          <p className="break-words text-xs font-semibold leading-4 text-olive">{title}</p>
           {subtitle ? <p className="mt-1 text-[10px] leading-4 text-olive/62">{subtitle}</p> : null}
-          <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-primary/72">
-            Нажмите по ярлыку еще раз, чтобы свернуть
-          </p>
         </div>
       </div>
     </div>
@@ -3759,7 +3804,7 @@ function FragmentByGroup({
   onToggleMobileRail,
   onCellMouseDown,
   onCellMouseEnter,
-  onPriceClick,
+  onCellTap,
   onOccupancyClick,
 }: FragmentByGroupProps) {
   const firstVisibleIso = visibleDays[0]?.iso ?? null;
@@ -3785,6 +3830,7 @@ function FragmentByGroup({
               {isMobilePortrait ? (
                 <MobileRailPreview
                   preview={buildCompactPreviewLabel(room.title)}
+                  ordinal={rowOffset + localRoomIndex + 1}
                   title={room.title}
                   subtitle={`${getGroupShortLabel(groupLabel)} • ${formatRoomMeta(room)}`}
                   expanded={expandedMobileRailKey === `room:${room.id}`}
@@ -4084,9 +4130,7 @@ function FragmentByGroup({
                       "h-full w-full rounded-[10px] px-1 py-0.5 text-left transition-colors",
                       isInteractive
                         ? isCoarsePointer
-                          ? boardMode === "prices" && price
-                            ? "cursor-pointer"
-                            : "cursor-default"
+                          ? "cursor-pointer active:bg-primary/10"
                           : "cursor-crosshair"
                         : "cursor-default",
                       boardMode === "prices"
@@ -4118,13 +4162,13 @@ function FragmentByGroup({
                       onCellMouseEnter(room.id, day.iso, Boolean(occupancy));
                     }}
                     onClick={() => {
-                      if (!isCoarsePointer || boardMode !== "prices" || !price) {
+                      if (!isCoarsePointer || !isInteractive) {
                         return;
                       }
                       onDismissMobileRail();
-                      onPriceClick(price);
+                      onCellTap(room.id, day.iso, Boolean(occupancy), price);
                     }}
-                    style={{ touchAction: "pan-y" }}
+                    style={{ touchAction: isCoarsePointer ? "manipulation" : "pan-y" }}
                   >
                     {boardMode === "occupancy" ? null : price ? null : (
                       <span

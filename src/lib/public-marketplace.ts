@@ -25,6 +25,7 @@ import {
 import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
+import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
 import {
   createStaticAttractionDraft,
   getStaticAttractionByIdentifier,
@@ -46,6 +47,7 @@ export type PublicAttractionCatalogQuery = {
   location?: string;
   category?: string;
   radiusKm?: number;
+  bounds?: MapBounds | null;
   sort?: "relevance" | "distance_asc" | "newest" | "name_asc";
   page?: number;
   pageSize?: number;
@@ -57,6 +59,7 @@ export type PublicTransferCatalogQuery = {
   location?: string;
   transferType?: string;
   radiusKm?: number;
+  bounds?: MapBounds | null;
   minPrice?: number;
   maxPrice?: number;
   sort?:
@@ -781,6 +784,10 @@ export async function getPublicTransferCatalog(
       }
 
       if (maxPrice !== null && (priceFrom === null || priceFrom > maxPrice)) {
+        return null;
+      }
+
+      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, query.bounds ?? null)) {
         return null;
       }
 

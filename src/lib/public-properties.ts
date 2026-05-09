@@ -46,6 +46,7 @@ import { serializeReview } from "@/lib/reviews";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import { serializeRoom, roomInclude, type SerializedRoom } from "@/lib/rooms";
 import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
+import type { MapBounds } from "@/lib/search-contracts";
 import type { FaqItem } from "@/types/excursions";
 
 // Public catalog domain layer:
@@ -73,6 +74,7 @@ export type PublicCatalogQuery = {
   familyFriendly?: boolean;
   petsAllowed?: boolean;
   sort?: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
+  bounds?: MapBounds | null;
   page?: number;
   pageSize?: number;
   trackSearchImpressions?: boolean;
@@ -1391,6 +1393,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const hasReviews = query.hasReviews === true;
   const familyFriendly = query.familyFriendly === true;
   const petsAllowed = query.petsAllowed === true;
+  const bounds = query.bounds ?? null;
   const hasExplicitLocationFilter =
     Boolean(query.locationId?.trim()) || Boolean(query.location?.trim());
   const [resolvedLocation, queryLocationHint] = await Promise.all([
@@ -1551,6 +1554,17 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       }
 
       if (searchQuery.length >= 2 && !searchScoreMap.has(property.id)) {
+        return null;
+      }
+      if (
+        bounds &&
+        (displayState.latitude === null ||
+          displayState.longitude === null ||
+          displayState.latitude < bounds.south ||
+          displayState.latitude > bounds.north ||
+          displayState.longitude < bounds.west ||
+          displayState.longitude > bounds.east)
+      ) {
         return null;
       }
 

@@ -26,6 +26,7 @@ export function buildAccommodationSearchParams(
   filters: SearchFilters,
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
+  bounds?: string | null,
 ): URLSearchParams {
   const params = new URLSearchParams();
 
@@ -50,6 +51,7 @@ export function buildAccommodationSearchParams(
   if (filters.hasReviews) params.set("hasReviews", "1");
   if (filters.familyFriendly) params.set("familyFriendly", "1");
   if (filters.petsAllowed) params.set("petsAllowed", "1");
+  appendIfNotEmpty(params, "bounds", bounds ?? "");
 
   return params;
 }
@@ -77,8 +79,9 @@ export async function fetchAccommodationSearch(
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
   signal?: AbortSignal,
+  bounds?: string | null,
 ): Promise<SearchResponse> {
-  const query = buildAccommodationSearchParams(filters, page, pageSize).toString();
+  const query = buildAccommodationSearchParams(filters, page, pageSize, bounds).toString();
   const response = await fetch(`/api/search/accommodations?${query}`, {
     method: "GET",
     signal,

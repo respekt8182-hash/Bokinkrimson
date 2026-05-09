@@ -41,6 +41,7 @@ import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/publi
 import { serializeReview } from "@/lib/reviews";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
+import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
 import type {
   ExcursionExtraOption,
   ExcursionSectionPhotoGroups,
@@ -92,6 +93,7 @@ export type PublicExcursionCatalogQuery = {
   pickup?: boolean;
   kids?: boolean;
   radiusKm?: number;
+  bounds?: MapBounds | null;
   minPrice?: number;
   maxPrice?: number;
   durationBucket?: "up_to_3h" | "between_3h_6h" | "more_6h";
@@ -951,6 +953,7 @@ export async function getPublicExcursionCatalog(
   const dateRange = parseDateRange({ dateFrom: query.dateFrom, dateTo: query.dateTo });
   const people = query.people && Number.isFinite(query.people) ? Math.max(1, query.people) : null;
   const radiusKm = parseNearbyCatalogRadiusKm(query.radiusKm);
+  const bounds = query.bounds ?? null;
 
   const [resolvedLocation, resolvedDistrict, resolvedCategory] = await Promise.all([
     resolveExcursionLocation({
@@ -1170,6 +1173,9 @@ export async function getPublicExcursionCatalog(
     // Pins and distance are based strictly on the excursion map point, not on location center.
     const excursionLatitude = toNumberOrNull(display.latitude);
     const excursionLongitude = toNumberOrNull(display.longitude);
+    if (!isPointInsideBounds(excursionLatitude, excursionLongitude, bounds)) {
+      continue;
+    }
 
     // Excursions with no sessions at all are treated as "always available"
     // (they operate on a request basis). Only filter by date/capacity when

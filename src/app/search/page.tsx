@@ -15,6 +15,7 @@ import {
 } from "@/lib/seo/structured-data";
 import { buildSearchMetadata, getSearchSeoState } from "@/lib/seo/search-metadata";
 import { parseDateRangeParam } from "@/lib/seo/url-normalize";
+import { parseBoundsParam } from "@/lib/search-contracts";
 
 type SearchPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -116,6 +117,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasReviews = hasReviewsRaw === "1" || hasReviewsRaw === "true";
   const familyFriendly = familyFriendlyRaw === "1" || familyFriendlyRaw === "true";
   const petsAllowed = petsAllowedRaw === "1" || petsAllowedRaw === "true";
+  const bounds = parseBoundsParam(pick(params.bounds));
   const pageRaw = Number.parseInt(pick(params.page) || "1", 10);
   const page = Number.isFinite(pageRaw) ? Math.max(1, pageRaw) : 1;
   const canEmitSearchSchema = seoState.index;
@@ -158,6 +160,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       dateTo: checkOut || undefined,
       people: Number.isFinite(peopleRaw) ? Math.max(1, peopleRaw) : undefined,
       radiusKm: Number.parseFloat(radiusKm) || 20,
+      bounds,
       page,
       pageSize: 30,
     });
@@ -225,6 +228,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     familyFriendly,
     petsAllowed,
     sort: normalizedSort || undefined,
+    bounds,
     page: 1,
     pageSize: 30,
   });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AttractionCatalog } from "@/components/public/marketplace-catalogs";
 import { getMarketplaceDirectoryData, getPublicAttractionCatalog } from "@/lib/public-marketplace";
+import { parseBoundsParam } from "@/lib/search-contracts";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 
 type AttractionsPageProps = {
@@ -24,6 +25,8 @@ function pick(value: string | string[] | undefined): string {
 
 export default async function AttractionsPage({ searchParams }: AttractionsPageProps) {
   const params = await searchParams;
+  const boundsParam = pick(params.bounds);
+  const bounds = parseBoundsParam(boundsParam);
   const radiusKm = Number.parseFloat(pick(params.radiusKm) || "20");
   const page = Number.parseInt(pick(params.page) || "1", 10);
   const sortRaw = pick(params.sort);
@@ -43,6 +46,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
   const [result, mapResult, directory] = await Promise.all([
     getPublicAttractionCatalog({
       ...catalogQuery,
+      bounds,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
     }),
@@ -61,6 +65,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
       mapItems={mapResult.items}
       categories={directory.attractionCategories}
       locationSuggestions={directory.attractionLocationSuggestions}
+      activeBounds={boundsParam || null}
     />
   );
 }

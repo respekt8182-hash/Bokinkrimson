@@ -11,6 +11,7 @@ import {
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { slugify } from "@/lib/public-properties";
+import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
 
 export type StaticAttractionStatus = "DRAFT" | "PUBLISHED" | "HIDDEN";
 
@@ -804,6 +805,7 @@ export type StaticAttractionCatalogQuery = {
   location?: string;
   category?: string;
   radiusKm?: number;
+  bounds?: MapBounds | null;
   sort?: "relevance" | "distance_asc" | "newest" | "name_asc";
   page?: number;
   pageSize?: number;
@@ -919,6 +921,10 @@ export async function getStaticAttractionCatalog(
       }
 
       if (category && normalizeText(item.category) !== normalizeText(category)) {
+        return null;
+      }
+
+      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, query.bounds ?? null)) {
         return null;
       }
 

@@ -57,6 +57,7 @@ type PublicHousingResultsWithMapProps = {
   newItemIds?: string[];
   onLoadMore?: () => void;
   onWishlistToggle?: (isFavorite: boolean) => void;
+  onMapBoundsFilterChange?: (bounds: string | null) => void;
 };
 
 type MapPointResponse = MapPopupPropertyItem & {
@@ -201,6 +202,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | null): string | null {
+  if (!bounds) {
+    return null;
+  }
+
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+  if (![south, west, north, east].every(Number.isFinite)) {
+    return null;
+  }
+
+  return [south, west, north, east].map((value) => value.toFixed(6)).join(",");
+}
+
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
   return (Object.entries(snaps) as Array<[MobileSheetSnap, number]>).reduce(
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
@@ -291,6 +308,7 @@ export function PublicHousingResultsWithMap({
   newItemIds = [],
   onLoadMore,
   onWishlistToggle,
+  onMapBoundsFilterChange,
 }: PublicHousingResultsWithMapProps) {
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
@@ -527,7 +545,7 @@ export function PublicHousingResultsWithMap({
   );
 
   const activePopupItem = activePointId ? (mapPointById.get(activePointId) ?? null) : null;
-  const activeMapPointId = activePointId ?? hoveredCardId;
+  const highlightedMapPointId = hoveredPointId ?? hoveredCardId;
   const hasMapPoints = mapViewerPoints.length > 0;
   const foundCount = totalCount ?? items.length;
   const foundCountLabel = formatRuCount(
@@ -809,6 +827,13 @@ export function PublicHousingResultsWithMap({
       setHoveredPointId(pointId);
     },
     [],
+  );
+
+  const handleMapBoundsChange = useCallback(
+    (bounds: [[number, number], [number, number]] | null) => {
+      onMapBoundsFilterChange?.(formatMapBoundsFilter(bounds));
+    },
+    [onMapBoundsFilterChange],
   );
 
   function openMapFully() {
@@ -1107,10 +1132,11 @@ export function PublicHousingResultsWithMap({
               <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
                 <YandexMapMultiViewer
                   points={mapViewerPoints}
-                  activePointId={activeMapPointId}
-                  hoveredPointId={hoveredPointId}
+                  activePointId={activePointId}
+                  hoveredPointId={highlightedMapPointId}
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={handleMapPointHoverChange}
+                  onBoundsChange={handleMapBoundsChange}
                   initialViewport={locationViewport}
                   viewportKey={viewportKey}
                   controls={[]}
@@ -1218,10 +1244,11 @@ export function PublicHousingResultsWithMap({
                   <div className="h-full" onPointerDownCapture={handleMobileMapPointerDown}>
                     <YandexMapMultiViewer
                       points={mapViewerPoints}
-                      activePointId={activeMapPointId}
-                      hoveredPointId={hoveredPointId}
+                      activePointId={activePointId}
+                      hoveredPointId={highlightedMapPointId}
                       onPointClick={handleMapPointClick}
                       onPointHoverChange={handleMapPointHoverChange}
+                      onBoundsChange={handleMapBoundsChange}
                       initialViewport={locationViewport}
                       viewportKey={viewportKey}
                       showBalloons={false}
@@ -1256,10 +1283,11 @@ export function PublicHousingResultsWithMap({
                       >
                         <YandexMapMultiViewer
                           points={mapViewerPoints}
-                          activePointId={activeMapPointId}
-                          hoveredPointId={hoveredPointId}
+                          activePointId={activePointId}
+                          hoveredPointId={highlightedMapPointId}
                           onPointClick={handleMapPointClick}
                           onPointHoverChange={handleMapPointHoverChange}
+                          onBoundsChange={handleMapBoundsChange}
                           initialViewport={locationViewport}
                           viewportKey={viewportKey}
                           controls={["zoomControl"]}
@@ -1319,10 +1347,11 @@ export function PublicHousingResultsWithMap({
             <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
               <YandexMapMultiViewer
                 points={mapViewerPoints}
-                activePointId={activeMapPointId}
-                hoveredPointId={hoveredPointId}
+                activePointId={activePointId}
+                hoveredPointId={highlightedMapPointId}
                 onPointClick={handleMapPointClick}
                 onPointHoverChange={handleMapPointHoverChange}
+                onBoundsChange={handleMapBoundsChange}
                 initialViewport={locationViewport}
                 viewportKey={viewportKey}
                 controls={["zoomControl"]}

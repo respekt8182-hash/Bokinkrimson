@@ -18,6 +18,7 @@ import type { SearchFilters, SearchResponse } from "@/types/catalog";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 260;
 
 const SORT_OPTIONS = [
   { value: "", label: "Рекомендуемые" },
@@ -174,7 +175,11 @@ export function HousingCatalogClient({
   const [newItemIds, setNewItemIds] = useState<string[]>([]);
   const [locationLabel, setLocationLabel] = useState(initialLocationLabel);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mapBoundsFilter, setMapBoundsFilter] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
+  const mapBoundsFilterRef = useRef<string | null>(null);
+  const mapBoundsRefreshTimerRef = useRef<number | null>(null);
+  const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
 
   const {
     items,
@@ -186,7 +191,8 @@ export function HousingCatalogClient({
     loadMore,
   } = useLoadMore({
     initialData: initialResponse,
-    loadPage: (nextPage) => fetchAccommodationSearch(filters, nextPage, PAGE_SIZE),
+    loadPage: (nextPage) =>
+      fetchAccommodationSearch(filters, nextPage, PAGE_SIZE, undefined, mapBoundsFilter),
   });
 
   const hasFloatingMapButton = items.length > 0;
@@ -199,11 +205,77 @@ export function HousingCatalogClient({
     }, 4_000);
   }, []);
 
+  useEffect(() => {
+    mapBoundsFilterRef.current = mapBoundsFilter;
+  }, [mapBoundsFilter]);
+
+  useEffect(() => {
+    return () => {
+      if (mapBoundsRefreshTimerRef.current) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+      }
+      mapBoundsAbortControllerRef.current?.abort();
+    };
+  }, []);
+
   const handleWishlistToggle = useCallback(
     (isFavorite: boolean) => {
       pushToast("success", isFavorite ? "Добавлено в избранное" : "Удалено из избранного");
     },
     [pushToast],
+  );
+
+  const handleMapBoundsFilterChange = useCallback(
+    (nextBounds: string | null) => {
+      const normalizedBounds = nextBounds?.trim() || null;
+      if (normalizedBounds === mapBoundsFilterRef.current) {
+        return;
+      }
+
+      mapBoundsFilterRef.current = normalizedBounds;
+      setMapBoundsFilter(normalizedBounds);
+
+      if (mapBoundsRefreshTimerRef.current) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+        mapBoundsRefreshTimerRef.current = null;
+      }
+      mapBoundsAbortControllerRef.current?.abort();
+
+      if (!normalizedBounds) {
+        return;
+      }
+
+      requestSeqRef.current += 1;
+      const requestId = requestSeqRef.current;
+
+      mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
+        mapBoundsRefreshTimerRef.current = null;
+        const controller = new AbortController();
+        mapBoundsAbortControllerRef.current = controller;
+        setIsRefreshing(true);
+
+        fetchAccommodationSearch(filters, 1, PAGE_SIZE, controller.signal, normalizedBounds)
+          .then((nextResponse) => {
+            if (requestId !== requestSeqRef.current || controller.signal.aborted) {
+              return;
+            }
+
+            replaceAll(nextResponse);
+            setNewItemIds([]);
+          })
+          .catch(() => {
+            if (!controller.signal.aborted && requestId === requestSeqRef.current) {
+              pushToast("error", "Не удалось обновить выдачу по карте");
+            }
+          })
+          .finally(() => {
+            if (requestId === requestSeqRef.current) {
+              setIsRefreshing(false);
+            }
+          });
+      }, MAP_BOUNDS_REFRESH_DELAY_MS);
+    },
+    [filters, pushToast, replaceAll],
   );
 
   useEffect(() => {
@@ -236,11 +308,23 @@ export function HousingCatalogClient({
 
       setFilters(normalizedFilters);
       setIsRefreshing(true);
+      if (mapBoundsRefreshTimerRef.current) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+        mapBoundsRefreshTimerRef.current = null;
+      }
+      mapBoundsAbortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       const requestId = requestSeqRef.current;
+      const boundsForRequest = mapBoundsFilterRef.current;
 
       try {
-        const nextResponse = await fetchAccommodationSearch(normalizedFilters, 1, PAGE_SIZE);
+        const nextResponse = await fetchAccommodationSearch(
+          normalizedFilters,
+          1,
+          PAGE_SIZE,
+          undefined,
+          boundsForRequest,
+        );
         if (requestId !== requestSeqRef.current) {
           return;
         }
@@ -382,6 +466,7 @@ export function HousingCatalogClient({
             newItemIds={newItemIds}
             onLoadMore={handleLoadMore}
             onWishlistToggle={handleWishlistToggle}
+            onMapBoundsFilterChange={handleMapBoundsFilterChange}
           />
         </div>
 

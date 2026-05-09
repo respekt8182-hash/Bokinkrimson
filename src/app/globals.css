@@ -2196,15 +2196,16 @@ button:focus-visible > .field-adornment-icon {
 
 .chessboard-board-scroll {
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 
 .chessboard-workspace {
-  --cb-cell-w: 40px;
-  --cb-cell-h: 42px;
-  --cb-sidebar-w: 112px;
-  --cb-header-h1: 34px;
-  --cb-header-h2: 34px;
-  --cb-booking-h: 32px;
+  --cb-cell-w: 36px;
+  --cb-cell-h: 40px;
+  --cb-sidebar-w: 72px;
+  --cb-header-h1: 30px;
+  --cb-header-h2: 32px;
+  --cb-booking-h: 30px;
   --cb-booking-top: calc((var(--cb-cell-h) - var(--cb-booking-h)) / 2);
 }
 
@@ -2227,6 +2228,17 @@ button:focus-visible > .field-adornment-icon {
     --cb-header-h1: 38px;
     --cb-header-h2: 38px;
     --cb-booking-h: 36px;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) {
+  .chessboard-workspace {
+    --cb-cell-w: 36px;
+    --cb-cell-h: 40px;
+    --cb-sidebar-w: 72px;
+    --cb-header-h1: 30px;
+    --cb-header-h2: 32px;
+    --cb-booking-h: 30px;
   }
 }
 

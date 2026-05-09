@@ -32,9 +32,11 @@ type YandexMapMultiViewerProps = {
   hoveredPointId?: string | null;
   onPointClick?: (pointId: string) => void;
   onPointHoverChange?: (pointId: string | null) => void;
+  onBoundsChange?: (bounds: [[number, number], [number, number]] | null) => void;
   className?: string;
   initialViewport?: YandexMapViewport | null;
   viewportKey?: string;
+  fitPointsOnChange?: "always" | "initial" | "never";
   radiusCircle?: YandexMapRadiusCircle | null;
   controls?: string[];
   showBalloons?: boolean;
@@ -43,6 +45,8 @@ type YandexMapMultiViewerProps = {
 
 type YandexMapInstance = {
   destroy: () => void;
+  getZoom: () => number;
+  getBounds: () => [[number, number], [number, number]] | null;
   setCenter: (center: [number, number], zoom?: number, options?: unknown) => void;
   setBounds: (bounds: [[number, number], [number, number]], options?: unknown) => void;
   container: {
@@ -75,11 +79,6 @@ type YandexPlacemarkInstance = {
   };
 };
 
-type YandexClustererInstance = {
-  add: (objects: unknown[]) => void;
-  removeAll: () => void;
-};
-
 type YandexApi = {
   ready: (callback: () => void) => void;
   Map: new (element: HTMLElement, state: unknown, options?: unknown) => YandexMapInstance;
@@ -88,7 +87,6 @@ type YandexApi = {
     properties: Record<string, unknown>,
     options: Record<string, unknown>,
   ) => YandexPlacemarkInstance;
-  Clusterer: new (options?: Record<string, unknown>) => YandexClustererInstance;
   Circle: new (
     geometry: [[number, number], number],
     properties: Record<string, unknown>,
@@ -106,6 +104,13 @@ type PriceLayouts = {
   active: unknown;
 };
 
+type DotLayouts = {
+  default: unknown;
+  viewed: unknown;
+  hover: unknown;
+  active: unknown;
+};
+
 type BalloonContentLayouts = {
   details: unknown;
   titleOnly: unknown;
@@ -116,10 +121,12 @@ const DEFAULT_ZOOM = 8;
 const SINGLE_POINT_ZOOM = 13;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const FALLBACK_PREVIEW_IMAGE_URL = "/crimea-map-preview.svg";
-const PRICE_MARKER_WIDTH = 144;
-const PRICE_MARKER_HEIGHT = 36;
-const PRICE_MARKER_HIT_PADDING_X = 8;
-const PRICE_MARKER_HIT_PADDING_Y = 6;
+const PRICE_MARKER_MIN_ZOOM = 13;
+const PRICE_MARKER_MIN_WIDTH = 56;
+const PRICE_MARKER_MAX_WIDTH = 128;
+const PRICE_MARKER_HEIGHT = 26;
+const PRICE_MARKER_HORIZONTAL_PADDING = 20;
+const DOT_MARKER_SIZE = 14;
 const BALLOON_CLOSE_DELAY_MS = 180;
 const PRICE_BALLOON_GAP_PX = 6;
 const DOT_BALLOON_OFFSET: [number, number] = [0, -12];
@@ -166,6 +173,12 @@ function loadYandexScript(apiKey: string): Promise<void> {
 function createPriceLayout(ymaps: YandexApi, style: string): unknown {
   return ymaps.templateLayoutFactory.createClass(
     `<div style="${style}">$[properties.iconContent]</div>`,
+  );
+}
+
+function createDotLayout(ymaps: YandexApi, outerStyle: string, innerStyle: string): unknown {
+  return ymaps.templateLayoutFactory.createClass(
+    `<span style="${outerStyle}"><span style="${innerStyle}"></span></span>`,
   );
 }
 
@@ -268,6 +281,72 @@ function formatReviewsCount(value: number): string {
   return `${count} ${tail}`;
 }
 
+function estimatePriceMarkerWidth(label: string): number {
+  const normalized = label.trim();
+  const estimatedContentWidth = Math.ceil(normalized.length * 7.3);
+  return Math.min(
+    PRICE_MARKER_MAX_WIDTH,
+    Math.max(PRICE_MARKER_MIN_WIDTH, estimatedContentWidth + PRICE_MARKER_HORIZONTAL_PADDING),
+  );
+}
+
+function getMapZoom(map: YandexMapInstance): number {
+  const zoom = map.getZoom();
+  return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
+}
+
+function normalizeMapBounds(
+  value: unknown,
+): [[number, number], [number, number]] | null {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return null;
+  }
+
+  const southWest = value[0];
+  const northEast = value[1];
+  if (
+    !Array.isArray(southWest) ||
+    !Array.isArray(northEast) ||
+    southWest.length < 2 ||
+    northEast.length < 2
+  ) {
+    return null;
+  }
+
+  const south = Number(southWest[0]);
+  const west = Number(southWest[1]);
+  const north = Number(northEast[0]);
+  const east = Number(northEast[1]);
+  if (![south, west, north, east].every(Number.isFinite) || south > north || west > east) {
+    return null;
+  }
+
+  return [
+    [south, west],
+    [north, east],
+  ];
+}
+
+function hasPointPriceLabel(point: YandexMapPoint): boolean {
+  return typeof point.priceLabel === "string" && point.priceLabel.trim().length > 0;
+}
+
+function shouldShowPricePlacemark(input: {
+  point: YandexMapPoint;
+  activePointId: string | null;
+  zoom: number;
+}): boolean {
+  if (!hasPointPriceLabel(input.point)) {
+    return false;
+  }
+
+  return (
+    input.zoom >= PRICE_MARKER_MIN_ZOOM ||
+    input.point.id === input.activePointId ||
+    input.point.isViewed === true
+  );
+}
+
 function buildPricePlacemarkOptions(input: {
   point: YandexMapPoint;
   activePointId: string | null;
@@ -277,6 +356,7 @@ function buildPricePlacemarkOptions(input: {
   const isActive = input.point.id === input.activePointId;
   const isHovered = input.point.id === input.hoveredPointId && !isActive;
   const isViewed = input.point.isViewed === true && !isActive && !isHovered;
+  const width = estimatePriceMarkerWidth(input.point.priceLabel ?? "");
 
   return {
     iconLayout: "default#imageWithContent",
@@ -290,19 +370,13 @@ function buildPricePlacemarkOptions(input: {
         : isViewed
           ? input.layouts.viewed
           : input.layouts.default,
-    iconContentOffset: [-PRICE_MARKER_WIDTH / 2, -PRICE_MARKER_HEIGHT / 2],
-    iconContentSize: [PRICE_MARKER_WIDTH, PRICE_MARKER_HEIGHT],
+    iconContentOffset: [-width / 2, -PRICE_MARKER_HEIGHT / 2],
+    iconContentSize: [width, PRICE_MARKER_HEIGHT],
     iconShape: {
       type: "Rectangle",
       coordinates: [
-        [
-          -(PRICE_MARKER_WIDTH / 2 + PRICE_MARKER_HIT_PADDING_X),
-          -(PRICE_MARKER_HEIGHT / 2 + PRICE_MARKER_HIT_PADDING_Y),
-        ],
-        [
-          PRICE_MARKER_WIDTH / 2 + PRICE_MARKER_HIT_PADDING_X,
-          PRICE_MARKER_HEIGHT / 2 + PRICE_MARKER_HIT_PADDING_Y,
-        ],
+        [-width / 2, -PRICE_MARKER_HEIGHT / 2],
+        [width / 2, PRICE_MARKER_HEIGHT / 2],
       ],
     },
     cursor: "pointer",
@@ -323,32 +397,93 @@ function buildBalloonPlacemarkOptions(input: {
     hideIconOnBalloonOpen: false,
     balloonAutoPan: false,
     balloonPanelMaxMapArea: 0,
-    balloonOffset: input.isPricePlacemark
-      ? [0, -(Math.round(PRICE_MARKER_HEIGHT / 2) + PRICE_BALLOON_GAP_PX)]
-      : DOT_BALLOON_OFFSET,
+    balloonOffset: getBalloonOffset(input.isPricePlacemark),
   };
+}
+
+function getBalloonOffset(isPricePlacemark: boolean): [number, number] {
+  return isPricePlacemark
+    ? [0, -(Math.round(PRICE_MARKER_HEIGHT / 2) + PRICE_BALLOON_GAP_PX)]
+    : DOT_BALLOON_OFFSET;
 }
 
 function buildDotPlacemarkOptions(input: {
   pointId: string;
   activePointId: string | null;
   hoveredPointId: string | null;
+  layouts: DotLayouts;
   isViewed?: boolean;
 }): Record<string, unknown> {
   const isActive = input.pointId === input.activePointId;
   const isHovered = input.pointId === input.hoveredPointId && !isActive;
   const isViewed = input.isViewed === true && !isActive && !isHovered;
+  const halfSize = DOT_MARKER_SIZE / 2;
 
   return {
-    preset: isActive
-      ? "islands#darkBlueCircleDotIcon"
+    iconLayout: "default#imageWithContent",
+    iconImageHref: TRANSPARENT_PIXEL,
+    iconImageSize: [1, 1],
+    iconImageOffset: [0, 0],
+    iconContentLayout: isActive
+      ? input.layouts.active
       : isHovered
-        ? "islands#blueCircleDotIcon"
+        ? input.layouts.hover
         : isViewed
-          ? "islands#grayCircleDotIcon"
-          : "islands#brownCircleDotIcon",
+          ? input.layouts.viewed
+          : input.layouts.default,
+    iconContentOffset: [-halfSize, -halfSize],
+    iconContentSize: [DOT_MARKER_SIZE, DOT_MARKER_SIZE],
+    iconShape: {
+      type: "Rectangle",
+      coordinates: [
+        [-halfSize, -halfSize],
+        [halfSize, halfSize],
+      ],
+    },
+    cursor: "pointer",
     zIndex: isActive ? 1400 : isHovered ? 1300 : 1000,
   };
+}
+
+function buildMarkerVisualOptions(input: {
+  point: YandexMapPoint;
+  activePointId: string | null;
+  hoveredPointId: string | null;
+  zoom: number;
+  priceLayouts: PriceLayouts;
+  dotLayouts: DotLayouts;
+}): Record<string, unknown> {
+  if (
+    shouldShowPricePlacemark({
+      point: input.point,
+      activePointId: input.activePointId,
+      zoom: input.zoom,
+    })
+  ) {
+    return buildPricePlacemarkOptions({
+      point: input.point,
+      activePointId: input.activePointId,
+      hoveredPointId: input.hoveredPointId,
+      layouts: input.priceLayouts,
+    });
+  }
+
+  return buildDotPlacemarkOptions({
+    pointId: input.point.id,
+    activePointId: input.activePointId,
+    hoveredPointId: input.hoveredPointId,
+    layouts: input.dotLayouts,
+    isViewed: input.point.isViewed,
+  });
+}
+
+function applyPlacemarkOptions(
+  placemark: YandexPlacemarkInstance,
+  options: Record<string, unknown>,
+): void {
+  Object.entries(options).forEach(([name, value]) => {
+    placemark.options.set(name, value);
+  });
 }
 
 function isPlacemarkBalloonOpen(placemark: YandexPlacemarkInstance): boolean {
@@ -414,9 +549,11 @@ export function YandexMapMultiViewer({
   hoveredPointId = null,
   onPointClick,
   onPointHoverChange,
+  onBoundsChange,
   className = "h-[560px] w-full",
   initialViewport,
   viewportKey,
+  fitPointsOnChange = "always",
   radiusCircle = null,
   controls,
   showBalloons = true,
@@ -425,16 +562,20 @@ export function YandexMapMultiViewer({
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<YandexMapInstance | null>(null);
-  const clustererRef = useRef<YandexClustererInstance | null>(null);
   const placemarkByIdRef = useRef<Map<string, YandexPlacemarkInstance>>(new Map());
   const mapCreatedRef = useRef(false);
   const pointsSignatureRef = useRef("");
   const appliedViewportKeyRef = useRef<string | null>(null);
   const lastCenteredActiveRef = useRef<string | null>(null);
+  const activePointIdRef = useRef(activePointId);
+  const hoveredPointIdRef = useRef(hoveredPointId);
+  const mapZoomRef = useRef(DEFAULT_ZOOM);
   const clickHandlerRef = useRef(onPointClick);
   const hoverHandlerRef = useRef(onPointHoverChange);
+  const boundsChangeHandlerRef = useRef(onBoundsChange);
   const showBalloonsRef = useRef(showBalloons);
   const priceLayoutsRef = useRef<PriceLayouts | null>(null);
+  const dotLayoutsRef = useRef<DotLayouts | null>(null);
   const balloonContentLayoutsRef = useRef<BalloonContentLayouts | null>(null);
   const closeBalloonTimerByPointIdRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -444,6 +585,7 @@ export function YandexMapMultiViewer({
   const circleRef = useRef<unknown>(null);
   const [error, setError] = useState("");
   const [mapReadyVersion, setMapReadyVersion] = useState(0);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const controlsSignature = useMemo(
     () => (controls ?? ["zoomControl", "fullscreenControl"]).join("|"),
     [controls],
@@ -485,6 +627,26 @@ export function YandexMapMultiViewer({
   useEffect(() => {
     hoverHandlerRef.current = onPointHoverChange;
   }, [onPointHoverChange]);
+
+  useEffect(() => {
+    boundsChangeHandlerRef.current = onBoundsChange;
+  }, [onBoundsChange]);
+
+  useEffect(() => {
+    activePointIdRef.current = activePointId;
+  }, [activePointId]);
+
+  useEffect(() => {
+    hoveredPointIdRef.current = hoveredPointId;
+  }, [hoveredPointId]);
+
+  useEffect(() => {
+    mapZoomRef.current = mapZoom;
+  }, [mapZoom]);
+
+  const reportCurrentBounds = useCallback((map: YandexMapInstance) => {
+    boundsChangeHandlerRef.current?.(normalizeMapBounds(map.getBounds()));
+  }, []);
 
   const clearBalloonCloseTimer = useCallback((pointId: string) => {
     const timer = closeBalloonTimerByPointIdRef.current.get(pointId);
@@ -567,8 +729,9 @@ export function YandexMapMultiViewer({
   );
 
   const updateMarkerStyles = useCallback(() => {
-    const layouts = priceLayoutsRef.current;
-    if (!layouts) {
+    const priceLayouts = priceLayoutsRef.current;
+    const dotLayouts = dotLayoutsRef.current;
+    if (!priceLayouts || !dotLayouts) {
       return;
     }
 
@@ -578,38 +741,38 @@ export function YandexMapMultiViewer({
         return;
       }
 
-      const hasPriceLabel =
-        typeof point.priceLabel === "string" && point.priceLabel.trim().length > 0;
-
-      if (hasPriceLabel) {
-        const isActive = point.id === activePointId;
-        const isHovered = point.id === hoveredPointId && !isActive;
-        const isViewed = point.isViewed === true && !isActive && !isHovered;
-
-        placemark.options.set(
-          "iconContentLayout",
-          isActive
-            ? layouts.active
-            : isHovered
-              ? layouts.hover
-              : isViewed
-                ? layouts.viewed
-                : layouts.default,
-        );
-        placemark.options.set("zIndex", isActive ? 1400 : isHovered ? 1300 : 1000);
-        return;
-      }
-
-      const nextDotOptions = buildDotPlacemarkOptions({
-        pointId,
+      const isPricePlacemark = shouldShowPricePlacemark({
+        point,
+        activePointId,
+        zoom: mapZoom,
+      });
+      const visualOptions = buildMarkerVisualOptions({
+        point,
         activePointId,
         hoveredPointId,
-        isViewed: point.isViewed,
+        zoom: mapZoom,
+        priceLayouts,
+        dotLayouts,
       });
-      placemark.options.set("preset", nextDotOptions.preset);
-      placemark.options.set("zIndex", nextDotOptions.zIndex);
+
+      if (showBalloonsRef.current) {
+        visualOptions.balloonOffset = getBalloonOffset(isPricePlacemark);
+      }
+
+      applyPlacemarkOptions(placemark, visualOptions);
     });
-  }, [activePointId, hoveredPointId, pointById]);
+  }, [activePointId, hoveredPointId, mapZoom, pointById]);
+
+  const removePlacemarksFromMap = useCallback(() => {
+    const map = mapRef.current;
+    if (map) {
+      placemarkByIdRef.current.forEach((placemark) => {
+        map.geoObjects.remove(placemark);
+      });
+    }
+
+    placemarkByIdRef.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!apiKey || !containerRef.current) {
@@ -644,33 +807,49 @@ export function YandexMapMultiViewer({
             { suppressMapOpenBlock: true },
           );
 
-          const clusterer = new readyYmaps.Clusterer({
-            clusterDisableClickZoom: false,
-            clusterOpenBalloonOnClick: false,
-            groupByCoordinates: false,
-          });
-
-          map.geoObjects.add(clusterer);
-
           const layoutBaseStyle =
-            "display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:32px;padding:0 11px;border-radius:999px;background:#ffffff;box-shadow:0 8px 18px rgba(15,23,42,0.16);font:700 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111827;white-space:nowrap;transition:transform .16s ease,box-shadow .16s ease,background .16s ease,color .16s ease;";
+            "display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:26px;padding:0 10px;border-radius:15px;background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,0.17),0 4px 15px rgba(0,0,0,0.10);font:700 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111827;white-space:nowrap;box-sizing:border-box;transition:background .12s ease,color .12s ease,border-color .12s ease,box-shadow .12s ease;";
 
           priceLayoutsRef.current = {
             default: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}border:1px solid rgba(17,24,39,0.16);`,
+              `${layoutBaseStyle}border:1px solid rgba(17,24,39,0.08);`,
             ),
             viewed: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}background:#e7e9ee;border:1px solid rgba(17,24,39,0.06);color:#707781;box-shadow:0 7px 15px rgba(15,23,42,0.10);`,
+              `${layoutBaseStyle}background:#e1e4ea;border:1px solid rgba(17,24,39,0.06);color:#5f6671;box-shadow:0 1px 2px rgba(0,0,0,0.12),0 4px 13px rgba(0,0,0,0.08);`,
             ),
             hover: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}border:1.8px solid rgba(17,24,39,0.22);transform:scale(1.06);box-shadow:0 12px 24px rgba(15,23,42,0.22);`,
+              `${layoutBaseStyle}background:#202124;border:1px solid #202124;color:#ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.28),0 8px 20px rgba(0,0,0,0.22);`,
             ),
             active: createPriceLayout(
               readyYmaps,
-              `${layoutBaseStyle}background:#202124;border:2px solid #202124;color:#ffffff;transform:scale(1.1);box-shadow:0 14px 28px rgba(15,23,42,0.34),0 0 0 8px rgba(32,33,36,0.14);`,
+              `${layoutBaseStyle}background:#202124;border:1px solid #202124;color:#ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.30),0 8px 22px rgba(0,0,0,0.24);`,
+            ),
+          };
+
+          const dotOuterBaseStyle =
+            "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#ffffff;border:1.6px solid #ffffff;box-sizing:border-box;box-shadow:0 1px 2px rgba(0,0,0,0.17),0 4px 15px rgba(0,0,0,0.10);transition:background .12s ease,border-color .12s ease,box-shadow .12s ease;";
+          const dotInnerBaseStyle =
+            "display:block;width:10.8px;height:10.8px;border-radius:50%;border:1.6px solid #1c1c1c;box-sizing:border-box;transition:background .12s ease,border-color .12s ease;";
+
+          dotLayoutsRef.current = {
+            default: createDotLayout(readyYmaps, dotOuterBaseStyle, dotInnerBaseStyle),
+            viewed: createDotLayout(
+              readyYmaps,
+              `${dotOuterBaseStyle}background:#e1e4ea;border-color:#e1e4ea;`,
+              `${dotInnerBaseStyle}border-color:#6f7680;`,
+            ),
+            hover: createDotLayout(
+              readyYmaps,
+              `${dotOuterBaseStyle}background:#202124;border-color:#202124;box-shadow:0 2px 5px rgba(0,0,0,0.28),0 8px 20px rgba(0,0,0,0.20);`,
+              `${dotInnerBaseStyle}border-color:#ffffff;`,
+            ),
+            active: createDotLayout(
+              readyYmaps,
+              `${dotOuterBaseStyle}background:#202124;border-color:#202124;box-shadow:0 2px 5px rgba(0,0,0,0.30),0 8px 22px rgba(0,0,0,0.22);`,
+              `${dotInnerBaseStyle}background:#ffffff;border-color:#ffffff;`,
             ),
           };
           balloonContentLayoutsRef.current = {
@@ -678,6 +857,24 @@ export function YandexMapMultiViewer({
             titleOnly: createTitleOnlyBalloonContentLayout(readyYmaps),
           };
           hoverEnabledRef.current = window.matchMedia("(hover: hover)").matches;
+          const initialZoom = getMapZoom(map);
+          mapZoomRef.current = initialZoom;
+          setMapZoom(initialZoom);
+
+          map.events.add("boundschange", (event) => {
+            const eventZoom = event.get("newZoom");
+            const nextZoom =
+              typeof eventZoom === "number" && Number.isFinite(eventZoom)
+                ? eventZoom
+                : getMapZoom(map);
+            const eventBounds = normalizeMapBounds(event.get("newBounds"));
+
+            mapZoomRef.current = nextZoom;
+            setMapZoom((currentZoom) =>
+              Math.abs(currentZoom - nextZoom) < 0.05 ? currentZoom : nextZoom,
+            );
+            boundsChangeHandlerRef.current?.(eventBounds ?? normalizeMapBounds(map.getBounds()));
+          });
 
           map.events.add("click", (event) => {
             if (hoverEnabledRef.current) {
@@ -693,9 +890,9 @@ export function YandexMapMultiViewer({
           });
 
           mapRef.current = map;
-          clustererRef.current = clusterer;
           mapCreatedRef.current = true;
           setMapReadyVersion((value) => value + 1);
+          window.requestAnimationFrame(() => reportCurrentBounds(map));
           setError("");
         });
       } catch {
@@ -709,7 +906,6 @@ export function YandexMapMultiViewer({
       mounted = false;
       mapRef.current?.destroy();
       mapRef.current = null;
-      clustererRef.current = null;
       closeAllBalloons();
       placemarkStore.clear();
       mapCreatedRef.current = false;
@@ -717,22 +913,24 @@ export function YandexMapMultiViewer({
       appliedViewportKeyRef.current = null;
       lastCenteredActiveRef.current = null;
       priceLayoutsRef.current = null;
+      dotLayoutsRef.current = null;
       balloonContentLayoutsRef.current = null;
+      mapZoomRef.current = DEFAULT_ZOOM;
     };
-  }, [apiKey, closeAllBalloons, controlsSignature]);
+  }, [apiKey, closeAllBalloons, controlsSignature, reportCurrentBounds]);
 
   useEffect(() => {
     const map = mapRef.current;
     const ymaps = getYandexApi();
-    const clusterer = clustererRef.current;
-    const layouts = priceLayoutsRef.current;
+    const priceLayouts = priceLayoutsRef.current;
+    const dotLayouts = dotLayoutsRef.current;
     const balloonContentLayouts = balloonContentLayoutsRef.current;
 
     if (
       !map ||
       !ymaps ||
-      !clusterer ||
-      !layouts ||
+      !priceLayouts ||
+      !dotLayouts ||
       !balloonContentLayouts ||
       !mapCreatedRef.current
     ) {
@@ -740,12 +938,19 @@ export function YandexMapMultiViewer({
     }
 
     closeAllBalloons();
-    clusterer.removeAll();
-    placemarkByIdRef.current.clear();
+    removePlacemarksFromMap();
 
-    const placemarks: YandexPlacemarkInstance[] = normalizedPoints.map((point) => {
-      const hasPriceLabel =
-        typeof point.priceLabel === "string" && point.priceLabel.trim().length > 0;
+    const currentActivePointId = activePointIdRef.current;
+    const currentHoveredPointId = hoveredPointIdRef.current;
+    const currentZoom = mapZoomRef.current;
+
+    normalizedPoints.forEach((point) => {
+      const hasPriceLabel = hasPointPriceLabel(point);
+      const isPricePlacemark = shouldShowPricePlacemark({
+        point,
+        activePointId: currentActivePointId,
+        zoom: currentZoom,
+      });
       const rating =
         typeof point.rating === "number" && Number.isFinite(point.rating) && point.rating > 0
           ? Math.min(5, point.rating)
@@ -767,7 +972,7 @@ export function YandexMapMultiViewer({
         : balloonContentLayouts.details;
       const balloonOptions = showBalloonsRef.current
         ? buildBalloonPlacemarkOptions({
-            isPricePlacemark: hasPriceLabel,
+            isPricePlacemark,
             balloonContentLayout,
           })
         : {
@@ -796,26 +1001,17 @@ export function YandexMapMultiViewer({
           balloonRatingLabel: safeRatingLabel,
           balloonReviewsLabel: safeReviewsLabel,
         },
-        hasPriceLabel
-          ? {
-              ...buildPricePlacemarkOptions({
-                point,
-                activePointId: null,
-                hoveredPointId: null,
-                layouts,
-              }),
-              ...balloonOptions,
-            }
-          : {
-              ...buildDotPlacemarkOptions({
-                pointId: point.id,
-                activePointId: null,
-                hoveredPointId: null,
-                isViewed: point.isViewed,
-              }),
-              ...balloonOptions,
-              cursor: "pointer",
-            },
+        {
+          ...buildMarkerVisualOptions({
+            point,
+            activePointId: currentActivePointId,
+            hoveredPointId: currentHoveredPointId,
+            zoom: currentZoom,
+            priceLayouts,
+            dotLayouts,
+          }),
+          ...balloonOptions,
+        },
       );
 
       placemark.events.add("click", () => {
@@ -860,17 +1056,14 @@ export function YandexMapMultiViewer({
       });
 
       placemarkByIdRef.current.set(point.id, placemark);
-      return placemark;
+      map.geoObjects.add(placemark);
     });
-
-    if (placemarks.length > 0) {
-      clusterer.add(placemarks);
-    }
 
     const signature = normalizedPoints
       .map((point) => `${point.id}:${point.latitude.toFixed(5)}:${point.longitude.toFixed(5)}`)
       .join("|");
-    const pointsChanged = signature !== pointsSignatureRef.current;
+    const previousSignature = pointsSignatureRef.current;
+    const pointsChanged = signature !== previousSignature;
     pointsSignatureRef.current = signature;
     lastCenteredActiveRef.current = null;
 
@@ -882,6 +1075,7 @@ export function YandexMapMultiViewer({
 
     if (normalizedPoints.length === 0) {
       applyViewport(map, initialViewport);
+      window.setTimeout(() => reportCurrentBounds(map), 240);
       if (viewportKey) {
         appliedViewportKeyRef.current = viewportKey;
       }
@@ -891,19 +1085,30 @@ export function YandexMapMultiViewer({
     if (canApplyViewport) {
       applyViewport(map, initialViewport);
       appliedViewportKeyRef.current = viewportKey ?? null;
+      window.setTimeout(() => reportCurrentBounds(map), 240);
       return;
     }
 
-    if (pointsChanged && !hasPinnedViewport) {
+    const shouldFitPoints =
+      pointsChanged &&
+      !hasPinnedViewport &&
+      (fitPointsOnChange === "always" ||
+        (fitPointsOnChange === "initial" && previousSignature.length === 0));
+
+    if (shouldFitPoints) {
       fitPoints(map, normalizedPoints);
+      window.setTimeout(() => reportCurrentBounds(map), 240);
     }
   }, [
     closeAllBalloons,
     closeBalloonForPoint,
+    fitPointsOnChange,
     initialViewport,
     mapReadyVersion,
     normalizedPoints,
     openBalloonForPoint,
+    removePlacemarksFromMap,
+    reportCurrentBounds,
     scheduleBalloonClose,
     viewportKey,
   ]);

@@ -82,6 +82,7 @@ export async function GET(request: Request) {
       searchParams.get("categoryId") ??
       undefined,
     category: searchParams.get("category") ?? undefined,
+    bounds,
     query:
       searchParams.get("query") ??
       searchParams.get("q") ??
