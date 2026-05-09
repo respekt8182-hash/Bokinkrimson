@@ -1313,18 +1313,24 @@ button:focus-visible > .field-adornment-icon {
 }
 
 .room-photo-lightbox .gallery-lightbox-content {
-  padding-bottom: 226px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
+  height: 100dvh;
+  max-height: none;
+  padding: 72px 80px 112px;
+  box-sizing: border-box;
 }
 
 .room-photo-lightbox .gallery-lightbox-img {
-  max-height: calc(100vh - 306px);
+  align-self: end;
+  justify-self: center;
+  max-height: 100%;
+  min-height: 0;
 }
 
 .room-photo-lightbox-info {
-  position: absolute;
-  right: 24px;
-  bottom: 88px;
-  left: 24px;
+  position: relative;
   z-index: 12;
   width: min(760px, calc(100vw - 48px));
   margin: 0 auto;
@@ -1341,26 +1347,21 @@ button:focus-visible > .field-adornment-icon {
 
 @media (min-width: 768px) {
   .room-photo-lightbox-info {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
+    justify-self: center;
   }
 }
 
 @media (max-width: 640px) {
   .room-photo-lightbox .gallery-lightbox-content {
-    padding: 70px 12px 250px;
+    gap: 10px;
+    padding: 70px 12px 108px;
   }
 
   .room-photo-lightbox .gallery-lightbox-img {
-    max-height: calc(100vh - 334px);
     border-radius: 12px;
   }
 
   .room-photo-lightbox-info {
-    right: 12px;
-    bottom: 88px;
-    left: 12px;
     width: auto;
     padding: 12px;
     border-radius: 16px;
