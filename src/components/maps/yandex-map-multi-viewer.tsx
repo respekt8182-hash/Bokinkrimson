@@ -122,14 +122,20 @@ const SINGLE_POINT_ZOOM = 13;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const FALLBACK_PREVIEW_IMAGE_URL = "/crimea-map-preview.svg";
 const PRICE_MARKER_MIN_ZOOM = 13;
-const PRICE_MARKER_MIN_WIDTH = 56;
-const PRICE_MARKER_MAX_WIDTH = 128;
-const PRICE_MARKER_HEIGHT = 26;
-const PRICE_MARKER_HORIZONTAL_PADDING = 20;
+const PRICE_MARKER_MIN_WIDTH = 62;
+const PRICE_MARKER_MAX_WIDTH = 138;
+const PRICE_MARKER_HEIGHT = 28;
+const PRICE_MARKER_TAIL_HEIGHT = 7;
+const PRICE_MARKER_HORIZONTAL_PADDING = 22;
 const DOT_MARKER_SIZE = 14;
 const BALLOON_CLOSE_DELAY_MS = 180;
 const PRICE_BALLOON_GAP_PX = 6;
 const DOT_BALLOON_OFFSET: [number, number] = [0, -12];
+const HOVER_CLEAR_DELAY_MS = 80;
+const MARKER_Z_INDEX_DEFAULT = 1000;
+const MARKER_Z_INDEX_HOVER = 3000;
+const MARKER_Z_INDEX_ACTIVE = 4000;
+const MARKER_Z_INDEX_DRAG_OFFSET = 20;
 
 let scriptPromise: Promise<void> | null = null;
 
@@ -170,9 +176,9 @@ function loadYandexScript(apiKey: string): Promise<void> {
   return scriptPromise;
 }
 
-function createPriceLayout(ymaps: YandexApi, style: string): unknown {
+function createPriceLayout(ymaps: YandexApi, style: string, tailStyle: string): unknown {
   return ymaps.templateLayoutFactory.createClass(
-    `<div style="${style}">$[properties.iconContent]</div>`,
+    `<div style="${style}">$[properties.iconContent]<span style="${tailStyle}"></span></div>`,
   );
 }
 
@@ -283,7 +289,7 @@ function formatReviewsCount(value: number): string {
 
 function estimatePriceMarkerWidth(label: string): number {
   const normalized = label.trim();
-  const estimatedContentWidth = Math.ceil(normalized.length * 7.3);
+  const estimatedContentWidth = Math.ceil(normalized.length * 7.8);
   return Math.min(
     PRICE_MARKER_MAX_WIDTH,
     Math.max(PRICE_MARKER_MIN_WIDTH, estimatedContentWidth + PRICE_MARKER_HORIZONTAL_PADDING),
@@ -347,6 +353,28 @@ function shouldShowPricePlacemark(input: {
   );
 }
 
+function getMarkerZIndex(input: { isActive: boolean; isHovered: boolean }): number {
+  if (input.isActive) {
+    return MARKER_Z_INDEX_ACTIVE;
+  }
+
+  if (input.isHovered) {
+    return MARKER_Z_INDEX_HOVER;
+  }
+
+  return MARKER_Z_INDEX_DEFAULT;
+}
+
+function buildMarkerLayerOptions(zIndex: number): Record<string, unknown> {
+  return {
+    interactiveZIndex: false,
+    zIndex,
+    zIndexHover: zIndex,
+    zIndexActive: zIndex,
+    zIndexDrag: zIndex + MARKER_Z_INDEX_DRAG_OFFSET,
+  };
+}
+
 function buildPricePlacemarkOptions(input: {
   point: YandexMapPoint;
   activePointId: string | null;
@@ -357,8 +385,11 @@ function buildPricePlacemarkOptions(input: {
   const isHovered = input.point.id === input.hoveredPointId && !isActive;
   const isViewed = input.point.isViewed === true && !isActive && !isHovered;
   const width = estimatePriceMarkerWidth(input.point.priceLabel ?? "");
+  const markerHeight = PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT;
+  const zIndex = getMarkerZIndex({ isActive, isHovered });
 
   return {
+    ...buildMarkerLayerOptions(zIndex),
     iconLayout: "default#imageWithContent",
     iconImageHref: TRANSPARENT_PIXEL,
     iconImageSize: [1, 1],
@@ -370,17 +401,16 @@ function buildPricePlacemarkOptions(input: {
         : isViewed
           ? input.layouts.viewed
           : input.layouts.default,
-    iconContentOffset: [-width / 2, -PRICE_MARKER_HEIGHT / 2],
-    iconContentSize: [width, PRICE_MARKER_HEIGHT],
+    iconContentOffset: [-width / 2, -markerHeight],
+    iconContentSize: [width, markerHeight],
     iconShape: {
       type: "Rectangle",
       coordinates: [
-        [-width / 2, -PRICE_MARKER_HEIGHT / 2],
-        [width / 2, PRICE_MARKER_HEIGHT / 2],
+        [-width / 2, -markerHeight],
+        [width / 2, 0],
       ],
     },
     cursor: "pointer",
-    zIndex: isActive ? 1400 : isHovered ? 1300 : 1000,
   };
 }
 
@@ -403,7 +433,7 @@ function buildBalloonPlacemarkOptions(input: {
 
 function getBalloonOffset(isPricePlacemark: boolean): [number, number] {
   return isPricePlacemark
-    ? [0, -(Math.round(PRICE_MARKER_HEIGHT / 2) + PRICE_BALLOON_GAP_PX)]
+    ? [0, -(PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT + PRICE_BALLOON_GAP_PX)]
     : DOT_BALLOON_OFFSET;
 }
 
@@ -418,8 +448,10 @@ function buildDotPlacemarkOptions(input: {
   const isHovered = input.pointId === input.hoveredPointId && !isActive;
   const isViewed = input.isViewed === true && !isActive && !isHovered;
   const halfSize = DOT_MARKER_SIZE / 2;
+  const zIndex = getMarkerZIndex({ isActive, isHovered });
 
   return {
+    ...buildMarkerLayerOptions(zIndex),
     iconLayout: "default#imageWithContent",
     iconImageHref: TRANSPARENT_PIXEL,
     iconImageSize: [1, 1],
@@ -441,7 +473,6 @@ function buildDotPlacemarkOptions(input: {
       ],
     },
     cursor: "pointer",
-    zIndex: isActive ? 1400 : isHovered ? 1300 : 1000,
   };
 }
 
@@ -581,6 +612,8 @@ export function YandexMapMultiViewer({
     new Map(),
   );
   const openedBalloonPointIdRef = useRef<string | null>(null);
+  const hoveredPointerPointIdRef = useRef<string | null>(null);
+  const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverEnabledRef = useRef(true);
   const circleRef = useRef<unknown>(null);
   const [error, setError] = useState("");
@@ -658,6 +691,15 @@ export function YandexMapMultiViewer({
     closeBalloonTimerByPointIdRef.current.delete(pointId);
   }, []);
 
+  const clearHoverClearTimer = useCallback(() => {
+    if (hoverClearTimerRef.current === null) {
+      return;
+    }
+
+    clearTimeout(hoverClearTimerRef.current);
+    hoverClearTimerRef.current = null;
+  }, []);
+
   const closeBalloonForPoint = useCallback(
     (pointId: string) => {
       clearBalloonCloseTimer(pointId);
@@ -726,6 +768,33 @@ export function YandexMapMultiViewer({
       closeBalloonTimerByPointIdRef.current.set(pointId, timer);
     },
     [clearBalloonCloseTimer, closeBalloonForPoint],
+  );
+
+  const handlePlacemarkMouseEnter = useCallback(
+    (pointId: string) => {
+      clearHoverClearTimer();
+      hoveredPointerPointIdRef.current = pointId;
+      hoverHandlerRef.current?.(pointId);
+    },
+    [clearHoverClearTimer],
+  );
+
+  const handlePlacemarkMouseLeave = useCallback(
+    (pointId: string) => {
+      clearHoverClearTimer();
+
+      hoverClearTimerRef.current = setTimeout(() => {
+        hoverClearTimerRef.current = null;
+
+        if (hoveredPointerPointIdRef.current !== pointId) {
+          return;
+        }
+
+        hoveredPointerPointIdRef.current = null;
+        hoverHandlerRef.current?.(null);
+      }, HOVER_CLEAR_DELAY_MS);
+    },
+    [clearHoverClearTimer],
   );
 
   const updateMarkerStyles = useCallback(() => {
@@ -808,24 +877,30 @@ export function YandexMapMultiViewer({
           );
 
           const layoutBaseStyle =
-            "display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:26px;padding:0 10px;border-radius:15px;background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,0.17),0 4px 15px rgba(0,0,0,0.10);font:700 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111827;white-space:nowrap;box-sizing:border-box;transition:background .12s ease,color .12s ease,border-color .12s ease,box-shadow .12s ease;";
+            "position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:62px;height:28px;padding:0 11px;border-radius:16px;background:#ffffff;box-shadow:0 2px 4px rgba(0,0,0,0.18),0 7px 18px rgba(0,0,0,0.12);font:800 13px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111827;white-space:nowrap;box-sizing:border-box;transition:background .12s ease,color .12s ease,border-color .12s ease,box-shadow .12s ease;";
+          const tailBaseStyle =
+            "position:absolute;left:50%;bottom:-5px;width:10px;height:10px;margin-left:-5px;transform:rotate(45deg);background:#ffffff;border-right:1px solid rgba(17,24,39,0.08);border-bottom:1px solid rgba(17,24,39,0.08);border-radius:2px;box-shadow:2px 2px 3px rgba(0,0,0,0.07);box-sizing:border-box;transition:background .12s ease,border-color .12s ease;";
 
           priceLayoutsRef.current = {
             default: createPriceLayout(
               readyYmaps,
               `${layoutBaseStyle}border:1px solid rgba(17,24,39,0.08);`,
+              tailBaseStyle,
             ),
             viewed: createPriceLayout(
               readyYmaps,
               `${layoutBaseStyle}background:#e1e4ea;border:1px solid rgba(17,24,39,0.06);color:#5f6671;box-shadow:0 1px 2px rgba(0,0,0,0.12),0 4px 13px rgba(0,0,0,0.08);`,
+              `${tailBaseStyle}background:#e1e4ea;border-right-color:rgba(17,24,39,0.06);border-bottom-color:rgba(17,24,39,0.06);`,
             ),
             hover: createPriceLayout(
               readyYmaps,
               `${layoutBaseStyle}background:#202124;border:1px solid #202124;color:#ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.28),0 8px 20px rgba(0,0,0,0.22);`,
+              `${tailBaseStyle}background:#202124;border-right-color:#202124;border-bottom-color:#202124;`,
             ),
             active: createPriceLayout(
               readyYmaps,
               `${layoutBaseStyle}background:#202124;border:1px solid #202124;color:#ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.30),0 8px 22px rgba(0,0,0,0.24);`,
+              `${tailBaseStyle}background:#202124;border-right-color:#202124;border-bottom-color:#202124;`,
             ),
           };
 
@@ -906,8 +981,10 @@ export function YandexMapMultiViewer({
       mounted = false;
       mapRef.current?.destroy();
       mapRef.current = null;
+      clearHoverClearTimer();
       closeAllBalloons();
       placemarkStore.clear();
+      hoveredPointerPointIdRef.current = null;
       mapCreatedRef.current = false;
       pointsSignatureRef.current = "";
       appliedViewportKeyRef.current = null;
@@ -917,7 +994,7 @@ export function YandexMapMultiViewer({
       balloonContentLayoutsRef.current = null;
       mapZoomRef.current = DEFAULT_ZOOM;
     };
-  }, [apiKey, closeAllBalloons, controlsSignature, reportCurrentBounds]);
+  }, [apiKey, clearHoverClearTimer, closeAllBalloons, controlsSignature, reportCurrentBounds]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1042,7 +1119,7 @@ export function YandexMapMultiViewer({
         if (showBalloonsRef.current) {
           openBalloonForPoint(point.id);
         }
-        hoverHandlerRef.current?.(point.id);
+        handlePlacemarkMouseEnter(point.id);
       });
       placemark.events.add("mouseleave", () => {
         if (!hoverEnabledRef.current) {
@@ -1052,7 +1129,7 @@ export function YandexMapMultiViewer({
         if (showBalloonsRef.current) {
           scheduleBalloonClose(point.id);
         }
-        hoverHandlerRef.current?.(null);
+        handlePlacemarkMouseLeave(point.id);
       });
 
       placemarkByIdRef.current.set(point.id, placemark);
@@ -1103,6 +1180,8 @@ export function YandexMapMultiViewer({
     closeAllBalloons,
     closeBalloonForPoint,
     fitPointsOnChange,
+    handlePlacemarkMouseEnter,
+    handlePlacemarkMouseLeave,
     initialViewport,
     mapReadyVersion,
     normalizedPoints,
