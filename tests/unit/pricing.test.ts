@@ -49,7 +49,7 @@ describe("pricing helpers", () => {
     }
   });
 
-  it("multiplies per-person nightly prices by guests", () => {
+  it("multiplies per-person prices by guests without multiplying by nights", () => {
     const result = calculateRoomStayPrice({
       prices: [
         {
@@ -69,8 +69,29 @@ describe("pricing helpers", () => {
     if (result.ok) {
       expect(result.priceType).toBe("PER_PERSON");
       expect(result.unitTotal).toBe(2400);
-      expect(result.total).toBe(7200);
-      expect(result.breakdown[0]?.totalPrice).toBe(3600);
+      expect(result.total).toBe(3600);
+      expect(result.breakdown[0]?.totalPrice).toBe(1800);
+    }
+
+    const longerStay = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-08-01",
+          dateTo: "2026-08-10",
+          price: 1200,
+          priceType: "PER_PERSON",
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-08-01",
+      checkOut: "2026-08-06",
+      guests: 3,
+    });
+
+    expect(longerStay.ok).toBe(true);
+    if (longerStay.ok) {
+      expect(longerStay.nights).toBe(5);
+      expect(longerStay.total).toBe(3600);
     }
   });
 });

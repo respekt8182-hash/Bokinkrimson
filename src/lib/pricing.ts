@@ -27,7 +27,7 @@ export function getRoomPriceUnitText(priceType: unknown): string {
 export function getRoomPriceNightlySuffix(
   priceType: RoomPriceCalculationType | null | undefined,
 ): string {
-  return priceType === "PER_PERSON" ? "/ чел/ночь" : "/ ночь";
+  return priceType === "PER_PERSON" ? "/ чел" : "/ ночь";
 }
 
 export function getRoomPriceShortUnit(priceType: unknown): string {
@@ -209,14 +209,25 @@ export function calculateRoomStayPrice(input: {
     };
   }
 
+  const calculationPriceType = priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED";
+  const adjustedBreakdown =
+    calculationPriceType === "PER_PERSON"
+      ? breakdown.map((item) => ({
+          ...item,
+          totalPrice: (item.price * guests) / nights,
+        }))
+      : breakdown;
+  const adjustedTotal =
+    calculationPriceType === "PER_PERSON" ? (unitTotal / nights) * guests : total;
+
   return {
     ok: true,
     nights,
-    total,
+    total: adjustedTotal,
     unitTotal,
     currency,
-    priceType: priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED",
+    priceType: calculationPriceType,
     guests,
-    breakdown,
+    breakdown: adjustedBreakdown,
   };
 }

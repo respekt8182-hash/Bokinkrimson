@@ -890,12 +890,15 @@ function RoomPhotoLightbox({
         />
 
         <div className="room-photo-lightbox-info" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-start justify-between gap-3">
+          <div className="room-photo-lightbox-title-row flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60">
                 Фото номера
               </p>
-              <h3 id={titleId} className="mt-1 truncate text-lg font-semibold text-white">
+              <h3
+                id={titleId}
+                className="room-photo-lightbox-title mt-1 truncate text-lg font-semibold text-white"
+              >
                 {room.title}
               </h3>
             </div>
@@ -905,7 +908,7 @@ function RoomPhotoLightbox({
             </span>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="room-photo-lightbox-summary mt-3 flex flex-wrap gap-1.5">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/88">
               <AppIcon icon={Users} className="h-3.5 w-3.5 text-white/68" />
               {formatRoomCapacityLabel(room.beds, room.extraBeds)}
@@ -923,11 +926,11 @@ function RoomPhotoLightbox({
           </div>
 
           {featureAmenities.length > 0 ? (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <div className="room-photo-lightbox-feature-list mt-2.5 flex flex-wrap gap-1.5">
               {featureAmenities.map((amenity) => (
                 <span
                   key={amenity.key}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.07] px-2 py-1 text-[11px] leading-snug text-white/74"
+                  className="room-photo-lightbox-feature-chip inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.07] px-2 py-1 text-[11px] leading-snug text-white/74"
                   title={amenity.name}
                 >
                   {amenity.icon ? (
@@ -939,7 +942,9 @@ function RoomPhotoLightbox({
                       className="h-3.5 w-3.5 shrink-0 text-white/54"
                     />
                   )}
-                  <span className="min-w-0 truncate">{amenity.name}</span>
+                  <span className="room-photo-lightbox-chip-text min-w-0 truncate">
+                    {amenity.name}
+                  </span>
                 </span>
               ))}
             </div>

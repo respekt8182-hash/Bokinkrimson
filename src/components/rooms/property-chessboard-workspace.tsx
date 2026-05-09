@@ -3264,7 +3264,7 @@ export function PropertyChessboardWorkspace({
                   <label className="space-y-1.5">
                     <span className={modalMetaLabelClass}>
                       {priceForm.priceType === "PER_PERSON"
-                        ? "Цена за человека/ночь"
+                        ? "Цена за человека"
                         : "Цена за комнату/ночь"}
                     </span>
                     <Input

@@ -253,7 +253,7 @@ export function RoomPricesManager({ propertyId, initialRooms, onChanged }: RoomP
                 value={priceInput}
                 onChange={(event) => setPriceInput(event.target.value)}
                 placeholder={
-                  priceType === "PER_PERSON" ? "Цена за человека/ночь" : "Цена за комнату/ночь"
+                  priceType === "PER_PERSON" ? "Цена за человека" : "Цена за комнату/ночь"
                 }
               />
               <Input
