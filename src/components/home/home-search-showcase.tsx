@@ -195,6 +195,8 @@ const countFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 });
 
+const STARTER_PROGRAM_LIMIT = 100;
+
 function normalizeLocation(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase().replace(/ё/g, "е");
 }
@@ -1114,6 +1116,27 @@ export function HomeSearchShowcase({
       label: "направления отдыха",
     };
   }, [publishedExcursionsCount]);
+  const starterProgram = useMemo(() => {
+    if (publishedPropertiesCount === null) {
+      return {
+        usedLabel: "обновляется",
+        leftLabel: "Счётчик обновится после подключения базы",
+        progressPercent: 0,
+      };
+    }
+
+    const used = Math.max(0, publishedPropertiesCount);
+    const left = Math.max(STARTER_PROGRAM_LIMIT - used, 0);
+
+    return {
+      usedLabel: `${countFormatter.format(used)} ${pluralize(used, ["объект", "объекта", "объектов"])}`,
+      leftLabel:
+        left > 0
+          ? `Осталось мест: ${countFormatter.format(left)}`
+          : "Стартовая программа заполнена",
+      progressPercent: Math.min(100, (used / STARTER_PROGRAM_LIMIT) * 100),
+    };
+  }, [publishedPropertiesCount]);
   const locationCountLabel = `${pluralize(locationSuggestions.length, [
     "населенный пункт",
     "населенных пункта",
@@ -3933,14 +3956,37 @@ export function HomeSearchShowcase({
 
       {/* ── Why choose us ── */}
       <div className="mx-auto mt-6 max-w-5xl">
-        <div className="mx-auto mb-4 flex max-w-3xl flex-col items-center justify-center gap-3 text-sm sm:flex-row sm:flex-wrap">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 font-bold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_-16px_rgba(185,28,28,0.75)]">
-            <AppIcon icon={Sparkles} className="h-4 w-4 text-white" />
-            0 ₽ до 20 июня
-          </span>
-          <span className="max-w-xl text-center font-semibold leading-6 text-olive">
-            Сейчас на сайте бесплатное размещение объявлений всех типов
-          </span>
+        <div className="mx-auto mb-5 max-w-3xl rounded-2xl border border-olive/10 bg-white/90 p-4 shadow-[0_18px_38px_-34px_rgba(15,74,64,0.45)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ до
+                20 июня
+              </span>
+              <p className="mt-2 text-sm font-semibold leading-6 text-olive">
+                Бесплатное размещение для первых 100 объектов жилья
+              </p>
+              <p className="mt-1 text-xs leading-5 text-olive/55">
+                Идёт набор стартовой базы жилья перед сезоном.
+              </p>
+            </div>
+
+            <div className="w-full shrink-0 rounded-xl border border-olive/10 bg-cream/45 p-3 sm:w-[220px]">
+              <div className="flex items-center justify-between gap-3 text-xs text-olive/60">
+                <span>Уже подключено:</span>
+                <span className="font-semibold text-olive">{starterProgram.usedLabel}</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+                  style={{ width: `${starterProgram.progressPercent}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-semibold leading-5 text-olive/65">
+                {starterProgram.leftLabel}
+              </p>
+            </div>
+          </div>
         </div>
         <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
           Почему выбирают «Крым Вокруг»?

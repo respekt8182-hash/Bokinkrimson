@@ -2275,6 +2275,7 @@ export default async function PublicExcursionPage({
                         organizerName={organizerName}
                         organizerAvatarUrl={item.owner.avatarUrl}
                         isInstantConfirmation={item.instantConfirmation}
+                        tracking={{ entityType: "excursion", entityId: item.id }}
                       />
 
                       {cancellationLabel ? (
@@ -2397,6 +2398,7 @@ export default async function PublicExcursionPage({
           phone={item.contacts.phone}
           organizerName={organizerName}
           organizerAvatarUrl={item.owner.avatarUrl}
+          tracking={{ entityType: "excursion", entityId: item.id }}
         />
       </div>
     );
@@ -3487,6 +3489,7 @@ export default async function PublicExcursionPage({
                       organizerName={organizerName}
                       organizerAvatarUrl={item.owner.avatarUrl}
                       isInstantConfirmation={item.instantConfirmation}
+                      tracking={{ entityType: "excursion", entityId: item.id }}
                     />
                   </div>
                 </article>
@@ -3611,6 +3614,7 @@ export default async function PublicExcursionPage({
         phone={item.contacts.phone}
         organizerName={organizerName}
         organizerAvatarUrl={item.owner.avatarUrl}
+        tracking={{ entityType: "excursion", entityId: item.id }}
       />
     </div>
   );

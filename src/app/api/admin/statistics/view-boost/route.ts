@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { validateAdminCredentials } from "@/lib/admin-password-auth";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
+  ADMIN_ACTION_BOOST_DAILY_LIMIT,
   ADMIN_VIEW_BOOST_DAILY_LIMIT,
+  applyAdminActionBoost,
   applyAdminViewBoost,
   getAdminStatisticsSummary,
+  isAdminActionStatsUnavailableError,
   isAdminViewBoostLimitError,
+  normalizeActionBoostAmount,
+  normalizeActionBoostType,
   normalizeViewBoostAmount,
 } from "@/lib/admin-statistics";
+import { LISTING_ACTION_LABELS } from "@/lib/listing-analytics";
 
 export async function GET() {
   const admin = await getAdminSession();
@@ -29,17 +35,34 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as {
     amount?: unknown;
+    metricType?: unknown;
+    actionType?: unknown;
     password?: unknown;
   } | null;
 
-  const amount = normalizeViewBoostAmount(body?.amount);
+  const metricType = body?.metricType === "actions" ? "actions" : "views";
+  const amount =
+    metricType === "actions"
+      ? normalizeActionBoostAmount(body?.amount)
+      : normalizeViewBoostAmount(body?.amount);
   const password = typeof body?.password === "string" ? body.password : "";
 
   if (amount === null) {
+    const limit =
+      metricType === "actions" ? ADMIN_ACTION_BOOST_DAILY_LIMIT : ADMIN_VIEW_BOOST_DAILY_LIMIT;
+    const label = metricType === "actions" ? "целевых действий" : "просмотров";
+
     return NextResponse.json(
-      { error: `Можно начислить от 1 до ${ADMIN_VIEW_BOOST_DAILY_LIMIT} просмотров за раз.` },
+      { error: `Можно начислить от 1 до ${limit} ${label} за раз.` },
       { status: 400 },
     );
+  }
+
+  const actionType =
+    metricType === "actions" ? normalizeActionBoostType(body?.actionType) : null;
+
+  if (metricType === "actions" && !actionType) {
+    return NextResponse.json({ error: "Выберите тип целевого действия." }, { status: 400 });
   }
 
   if (!password) {
@@ -51,14 +74,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await applyAdminViewBoost(amount);
+    const result =
+      metricType === "actions" && actionType
+        ? await applyAdminActionBoost(amount, actionType)
+        : await applyAdminViewBoost(amount);
     return NextResponse.json(result);
   } catch (error) {
-    if (isAdminViewBoostLimitError(error)) {
-      const summary = await getAdminStatisticsSummary();
+    if (isAdminActionStatsUnavailableError(error)) {
       return NextResponse.json(
         {
-          error: `Лимит на сегодня уже исчерпан: максимум ${ADMIN_VIEW_BOOST_DAILY_LIMIT} просмотров в сутки.`,
+          error: "Таблица целевых действий ещё не создана. Примените миграцию Prisma и повторите попытку.",
+          summary: await getAdminStatisticsSummary(),
+        },
+        { status: 503 },
+      );
+    }
+
+    if (isAdminViewBoostLimitError(error)) {
+      const summary = await getAdminStatisticsSummary();
+      const limit =
+        metricType === "actions" ? ADMIN_ACTION_BOOST_DAILY_LIMIT : ADMIN_VIEW_BOOST_DAILY_LIMIT;
+      const metricLabel =
+        metricType === "actions"
+          ? `целевых действий (${LISTING_ACTION_LABELS[actionType!]})`
+          : "просмотров";
+      return NextResponse.json(
+        {
+          error: `Лимит на сегодня уже исчерпан: максимум ${limit} ${metricLabel} в сутки.`,
           summary,
         },
         { status: 429 },
@@ -66,7 +108,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Не удалось начислить просмотры. Попробуйте ещё раз." },
+      { error: "Не удалось начислить метрику. Попробуйте ещё раз." },
       { status: 500 },
     );
   }

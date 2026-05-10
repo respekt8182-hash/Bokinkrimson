@@ -43,7 +43,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
     sort,
   } as const;
 
-  const [result, mapResult, directory] = await Promise.all([
+  const [result, mapResult, directory, catalogOverview] = await Promise.all([
     getPublicAttractionCatalog({
       ...catalogQuery,
       bounds,
@@ -57,6 +57,10 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
       allowLargePageSize: true,
     }),
     getMarketplaceDirectoryData(),
+    getPublicAttractionCatalog({
+      page: 1,
+      pageSize: 1,
+    }),
   ]);
 
   return (
@@ -66,6 +70,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
       categories={directory.attractionCategories}
       locationSuggestions={directory.attractionLocationSuggestions}
       activeBounds={boundsParam || null}
+      catalogActiveTotal={catalogOverview.total}
     />
   );
 }

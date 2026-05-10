@@ -6,8 +6,8 @@ import {
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import {
-  buildPublishedExcursionVisibilityWhere,
-  buildPublishedPropertyVisibilityWhere,
+  buildPublicCatalogExcursionVisibilityWhere,
+  buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 
 export type HomeStats = {
@@ -19,10 +19,10 @@ const getCachedHomeStats = unstable_cache(
   async (): Promise<HomeStats> => {
     const [publishedPropertiesCount, publishedExcursionsCount] = await Promise.all([
       db.property.count({
-        where: buildPublishedPropertyVisibilityWhere(),
+        where: buildPublicCatalogPropertyVisibilityWhere(),
       }),
       db.excursion.count({
-        where: buildPublishedExcursionVisibilityWhere(),
+        where: buildPublicCatalogExcursionVisibilityWhere(),
       }),
     ]);
 
@@ -31,7 +31,7 @@ const getCachedHomeStats = unstable_cache(
       publishedExcursionsCount,
     };
   },
-  ["home-stats-v1"],
+  ["home-stats-v2"],
   { revalidate: 600 },
 );
 

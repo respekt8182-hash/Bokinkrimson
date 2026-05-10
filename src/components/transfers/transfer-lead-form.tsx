@@ -5,8 +5,10 @@ import { useId, useMemo, useState } from "react";
 import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildTransferLeadMessage } from "@/lib/lead-message-author";
+import type { ListingEntityType } from "@/lib/listing-analytics";
 
 type TransferLeadFormProps = {
   transferTitle: string;
@@ -15,6 +17,10 @@ type TransferLeadFormProps = {
   vehicleOptions: string[];
   triggerLabel?: string;
   triggerClassName?: string;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 export function TransferLeadForm({
@@ -24,6 +30,7 @@ export function TransferLeadForm({
   vehicleOptions,
   triggerLabel = "Заказать трансфер",
   triggerClassName,
+  tracking = null,
 }: TransferLeadFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [extra, setExtra] = useState("");
@@ -46,6 +53,10 @@ export function TransferLeadForm({
   );
 
   function openModal() {
+    if (tracking) {
+      trackListingAction({ ...tracking, actionType: "lead_phrase" });
+    }
+
     setExtra("");
     setCopied(false);
     setIsOpen(true);
@@ -168,7 +179,9 @@ export function TransferLeadForm({
                 onClick={handleCopy}
                 className={cn(
                   "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
-                  copied ? "bg-emerald-600 text-white" : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+                  copied
+                    ? "bg-emerald-600 text-white"
+                    : "bg-[#e8621a] text-white hover:bg-[#d45615]",
                 )}
               >
                 <AppIcon icon={copied ? Check : Copy} className="h-4.5 w-4.5" />

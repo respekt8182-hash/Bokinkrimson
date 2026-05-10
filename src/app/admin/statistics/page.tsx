@@ -2,6 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { AdminStatisticsBoostPanel } from "@/components/admin/admin-statistics-boost-panel";
 import { AdminLinkButton, AdminNotice, AdminPageHeader } from "@/components/admin/admin-ui";
 import {
+  ADMIN_ACTION_BOOST_DAILY_LIMIT,
   ADMIN_VIEW_BOOST_DAILY_LIMIT,
   getAdminStatisticsSummary,
   type AdminStatisticsSummary,
@@ -15,9 +16,13 @@ function buildFallbackSummary(): AdminStatisticsSummary {
     dailyLimit: ADMIN_VIEW_BOOST_DAILY_LIMIT,
     usedToday: ADMIN_VIEW_BOOST_DAILY_LIMIT,
     remainingToday: 0,
+    actionDailyLimit: ADMIN_ACTION_BOOST_DAILY_LIMIT,
+    actionUsedToday: ADMIN_ACTION_BOOST_DAILY_LIMIT,
+    actionRemainingToday: 0,
     todayKey,
     todayLabel: todayKey,
     lastBoostAt: null,
+    lastActionBoostAt: null,
     totals: {
       publishedProperties: 0,
       publishedExcursions: 0,
@@ -25,6 +30,7 @@ function buildFallbackSummary(): AdminStatisticsSummary {
       publishedTransfers: 0,
       totalCards: 0,
       totalViews: 0,
+      totalActions: 0,
     },
   };
 }
@@ -52,8 +58,8 @@ export default async function AdminStatisticsPage() {
     <div className="space-y-6">
       <AdminPageHeader
         eyebrow="Статистика"
-        title="Просмотры карточек"
-        description="Сдержанное ручное начисление просмотров для всех опубликованных карточек сайта: жильё, экскурсии, туры и трансферы."
+        title="Метрики карточек"
+        description="Ручное начисление просмотров и целевых действий для опубликованных карточек сайта: жильё, экскурсии, туры и трансферы."
         actions={
           <AdminLinkButton href="/admin" variant="ghost">
             <BarChart3 className="h-4 w-4" />В обзор

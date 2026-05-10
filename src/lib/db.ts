@@ -47,6 +47,7 @@ const USER_COMPAT_COLUMNS = [
 ] as const;
 
 const TRANSFER_COMPAT_COLUMNS = [
+  "isPublishedVisible",
   "serviceTags",
   "fleet",
   "pendingEditStatus",
@@ -133,6 +134,7 @@ const SCHEMA_COMPAT_MODELS = {
   Transfer: {
     columns: TRANSFER_COMPAT_COLUMNS,
     defaults: {
+      isPublishedVisible: true,
       serviceTags: [],
       fleet: [],
       pendingEditStatus: null,
@@ -605,6 +607,43 @@ export type DbTransactionClient = Omit<
   "$connect" | "$disconnect" | "$extends" | "$on" | "$transaction"
 >;
 export type DbClientLike = DbClient | DbTransactionClient;
+
+const tableAvailabilityPromises = new Map<string, Promise<boolean>>();
+
+export async function isDatabaseTableAvailable(
+  tableName: string,
+  queryClient: CompatColumnQueryClient = db,
+): Promise<boolean> {
+  const normalizedTableName = tableName.trim();
+
+  if (!normalizedTableName) {
+    return false;
+  }
+
+  if (queryClient === db) {
+    const cached = tableAvailabilityPromises.get(normalizedTableName);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  const availabilityPromise = queryClient
+    .$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ${normalizedTableName}
+      LIMIT 1
+    `)
+    .then((rows) => rows.length > 0)
+    .catch(() => false);
+
+  if (queryClient === db) {
+    tableAvailabilityPromises.set(normalizedTableName, availabilityPromise);
+  }
+
+  return availabilityPromise;
+}
 
 export async function areDatabaseColumnsAvailable(
   modelName: CompatModelName,

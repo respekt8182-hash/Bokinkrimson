@@ -124,46 +124,56 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   if (direction === "excursions") {
     const peopleRaw = Number.parseInt(guests, 10);
-    const result = await getPublicExcursionCatalog({
-      offerType: offerType === "tour" || offerType === "excursion" ? offerType : undefined,
-      query: textQuery,
-      location,
-      district,
-      category,
-      format,
-      durationBucket:
-        durationBucket === "up_to_3h" ||
-        durationBucket === "between_3h_6h" ||
-        durationBucket === "more_6h"
-          ? durationBucket
-          : undefined,
-      language: language || undefined,
-      difficulty:
-        difficulty === "easy" || difficulty === "medium" || difficulty === "hard"
-          ? difficulty
-          : undefined,
-      pickup: pickup === "1" || pickup === "true",
-      kids: kids === "1" || kids === "true",
-      minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
-      maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
-      sort:
-        sort === "relevance" ||
-        sort === "price_asc" ||
-        sort === "price_desc" ||
-        sort === "rating_desc" ||
-        sort === "popular_desc" ||
-        sort === "distance_asc" ||
-        sort === "duration_asc"
-          ? sort
-          : undefined,
-      dateFrom: checkIn || undefined,
-      dateTo: checkOut || undefined,
-      people: Number.isFinite(peopleRaw) ? Math.max(1, peopleRaw) : undefined,
-      radiusKm: Number.parseFloat(radiusKm) || 20,
-      bounds,
-      page,
-      pageSize: 30,
-    });
+    const catalogOfferType = normalizedDirection === "tours" ? "tour" : "excursion";
+    const requestedOfferType =
+      offerType === "tour" || offerType === "excursion" ? offerType : catalogOfferType;
+    const [result, catalogOverview] = await Promise.all([
+      getPublicExcursionCatalog({
+        offerType: requestedOfferType,
+        query: textQuery,
+        location,
+        district,
+        category,
+        format,
+        durationBucket:
+          durationBucket === "up_to_3h" ||
+          durationBucket === "between_3h_6h" ||
+          durationBucket === "more_6h"
+            ? durationBucket
+            : undefined,
+        language: language || undefined,
+        difficulty:
+          difficulty === "easy" || difficulty === "medium" || difficulty === "hard"
+            ? difficulty
+            : undefined,
+        pickup: pickup === "1" || pickup === "true",
+        kids: kids === "1" || kids === "true",
+        minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
+        maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
+        sort:
+          sort === "relevance" ||
+          sort === "price_asc" ||
+          sort === "price_desc" ||
+          sort === "rating_desc" ||
+          sort === "popular_desc" ||
+          sort === "distance_asc" ||
+          sort === "duration_asc"
+            ? sort
+            : undefined,
+        dateFrom: checkIn || undefined,
+        dateTo: checkOut || undefined,
+        people: Number.isFinite(peopleRaw) ? Math.max(1, peopleRaw) : undefined,
+        radiusKm: Number.parseFloat(radiusKm) || 20,
+        bounds,
+        page,
+        pageSize: 30,
+      }),
+      getPublicExcursionCatalog({
+        offerType: catalogOfferType,
+        page: 1,
+        pageSize: 1,
+      }),
+    ]);
     return (
       <>
         {canEmitSearchSchema ? (
@@ -193,6 +203,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           locationNames={excursionSeoDirectory.cities.map((item) => item.name)}
           initialPopularLocationSuggestions={popularExcursionLocationSuggestions}
           catalogDirection={normalizedDirection === "tours" ? "tours" : "excursions"}
+          catalogActiveTotal={catalogOverview.total}
         />
       </>
     );
@@ -213,25 +224,36 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ? sort
       : "";
 
-  const initialHousingResult = await getPublicCatalog({
-    query: textQuery,
-    location,
-    type: propertyType || undefined,
-    checkIn: checkIn || undefined,
-    checkOut: checkOut || undefined,
-    guests: Number.isFinite(guestsCountRaw) ? Math.max(1, guestsCountRaw) : 1,
-    minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
-    maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
-    minRating: normalizedMinRating,
-    hasPhotos,
-    hasReviews,
-    familyFriendly,
-    petsAllowed,
-    sort: normalizedSort || undefined,
-    bounds,
-    page: 1,
-    pageSize: 30,
-  });
+  const shouldCheckLocationHousing = Boolean(location.trim());
+  const [initialHousingResult, locationHousingOverview] = await Promise.all([
+    getPublicCatalog({
+      query: textQuery,
+      location,
+      type: propertyType || undefined,
+      checkIn: checkIn || undefined,
+      checkOut: checkOut || undefined,
+      guests: Number.isFinite(guestsCountRaw) ? Math.max(1, guestsCountRaw) : 1,
+      minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
+      maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
+      minRating: normalizedMinRating,
+      hasPhotos,
+      hasReviews,
+      familyFriendly,
+      petsAllowed,
+      sort: normalizedSort || undefined,
+      bounds,
+      page: 1,
+      pageSize: 30,
+    }),
+    shouldCheckLocationHousing
+      ? getPublicCatalog({
+          location,
+          page: 1,
+          pageSize: 1,
+          trackSearchImpressions: false,
+        })
+      : Promise.resolve(null),
+  ]);
 
   const initialSortParam =
     initialHousingResult.filters.sort === "relevance" ? "" : initialHousingResult.filters.sort;
@@ -289,6 +311,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         initialLocationLabel={
           initialHousingResult.filters.locationName ?? (location || "весь Крым")
         }
+        initialLocationActiveHousingCount={locationHousingOverview?.total ?? null}
       />
     </>
   );

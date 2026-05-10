@@ -45,7 +45,10 @@ import {
 import { serializeReview } from "@/lib/reviews";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import { serializeRoom, roomInclude, type SerializedRoom } from "@/lib/rooms";
-import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
+import {
+  buildPublishedPropertyVisibilityWhere,
+  buildPublicCatalogPropertyVisibilityWhere,
+} from "@/lib/public-visibility";
 import type { MapBounds } from "@/lib/search-contracts";
 import type { FaqItem } from "@/types/excursions";
 
@@ -1423,7 +1426,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const hasLocationSearchScope = Boolean(resolvedLocation || locationCenterPoint);
 
   const where: Prisma.PropertyWhereInput = {
-    ...buildPublishedPropertyVisibilityWhere(),
+    ...buildPublicCatalogPropertyVisibilityWhere(),
     ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
     ...(hasReviews ? { reviewsCount: { gt: 0 } } : {}),
   };

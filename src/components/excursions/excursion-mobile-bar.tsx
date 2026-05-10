@@ -7,6 +7,7 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
   normalizeMaxProfileUrl,
@@ -14,6 +15,7 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
+import { getContactActionTypeFromChannel, type ListingEntityType } from "@/lib/listing-analytics";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { normalizeWebsiteUrl } from "@/lib/website-favicon";
 
@@ -35,6 +37,10 @@ type ExcursionMobileBarProps = {
   phone: string | null;
   organizerName: string;
   organizerAvatarUrl?: string | null;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 type MobileQuickAction = {
@@ -63,6 +69,7 @@ export function ExcursionMobileBar({
   actionLabel,
   actionDisabled = false,
   websiteUrl,
+  tracking = null,
   ...formProps
 }: ExcursionMobileBarProps) {
   const [open, setOpen] = useState(false);
@@ -156,6 +163,13 @@ export function ExcursionMobileBar({
     });
   }
 
+  function trackQuickAction(actionId: MobileQuickAction["id"]) {
+    const actionType = getContactActionTypeFromChannel(actionId);
+    if (tracking && actionType) {
+      trackListingAction({ ...tracking, actionType });
+    }
+  }
+
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-olive/15 bg-white/97 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] shadow-[0_-4px_24px_rgba(15,118,110,0.12)] backdrop-blur-sm lg:hidden">
@@ -189,6 +203,7 @@ export function ExcursionMobileBar({
                     rel={action.id === "phone" ? undefined : "noreferrer noopener"}
                     title={action.label}
                     aria-label={action.label}
+                    onClick={() => trackQuickAction(action.id)}
                     className={cn(
                       "inline-flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.96]",
                       action.className,
@@ -206,6 +221,10 @@ export function ExcursionMobileBar({
               type="button"
               onClick={() => {
                 if (!actionDisabled) {
+                  if (tracking) {
+                    trackListingAction({ ...tracking, actionType: "lead_phrase" });
+                  }
+
                   setOpen(true);
                 }
               }}

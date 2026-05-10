@@ -40,7 +40,10 @@ import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { serializeReview } from "@/lib/reviews";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
-import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
+import {
+  buildPublishedExcursionVisibilityWhere,
+  buildPublicCatalogExcursionVisibilityWhere,
+} from "@/lib/public-visibility";
 import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
 import type {
   ExcursionExtraOption,
@@ -1009,9 +1012,7 @@ export async function getPublicExcursionCatalog(
   // Fetch a broad candidate set first; final relevance depends on geo/date/text signals
   // that are easier to combine in application code than in SQL.
   const rows = await db.excursion.findMany({
-    where: {
-      ...buildPublishedExcursionVisibilityWhere(),
-    },
+    where: buildPublicCatalogExcursionVisibilityWhere(),
     include: {
       mainLocation: {
         select: { id: true, name: true },

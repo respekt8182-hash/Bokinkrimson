@@ -39,6 +39,23 @@ export function buildPublishedPropertyVisibilityWhere(now = new Date()): Prisma.
   };
 }
 
+export function buildPublicCatalogPropertyVisibilityWhere(
+  now = new Date(),
+): Prisma.PropertyWhereInput {
+  return {
+    AND: [
+      buildPublishedPropertyVisibilityWhere(now),
+      {
+        NOT: {
+          id: {
+            startsWith: "demo_property_",
+          },
+        },
+      },
+    ],
+  };
+}
+
 export function buildPublishedExcursionVisibilityWhere(): Prisma.ExcursionWhereInput {
   return {
     status: ExcursionStatus.PUBLISHED,
@@ -49,6 +66,28 @@ export function buildPublishedExcursionVisibilityWhere(): Prisma.ExcursionWhereI
         deletedAt: null,
       },
     },
+  };
+}
+
+export function buildPublicCatalogExcursionVisibilityWhere(): Prisma.ExcursionWhereInput {
+  return {
+    AND: [
+      buildPublishedExcursionVisibilityWhere(),
+      {
+        NOT: [
+          {
+            id: {
+              startsWith: "demo_excursion_",
+            },
+          },
+          {
+            id: {
+              startsWith: "demo_tour_",
+            },
+          },
+        ],
+      },
+    ],
   };
 }
 

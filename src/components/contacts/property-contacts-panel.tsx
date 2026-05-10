@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Globe, Phone } from "lucide-react
 import { type ReactNode, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
   normalizeMaxProfileUrl,
@@ -11,6 +12,11 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
+import {
+  getPhoneListingActionType,
+  type ListingActionType,
+  type ListingEntityType,
+} from "@/lib/listing-analytics";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import {
   buildWebsiteFaviconUrl,
@@ -39,6 +45,10 @@ type PropertyContactsPanelProps = {
   secondaryContactsNoWrap?: boolean;
   hideEmptyState?: boolean;
   hideSecondaryContactsEyebrow?: boolean;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 export type PropertyContactsPanelText = {
@@ -120,6 +130,7 @@ function ContactChannelLink(props: {
   compact?: boolean;
   fullWidthCompact?: boolean;
   iconOnlyCompact?: boolean;
+  onClick?: () => void;
 }) {
   const {
     label,
@@ -132,6 +143,7 @@ function ContactChannelLink(props: {
     compact = false,
     fullWidthCompact = false,
     iconOnlyCompact = false,
+    onClick,
   } = props;
   const effectiveLabel = compact ? (compactLabel ?? label) : label;
   const showCompactAsIconOnly = compact && iconOnlyCompact;
@@ -143,6 +155,7 @@ function ContactChannelLink(props: {
       rel="noreferrer noopener"
       title={label}
       aria-label={label}
+      onClick={onClick}
       className={cn(
         "group flex items-center border text-left transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-terra/25",
         showCompactAsIconOnly
@@ -223,6 +236,7 @@ export function PropertyContactsPanel({
   secondaryContactsNoWrap = false,
   hideEmptyState = false,
   hideSecondaryContactsEyebrow = false,
+  tracking = null,
 }: PropertyContactsPanelProps) {
   const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
   const isCompact = variant === "compact";
@@ -340,6 +354,11 @@ export function PropertyContactsPanel({
   const visibleActions = actions.filter((item) => item.href.trim().length > 0);
   const hasSecondaryContacts = Boolean(normalizedWebsiteHref || visibleActions.length > 0);
   const hasAnyContact = Boolean(phoneItems.length > 0 || hasSecondaryContacts);
+  const trackAction = (actionType: ListingActionType) => {
+    if (tracking) {
+      trackListingAction({ ...tracking, actionType });
+    }
+  };
 
   return (
     <div className={cn("space-y-4", isCompact && "space-y-3")}>
@@ -370,6 +389,7 @@ export function PropertyContactsPanel({
               {primaryPhone.href ? (
                 <a
                   href={primaryPhone.href}
+                  onClick={() => trackAction("phone_primary")}
                   className={cn(
                     "mt-2 block font-semibold leading-tight text-olive transition-colors hover:text-primary",
                     isCompact ? "text-base" : "text-lg",
@@ -441,6 +461,7 @@ export function PropertyContactsPanel({
                   <a
                     key={item.key}
                     href={item.href}
+                    onClick={() => trackAction(getPhoneListingActionType(index + 1))}
                     className={cn(
                       "block rounded-[18px] border border-white/80 bg-white/88 shadow-sm transition-colors hover:border-primary/14 hover:text-primary",
                       isCompact ? "px-3.5 py-2.5" : "px-4 py-3",
@@ -485,6 +506,7 @@ export function PropertyContactsPanel({
                 label={copy.websiteLabel}
                 href={normalizedWebsiteHref}
                 caption={websiteCaption}
+                onClick={() => trackAction("website")}
                 compact={isSecondaryContactsCompact}
                 iconOnlyCompact={isSecondaryContactsCompact}
                 className="border-primary/16 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(14,116,144,0.10))] hover:border-primary/30 hover:shadow-[0_16px_30px_rgba(14,116,144,0.12)]"
@@ -512,6 +534,7 @@ export function PropertyContactsPanel({
                 compactLabel={action.compactLabel}
                 href={action.href}
                 caption={action.caption}
+                onClick={() => trackAction(action.id as ListingActionType)}
                 compact={isSecondaryContactsCompact}
                 iconOnlyCompact={isSecondaryContactsCompact}
                 compactDescription={action.compactDescription}

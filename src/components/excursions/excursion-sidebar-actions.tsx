@@ -9,6 +9,8 @@ import {
 import { ExcursionLeadModal } from "@/components/excursions/excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
+import { trackListingAction } from "@/lib/client-listing-actions";
+import type { ListingEntityType } from "@/lib/listing-analytics";
 
 type ExcursionSidebarActionsProps = {
   actionLabel: string;
@@ -29,6 +31,10 @@ type ExcursionSidebarActionsProps = {
   organizerName: string;
   organizerAvatarUrl?: string | null;
   isInstantConfirmation?: boolean;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 export const excursionContactPanelText = {
@@ -95,6 +101,7 @@ export function ExcursionSidebarActions({
   organizerName,
   organizerAvatarUrl = null,
   isInstantConfirmation = false,
+  tracking = null,
 }: ExcursionSidebarActionsProps) {
   const [open, setOpen] = useState(false);
   const organizerInitial = organizerName.trim()[0]?.toUpperCase() ?? "?";
@@ -167,6 +174,7 @@ export function ExcursionSidebarActions({
               okUrl={okUrl}
               text={excursionContactPanelText}
               variant="compact"
+              tracking={tracking}
             />
           </div>
         </div>
@@ -181,7 +189,13 @@ export function ExcursionSidebarActions({
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            if (tracking) {
+              trackListingAction({ ...tracking, actionType: "lead_phrase" });
+            }
+
+            setOpen(true);
+          }}
           className="inline-flex h-12 w-full items-center justify-center rounded-[18px] bg-[#e8621a] px-5 text-[15px] font-semibold text-white shadow-[0_18px_36px_rgba(232,98,26,0.24)] ring-4 ring-white/92 transition hover:bg-[#d45615] active:scale-[0.985]"
         >
           {actionLabel}

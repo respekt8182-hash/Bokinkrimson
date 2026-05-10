@@ -87,6 +87,7 @@ export type ExcursionSearchResultsProps = {
   locationNames: string[];
   initialPopularLocationSuggestions: ExcursionLocationSuggestionItem[];
   catalogDirection?: "excursions" | "tours";
+  catalogActiveTotal?: number;
 };
 
 type ExcursionLocationSuggestionSection = "recent" | "popular" | "matches";
@@ -773,6 +774,34 @@ function ExcursionToggleCard(props: {
   );
 }
 
+const catalogConnectionCopy = {
+  excursions: {
+    title: "Идёт подключение гидов и экскурсионных программ",
+    description:
+      "Мы подключаем экскурсии, прогулки, джип-туры, морские маршруты и авторские программы по Крыму. Раздел скоро начнёт наполняться реальными предложениями от партнёров.",
+  },
+  tours: {
+    title: "Идёт подключение авторских туров по Крыму",
+    description:
+      "Мы собираем предложения от организаторов туров, маршрутов выходного дня, джип-поездок и активного отдыха. Раздел находится в стадии наполнения.",
+  },
+} as const;
+
+function CatalogConnectionEmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-dashed border-olive/24 bg-white/94 p-6 text-left shadow-[0_14px_34px_-30px_rgba(15,74,64,0.45)]">
+      <p className="text-base font-semibold leading-6 text-olive">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-olive/60">{description}</p>
+    </section>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ExcursionSearchResults({
@@ -784,6 +813,7 @@ export function ExcursionSearchResults({
   locationNames,
   initialPopularLocationSuggestions,
   catalogDirection = "excursions",
+  catalogActiveTotal,
 }: ExcursionSearchResultsProps) {
   const router = useRouter();
   const isMobileViewport = useIsMobileViewport();
@@ -1640,7 +1670,9 @@ export function ExcursionSearchResults({
           })
           .catch(() => {
             if (!controller.signal.aborted && requestId === searchRequestSeqRef.current) {
-              setMapPointsError("Не удалось обновить выдачу по зоне карты. Показаны текущие результаты.");
+              setMapPointsError(
+                "Не удалось обновить выдачу по зоне карты. Показаны текущие результаты.",
+              );
             }
           })
           .finally(() => {
@@ -2324,6 +2356,8 @@ export function ExcursionSearchResults({
       : filters.offerType === "excursion"
         ? "экскурсии"
         : "варианты";
+  const connectionEmptyCopy = catalogConnectionCopy[catalogDirection];
+  const shouldShowConnectionEmptyState = catalogActiveTotal === 0;
   const draftGuestsValue = Number.isFinite(Number.parseInt(guests, 10))
     ? Math.max(1, Math.min(40, Number.parseInt(guests, 10)))
     : 2;
@@ -3039,24 +3073,31 @@ export function ExcursionSearchResults({
                   )}
                 >
                   {displayItems.length === 0 ? (
-                    <div className="space-y-3">
-                      <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
-                        <p className="text-sm text-olive/60">
-                          По вашим параметрам {resultsTitle} не найдены.
-                        </p>
-                        <p className="mt-1 text-xs text-olive/45">
-                          Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={resetAllFilters}
-                          className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-                        >
-                          Сбросить все фильтры
-                        </button>
+                    shouldShowConnectionEmptyState ? (
+                      <CatalogConnectionEmptyState
+                        title={connectionEmptyCopy.title}
+                        description={connectionEmptyCopy.description}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
+                          <p className="text-sm text-olive/60">
+                            По вашим параметрам {resultsTitle} не найдены.
+                          </p>
+                          <p className="mt-1 text-xs text-olive/45">
+                            Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={resetAllFilters}
+                            className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+                          >
+                            Сбросить все фильтры
+                          </button>
+                        </div>
+                        <FirstListingPromo kind="excursions" />
                       </div>
-                      <FirstListingPromo kind="excursions" />
-                    </div>
+                    )
                   ) : (
                     <div className="space-y-4">
                       {displayItems.map((item, index) => {
@@ -3246,24 +3287,31 @@ export function ExcursionSearchResults({
         {/* ── Center: Results ─────────────────────────────────────────────── */}
         <div id="catalog-results" className="min-w-0 flex-1 lg:w-full">
           {displayItems.length === 0 ? (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
-                <p className="text-sm text-olive/60">
-                  По вашим параметрам {resultsTitle} не найдены.
-                </p>
-                <p className="mt-1 text-xs text-olive/45">
-                  Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
-                </p>
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-                >
-                  Сбросить все фильтры
-                </button>
+            shouldShowConnectionEmptyState ? (
+              <CatalogConnectionEmptyState
+                title={connectionEmptyCopy.title}
+                description={connectionEmptyCopy.description}
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
+                  <p className="text-sm text-olive/60">
+                    По вашим параметрам {resultsTitle} не найдены.
+                  </p>
+                  <p className="mt-1 text-xs text-olive/45">
+                    Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    Сбросить все фильтры
+                  </button>
+                </div>
+                <FirstListingPromo kind="excursions" />
               </div>
-              <FirstListingPromo kind="excursions" />
-            </div>
+            )
           ) : (
             <div className="space-y-4">
               {displayItems.map((item, index) => {

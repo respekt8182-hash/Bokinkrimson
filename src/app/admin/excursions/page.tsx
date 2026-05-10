@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
+import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
 import {
   AdminEmptyState,
   AdminNotice,
@@ -415,6 +416,12 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
                   </p>
 
                   <div className="flex flex-wrap gap-2">
+                    <ListingStatsButton
+                      endpoint={`/api/admin/statistics/listing?entityType=excursion&id=${item.id}`}
+                      entityName={item.title ?? "Экскурсия без названия"}
+                      storageKey={`admin:excursion:${item.id}`}
+                      buttonLabel="Аналитика"
+                    />
                     <Link
                       href={`/admin/excursions/${item.id}`}
                       className="rounded-2xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"

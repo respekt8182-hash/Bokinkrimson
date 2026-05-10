@@ -6,7 +6,7 @@ import {
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
-import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
+import { buildPublicCatalogPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 export type PopularPropertyItem = {
   id: string;
@@ -45,10 +45,7 @@ function stripCountryFromAddress(address: string): string {
     .trim();
 }
 
-function buildLocationLine(
-  locationName: string | null,
-  address: string | null,
-): string {
+function buildLocationLine(locationName: string | null, address: string | null): string {
   const loc = locationName?.trim() ?? "";
   const addr = address ? stripCountryFromAddress(address) : "";
   if (loc && addr) return `${loc}, ${addr}`;
@@ -58,7 +55,7 @@ function buildLocationLine(
 async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
   const properties = await db.property.findMany({
     where: {
-      ...buildPublishedPropertyVisibilityWhere(),
+      ...buildPublicCatalogPropertyVisibilityWhere(),
       media: { some: { type: "IMAGE", roomId: null } },
     },
     select: {
@@ -120,8 +117,7 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
     }
 
     // Determine if price is "per room" or "per night" based on room count
-    const priceType: "per_room" | "per_night" =
-      p.rooms.length <= 1 ? "per_room" : "per_night";
+    const priceType: "per_room" | "per_night" = p.rooms.length <= 1 ? "per_room" : "per_night";
 
     return {
       id: p.id,

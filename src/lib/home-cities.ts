@@ -8,8 +8,8 @@ import {
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import {
-  buildPublishedExcursionVisibilityWhere,
-  buildPublishedPropertyVisibilityWhere,
+  buildPublicCatalogExcursionVisibilityWhere,
+  buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 
 export const HOME_CITY_FALLBACK_PRICE_RUB = 500;
@@ -232,7 +232,7 @@ async function readHomeCitySourceRows(locationIds: string[], today: Date) {
           room: {
             isActive: true,
             property: {
-              ...buildPublishedPropertyVisibilityWhere(),
+              ...buildPublicCatalogPropertyVisibilityWhere(),
               locationId: { in: locationIds },
             },
           },
@@ -254,7 +254,7 @@ async function readHomeCitySourceRows(locationIds: string[], today: Date) {
       }),
       db.excursion.findMany({
         where: {
-          ...buildPublishedExcursionVisibilityWhere(),
+          ...buildPublicCatalogExcursionVisibilityWhere(),
           locationId: { in: locationIds },
           priceFrom: { not: null },
         },
@@ -283,50 +283,50 @@ export async function getHomeCityShowcaseItems(): Promise<HomeCityShowcaseItem[]
 
 const getCachedHomeCityShowcaseItems = unstable_cache(
   async (): Promise<HomeCityShowcaseItem[]> => {
-  const fallbackPrice = HOME_CITY_FALLBACK_PRICE_RUB;
-  const locationIds = homeCityDefinitions.map((item) => item.locationId);
-  const today = getUtcDateOnly(new Date());
+    const fallbackPrice = HOME_CITY_FALLBACK_PRICE_RUB;
+    const locationIds = homeCityDefinitions.map((item) => item.locationId);
+    const today = getUtcDateOnly(new Date());
 
-  const [housingRows, excursionRows] = await readHomeCitySourceRows(locationIds, today);
+    const [housingRows, excursionRows] = await readHomeCitySourceRows(locationIds, today);
 
-  const housingRecords: HousingPriceRecord[] = housingRows
-    .map((row) => ({
-      locationId: row.room.property.locationId ?? "",
-      dateFrom: row.dateFrom,
-      dateTo: row.dateTo,
-      price: Number(row.price),
-    }))
-    .filter((row) => row.locationId.length > 0);
+    const housingRecords: HousingPriceRecord[] = housingRows
+      .map((row) => ({
+        locationId: row.room.property.locationId ?? "",
+        dateFrom: row.dateFrom,
+        dateTo: row.dateTo,
+        price: Number(row.price),
+      }))
+      .filter((row) => row.locationId.length > 0);
 
-  const excursionRecords: ExcursionPriceRecord[] = excursionRows
-    .map((row) => ({
-      locationId: row.locationId ?? "",
-      price: Number(row.priceFrom),
-    }))
-    .filter((row) => row.locationId.length > 0);
+    const excursionRecords: ExcursionPriceRecord[] = excursionRows
+      .map((row) => ({
+        locationId: row.locationId ?? "",
+        price: Number(row.priceFrom),
+      }))
+      .filter((row) => row.locationId.length > 0);
 
-  const housingPriceByLocation = resolveHousingPricesByLocation({
-    locationIds,
-    records: housingRecords,
-    today,
-    fallbackPrice,
-  });
-  const excursionPriceByLocation = resolveExcursionPricesByLocation({
-    locationIds,
-    records: excursionRecords,
-    fallbackPrice,
-  });
+    const housingPriceByLocation = resolveHousingPricesByLocation({
+      locationIds,
+      records: housingRecords,
+      today,
+      fallbackPrice,
+    });
+    const excursionPriceByLocation = resolveExcursionPricesByLocation({
+      locationIds,
+      records: excursionRecords,
+      fallbackPrice,
+    });
 
-  return homeCityDefinitions.map((city) => ({
-    key: city.key,
-    title: city.title,
-    locationId: city.locationId,
-    locationName: city.locationName,
-    imageSrc: `/Foto/${city.imageBaseName}.webp`,
-    housingPriceFrom: housingPriceByLocation.get(city.locationId) ?? fallbackPrice,
-    excursionPriceFrom: excursionPriceByLocation.get(city.locationId) ?? fallbackPrice,
-  }));
+    return homeCityDefinitions.map((city) => ({
+      key: city.key,
+      title: city.title,
+      locationId: city.locationId,
+      locationName: city.locationName,
+      imageSrc: `/Foto/${city.imageBaseName}.webp`,
+      housingPriceFrom: housingPriceByLocation.get(city.locationId) ?? fallbackPrice,
+      excursionPriceFrom: excursionPriceByLocation.get(city.locationId) ?? fallbackPrice,
+    }));
   },
-  ["home-city-showcase-v1"],
+  ["home-city-showcase-v2"],
   { revalidate: 900 },
 );

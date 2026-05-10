@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
 import { resolveKnownCrimeaLocationName } from "@/lib/seo/routes";
+import { formatLocationInPrepositional } from "@/lib/seo/site";
 import { parseDateRangeParam } from "@/lib/seo/url-normalize";
 import type { SearchFilters, SearchResponse } from "@/types/catalog";
 
@@ -41,6 +42,7 @@ type HousingCatalogClientProps = {
     subtitle: string;
   }>;
   initialLocationLabel: string;
+  initialLocationActiveHousingCount: number | null;
 };
 
 type ToastType = "success" | "error" | "info";
@@ -79,6 +81,10 @@ function readCatalogLocationFromPath(pathname: string): string {
   } catch {
     return resolveKnownCrimeaLocationName({ location, locationId: location }) ?? "";
   }
+}
+
+function normalizeCatalogLocationKey(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
 }
 
 function parseUrlFilters(search: string, pathname = ""): SearchFilters {
@@ -160,6 +166,26 @@ function ToastContainer({
   );
 }
 
+function HousingLocationConnectionEmptyState({ locationName }: { locationName: string | null }) {
+  const locationPhrase = formatLocationInPrepositional(locationName);
+  const title = locationPhrase
+    ? `Идёт подключение жилья ${locationPhrase}`
+    : "Идёт подключение жилья в этом регионе";
+
+  return (
+    <section className="rounded-2xl border border-dashed border-olive/24 bg-white/94 p-6 text-left shadow-[0_14px_34px_-30px_rgba(15,74,64,0.45)]">
+      <p className="text-base font-semibold leading-6 text-olive">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-olive/60">
+        Мы постепенно подключаем владельцев жилья по этому направлению. Скоро здесь появятся
+        реальные объекты с ценами, фото и прямыми контактами.
+      </p>
+      <p className="mt-2 text-sm leading-6 text-olive/60">
+        Если вы сдаёте жильё в этом регионе, сейчас можно попасть в стартовую программу размещения.
+      </p>
+    </section>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function HousingCatalogClient({
@@ -168,6 +194,7 @@ export function HousingCatalogClient({
   locationNames,
   initialPopularLocationSuggestions,
   initialLocationLabel,
+  initialLocationActiveHousingCount,
 }: HousingCatalogClientProps) {
   const [filters, setFilters] = useState(initialFilters);
   const view = "list" as const;
@@ -415,7 +442,18 @@ export function HousingCatalogClient({
     return () => window.removeEventListener("popstate", handlePopState);
   }, [runFilterRequest]);
 
-  const emptyCatalogContent = (
+  const initialLocationKey = normalizeCatalogLocationKey(
+    initialFilters.locationId || initialFilters.location,
+  );
+  const currentLocationKey = normalizeCatalogLocationKey(filters.locationId || filters.location);
+  const shouldShowLocationConnectionEmpty =
+    initialLocationActiveHousingCount === 0 &&
+    initialLocationKey.length > 0 &&
+    currentLocationKey === initialLocationKey;
+
+  const emptyCatalogContent = shouldShowLocationConnectionEmpty ? (
+    <HousingLocationConnectionEmptyState locationName={initialLocationLabel || null} />
+  ) : (
     <div className="space-y-3">
       <section className="rounded-2xl border border-olive/10 bg-white/94 p-5 text-left shadow-[0_14px_34px_-30px_rgba(15,74,64,0.45)]">
         <p className="text-sm font-semibold text-olive">

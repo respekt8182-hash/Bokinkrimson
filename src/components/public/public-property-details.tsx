@@ -40,8 +40,13 @@ import { AvatarImage } from "@/components/ui/avatar-image";
 import { parseDetailedGuestsValue } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildPropertyLeadMessage } from "@/lib/lead-message-author";
+import {
+  getContactActionTypeFromChannel,
+  getPhoneListingActionType,
+} from "@/lib/listing-analytics";
 import {
   addDays,
   calculateRoomStayPrice,
@@ -1176,6 +1181,7 @@ export function PublicPropertyDetails({
     maxUrl: item.contacts.maxUrl,
     okUrl: item.contacts.okUrl,
   });
+  const contactTracking = { entityType: "property" as const, entityId: item.id };
   const seaDistanceLabel = extractSeaDistanceLabel(allAmenities);
   const mainPriceLabel =
     item.minNightPrice !== null && item.currency
@@ -1485,12 +1491,20 @@ export function PublicPropertyDetails({
     }
 
     if (primaryMobileCallPhone) {
+      trackListingAction({
+        ...contactTracking,
+        actionType: getPhoneListingActionType(0),
+      });
       window.location.assign(primaryMobileCallPhone.href);
       return;
     }
 
     const firstMessenger = mobileMessengerLinks[0];
     if (firstMessenger) {
+      const actionType = getContactActionTypeFromChannel(firstMessenger.key);
+      if (actionType) {
+        trackListingAction({ ...contactTracking, actionType });
+      }
       window.open(firstMessenger.href, "_blank", "noopener,noreferrer");
       return;
     }
@@ -2003,6 +2017,10 @@ export function PublicPropertyDetails({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    trackListingAction({
+                                      ...contactTracking,
+                                      actionType: "lead_phrase",
+                                    });
                                     setLeadModalRoom(room);
                                     setLeadExtra("");
                                     setLeadCopied(false);
@@ -2323,6 +2341,7 @@ export function PublicPropertyDetails({
                 maxUrl={item.contacts.maxUrl}
                 okUrl={item.contacts.okUrl}
                 secondaryContactsCompact
+                tracking={contactTracking}
               />
             </div>
           </div>
@@ -2361,6 +2380,12 @@ export function PublicPropertyDetails({
                     rel="noreferrer noopener"
                     title={channel.label}
                     aria-label={channel.label}
+                    onClick={() => {
+                      const actionType = getContactActionTypeFromChannel(channel.key);
+                      if (actionType) {
+                        trackListingAction({ ...contactTracking, actionType });
+                      }
+                    }}
                     className={cn(
                       "inline-flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.96]",
                       getMobileMessengerChipClasses(channel.brand),
@@ -2393,6 +2418,12 @@ export function PublicPropertyDetails({
             ) : primaryMobileCallPhone ? (
               <a
                 href={primaryMobileCallPhone.href}
+                onClick={() =>
+                  trackListingAction({
+                    ...contactTracking,
+                    actionType: getPhoneListingActionType(0),
+                  })
+                }
                 className="btn-primary inline-flex h-11 min-w-[112px] items-center justify-center gap-2 rounded-2xl px-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(15,118,110,0.24)] sm:h-12 sm:min-w-[122px] sm:px-4"
               >
                 <AppIcon icon={Phone} className="h-4 w-4" />
@@ -2448,7 +2479,13 @@ export function PublicPropertyDetails({
                   <a
                     key={phone.key}
                     href={phone.href}
-                    onClick={() => setIsMobileCallSheetOpen(false)}
+                    onClick={() => {
+                      trackListingAction({
+                        ...contactTracking,
+                        actionType: getPhoneListingActionType(index),
+                      });
+                      setIsMobileCallSheetOpen(false);
+                    }}
                     className="flex items-center gap-3 rounded-[18px] border border-olive/10 bg-white px-4 py-3 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition-colors hover:border-primary/20 hover:bg-primary/[0.04]"
                   >
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(145deg,rgba(15,118,110,0.98),rgba(14,116,144,0.92))] text-white shadow-[0_12px_24px_rgba(15,118,110,0.22)]">

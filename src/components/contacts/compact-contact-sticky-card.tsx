@@ -1,6 +1,7 @@
 import { BadgeCheck, Phone } from "lucide-react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
   normalizeMaxProfileUrl,
@@ -8,6 +9,7 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
+import type { ListingActionType, ListingEntityType } from "@/lib/listing-analytics";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 
 type CompactContactStickyCardProps = {
@@ -22,6 +24,10 @@ type CompactContactStickyCardProps = {
   badges?: string[];
   note?: string | null;
   className?: string;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 type ContactChannel = {
@@ -120,11 +126,17 @@ export function CompactContactStickyCard({
   badges = [],
   note = null,
   className,
+  tracking = null,
 }: CompactContactStickyCardProps) {
   const phoneHref = normalizePhoneHref(phone);
   const phoneLabel = formatPhoneLabel(phone);
   const channels = buildChannels({ whatsappUrl, telegramUrl, vkUrl, maxUrl, okUrl });
   const initial = name.trim().charAt(0).toUpperCase() || "?";
+  const trackAction = (actionType: ListingActionType) => {
+    if (tracking) {
+      trackListingAction({ ...tracking, actionType });
+    }
+  };
 
   return (
     <article
@@ -168,6 +180,7 @@ export function CompactContactStickyCard({
           </p>
           <a
             href={phoneHref}
+            onClick={() => trackAction("phone_primary")}
             className="mt-2 block rounded-[20px] border border-olive/10 bg-white px-4 py-3 transition hover:border-olive/18 hover:shadow-sm"
           >
             <span className="block text-[1.35rem] font-semibold leading-tight text-olive">
@@ -185,6 +198,7 @@ export function CompactContactStickyCard({
               href={channel.href}
               target="_blank"
               rel="noreferrer noopener"
+              onClick={() => trackAction(channel.key as ListingActionType)}
               className="flex items-center gap-2.5 rounded-[18px] border border-olive/10 bg-white px-3 py-2.5 transition hover:border-olive/18 hover:shadow-sm"
             >
               <ContactBrandMark brand={channel.brand} className="h-9 w-9 rounded-xl" />

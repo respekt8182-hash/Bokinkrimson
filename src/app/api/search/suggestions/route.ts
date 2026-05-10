@@ -2,19 +2,16 @@ import { NextResponse } from "next/server";
 import { crimeaLocationById, crimeaLocations } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
-import {
-  getLocationDirectoryItems,
-  type LocationDirectoryItem,
-} from "@/lib/location-directory";
+import { getLocationDirectoryItems, type LocationDirectoryItem } from "@/lib/location-directory";
 import {
   isConfiguredDatabaseReachable,
   isDatabaseFallbackEligibleError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import {
-  buildPublishedExcursionVisibilityWhere,
-  buildPublishedPropertyVisibilityWhere,
   buildPublishedTransferVisibilityWhere,
+  buildPublicCatalogExcursionVisibilityWhere,
+  buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 import { createInMemoryRateLimiter } from "@/lib/rate-limit";
 import {
@@ -192,11 +189,7 @@ let attractionRowsCache: CachedRows<AttractionSuggestionRow> | null = null;
 let transferRowsCache: CachedRows<TransferSuggestionRow> | null = null;
 
 function normalizeText(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/\s+/g, " ");
+  return value.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
 }
 
 function transliterateToLatin(input: string): string {
@@ -692,11 +685,9 @@ function buildAttractionLocationAggregates(rows: AttractionSuggestionRow[]): Loc
     }
 
     const locationId = toStableLocationId(displayName);
-    const searchTerms = [
-      row.locationName,
-      row.districtName,
-      ...row.locationAliases,
-    ].flatMap((term) => (term?.trim() ? [term.trim()] : []));
+    const searchTerms = [row.locationName, row.districtName, ...row.locationAliases].flatMap(
+      (term) => (term?.trim() ? [term.trim()] : []),
+    );
     const existing = byLocationId.get(locationId);
     if (!existing) {
       byLocationId.set(locationId, {
@@ -958,7 +949,7 @@ async function getHousingSuggestionRows(): Promise<HousingSuggestionRow[]> {
 
   const rows = await db.property.findMany({
     where: {
-      ...buildPublishedPropertyVisibilityWhere(),
+      ...buildPublicCatalogPropertyVisibilityWhere(),
       rooms: {
         some: {
           isActive: true,
@@ -992,7 +983,7 @@ async function getExcursionSuggestionRows(): Promise<ExcursionSuggestionRow[]> {
 
   const rows = await db.excursion.findMany({
     where: {
-      ...buildPublishedExcursionVisibilityWhere(),
+      ...buildPublicCatalogExcursionVisibilityWhere(),
     },
     select: {
       id: true,
@@ -1213,7 +1204,7 @@ function rankHotelMatches(input: {
       const name = row.name?.trim() ?? "";
       const locationName = row.locationId
         ? (crimeaLocationById[row.locationId]?.name ?? row.locationName ?? null)
-        : row.locationName ?? null;
+        : (row.locationName ?? null);
 
       return {
         id: row.id,
@@ -1256,8 +1247,9 @@ function rankHotelMatches(input: {
         { value: item.locationName, weight: 0.98 },
       ]);
       const trigramScore = trigramScoreMap.get(item.id) ?? 0;
-      const locationPopularity =
-        item.locationId ? (input.locationCountById.get(item.locationId) ?? 1) : 1;
+      const locationPopularity = item.locationId
+        ? (input.locationCountById.get(item.locationId) ?? 1)
+        : 1;
       const popularityBoost = Math.min(0.2, Math.log(locationPopularity + 1) / 10);
       const score = Math.max(tokenScore, trigramScore * 1.12) + popularityBoost;
 

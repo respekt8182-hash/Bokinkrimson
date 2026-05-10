@@ -1150,6 +1150,21 @@ model ViewLog {
   @@index([entityType, entityId, date])
 }
 
+model EngagementLog {
+  id         String   @id @default(cuid())
+  entityType String   @db.VarChar(20)
+  entityId   String
+  actionType String   @db.VarChar(40)
+  date       DateTime @db.Date
+  count      Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([entityType, entityId, actionType, date])
+  @@index([entityType, entityId, date])
+  @@index([entityType, actionType, date])
+}
+
 model Media {
   id           String    @id @default(cuid())
   propertyId   String?

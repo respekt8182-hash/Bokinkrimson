@@ -2,8 +2,10 @@ import { PaymentStatus, Prisma, ReviewEntityType, TransferStatus } from "@prisma
 import { ArrowUpRight, Car, Eye, FileText, MapPin, ShieldCheck, Star } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
 import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
+import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
 import { AppIcon } from "@/components/ui/app-icon";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
@@ -312,12 +314,25 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <ListingStatsButton
+            endpoint={`/api/admin/statistics/listing?entityType=transfer&id=${transfer.id}`}
+            entityName={transfer.title || "Трансфер без названия"}
+            storageKey={`admin:transfer:${transfer.id}`}
+            buttonLabel="Аналитика"
+          />
           <Link
             href="/admin/transfers"
             className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
           >
             К трансферам
           </Link>
+          {transfer.status === TransferStatus.PUBLISHED ? (
+            <AdminListingVisibilityToggle
+              endpoint={`/api/admin/transfers/${transfer.id}`}
+              entityLabel="трансфер"
+              isVisible={transfer.isPublishedVisible}
+            />
+          ) : null}
           {publicPath ? (
             <Link
               href={publicPath}

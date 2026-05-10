@@ -1,6 +1,7 @@
 import { TransferStatus } from "@prisma/client";
 import { ArrowUpRight, Car } from "lucide-react";
 import Link from "next/link";
+import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import {
   AdminEmptyState,
   AdminPageHeader,
@@ -8,6 +9,7 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicTransferPath } from "@/lib/public-marketplace";
@@ -242,12 +244,25 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <ListingStatsButton
+                      endpoint={`/api/admin/statistics/listing?entityType=transfer&id=${item.id}`}
+                      entityName={item.title || "Трансфер без названия"}
+                      storageKey={`admin:transfer:${item.id}`}
+                      buttonLabel="Аналитика"
+                    />
                     <Link
                       href={`/admin/transfers/${item.id}`}
                       className="rounded-2xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
                     >
                       Проверить
                     </Link>
+                    {item.status === TransferStatus.PUBLISHED ? (
+                      <AdminListingVisibilityToggle
+                        endpoint={`/api/admin/transfers/${item.id}`}
+                        entityLabel="трансфер"
+                        isVisible={item.isPublishedVisible}
+                      />
+                    ) : null}
                     {publicPath ? (
                       <Link
                         href={publicPath}

@@ -7,9 +7,9 @@ import {
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import {
-  buildPublishedExcursionVisibilityWhere,
-  buildPublishedPropertyVisibilityWhere,
   buildPublishedTransferVisibilityWhere,
+  buildPublicCatalogExcursionVisibilityWhere,
+  buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 import { getStaticAttractions, type StaticAttraction } from "@/lib/static-attractions";
 
@@ -263,14 +263,16 @@ async function readPopularHousingLocationIds(): Promise<PopularLocationEntry[]> 
       ? await db.property.findMany({
           where: {
             id: { in: propertyIds },
-            ...buildPublishedPropertyVisibilityWhere(),
+            ...buildPublicCatalogPropertyVisibilityWhere(),
           },
           select: { id: true, locationId: true },
         })
       : [];
 
   const propertyLocationMap = new Map(
-    properties.filter((property) => property.locationId).map((property) => [property.id, property.locationId as string]),
+    properties
+      .filter((property) => property.locationId)
+      .map((property) => [property.id, property.locationId as string]),
   );
 
   const locationViewCounts = new Map<string, number>();
@@ -308,7 +310,7 @@ async function readPopularExcursionLocationIds(): Promise<PopularLocationEntry[]
       ? await db.excursion.findMany({
           where: {
             id: { in: excursionIds },
-            ...buildPublishedExcursionVisibilityWhere(),
+            ...buildPublicCatalogExcursionVisibilityWhere(),
           },
           select: {
             id: true,
@@ -348,7 +350,7 @@ const readCachedPopularHousingSuggestions = unstable_cache(
     const locationCounts = await db.property.groupBy({
       by: ["locationId"],
       where: {
-        ...buildPublishedPropertyVisibilityWhere(),
+        ...buildPublicCatalogPropertyVisibilityWhere(),
         locationId: { not: null },
         rooms: {
           some: {
@@ -398,9 +400,7 @@ const readCachedPopularHousingSuggestions = unstable_cache(
           .slice(0, popularLocationsLimit * 4)
           .map((entry) => entry.locationId)
           .filter((locationId) => countEntryById.has(locationId)),
-        ...countEntries
-          .slice(0, popularLocationsLimit * 4)
-          .map((entry) => entry.locationId),
+        ...countEntries.slice(0, popularLocationsLimit * 4).map((entry) => entry.locationId),
       ]),
     );
 
@@ -427,7 +427,7 @@ const readCachedPopularHousingSuggestions = unstable_cache(
     rows.sort((left, right) => sortPopularSuggestionItems(left, right, viewRankMap));
     return rows.slice(0, popularLocationsLimit);
   },
-  ["popular-housing-search-suggestions-v2"],
+  ["popular-housing-search-suggestions-v3"],
   { revalidate: popularSuggestionsRevalidateSeconds },
 );
 
@@ -435,7 +435,7 @@ const readCachedPopularExcursionSuggestions = unstable_cache(
   async (): Promise<SearchSuggestionItem[]> => {
     const rows = await db.excursion.findMany({
       where: {
-        ...buildPublishedExcursionVisibilityWhere(),
+        ...buildPublicCatalogExcursionVisibilityWhere(),
       },
       select: {
         locationId: true,
@@ -492,7 +492,7 @@ const readCachedPopularExcursionSuggestions = unstable_cache(
 
     return [...popular, ...fallback];
   },
-  ["popular-excursion-search-suggestions-v2"],
+  ["popular-excursion-search-suggestions-v3"],
   { revalidate: popularSuggestionsRevalidateSeconds },
 );
 
@@ -605,7 +605,9 @@ export async function getPopularExcursionSuggestions(): Promise<SearchSuggestion
 
   try {
     const suggestions = await readCachedPopularExcursionSuggestions();
-    return suggestions.length > 0 ? suggestions : getFallbackPopularLocationSuggestions("excursions");
+    return suggestions.length > 0
+      ? suggestions
+      : getFallbackPopularLocationSuggestions("excursions");
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;
@@ -622,7 +624,9 @@ export async function getPopularExcursionSuggestions(): Promise<SearchSuggestion
 
 export async function getPopularAttractionSuggestions(): Promise<SearchSuggestionItem[]> {
   const suggestions = await readCachedPopularAttractionSuggestions();
-  return suggestions.length > 0 ? suggestions : getFallbackPopularLocationSuggestions("attractions");
+  return suggestions.length > 0
+    ? suggestions
+    : getFallbackPopularLocationSuggestions("attractions");
 }
 
 export async function getPopularTransferSuggestions(): Promise<SearchSuggestionItem[]> {
@@ -639,7 +643,9 @@ export async function getPopularTransferSuggestions(): Promise<SearchSuggestionI
 
   try {
     const suggestions = await readCachedPopularTransferSuggestions();
-    return suggestions.length > 0 ? suggestions : getFallbackPopularLocationSuggestions("transfers");
+    return suggestions.length > 0
+      ? suggestions
+      : getFallbackPopularLocationSuggestions("transfers");
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;

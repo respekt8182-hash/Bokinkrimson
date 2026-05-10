@@ -22,6 +22,7 @@ import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearb
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
+import { TrackedContactLink } from "@/components/public/tracked-contact-link";
 import {
   PropertyContactsPanel,
   type PropertyContactsPanelText,
@@ -44,6 +45,7 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
+import { getContactActionTypeFromChannel } from "@/lib/listing-analytics";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { normalizeWebsiteUrl } from "@/lib/website-favicon";
@@ -63,6 +65,7 @@ type AttractionCatalogProps = {
   categories: string[];
   locationSuggestions: PublicMarketplaceLocationSuggestion[];
   activeBounds?: string | null;
+  catalogActiveTotal?: number;
 };
 
 type TransferCatalogProps = {
@@ -71,6 +74,7 @@ type TransferCatalogProps = {
   transferTypes: string[];
   locationSuggestions: PublicMarketplaceLocationSuggestion[];
   activeBounds?: string | null;
+  catalogActiveTotal?: number;
 };
 
 type TransferFleet = PublicTransferCatalogItem["fleet"];
@@ -597,6 +601,21 @@ function EmptyState({
   );
 }
 
+function CatalogConnectionEmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-dashed border-olive/24 bg-white/94 p-6 text-left shadow-[0_14px_34px_-30px_rgba(15,74,64,0.45)]">
+      <p className="text-base font-semibold leading-6 text-olive">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-olive/60">{description}</p>
+    </section>
+  );
+}
+
 function TransferEmptyCatalogContent() {
   return (
     <div className="space-y-4">
@@ -1026,7 +1045,9 @@ export function AttractionCatalog({
   categories,
   locationSuggestions,
   activeBounds = null,
+  catalogActiveTotal,
 }: AttractionCatalogProps) {
+  const shouldShowConnectionEmptyState = catalogActiveTotal === 0;
   const params: CatalogParams = {
     q: result.filters.query,
     location: result.filters.locationName,
@@ -1080,11 +1101,18 @@ export function AttractionCatalog({
       >
         <section className="min-w-0 lg:w-full" id="catalog-results">
           {result.items.length === 0 ? (
-            <EmptyState
-              title="Досуг не найден"
-              description="Попробуйте другой город, увеличьте радиус или очистите поиск."
-              resetHref="/attractions"
-            />
+            shouldShowConnectionEmptyState ? (
+              <CatalogConnectionEmptyState
+                title="Идёт наполнение раздела «Досуг»"
+                description="Здесь появятся развлечения, активности, места для отдыха, прогулок и семейного досуга в городах Крыма. Пока раздел наполняется, вы можете посмотреть жильё и достопримечательности по городам."
+              />
+            ) : (
+              <EmptyState
+                title="Досуг не найден"
+                description="Попробуйте другой город, увеличьте радиус или очистите поиск."
+                resetHref="/attractions"
+              />
+            )
           ) : (
             <div className="space-y-4">
               {result.items.map((item, index) => (
@@ -1105,7 +1133,9 @@ export function TransferCatalog({
   transferTypes,
   locationSuggestions,
   activeBounds = null,
+  catalogActiveTotal,
 }: TransferCatalogProps) {
+  const shouldShowConnectionEmptyState = catalogActiveTotal === 0;
   const params: CatalogParams = {
     q: result.filters.query,
     location: result.filters.locationName,
@@ -1163,7 +1193,14 @@ export function TransferCatalog({
       >
         <section className="min-w-0 flex-1 lg:w-full" id="catalog-results">
           {result.items.length === 0 ? (
-            <TransferEmptyCatalogContent />
+            shouldShowConnectionEmptyState ? (
+              <CatalogConnectionEmptyState
+                title="Идёт подключение трансферов по Крыму"
+                description="Мы подключаем водителей и компании, которые выполняют трансферы из аэропорта, с вокзалов и между городами Крыма. Скоро здесь появятся реальные предложения с маршрутами, ценами и контактами."
+              />
+            ) : (
+              <TransferEmptyCatalogContent />
+            )
           ) : (
             <div className="space-y-4">
               {result.items.map((item, index) => {
@@ -1537,6 +1574,7 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
     maxUrl: item.contacts.maxUrl,
     okUrl: item.contacts.okUrl,
   });
+  const contactTracking = { entityType: "transfer" as const, entityId: item.id };
   const sectionLinks = [
     { href: "#transfer-options", label: item.fleet.length > 1 ? "Варианты" : "Автомобиль" },
     ...(availableTransferTypes.length > 0 ? [{ href: "#transfer-types", label: "Виды" }] : []),
@@ -1924,6 +1962,7 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                             vehicleOptions={[fleetLeadOption || fleetTitle]}
                             triggerLabel="Заказать"
                             triggerClassName="h-10 rounded-xl bg-[#e8621a] px-4 text-[13px] text-white hover:bg-[#d45615]"
+                            tracking={contactTracking}
                           />
                         </div>
                       </div>
@@ -2023,6 +2062,7 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                 okUrl={item.contacts.okUrl}
                 text={transferContactPanelText}
                 secondaryContactsCompact
+                tracking={contactTracking}
               />
             </div>
           </section>
@@ -2047,42 +2087,53 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
             </div>
             {mobileMessengerLinks.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {mobileMessengerLinks.map((channel) => (
-                  <a
-                    key={channel.key}
-                    href={channel.href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    title={channel.label}
-                    aria-label={channel.label}
-                    className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.96]",
-                      getMobileMessengerChipClasses(channel.brand),
-                    )}
-                  >
-                    {channel.brand === "website" ? (
-                      <ContactWebsiteMark
-                        websiteUrl={channel.href}
-                        className="h-4 w-4"
-                        iconClassName="text-primary"
-                      />
-                    ) : (
-                      <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
-                    )}
-                  </a>
-                ))}
+                {mobileMessengerLinks.map((channel) => {
+                  const actionType = getContactActionTypeFromChannel(channel.key);
+                  if (!actionType) {
+                    return null;
+                  }
+
+                  return (
+                    <TrackedContactLink
+                      key={channel.key}
+                      href={channel.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      title={channel.label}
+                      aria-label={channel.label}
+                      tracking={contactTracking}
+                      actionType={actionType}
+                      className={cn(
+                        "inline-flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.96]",
+                        getMobileMessengerChipClasses(channel.brand),
+                      )}
+                    >
+                      {channel.brand === "website" ? (
+                        <ContactWebsiteMark
+                          websiteUrl={channel.href}
+                          className="h-4 w-4"
+                          iconClassName="text-primary"
+                        />
+                      ) : (
+                        <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
+                      )}
+                    </TrackedContactLink>
+                  );
+                })}
               </div>
             ) : null}
           </div>
           <div className="shrink-0">
             {phoneHref ? (
-              <a
+              <TrackedContactLink
                 href={phoneHref}
+                tracking={contactTracking}
+                actionType="phone_primary"
                 className="btn-primary inline-flex h-11 min-w-[112px] items-center justify-center gap-2 rounded-2xl px-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(15,118,110,0.24)] sm:h-12 sm:min-w-[122px] sm:px-4"
               >
                 <AppIcon icon={Phone} className="h-4 w-4" />
                 Позвонить
-              </a>
+              </TrackedContactLink>
             ) : null}
           </div>
         </div>
