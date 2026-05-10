@@ -1176,10 +1176,10 @@ model ListingAnalyticsEvent {
   metadata   Json?
   createdAt  DateTime @default(now())
 
-  @@index([entityType, entityId, eventDate])
-  @@index([entityType, eventType, eventDate])
-  @@index([ownerId, eventDate])
-  @@index([occurredAt])
+  @@index([entityType, entityId, eventDate], map: "la_event_entity_date_idx")
+  @@index([entityType, eventType, eventDate], map: "la_event_type_date_idx")
+  @@index([ownerId, eventDate], map: "la_event_owner_date_idx")
+  @@index([occurredAt], map: "la_event_occurred_idx")
 }
 
 model ListingAnalyticsDailyAggregate {
@@ -1199,9 +1199,9 @@ model ListingAnalyticsDailyAggregate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  @@unique([entityType, entityId, periodStart])
-  @@index([entityType, entityId, periodStart])
-  @@index([periodStart])
+  @@unique([entityType, entityId, periodStart], map: "la_daily_entity_period_key")
+  @@index([entityType, entityId, periodStart], map: "la_daily_entity_period_idx")
+  @@index([periodStart], map: "la_daily_period_idx")
 }
 
 model ListingAnalyticsMonthlyAggregate {
@@ -1221,9 +1221,9 @@ model ListingAnalyticsMonthlyAggregate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  @@unique([entityType, entityId, periodStart])
-  @@index([entityType, entityId, periodStart])
-  @@index([periodStart])
+  @@unique([entityType, entityId, periodStart], map: "la_monthly_entity_period_key")
+  @@index([entityType, entityId, periodStart], map: "la_monthly_entity_period_idx")
+  @@index([periodStart], map: "la_monthly_period_idx")
 }
 
 model ListingAnalyticsRefreshState {
@@ -1243,10 +1243,10 @@ model ListingAnalyticsRefreshState {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  @@unique([entityType, entityId])
-  @@index([ownerId, updatedAt])
-  @@index([status, nextAutoUpdateAt])
-  @@index([lastAggregatedAt])
+  @@unique([entityType, entityId], map: "la_refresh_entity_key")
+  @@index([ownerId, updatedAt], map: "la_refresh_owner_updated_idx")
+  @@index([status, nextAutoUpdateAt], map: "la_refresh_status_next_idx")
+  @@index([lastAggregatedAt], map: "la_refresh_last_agg_idx")
 }
 
 model Media {

@@ -72,44 +72,44 @@ CREATE TABLE "public"."ListingAnalyticsRefreshState" (
     CONSTRAINT "ListingAnalyticsRefreshState_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ListingAnalyticsEvent_entityType_entityId_eventDate_idx"
+CREATE INDEX "la_event_entity_date_idx"
 ON "public"."ListingAnalyticsEvent"("entityType", "entityId", "eventDate");
 
-CREATE INDEX "ListingAnalyticsEvent_entityType_eventType_eventDate_idx"
+CREATE INDEX "la_event_type_date_idx"
 ON "public"."ListingAnalyticsEvent"("entityType", "eventType", "eventDate");
 
-CREATE INDEX "ListingAnalyticsEvent_ownerId_eventDate_idx"
+CREATE INDEX "la_event_owner_date_idx"
 ON "public"."ListingAnalyticsEvent"("ownerId", "eventDate");
 
-CREATE INDEX "ListingAnalyticsEvent_occurredAt_idx"
+CREATE INDEX "la_event_occurred_idx"
 ON "public"."ListingAnalyticsEvent"("occurredAt");
 
-CREATE UNIQUE INDEX "ListingAnalyticsDailyAggregate_entityType_entityId_periodStart_key"
+CREATE UNIQUE INDEX "la_daily_entity_period_key"
 ON "public"."ListingAnalyticsDailyAggregate"("entityType", "entityId", "periodStart");
 
-CREATE INDEX "ListingAnalyticsDailyAggregate_entityType_entityId_periodStart_idx"
+CREATE INDEX "la_daily_entity_period_idx"
 ON "public"."ListingAnalyticsDailyAggregate"("entityType", "entityId", "periodStart");
 
-CREATE INDEX "ListingAnalyticsDailyAggregate_periodStart_idx"
+CREATE INDEX "la_daily_period_idx"
 ON "public"."ListingAnalyticsDailyAggregate"("periodStart");
 
-CREATE UNIQUE INDEX "ListingAnalyticsMonthlyAggregate_entityType_entityId_periodStart_key"
+CREATE UNIQUE INDEX "la_monthly_entity_period_key"
 ON "public"."ListingAnalyticsMonthlyAggregate"("entityType", "entityId", "periodStart");
 
-CREATE INDEX "ListingAnalyticsMonthlyAggregate_entityType_entityId_periodStart_idx"
+CREATE INDEX "la_monthly_entity_period_idx"
 ON "public"."ListingAnalyticsMonthlyAggregate"("entityType", "entityId", "periodStart");
 
-CREATE INDEX "ListingAnalyticsMonthlyAggregate_periodStart_idx"
+CREATE INDEX "la_monthly_period_idx"
 ON "public"."ListingAnalyticsMonthlyAggregate"("periodStart");
 
-CREATE UNIQUE INDEX "ListingAnalyticsRefreshState_entityType_entityId_key"
+CREATE UNIQUE INDEX "la_refresh_entity_key"
 ON "public"."ListingAnalyticsRefreshState"("entityType", "entityId");
 
-CREATE INDEX "ListingAnalyticsRefreshState_ownerId_updatedAt_idx"
+CREATE INDEX "la_refresh_owner_updated_idx"
 ON "public"."ListingAnalyticsRefreshState"("ownerId", "updatedAt");
 
-CREATE INDEX "ListingAnalyticsRefreshState_status_nextAutoUpdateAt_idx"
+CREATE INDEX "la_refresh_status_next_idx"
 ON "public"."ListingAnalyticsRefreshState"("status", "nextAutoUpdateAt");
 
-CREATE INDEX "ListingAnalyticsRefreshState_lastAggregatedAt_idx"
+CREATE INDEX "la_refresh_last_agg_idx"
 ON "public"."ListingAnalyticsRefreshState"("lastAggregatedAt");
