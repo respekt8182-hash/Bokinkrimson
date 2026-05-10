@@ -3,10 +3,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import {
-  markPropertyNeedsRemoderationAfterOwnerEdit,
-  preparePropertyForPublishedOwnerEdit,
-} from "@/lib/properties";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
 
 type RouteContext = {
@@ -85,8 +81,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  await preparePropertyForPublishedOwnerEdit(db, property.id);
-
   await db.$transaction(
     orderedIds.map((roomId, index) =>
       db.room.update({
@@ -95,8 +89,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       }),
     ),
   );
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, property.id);
 
   const items = await db.room.findMany({
     where: {

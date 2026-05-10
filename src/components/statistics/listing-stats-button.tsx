@@ -1,71 +1,100 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BarChart3, Eye, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BarChart3,
+  CalendarDays,
+  Clock3,
+  CircleAlert,
+  Eye,
+  Globe2,
+  Info,
+  Loader2,
+  MessageCircle,
+  MessageSquareText,
+  Phone,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
 
-type DailyActivity = {
+type PeriodKey = "today" | "last7Days" | "last30Days" | "last6Months" | `month:${string}`;
+
+type PeriodSummary = {
+  views: number;
+  actions: number;
+  conversion: number | null;
+};
+
+type ChartPoint = {
   date: string;
   views: number;
   actions: number;
 };
 
-type MonthlyActivity = {
-  month: string;
-  label: string;
-  views: number;
-  actions: number;
-  phoneActions: number;
-  messengerActions: number;
-  leadActions: number;
-  websiteActions: number;
-  breakdown: ActionBreakdownItem[];
+type Breakdown = {
+  phones: number;
+  messengers: number;
+  leads: number;
+  website: number;
+  booking: number;
+  other: number;
 };
 
-type ActionBreakdownItem = {
+type BreakdownItem = {
   actionType: string;
   label: string;
   count: number;
 };
 
-type ActionSummary = {
-  total: number;
-  phoneActions: number;
-  messengerActions: number;
-  leadActions: number;
-  websiteActions: number;
-  breakdown: ActionBreakdownItem[];
+type AnalyticsMonth = PeriodSummary & {
+  month: string;
+  label: string;
+  activityLevel: "none" | "low" | "medium" | "high";
+  breakdown: Breakdown;
+  breakdownItems: BreakdownItem[];
 };
 
 type StatsData = {
-  totalViews: number;
-  totalActions: number;
-  periodViews: number;
-  periodActions: number;
-  periodLabel: string;
-  dailyActivity: DailyActivity[];
-  weeklyTotal: number;
-  monthlyTotal: number;
-  weeklyActions: number;
-  monthlyActions: number;
-  monthlyHistory: MonthlyActivity[];
-  actionBreakdown: ActionBreakdownItem[];
-  actionSummary?: {
-    today: ActionSummary;
-    week: ActionSummary;
-    month30: ActionSummary;
-    period: ActionSummary;
+  entityType: "property" | "excursion" | "transfer";
+  entityId: string;
+  entityName: string;
+  lastUpdatedAt: string | null;
+  nextAutoUpdateAt: string | null;
+  updateStatus: "idle" | "updating" | "success" | "error";
+  isStale: boolean;
+  staleReason: string | null;
+  manualRefresh: {
+    limitPerDay: number;
+    usedToday: number;
+    remainingToday: number;
+    canRefresh: boolean;
+    isUpdating: boolean;
   };
-  messengerActions: number;
-  phoneActions: number;
-  leadActions?: number;
-  websiteActions?: number;
+  summary: {
+    today: PeriodSummary;
+    last7Days: PeriodSummary;
+    last30Days: PeriodSummary;
+    last6Months: PeriodSummary;
+  };
+  selectedPeriod: PeriodSummary & {
+    key: PeriodKey;
+    label: string;
+    breakdown: Breakdown;
+    breakdownItems: BreakdownItem[];
+    chart: ChartPoint[];
+  };
+  dailyActivity: ChartPoint[];
+  months: AnalyticsMonth[];
+  meta: {
+    autoUpdateHour: number;
+    timeZone: string;
+    source: "aggregated" | "legacy";
+    lastEventAt: string | null;
+    lastError: string | null;
+  };
 };
-
-type RefreshRecord = { date: string; count: number };
-
-type StatsRange = "today" | "week" | "month30" | "period" | "month";
 
 type ListingStatsButtonProps = {
   endpoint: string;
@@ -75,323 +104,305 @@ type ListingStatsButtonProps = {
   className?: string;
 };
 
-const MAX_DAILY_REFRESHES = 2;
-const LS_PREFIX = "listing_stats_refresh_";
-const CHART_W = 720;
-const CHART_H = 260;
-const PAD_L = 42;
-const PAD_R = 16;
-const PAD_T = 18;
-const PAD_B = 36;
-const PLOT_W = CHART_W - PAD_L - PAD_R;
-const PLOT_H = CHART_H - PAD_T - PAD_B;
+const PERIOD_OPTIONS: Array<{
+  key: Exclude<PeriodKey, `month:${string}`>;
+  label: string;
+  description: string;
+  summaryKey: keyof StatsData["summary"];
+}> = [
+  { key: "today", label: "Сегодня", description: "Текущий день", summaryKey: "today" },
+  { key: "last7Days", label: "7 дней", description: "Последняя неделя", summaryKey: "last7Days" },
+  { key: "last30Days", label: "30 дней", description: "Основной период", summaryKey: "last30Days" },
+  {
+    key: "last6Months",
+    label: "6 месяцев",
+    description: "Длинная динамика",
+    summaryKey: "last6Months",
+  },
+];
 
-function todayStr() {
-  return new Date().toISOString().split("T")[0];
-}
-
-function getRefreshRecord(key: string): RefreshRecord {
-  try {
-    const raw = localStorage.getItem(LS_PREFIX + key);
-    if (!raw) return { date: todayStr(), count: 0 };
-    const record = JSON.parse(raw) as RefreshRecord;
-    return record.date === todayStr() ? record : { date: todayStr(), count: 0 };
-  } catch {
-    return { date: todayStr(), count: 0 };
-  }
-}
-
-function bumpRefreshRecord(key: string): RefreshRecord {
-  const record = getRefreshRecord(key);
-  const next: RefreshRecord = { date: todayStr(), count: record.count + 1 };
-  try {
-    localStorage.setItem(LS_PREFIX + key, JSON.stringify(next));
-  } catch {
-    // noop
-  }
-  return next;
-}
+const BREAKDOWN_CARDS: Array<{
+  key: keyof Breakdown;
+  label: string;
+  hint: string;
+  icon: typeof Phone;
+}> = [
+  { key: "phones", label: "Телефоны", hint: "Основной и дополнительные номера", icon: Phone },
+  { key: "messengers", label: "Мессенджеры", hint: "WhatsApp, Telegram, VK, Max, OK", icon: MessageCircle },
+  { key: "leads", label: "Лиды", hint: "Лид-фраза и форма сообщения", icon: MessageSquareText },
+  { key: "website", label: "Сайт", hint: "Переходы на внешний сайт", icon: Globe2 },
+  { key: "booking", label: "Бронирование", hint: "Клики по кнопке брони", icon: CalendarDays },
+];
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("ru-RU").format(value);
 }
 
 function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(
-    value,
+  return new Intl.NumberFormat("ru-RU", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return "ещё не обновлялась";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatChartDate(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(
+    new Date(`${value}T00:00:00`),
   );
 }
 
-function fmtDate(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+function buildEndpoint(endpoint: string, period: PeriodKey): string {
+  const separator = endpoint.includes("?") ? "&" : "?";
+  return `${endpoint}${separator}${new URLSearchParams({ period }).toString()}`;
 }
 
-function getFallbackSummary(
-  data: StatsData,
-  range: "today" | "week" | "month30" | "period",
-): ActionSummary {
-  const total =
-    range === "today"
-      ? (data.dailyActivity.find((item) => item.date === todayStr())?.actions ?? 0)
-      : range === "week"
-        ? data.weeklyActions
-        : range === "month30"
-          ? data.monthlyActions
-          : data.periodActions;
-
-  return {
-    total,
-    phoneActions: range === "period" ? data.phoneActions : 0,
-    messengerActions: range === "period" ? data.messengerActions : 0,
-    leadActions: range === "period" ? (data.leadActions ?? 0) : 0,
-    websiteActions: range === "period" ? (data.websiteActions ?? 0) : 0,
-    breakdown: range === "period" ? data.actionBreakdown : [],
-  };
+function hasAnyData(data: StatsData): boolean {
+  return (
+    data.summary.last6Months.views > 0 ||
+    data.summary.last6Months.actions > 0 ||
+    data.months.some((month) => month.views > 0 || month.actions > 0)
+  );
 }
 
-function getActionSummary(
-  data: StatsData,
-  range: "today" | "week" | "month30" | "period",
-): ActionSummary {
-  return data.actionSummary?.[range] ?? getFallbackSummary(data, range);
-}
+function ActivityChart({ points }: { points: ChartPoint[] }) {
+  const chartPoints = points.length > 0 ? points : [];
+  const maxValue = Math.max(
+    1,
+    ...chartPoints.flatMap((point) => [point.views, point.actions]),
+  );
+  const width = 680;
+  const height = 260;
+  const padLeft = 42;
+  const padRight = 20;
+  const padTop = 22;
+  const padBottom = 42;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const hasData = chartPoints.some((point) => point.views > 0 || point.actions > 0);
 
-function getMonthlySummary(item: MonthlyActivity | null): ActionSummary {
-  return {
-    total: item?.actions ?? 0,
-    phoneActions: item?.phoneActions ?? 0,
-    messengerActions: item?.messengerActions ?? 0,
-    leadActions: item?.leadActions ?? 0,
-    websiteActions: item?.websiteActions ?? 0,
-    breakdown: item?.breakdown ?? [],
-  };
-}
-
-function ActivityChart({ data }: { data: DailyActivity[] }) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const chartData = data.slice(-30);
-  const maxValue = Math.max(...chartData.map((item) => item.views + item.actions), 1);
-  const slotW = PLOT_W / Math.max(chartData.length, 1);
-  const barW = Math.max(Math.min(slotW - 6, 14), 4);
-  const today = todayStr();
+  const getX = (index: number) =>
+    padLeft + (chartPoints.length <= 1 ? plotWidth / 2 : (index / (chartPoints.length - 1)) * plotWidth);
+  const getY = (value: number) => padTop + plotHeight - (value / maxValue) * plotHeight;
+  const buildPath = (field: "views" | "actions") =>
+    chartPoints
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${getX(index).toFixed(1)} ${getY(point[field]).toFixed(1)}`)
+      .join(" ");
 
   return (
-    <div className="rounded-2xl border border-olive/10 bg-white px-3 py-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
-        <p className="text-sm font-semibold text-olive">Динамика за 30 дней</p>
-        <div className="flex items-center gap-3 text-[11px] text-olive/55">
+    <section className="rounded-xl border border-olive/10 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-olive">Динамика</h3>
+          <p className="mt-0.5 text-xs text-olive/55">
+            Просмотры и целевые действия в выбранном периоде
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-olive/60">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+            <span className="h-2.5 w-2.5 rounded-full bg-primary" />
             Просмотры
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-terra" />
+            <span className="h-2.5 w-2.5 rounded-full bg-terra" />
             Действия
           </span>
         </div>
       </div>
 
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        className="w-full"
-        style={{ height: "auto", display: "block" }}
-        role="img"
-        aria-label="График просмотров и целевых действий по дням"
-      >
-        {[0, 0.5, 1].map((tick) => {
-          const y = PAD_T + PLOT_H - tick * PLOT_H;
-          return (
-            <g key={tick}>
-              <line
-                x1={PAD_L}
-                y1={y}
-                x2={CHART_W - PAD_R}
-                y2={y}
-                stroke={tick === 0 ? "#c9bfb5" : "#e8e0d6"}
-                strokeWidth={tick === 0 ? 0.8 : 0.5}
-                strokeDasharray={tick === 0 ? "none" : "3 4"}
-              />
-              <text
-                x={PAD_L - 6}
-                y={y}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fontSize={9}
-                fill="#9e8e82"
-              >
-                {Math.round(tick * maxValue)}
-              </text>
-            </g>
-          );
-        })}
-
-        {chartData.map((item, index) => {
-          const total = item.views + item.actions;
-          const totalHeight = total > 0 ? Math.max((total / maxValue) * PLOT_H, 3) : 0;
-          const actionHeight =
-            total > 0 && item.actions > 0 ? Math.max((item.actions / maxValue) * PLOT_H, 3) : 0;
-          const x = PAD_L + index * slotW + (slotW - barW) / 2;
-          const y = PAD_T + PLOT_H - totalHeight;
-          const actionY = PAD_T + PLOT_H - actionHeight;
-          const isActive = activeIndex === index;
-          const isToday = item.date === today;
-
-          return (
-            <g key={item.date}>
-              <rect
-                x={PAD_L + index * slotW}
-                y={PAD_T}
-                width={slotW}
-                height={PLOT_H}
-                fill="transparent"
-                onMouseEnter={() => setActiveIndex(index)}
-                onMouseLeave={() => setActiveIndex(null)}
-                onPointerDown={() =>
-                  setActiveIndex((current) => (current === index ? null : index))
-                }
-                style={{ cursor: "pointer" }}
-              />
-              {total === 0 ? (
+      {!hasData ? (
+        <div className="mt-4 flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-olive/14 bg-cream/45 px-4 text-center text-sm text-olive/58">
+          Данных для графика пока мало. После первых просмотров и действий здесь появится динамика.
+        </div>
+      ) : (
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="mt-4 w-full"
+          role="img"
+          aria-label="График просмотров и целевых действий"
+        >
+          {[0, 0.5, 1].map((tick) => {
+            const y = padTop + plotHeight - tick * plotHeight;
+            return (
+              <g key={tick}>
                 <line
-                  x1={x}
-                  y1={PAD_T + PLOT_H}
-                  x2={x + barW}
-                  y2={PAD_T + PLOT_H}
-                  stroke="#e0d6cc"
-                  strokeWidth={1}
-                  pointerEvents="none"
+                  x1={padLeft}
+                  y1={y}
+                  x2={width - padRight}
+                  y2={y}
+                  stroke={tick === 0 ? "#d5cabf" : "#eadfd4"}
+                  strokeDasharray={tick === 0 ? undefined : "4 5"}
                 />
-              ) : (
-                <>
-                  <rect
-                    x={x}
-                    y={y}
-                    width={barW}
-                    height={totalHeight}
-                    rx={3}
-                    fill={isToday ? "#0d6b62" : "#0f766e"}
-                    fillOpacity={isActive ? 0.96 : 0.78}
-                    pointerEvents="none"
-                  />
-                  {item.actions > 0 ? (
-                    <rect
-                      x={x}
-                      y={actionY}
-                      width={barW}
-                      height={actionHeight}
-                      rx={3}
-                      fill="#a76549"
-                      fillOpacity={isActive ? 1 : 0.86}
-                      pointerEvents="none"
-                    />
-                  ) : null}
-                </>
-              )}
-              {isActive ? (
-                <g pointerEvents="none">
-                  <rect
-                    x={Math.min(Math.max(x + barW / 2 - 64, PAD_L), CHART_W - PAD_R - 128)}
-                    y={Math.max(y - 44, PAD_T)}
-                    width={128}
-                    height={34}
-                    rx={7}
-                    fill="#2b1f19"
-                    opacity={0.94}
-                  />
-                  <text
-                    x={Math.min(Math.max(x + barW / 2, PAD_L + 64), CHART_W - PAD_R - 64)}
-                    y={Math.max(y - 44, PAD_T) + 14}
-                    textAnchor="middle"
-                    fontSize={9}
-                    fill="white"
-                  >
-                    {fmtDate(item.date)}
-                  </text>
-                  <text
-                    x={Math.min(Math.max(x + barW / 2, PAD_L + 64), CHART_W - PAD_R - 64)}
-                    y={Math.max(y - 44, PAD_T) + 27}
-                    textAnchor="middle"
-                    fontSize={9}
-                    fill="white"
-                  >
-                    {item.views} просмотров · {item.actions} действий
-                  </text>
-                </g>
-              ) : null}
-            </g>
-          );
-        })}
+                <text
+                  x={padLeft - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize={10}
+                  fill="#8e7c70"
+                >
+                  {Math.round(maxValue * tick)}
+                </text>
+              </g>
+            );
+          })}
 
-        {chartData.map((item, index) => {
-          const showLabel = index === 0 || index === chartData.length - 1 || index % 5 === 0;
-          if (!showLabel) return null;
-          const x = PAD_L + index * slotW + slotW / 2;
-          return (
-            <text
-              key={`${item.date}-label`}
-              x={x}
-              y={CHART_H - 10}
-              textAnchor="middle"
-              fontSize={9}
-              fill="#9e8e82"
-            >
-              {fmtDate(item.date)}
-            </text>
-          );
-        })}
-      </svg>
-    </div>
+          <path d={buildPath("views")} fill="none" stroke="#0f766e" strokeWidth={3} />
+          <path d={buildPath("actions")} fill="none" stroke="#a76549" strokeWidth={3} />
+
+          {chartPoints.map((point, index) => (
+            <g key={point.date}>
+              <circle cx={getX(index)} cy={getY(point.views)} r={3.5} fill="#0f766e" />
+              <circle cx={getX(index)} cy={getY(point.actions)} r={3.5} fill="#a76549" />
+              {(index === 0 || index === chartPoints.length - 1 || index % 5 === 0) && (
+                <text
+                  x={getX(index)}
+                  y={height - 14}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fill="#8e7c70"
+                >
+                  {formatChartDate(point.date)}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+      )}
+    </section>
+  );
+}
+
+function BreakdownPanel({ data }: { data: StatsData }) {
+  const selected = data.selectedPeriod;
+  const maxValue = Math.max(1, ...selected.breakdownItems.map((item) => item.count));
+
+  return (
+    <section className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {BREAKDOWN_CARDS.map((card) => (
+          <div key={card.key} className="rounded-xl border border-olive/10 bg-white p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-xs text-olive/55">{card.label}</p>
+                <p className="mt-1 text-2xl font-bold text-olive">
+                  {formatNumber(selected.breakdown[card.key])}
+                </p>
+              </div>
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
+                <AppIcon icon={card.icon} className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-2 min-h-8 text-[11px] leading-4 text-olive/48">{card.hint}</p>
+          </div>
+        ))}
+      </div>
+
+      {selected.breakdownItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-olive/14 bg-cream/45 px-4 py-4 text-sm text-olive/58">
+          За выбранный период целевых действий пока нет.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-olive/10 bg-white p-4">
+          <h3 className="text-sm font-semibold text-olive">Из чего состоят действия</h3>
+          <div className="mt-3 space-y-2">
+            {selected.breakdownItems.map((item) => (
+              <div key={item.actionType}>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium text-olive">{item.label}</span>
+                  <span className="text-olive/58">{formatNumber(item.count)}</span>
+                </div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-cream">
+                  <div
+                    className="h-full rounded-full bg-terra"
+                    style={{ width: `${Math.max(5, Math.round((item.count / maxValue) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
 function MonthlyJournal({
-  items,
-  selectedMonth,
+  months,
+  activePeriod,
   onSelect,
 }: {
-  items: MonthlyActivity[];
-  selectedMonth: string;
-  onSelect: (month: string) => void;
+  months: AnalyticsMonth[];
+  activePeriod: PeriodKey;
+  onSelect: (period: PeriodKey) => void;
 }) {
-  const maxValue = Math.max(...items.map((item) => item.views + item.actions), 1);
+  const maxValue = Math.max(1, ...months.map((month) => month.views + month.actions));
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-olive">Журнал по месяцам</h3>
-        <p className="text-xs text-olive/50">Последние 6 месяцев</p>
+    <section className="rounded-xl border border-olive/10 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-olive">Журнал по месяцам</h3>
+          <p className="mt-0.5 text-xs text-olive/55">Нажмите на месяц, чтобы открыть детализацию</p>
+        </div>
+        <AppIcon icon={CalendarDays} className="h-5 w-5 text-primary/70" />
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => {
-          const total = item.views + item.actions;
-          const width = `${Math.max(5, Math.round((total / maxValue) * 100))}%`;
-          const actionShare = total > 0 ? `${Math.round((item.actions / total) * 100)}%` : "0%";
-          const isSelected = item.month === selectedMonth;
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {months.map((month) => {
+          const period: PeriodKey = `month:${month.month}`;
+          const total = month.views + month.actions;
+          const isActive = activePeriod === period;
+          const width = `${Math.max(total > 0 ? 8 : 0, Math.round((total / maxValue) * 100))}%`;
 
           return (
             <button
-              key={item.month}
+              key={month.month}
               type="button"
-              onClick={() => onSelect(item.month)}
+              onClick={() => onSelect(period)}
               className={cn(
-                "rounded-2xl border bg-white p-3 text-left transition hover:border-primary/25 hover:shadow-[0_10px_24px_rgba(15,118,110,0.08)]",
-                isSelected ? "border-primary/45 ring-2 ring-primary/10" : "border-olive/10",
+                "rounded-xl border p-3 text-left transition hover:border-primary/30 hover:bg-primary/[0.03]",
+                isActive ? "border-primary/45 bg-primary/[0.04]" : "border-olive/10 bg-white",
               )}
             >
-              <p className="truncate text-xs font-semibold uppercase text-olive/45">{item.label}</p>
-              <div className="mt-2 flex items-end justify-between gap-3">
-                <p className="text-xl font-bold text-olive">{formatNumber(item.actions)}</p>
-                <p className="text-right text-[11px] leading-4 text-olive/55">
-                  {formatNumber(item.views)} просмотров
-                  <br />
-                  {formatNumber(item.actions)} действий
-                </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-semibold text-olive">{month.label}</p>
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    month.activityLevel === "high"
+                      ? "bg-primary"
+                      : month.activityLevel === "medium"
+                        ? "bg-terra"
+                        : month.activityLevel === "low"
+                          ? "bg-sage"
+                          : "bg-olive/18",
+                  )}
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-olive/55">
+                <span>
+                  <b className="block text-base text-olive">{formatNumber(month.views)}</b>
+                  просмотры
+                </span>
+                <span>
+                  <b className="block text-base text-olive">{formatNumber(month.actions)}</b>
+                  действия
+                </span>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-cream">
-                <div className="flex h-full rounded-full bg-primary/75" style={{ width }}>
-                  <span className="block h-full bg-terra" style={{ width: actionShare }} />
-                </div>
+                <div className="h-full rounded-full bg-primary/75" style={{ width }} />
               </div>
             </button>
           );
@@ -401,396 +412,341 @@ function MonthlyJournal({
   );
 }
 
-function ActionBreakdown({ items }: { items: ActionBreakdownItem[] }) {
-  if (items.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-olive/16 bg-cream/45 px-4 py-5 text-sm text-olive/60">
-        Целевых действий пока нет.
-      </div>
-    );
-  }
-
-  const maxCount = Math.max(...items.map((item) => item.count), 1);
-
-  return (
-    <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-olive">По действиям</h3>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div
-            key={item.actionType}
-            className="rounded-2xl border border-olive/10 bg-white px-3 py-3"
-          >
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="font-semibold text-olive">{item.label}</span>
-              <span className="text-olive/60">{formatNumber(item.count)}</span>
-            </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-cream">
-              <div
-                className="h-full rounded-full bg-terra"
-                style={{ width: `${Math.max(5, Math.round((item.count / maxCount) * 100))}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ActionSummaryCards({
-  summary,
-  title,
-  caption,
-}: {
-  summary: ActionSummary;
-  title: string;
-  caption: string;
-}) {
-  const cards = [
-    {
-      label: "Телефоны",
-      value: summary.phoneActions,
-      description: "Основной и доп. номера",
-    },
-    {
-      label: "Мессенджеры",
-      value: summary.messengerActions,
-      description: "WhatsApp, Telegram, VK, Max, OK",
-    },
-    {
-      label: "Лиды",
-      value: summary.leadActions,
-      description: "Кнопки брони и лид-фраза",
-    },
-    {
-      label: "Сайт",
-      value: summary.websiteActions,
-      description: "Переходы на внешний сайт",
-    },
-  ];
-
-  return (
-    <section className="rounded-2xl border border-olive/10 bg-white p-3 sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-olive">{title}</h3>
-          <p className="mt-0.5 text-xs text-olive/50">{caption}</p>
-        </div>
-        <div className="rounded-2xl bg-primary/8 px-3 py-2 text-right">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">
-            Всего
-          </p>
-          <p className="text-xl font-bold text-primary">{formatNumber(summary.total)}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {cards.map((card) => (
-          <div key={card.label} className="rounded-2xl bg-cream/70 p-3">
-            <p className="text-[11px] text-olive/50">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold text-olive">{formatNumber(card.value)}</p>
-            <p className="mt-1 text-[10px] leading-4 text-olive/45">{card.description}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function StatsModal({
   endpoint,
   entityName,
-  storageKey,
   onClose,
 }: {
   endpoint: string;
   entityName: string;
-  storageKey: string;
   onClose: () => void;
 }) {
   const [data, setData] = useState<StatsData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [activePeriod, setActivePeriod] = useState<PeriodKey>("last30Days");
+  const [loading, setLoading] = useState(true);
+  const [periodLoading, setPeriodLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [refreshRec, setRefreshRec] = useState<RefreshRecord>({ date: todayStr(), count: 0 });
-  const [activeRange, setActiveRange] = useState<StatsRange>("today");
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const midnightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) throw new Error("Ошибка сервера");
-      setData((await response.json()) as StatsData);
-      setLastUpdated(
-        new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      );
-    } catch {
-      setError("Не удалось загрузить статистику");
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint]);
+  const fetchData = useCallback(
+    async (period: PeriodKey, soft = false) => {
+      if (soft) {
+        setPeriodLoading(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
 
-  useEffect(() => {
-    setRefreshRec(getRefreshRecord(storageKey));
-    void fetchData();
-  }, [fetchData, storageKey]);
+      try {
+        const response = await fetch(buildEndpoint(endpoint, period), { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as StatsData | { error?: string } | null;
 
-  useEffect(() => {
-    if (!data || selectedMonth) {
-      return;
-    }
+        if (!response.ok) {
+          throw new Error(payload && "error" in payload ? payload.error : "Не удалось загрузить статистику");
+        }
 
-    setSelectedMonth(data.monthlyHistory.at(-1)?.month ?? null);
-  }, [data, selectedMonth]);
+        setData(payload as StatsData);
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить статистику",
+        );
+      } finally {
+        setLoading(false);
+        setPeriodLoading(false);
+      }
+    },
+    [endpoint],
+  );
 
   useEffect(() => {
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setDate(midnight.getDate() + 1);
-    midnight.setHours(0, 0, 0, 0);
-    const ms = midnight.getTime() - now.getTime();
-    midnightTimerRef.current = setTimeout(() => {
-      setRefreshRec({ date: todayStr(), count: 0 });
-      void fetchData();
-    }, ms);
-    return () => {
-      if (midnightTimerRef.current) clearTimeout(midnightTimerRef.current);
-    };
-  }, [fetchData]);
+    void fetchData(activePeriod);
+  }, [activePeriod, fetchData]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const canRefresh = refreshRec.count < MAX_DAILY_REFRESHES;
-  const remaining = Math.max(0, MAX_DAILY_REFRESHES - refreshRec.count);
-  const today = todayStr();
-  const todayActivity = data?.dailyActivity.find((item) => item.date === today) ?? null;
-  const selectedMonthItem =
-    data?.monthlyHistory.find((item) => item.month === selectedMonth) ??
-    data?.monthlyHistory.at(-1) ??
-    null;
-  const selectedSummary =
-    data && activeRange !== "month"
-      ? getActionSummary(data, activeRange)
-      : getMonthlySummary(selectedMonthItem);
-  const selectedViews =
-    activeRange === "today"
-      ? (todayActivity?.views ?? 0)
-      : activeRange === "week"
-        ? (data?.weeklyTotal ?? 0)
-        : activeRange === "month30"
-          ? (data?.monthlyTotal ?? 0)
-          : activeRange === "period"
-            ? (data?.periodViews ?? 0)
-            : (selectedMonthItem?.views ?? 0);
-  const rangeTitle =
-    activeRange === "today"
-      ? "Сегодня"
-      : activeRange === "week"
-        ? "За 7 дней"
-        : activeRange === "month30"
-          ? "За 30 дней"
-          : activeRange === "period"
-            ? (data?.periodLabel ?? "Последние 6 месяцев")
-            : (selectedMonthItem?.label ?? "Выбранный месяц");
-  const rangeCaption = `${formatNumber(selectedViews)} просмотров · ${formatNumber(
-    selectedSummary.total,
-  )} целевых действий`;
+  const periodCards = useMemo(() => {
+    if (!data) {
+      return [];
+    }
 
-  function handleRefresh() {
-    if (!canRefresh || loading) return;
-    const next = bumpRefreshRecord(storageKey);
-    setRefreshRec(next);
-    void fetchData();
+    return PERIOD_OPTIONS.map((option) => ({
+      ...option,
+      summary: data.summary[option.summaryKey],
+    }));
+  }, [data]);
+
+  async function handleRefresh() {
+    if (!data?.manualRefresh.canRefresh || refreshing) {
+      return;
+    }
+
+    setRefreshing(true);
+    setRefreshError(null);
+
+    try {
+      const response = await fetch(endpoint, { method: "POST" });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Не удалось обновить статистику");
+      }
+
+      await fetchData(activePeriod, true);
+    } catch (requestError) {
+      setRefreshError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось обновить статистику",
+      );
+    } finally {
+      setRefreshing(false);
+    }
   }
+
+  const selected = data?.selectedPeriod;
+  const empty = data ? !hasAnyData(data) : false;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
       }}
     >
-      <div className="absolute inset-0 bg-midnight/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-midnight/58 backdrop-blur-sm" />
 
-      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-3xl flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-olive/10 px-5 py-4">
+      <div className="relative z-10 flex max-h-[94dvh] w-full max-w-5xl flex-col rounded-t-2xl bg-cream shadow-2xl sm:max-h-[90vh] sm:rounded-2xl">
+        <header className="flex items-start justify-between gap-3 border-b border-olive/10 bg-white px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <AppIcon icon={BarChart3} className="h-4 w-4 shrink-0 text-primary" />
-              <h2 className="truncate text-base font-semibold text-olive">Статистика карточки</h2>
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                <AppIcon icon={BarChart3} className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-semibold text-olive sm:text-lg">
+                  Статистика карточки
+                </h2>
+                <p className="truncate text-xs text-olive/58">{data?.entityName ?? entityName}</p>
+              </div>
             </div>
-            <p className="mt-0.5 truncate text-xs text-olive/60">{entityName}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-lg p-1.5 text-olive/50 hover:bg-cream hover:text-olive"
-            aria-label="Закрыть"
-          >
-            <AppIcon icon={X} className="h-5 w-5" />
-          </button>
-        </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {error ? (
-            <p className="rounded-xl bg-terra/10 px-4 py-3 text-sm text-terra">{error}</p>
-          ) : loading && !data ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {data ? (
+              <span
+                className={cn(
+                  "hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs sm:inline-flex",
+                  data.isStale
+                    ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                    : "bg-primary/8 text-primary ring-1 ring-primary/12",
+                )}
+              >
+                <AppIcon icon={Clock3} className="h-3.5 w-3.5" />
+                {data.lastUpdatedAt ? `Обновлено ${formatDateTime(data.lastUpdatedAt)}` : "Ожидает пересчёта"}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-olive/10 bg-white text-olive/60 transition hover:bg-cream hover:text-olive"
+              aria-label="Закрыть"
+            >
+              <AppIcon icon={X} className="h-4.5 w-4.5" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          {loading && !data ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="h-16 animate-pulse rounded-xl bg-cream" />
+                  <div key={index} className="h-24 animate-pulse rounded-xl bg-white" />
                 ))}
               </div>
-              <div className="h-56 animate-pulse rounded-xl bg-cream" />
+              <div className="h-52 animate-pulse rounded-xl bg-white" />
+              <div className="h-36 animate-pulse rounded-xl bg-white" />
             </div>
-          ) : data ? (
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                {[
-                  {
-                    range: "today" as const,
-                    label: "Сегодня",
-                    value: `${formatCompactNumber(todayActivity?.views ?? 0)} / ${formatCompactNumber(
-                      todayActivity?.actions ?? 0,
-                    )}`,
-                    note: "просмотры / действия",
-                    icon: BarChart3,
-                  },
-                  {
-                    range: "week" as const,
-                    label: "За 7 дней",
-                    value: `${formatCompactNumber(data.weeklyTotal)} / ${formatCompactNumber(
-                      data.weeklyActions,
-                    )}`,
-                    note: "просмотры / действия",
-                    icon: Eye,
-                  },
-                  {
-                    range: "month30" as const,
-                    label: "За 30 дней",
-                    value: `${formatCompactNumber(data.monthlyTotal)} / ${formatCompactNumber(
-                      data.monthlyActions,
-                    )}`,
-                    note: "просмотры / действия",
-                    icon: BarChart3,
-                  },
-                  {
-                    range: "period" as const,
-                    label: data.periodLabel,
-                    value: `${formatCompactNumber(data.periodViews)} / ${formatCompactNumber(
-                      data.periodActions,
-                    )}`,
-                    note: "последние 6 месяцев",
-                    icon: BarChart3,
-                  },
-                ].map(({ range, label, value, note, icon }) => (
-                  <button
-                    key={range}
-                    type="button"
-                    onClick={() => setActiveRange(range)}
-                    className={cn(
-                      "rounded-xl px-3 py-3 text-left transition hover:bg-primary/8",
-                      activeRange === range
-                        ? "bg-primary text-white shadow-[0_12px_28px_rgba(15,118,110,0.18)]"
-                        : "bg-cream text-olive",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p
-                        className={cn(
-                          "truncate text-[10px]",
-                          activeRange === range ? "text-white/72" : "text-olive/55",
-                        )}
-                      >
-                        {label}
-                      </p>
-                      <AppIcon
-                        icon={icon}
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0",
-                          activeRange === range ? "text-white/80" : "text-primary/70",
-                        )}
-                      />
-                    </div>
-                    <p className="mt-1 text-lg font-bold">{value}</p>
-                    <p
+          ) : error && !data ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+              <div className="flex items-start gap-2">
+                <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4" />
+                <span>{error}</span>
+              </div>
+            </div>
+          ) : data && selected ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  {periodCards.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setActivePeriod(option.key)}
                       className={cn(
-                        "mt-0.5 text-[10px]",
-                        activeRange === range ? "text-white/62" : "text-olive/45",
+                        "rounded-xl border p-3 text-left transition",
+                        activePeriod === option.key
+                          ? "border-primary/45 bg-primary text-white shadow-[0_14px_30px_rgba(15,118,110,0.18)]"
+                          : "border-olive/10 bg-white text-olive hover:border-primary/24",
                       )}
                     >
-                      {note}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              <ActionSummaryCards
-                summary={selectedSummary}
-                title={rangeTitle}
-                caption={rangeCaption}
-              />
-
-              <ActivityChart data={data.dailyActivity} />
-
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
-                <MonthlyJournal
-                  items={data.monthlyHistory}
-                  selectedMonth={selectedMonthItem?.month ?? ""}
-                  onSelect={(month) => {
-                    setSelectedMonth(month);
-                    setActiveRange("month");
-                  }}
-                />
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-olive/10 bg-cream/60 p-4">
-                    <p className="text-sm font-semibold text-olive">
-                      Что считается целевым действием
-                    </p>
-                    <p className="mt-2 text-xs leading-5 text-olive/58">
-                      Клики по основному и дополнительным телефонам, мессенджерам, сайту и кнопкам
-                      бронирования/лид-фразам. Срез справа меняется вместе с выбранным периодом или
-                      месяцем.
-                    </p>
-                  </div>
-                  <ActionBreakdown items={selectedSummary.breakdown} />
+                      <p
+                        className={cn(
+                          "text-xs font-semibold",
+                          activePeriod === option.key ? "text-white" : "text-olive",
+                        )}
+                      >
+                        {option.label}
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-0.5 text-[11px]",
+                          activePeriod === option.key ? "text-white/70" : "text-olive/45",
+                        )}
+                      >
+                        {option.description}
+                      </p>
+                      <div className="mt-2 flex items-end justify-between gap-2">
+                        <p className="text-xl font-bold">{formatCompactNumber(option.summary.views)}</p>
+                        <p
+                          className={cn(
+                            "text-right text-[11px] leading-4",
+                            activePeriod === option.key ? "text-white/70" : "text-olive/50",
+                          )}
+                        >
+                          {formatCompactNumber(option.summary.actions)}
+                          <br />
+                          действий
+                        </p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-olive/50">
-                <span>
-                  {lastUpdated ? `Обновлено: ${lastUpdated}` : ""}
-                  {" · "}
-                  <span className="italic">Автообновление: раз в сутки</span>
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className={remaining === 0 ? "text-terra/70" : ""}>
-                    Ручных обновлений: {remaining}/{MAX_DAILY_REFRESHES}
-                  </span>
+                <div className="rounded-xl border border-olive/10 bg-white p-3 lg:min-w-[260px]">
+                  <div className="flex items-start gap-2 text-xs text-olive/58">
+                    <AppIcon icon={Clock3} className="mt-0.5 h-4 w-4 text-primary" />
+                    <div>
+                      <p>
+                        Обновлено: <span className="font-medium text-olive">{formatDateTime(data.lastUpdatedAt)}</span>
+                      </p>
+                      <p className="mt-1">
+                        Следующее автообновление:{" "}
+                        <span className="font-medium text-olive">{formatDateTime(data.nextAutoUpdateAt)}</span>
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={handleRefresh}
-                    disabled={!canRefresh || loading}
-                    className="inline-flex items-center gap-1 rounded-lg border border-primary/30 px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => void handleRefresh()}
+                    disabled={!data.manualRefresh.canRefresh || refreshing}
+                    className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-white px-3 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <AppIcon
-                      icon={RefreshCw}
-                      className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                      icon={refreshing ? Loader2 : RefreshCw}
+                      className={cn("h-4 w-4", refreshing && "animate-spin")}
                     />
-                    Обновить
+                    {data.manualRefresh.remainingToday > 0
+                      ? `Обновить · осталось ${data.manualRefresh.remainingToday} из ${data.manualRefresh.limitPerDay}`
+                      : "Лимит обновлений исчерпан"}
                   </button>
                 </div>
+              </div>
+
+              {refreshError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {refreshError}
+                </div>
+              ) : null}
+
+              {data.isStale ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <div className="flex items-start gap-2">
+                    <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4" />
+                    <span>
+                      Данные могут быть устаревшими. {data.staleReason ?? "Они обновятся по расписанию или вручную."}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {periodLoading ? (
+                <div className="rounded-xl border border-primary/12 bg-white px-4 py-3 text-sm text-primary">
+                  <span className="inline-flex items-center gap-2">
+                    <AppIcon icon={Loader2} className="h-4 w-4 animate-spin" />
+                    Обновляем выбранный период...
+                  </span>
+                </div>
+              ) : null}
+
+              <section className="grid gap-3">
+                <div className="rounded-xl border border-olive/10 bg-white p-4">
+                  <p className="text-sm font-semibold text-olive">{selected.label}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-lg bg-cream/70 p-3">
+                      <p className="text-xs text-olive/55">Просмотры</p>
+                      <p className="mt-1 text-3xl font-bold text-olive">{formatNumber(selected.views)}</p>
+                    </div>
+                    <div className="rounded-lg bg-cream/70 p-3">
+                      <p className="text-xs text-olive/55">Целевые действия</p>
+                      <p className="mt-1 text-3xl font-bold text-olive">{formatNumber(selected.actions)}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {empty ? (
+                <div className="rounded-xl border border-dashed border-olive/16 bg-white px-4 py-6 text-center">
+                  <AppIcon icon={Eye} className="mx-auto h-8 w-8 text-olive/32" />
+                  <h3 className="mt-3 text-sm font-semibold text-olive">Данных пока нет</h3>
+                  <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-olive/58">
+                    После публикации и первых действий гостей здесь появятся просмотры, обращения и динамика.
+                  </p>
+                </div>
+              ) : null}
+
+              <BreakdownPanel data={data} />
+              <ActivityChart points={selected.chart} />
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.55fr)]">
+                <MonthlyJournal
+                  months={data.months}
+                  activePeriod={activePeriod}
+                  onSelect={(period) => setActivePeriod(period)}
+                />
+
+                <section className="rounded-xl border border-olive/10 bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <AppIcon icon={Info} className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-olive">
+                      Что считается целевым действием
+                    </h3>
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm leading-6 text-olive/65">
+                    <p>Просмотр — открытие публичной страницы карточки.</p>
+                    <p>
+                      Целевое действие — клик по телефону, мессенджеру, сайту, кнопке брони,
+                      лид-фразе или форме сообщения.
+                    </p>
+                    <p>
+                      Цифры не онлайн: события записываются сразу, а статистика для кабинета
+                      пересчитывается агрегатами примерно раз в сутки.
+                    </p>
+                  </div>
+                </section>
               </div>
             </div>
           ) : null}
@@ -808,6 +764,7 @@ export function ListingStatsButton({
   className,
 }: ListingStatsButtonProps) {
   const [open, setOpen] = useState(false);
+  void storageKey;
 
   return (
     <>
@@ -824,12 +781,7 @@ export function ListingStatsButton({
       </button>
 
       {open ? (
-        <StatsModal
-          endpoint={endpoint}
-          entityName={entityName}
-          storageKey={storageKey}
-          onClose={() => setOpen(false)}
-        />
+        <StatsModal endpoint={endpoint} entityName={entityName} onClose={() => setOpen(false)} />
       ) : null}
     </>
   );

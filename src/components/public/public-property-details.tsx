@@ -2019,7 +2019,7 @@ export function PublicPropertyDetails({
                                   onClick={() => {
                                     trackListingAction({
                                       ...contactTracking,
-                                      actionType: "lead_phrase",
+                                      actionType: "booking",
                                     });
                                     setLeadModalRoom(room);
                                     setLeadExtra("");
@@ -2535,6 +2535,7 @@ export function PublicPropertyDetails({
             const handleCopy = async () => {
               try {
                 await navigator.clipboard.writeText(fullMessage);
+                trackListingAction({ ...contactTracking, actionType: "lead_form" });
                 setLeadCopied(true);
                 setTimeout(() => setLeadCopied(false), 2500);
                 setLeadModalRoom(null);
@@ -2548,6 +2549,7 @@ export function PublicPropertyDetails({
                 ta.select();
                 document.execCommand("copy");
                 document.body.removeChild(ta);
+                trackListingAction({ ...contactTracking, actionType: "lead_form" });
                 setLeadCopied(true);
                 setTimeout(() => setLeadCopied(false), 2500);
                 setLeadModalRoom(null);

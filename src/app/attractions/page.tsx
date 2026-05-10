@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { AttractionCatalog } from "@/components/public/marketplace-catalogs";
-import { getMarketplaceDirectoryData, getPublicAttractionCatalog } from "@/lib/public-marketplace";
+import {
+  getAttractionMarketplaceDirectoryData,
+  getPublicAttractionCatalog,
+} from "@/lib/public-marketplace";
 import { parseBoundsParam } from "@/lib/search-contracts";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 
@@ -43,34 +46,23 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
     sort,
   } as const;
 
-  const [result, mapResult, directory, catalogOverview] = await Promise.all([
+  const [result, directory] = await Promise.all([
     getPublicAttractionCatalog({
       ...catalogQuery,
       bounds,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
     }),
-    getPublicAttractionCatalog({
-      ...catalogQuery,
-      page: 1,
-      pageSize: 5000,
-      allowLargePageSize: true,
-    }),
-    getMarketplaceDirectoryData(),
-    getPublicAttractionCatalog({
-      page: 1,
-      pageSize: 1,
-    }),
+    getAttractionMarketplaceDirectoryData(),
   ]);
 
   return (
     <AttractionCatalog
       result={result}
-      mapItems={mapResult.items}
       categories={directory.attractionCategories}
       locationSuggestions={directory.attractionLocationSuggestions}
       activeBounds={boundsParam || null}
-      catalogActiveTotal={catalogOverview.total}
+      catalogActiveTotal={directory.attractionTotal}
     />
   );
 }

@@ -3,10 +3,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  markPropertyNeedsRemoderationAfterOwnerEdit,
-  preparePropertyForPublishedOwnerEdit,
-} from "@/lib/properties";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
 
 type RouteContext = {
@@ -114,8 +110,6 @@ export async function POST(request: Request, context: RouteContext) {
     categoryFeatures.map((feature) => [feature.id, `${feature.name} (платно)`]),
   );
 
-  await preparePropertyForPublishedOwnerEdit(db, property.id);
-
   await db.$transaction(async (tx) => {
     for (const roomId of roomIds) {
       await tx.roomFeatureOnRoom.deleteMany({
@@ -168,8 +162,6 @@ export async function POST(request: Request, context: RouteContext) {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: roomInclude,
   });
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, property.id);
 
   return NextResponse.json({
     items: updatedRooms.map(serializeRoom),

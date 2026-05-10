@@ -2,6 +2,7 @@
 // Called client-side on property detail page mount; no auth required.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { recordListingViewEvent } from "@/lib/listing-analytics-service";
 import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
@@ -17,28 +18,25 @@ export async function POST(_: Request, context: RouteContext) {
 
   const propertyId = id.trim();
 
-  const updated = await db.property.updateMany({
+  const property = await db.property.findFirst({
     where: {
       id: propertyId,
       ...buildPublishedPropertyVisibilityWhere(),
     },
-    data: { profileViews: { increment: 1 } },
+    select: { ownerId: true },
   });
 
-  if (updated.count > 0) {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+  if (property) {
+    await db.property.update({
+      where: { id: propertyId },
+      data: { profileViews: { increment: 1 } },
+      select: { id: true },
+    });
 
-    await db.viewLog.upsert({
-      where: {
-        entityType_entityId_date: {
-          entityType: "property",
-          entityId: propertyId,
-          date: today,
-        },
-      },
-      create: { entityType: "property", entityId: propertyId, date: today, count: 1 },
-      update: { count: { increment: 1 } },
+    await recordListingViewEvent({
+      entityType: "property",
+      entityId: propertyId,
+      ownerId: property.ownerId,
     });
   }
 

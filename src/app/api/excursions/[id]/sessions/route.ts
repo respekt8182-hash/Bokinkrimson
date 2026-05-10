@@ -3,10 +3,6 @@ import { ExcursionAvailabilityMode, ExcursionScheduleMode, Prisma } from "@prism
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import {
-  markExcursionNeedsRemoderationAfterOwnerEdit,
-  prepareExcursionForPublishedOwnerEdit,
-} from "@/lib/excursions";
 import { upsertExcursionSessionsSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -107,10 +103,6 @@ export async function POST(request: Request, context: RouteContext) {
     bookingDeadlineMinutes: item.bookingDeadlineMinutes ?? null,
   }));
 
-  if (!editor.isAdmin) {
-    await prepareExcursionForPublishedOwnerEdit(db, existing.id);
-  }
-
   await db.$transaction(async (tx) => {
     await tx.excursionSession.deleteMany({
       where: { excursionId: id },
@@ -138,10 +130,6 @@ export async function POST(request: Request, context: RouteContext) {
       },
     });
   });
-
-  if (!editor.isAdmin) {
-    await markExcursionNeedsRemoderationAfterOwnerEdit(db, existing.id);
-  }
 
   return NextResponse.json({ ok: true });
 }

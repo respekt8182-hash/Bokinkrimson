@@ -85,6 +85,10 @@ export function TransferLeadForm({
     }
 
     if (didCopy) {
+      if (tracking) {
+        trackListingAction({ ...tracking, actionType: "lead_form" });
+      }
+
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2500);
       setIsOpen(false);

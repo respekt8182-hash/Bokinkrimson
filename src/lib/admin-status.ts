@@ -24,7 +24,7 @@ export function getAdminPropertyPendingEditLabel(
   }
 
   if (pendingEditStatus === PropertyStatus.DRAFT) {
-    return "Есть новые правки";
+    return null;
   }
 
   if (pendingEditStatus === PropertyStatus.PENDING_MODERATION) {
@@ -32,7 +32,7 @@ export function getAdminPropertyPendingEditLabel(
   }
 
   if (pendingEditStatus === PropertyStatus.REJECTED) {
-    return moderationNotes?.trim() ? "Изменения отклонены" : "Есть новые правки";
+    return moderationNotes?.trim() ? "Изменения отклонены" : null;
   }
 
   return null;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PropertyStatus } from "@prisma/client";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
+import { AdminListingPaymentConfirmation } from "@/components/admin/admin-listing-payment-confirmation";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
@@ -14,6 +15,7 @@ import {
   getAdminPropertyPendingEditLabel,
 } from "@/lib/admin-status";
 import { AdminPropertyEditor } from "@/components/admin/admin-property-editor";
+import { getPropertyWorkflowStatus } from "@/lib/properties";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -78,6 +80,10 @@ export default async function AdminPropertyEditPage({ params }: Props) {
   ];
   const isPublished = property.status === PropertyStatus.PUBLISHED;
   const isPendingDeletion = Boolean(property.ownerDeletedAt);
+  const workflowStatus = getPropertyWorkflowStatus(
+    property.status,
+    property.pendingEditStatus,
+  );
   const pendingEditLabel = isPublished
     ? getAdminPropertyPendingEditLabel(property.pendingEditStatus, property.moderationNotes)
     : null;
@@ -91,7 +97,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
         >
           Назад к списку
         </Link>
-        {property.status === PropertyStatus.PENDING_MODERATION && (
+        {workflowStatus === PropertyStatus.PENDING_MODERATION && (
           <Link
             href={`/admin/moderation/${property.id}`}
             className="rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-200"
@@ -157,6 +163,17 @@ export default async function AdminPropertyEditPage({ params }: Props) {
         Рейтинг: {Number(property.avgRating).toFixed(1)} ({property.reviewsCount} отз.) |
         Создано: {new Date(property.createdAt).toLocaleString("ru-RU")}
       </div>
+
+      <AdminListingPaymentConfirmation
+        entityType="property"
+        entityId={property.id}
+        entityLabel="Объект"
+        tariffOptions={[
+          { value: "season", label: "Сезон" },
+          { value: "offseason", label: "Межсезонье" },
+          { value: "yearly", label: "Годовой" },
+        ]}
+      />
 
       <section className="rounded-2xl border border-olive/10 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

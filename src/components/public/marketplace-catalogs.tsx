@@ -52,6 +52,7 @@ import { normalizeWebsiteUrl } from "@/lib/website-favicon";
 import type {
   PublicAttractionCatalogItem,
   PublicAttractionCatalogResult,
+  PublicAttractionMapItem,
   PublicMarketplaceLocationSuggestion,
   PublicTransferCatalogItem,
   PublicTransferCatalogResult,
@@ -61,7 +62,7 @@ type CatalogParams = Record<string, string | null | undefined>;
 
 type AttractionCatalogProps = {
   result: PublicAttractionCatalogResult;
-  mapItems?: PublicAttractionCatalogItem[];
+  mapItems?: PublicAttractionMapItem[];
   categories: string[];
   locationSuggestions: PublicMarketplaceLocationSuggestion[];
   activeBounds?: string | null;
@@ -473,6 +474,23 @@ function getGalleryImages(photoUrls: string[], coverImageUrl: string | null): st
   }
 
   return unique;
+}
+
+function toAttractionMapItem(item: PublicAttractionCatalogItem): PublicAttractionMapItem {
+  return {
+    id: item.id,
+    path: item.path,
+    title: item.title,
+    category: item.category,
+    tags: item.tags.slice(0, 1),
+    locationName: item.locationName,
+    districtName: item.districtName,
+    address: item.address,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    shortDescription: item.shortDescription,
+    coverImageUrl: item.coverImageUrl,
+  };
 }
 
 function buildCatalogPath(basePath: string, params: CatalogParams): string {
@@ -1056,6 +1074,11 @@ export function AttractionCatalog({
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
     bounds: activeBounds,
   };
+  const mapItemsEndpoint = buildCatalogPath("/api/map/attractions", {
+    ...params,
+    bounds: null,
+  });
+  const initialMapItems = mapItems ?? result.items.map(toAttractionMapItem);
   const pagination = (
     <Pagination
       basePath="/attractions"
@@ -1094,9 +1117,11 @@ export function AttractionCatalog({
 
       <MarketplaceCatalogMap
         kind="attractions"
-        items={mapItems ?? result.items}
+        items={initialMapItems}
         resultsCount={result.total}
         filters={result.filters}
+        syncBoundsToUrl
+        mapItemsEndpoint={mapItemsEndpoint}
         mapTitle="Карта мест"
       >
         <section className="min-w-0 lg:w-full" id="catalog-results">

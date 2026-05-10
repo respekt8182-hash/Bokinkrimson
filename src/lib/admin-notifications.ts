@@ -142,14 +142,26 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         db.excursion.count({
           where: {
             deletedAt: null,
-            status: ExcursionStatus.PENDING_MODERATION,
+            OR: [
+              { status: ExcursionStatus.PENDING_MODERATION },
+              {
+                status: ExcursionStatus.PUBLISHED,
+                pendingEditStatus: ExcursionStatus.PENDING_MODERATION,
+              },
+            ],
             owner: { deletedAt: null },
           },
         }),
         db.excursion.findFirst({
           where: {
             deletedAt: null,
-            status: ExcursionStatus.PENDING_MODERATION,
+            OR: [
+              { status: ExcursionStatus.PENDING_MODERATION },
+              {
+                status: ExcursionStatus.PUBLISHED,
+                pendingEditStatus: ExcursionStatus.PENDING_MODERATION,
+              },
+            ],
             owner: { deletedAt: null },
           },
           orderBy: [{ updatedAt: "desc" }],

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExcursionStatus } from "@prisma/client";
+import { ExcursionOfferType, ExcursionStatus } from "@prisma/client";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
+import { AdminListingPaymentConfirmation } from "@/components/admin/admin-listing-payment-confirmation";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { AdminPageHeader, AdminUnavailableState } from "@/components/admin/admin-ui";
@@ -16,9 +17,10 @@ import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import {
   getExcursionDisplayNumberFromOrderedIds,
+  getExcursionStatusLabel,
+  getExcursionWorkflowStatus,
   serializeExcursion,
 } from "@/lib/excursions";
-import { getAdminExcursionStatusLabel } from "@/lib/admin-status";
 
 type AdminExcursionEditPageProps = {
   params: Promise<{ id: string }>;
@@ -117,7 +119,17 @@ export default async function AdminExcursionEditPage({
     ) ?? 1;
   const isPublished = excursion.status === ExcursionStatus.PUBLISHED;
   const isPendingDeletion = Boolean(excursion.deletedAt);
-  const statusBits = [getAdminExcursionStatusLabel(excursion.status)];
+  const workflowStatus = getExcursionWorkflowStatus(
+    excursion.status,
+    excursion.pendingEditStatus ?? null,
+  );
+  const statusBits = [
+    getExcursionStatusLabel(
+      excursion.status,
+      excursion.pendingEditStatus ?? null,
+      excursion.moderationNotes,
+    ),
+  ];
   if (isPublished && !excursion.isPublishedVisible && !isPendingDeletion) {
     statusBits.push("скрыта из публикации");
   }
@@ -145,7 +157,7 @@ export default async function AdminExcursionEditPage({
             >
               Быстрая правка
             </Link>
-            {excursion.status === ExcursionStatus.PENDING_MODERATION ? (
+            {workflowStatus === ExcursionStatus.PENDING_MODERATION ? (
               <Link
                 href={`/admin/moderation/excursions/${excursion.id}`}
                 className="inline-flex items-center rounded-2xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-200"
@@ -187,6 +199,16 @@ export default async function AdminExcursionEditPage({
         }
       />
       <PlacementPromoNotice compact />
+
+      <AdminListingPaymentConfirmation
+        entityType="excursion"
+        entityId={excursion.id}
+        entityLabel={excursion.offerType === ExcursionOfferType.TOUR ? "Тур" : "Экскурсия"}
+        tariffOptions={[
+          { value: "season", label: "Сезон" },
+          { value: "year", label: "Год" },
+        ]}
+      />
 
       <ExcursionEditor
         initialExcursion={serializeExcursion(excursion)}

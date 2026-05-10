@@ -198,6 +198,7 @@ export function canAdminApproveExcursionModeration(
 
   if (status === ExcursionStatus.PUBLISHED && pendingEditStatus !== null) {
     return (
+      workflowStatus === ExcursionStatus.DRAFT ||
       workflowStatus === ExcursionStatus.PENDING_MODERATION ||
       workflowStatus === ExcursionStatus.NEEDS_FIX ||
       workflowStatus === ExcursionStatus.REJECTED

@@ -1,13 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  calculateDistanceKm,
-  isWithinRadiusKm,
-  roundDistanceKm,
-} from "@/lib/catalog-radius";
+import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { slugify } from "@/lib/public-properties";
@@ -324,6 +320,19 @@ const BASE_STATIC_ATTRACTIONS: StaticAttraction[] = [
 
 let hasLoggedOverridesReadError = false;
 let hasLoggedOverridesWriteError = false;
+let overridesCache: {
+  mtimeMs: number;
+  value: StaticAttractionOverrideFile;
+} | null = null;
+let overridesReadPromise: Promise<StaticAttractionOverrideFile> | null = null;
+let publishedAttractionsCache: {
+  mtimeMs: number;
+  items: StaticAttraction[];
+} | null = null;
+let allAttractionsCache: {
+  mtimeMs: number;
+  items: StaticAttraction[];
+} | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -475,6 +484,29 @@ function normalizeIsoDate(value: unknown, fallback: string): string {
   return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
 }
 
+function getErrorCode(error: unknown): string {
+  return isRecord(error) && typeof error.code === "string" ? error.code : "";
+}
+
+function invalidateAttractionCaches() {
+  overridesCache = null;
+  publishedAttractionsCache = null;
+  allAttractionsCache = null;
+}
+
+async function getOverridesFileMtimeMs(): Promise<number> {
+  try {
+    const fileStat = await stat(overridesFilePath);
+    return fileStat.mtimeMs;
+  } catch (error) {
+    if (getErrorCode(error) === "ENOENT") {
+      return -1;
+    }
+
+    throw error;
+  }
+}
+
 function hasPlaceholderOnlyGallery(gallery: StaticAttractionGalleryImage[]): boolean {
   return (
     gallery.length > 0 &&
@@ -539,12 +571,63 @@ function normalizeAttraction(input: Partial<StaticAttraction> & { id: string }):
 }
 
 async function readOverrideFile(): Promise<StaticAttractionOverrideFile> {
+  const mtimeMs = await getOverridesFileMtimeMs().catch((error) => {
+    if (!hasLoggedOverridesReadError) {
+      hasLoggedOverridesReadError = true;
+      console.error("Failed to read attraction overrides", error);
+    }
+    return -2;
+  });
+
+  if (overridesCache && overridesCache.mtimeMs === mtimeMs) {
+    return overridesCache.value;
+  }
+
+  if (overridesReadPromise) {
+    return overridesReadPromise;
+  }
+
+  overridesReadPromise = (async () => {
+    if (mtimeMs === -1) {
+      const value: StaticAttractionOverrideFile = {};
+      overridesCache = { mtimeMs, value };
+      return value;
+    }
+
+    if (mtimeMs === -2) {
+      return {};
+    }
+
+    try {
+      const raw = await readFile(overridesFilePath, "utf8");
+      const parsed: unknown = JSON.parse(raw);
+      const value = isRecord(parsed) ? (parsed as StaticAttractionOverrideFile) : {};
+      overridesCache = { mtimeMs, value };
+      return value;
+    } catch (error) {
+      const code = getErrorCode(error);
+      if (code !== "ENOENT" && !hasLoggedOverridesReadError) {
+        hasLoggedOverridesReadError = true;
+        console.error("Failed to read attraction overrides", error);
+      }
+      const value: StaticAttractionOverrideFile = {};
+      overridesCache = { mtimeMs: code === "ENOENT" ? -1 : mtimeMs, value };
+      return value;
+    }
+  })().finally(() => {
+    overridesReadPromise = null;
+  });
+
+  return overridesReadPromise;
+}
+
+async function readOverrideFileUncached(): Promise<StaticAttractionOverrideFile> {
   try {
     const raw = await readFile(overridesFilePath, "utf8");
     const parsed: unknown = JSON.parse(raw);
     return isRecord(parsed) ? (parsed as StaticAttractionOverrideFile) : {};
   } catch (error) {
-    const code = isRecord(error) && typeof error.code === "string" ? error.code : "";
+    const code = getErrorCode(error);
     if (code !== "ENOENT" && !hasLoggedOverridesReadError) {
       hasLoggedOverridesReadError = true;
       console.error("Failed to read attraction overrides", error);
@@ -557,6 +640,7 @@ async function writeOverrideFile(value: StaticAttractionOverrideFile): Promise<v
   try {
     await mkdir(path.dirname(overridesFilePath), { recursive: true });
     await writeFile(overridesFilePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    invalidateAttractionCaches();
   } catch (error) {
     if (!hasLoggedOverridesWriteError) {
       hasLoggedOverridesWriteError = true;
@@ -620,6 +704,14 @@ export async function getStaticAttractions(options?: {
   includeUnpublished?: boolean;
 }): Promise<StaticAttraction[]> {
   const overrides = await readOverrideFile();
+  const mtimeMs = overridesCache?.mtimeMs ?? -2;
+  const includeUnpublished = options?.includeUnpublished === true;
+  const cached = includeUnpublished ? allAttractionsCache : publishedAttractionsCache;
+
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.items;
+  }
+
   const baseById = new Map(BASE_STATIC_ATTRACTIONS.map((item) => [item.id, item]));
   const result: StaticAttraction[] = BASE_STATIC_ATTRACTIONS.map((base) => {
     const override = overrides[base.id];
@@ -632,9 +724,9 @@ export async function getStaticAttractions(options?: {
     }
   }
 
-  return result
-    .filter((item) =>
-      options?.includeUnpublished ? true : item.status === "PUBLISHED" && item.isPublishedVisible,
+  const items = result
+    .filter(
+      (item) => includeUnpublished || (item.status === "PUBLISHED" && item.isPublishedVisible),
     )
     .sort((left, right) => {
       if (left.status !== right.status) {
@@ -648,6 +740,14 @@ export async function getStaticAttractions(options?: {
 
       return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
     });
+
+  if (includeUnpublished) {
+    allAttractionsCache = { mtimeMs, items };
+  } else {
+    publishedAttractionsCache = { mtimeMs, items };
+  }
+
+  return items;
 }
 
 export async function getStaticAttractionById(id: string): Promise<StaticAttraction | null> {
@@ -685,7 +785,7 @@ export async function saveStaticAttraction(
     ...patch,
     updatedAt: now,
   };
-  const overrides = await readOverrideFile();
+  const overrides = await readOverrideFileUncached();
   overrides[id] = normalizedPatch;
   await writeOverrideFile(overrides);
 
@@ -924,7 +1024,13 @@ export async function getStaticAttractionCatalog(
         return null;
       }
 
-      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, query.bounds ?? null)) {
+      if (
+        !isPointInsideBounds(
+          point?.latitude ?? null,
+          point?.longitude ?? null,
+          query.bounds ?? null,
+        )
+      ) {
         return null;
       }
 
@@ -951,9 +1057,7 @@ export async function getStaticAttractionCatalog(
       }
 
       const distanceScore =
-        distanceKm === null
-          ? 0
-          : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
+        distanceKm === null ? 0 : Math.max(0, (1 - distanceKm / Math.max(radiusKm * 2, 30)) * 20);
       const locationAliasScore =
         locationQuery &&
         containsQuery(locationQuery, [

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { normalizeRoomTitle } from "@/lib/room-title";
 
 type RouteContext = {
@@ -430,8 +429,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ error: "Не удалось сохранить настройки удобства" }, { status: 500 });
   }
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, property.id);
 
   return NextResponse.json({
     item: {

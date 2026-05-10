@@ -5,8 +5,10 @@ import { useId, useMemo, useState } from "react";
 import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildExcursionLeadMessage } from "@/lib/lead-message-author";
+import type { ListingEntityType } from "@/lib/listing-analytics";
 
 type ExcursionLeadFormProps = {
   offerType?: string | null;
@@ -19,6 +21,10 @@ type ExcursionLeadFormProps = {
   phone: string | null;
   organizerName: string;
   onCopySuccess?: (() => void) | null;
+  tracking?: {
+    entityType: ListingEntityType;
+    entityId: string;
+  } | null;
 };
 
 export function ExcursionLeadForm({
@@ -27,6 +33,7 @@ export function ExcursionLeadForm({
   locationName,
   organizerName,
   onCopySuccess = null,
+  tracking = null,
 }: ExcursionLeadFormProps) {
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
@@ -68,6 +75,10 @@ export function ExcursionLeadForm({
 
     if (!didCopy) {
       return;
+    }
+
+    if (tracking) {
+      trackListingAction({ ...tracking, actionType: "lead_form" });
     }
 
     if (onCopySuccess) {

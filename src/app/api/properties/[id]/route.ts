@@ -1,5 +1,6 @@
 import { PetsPolicy, Prisma, PropertyStatus, SmokingPolicy } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { crimeaLocationById, isClassificationApplicableByType } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
@@ -35,6 +36,8 @@ type DeletePropertyPayload = {
   acknowledged?: boolean;
 };
 
+type PropertyStepPayload = z.infer<typeof updatePropertyStepSchema>;
+
 // Shared include shape keeps GET/PATCH responses consistent for progress calculation.
 const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   media: {
@@ -64,6 +67,58 @@ function runtimeSupportsAllowedPolicies(): boolean {
     Object.prototype.hasOwnProperty.call(PetsPolicy, "ALLOWED") &&
     Object.prototype.hasOwnProperty.call(SmokingPolicy, "ALLOWED")
   );
+}
+
+function normalizePropertyFaqItemsForCompare(value: unknown): Array<{ q: string; a: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const candidate = item as { q?: unknown; a?: unknown };
+      const q = typeof candidate.q === "string" ? candidate.q.trim() : "";
+      const a = typeof candidate.a === "string" ? candidate.a.trim() : "";
+
+      return q && a ? { q, a } : null;
+    })
+    .filter((item): item is { q: string; a: string } => item !== null);
+}
+
+function isPublishedPropertyEditModerated(
+  stepPayload: PropertyStepPayload,
+  existing: { description: string | null; faqItems: Prisma.JsonValue },
+): boolean {
+  switch (stepPayload.step) {
+    case 1:
+    case 2:
+    case 3:
+      return true;
+    case 5: {
+      const data = stepPayload.data;
+      const nextDescription = data.description ?? null;
+      const currentDescription = existing.description ?? null;
+
+      if (nextDescription !== currentDescription) {
+        return true;
+      }
+
+      if (data.faqItems !== undefined) {
+        return (
+          JSON.stringify(normalizePropertyFaqItemsForCompare(data.faqItems)) !==
+          JSON.stringify(normalizePropertyFaqItemsForCompare(existing.faqItems))
+        );
+      }
+
+      return false;
+    }
+    default:
+      return false;
+  }
 }
 
 // Fetch one property draft by id. Access is owner-only.
@@ -146,7 +201,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  if (existing.status === PropertyStatus.PUBLISHED) {
+  const shouldTrackPublishedOwnerEdit =
+    existing.status === PropertyStatus.PUBLISHED &&
+    !editor.isAdmin &&
+    isPublishedPropertyEditModerated(parsed.data, existing);
+
+  if (shouldTrackPublishedOwnerEdit) {
     await preparePropertyForPublishedOwnerEdit(db, id);
   }
 
@@ -501,14 +561,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const shouldMarkAsOwnerUpdated =
-    existing.status === PropertyStatus.PUBLISHED &&
-    (parsed.data.step === 1 ||
-      parsed.data.step === 2 ||
-      parsed.data.step === 3 ||
-      parsed.data.step === 4 ||
-      parsed.data.step === 5 ||
-      parsed.data.step === 6 ||
-      parsed.data.step === 7);
+    shouldTrackPublishedOwnerEdit;
 
   if (shouldMarkAsOwnerUpdated) {
     await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);

@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import { serializeRoomOccupancy } from "@/lib/occupancy";
-import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate } from "@/lib/pricing";
 import { updateRoomOccupancySchema } from "@/lib/schemas";
 
@@ -124,8 +123,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     },
   });
 
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);
-
   return NextResponse.json({ item: serializeRoomOccupancy(updated) });
 }
 
@@ -144,8 +141,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   await db.roomOccupancy.delete({ where: { id: existing.id } });
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);
 
   return NextResponse.json({ ok: true });
 }

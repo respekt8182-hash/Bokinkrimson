@@ -1,5 +1,11 @@
 // Admin API: confirm or reject a manager payment request.
-import { PaymentProvider, PaymentStatus } from "@prisma/client";
+import {
+  ExcursionStatus,
+  PaymentProvider,
+  PaymentStatus,
+  PropertyStatus,
+  TransferStatus,
+} from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAdminAuditLog } from "@/lib/admin-audit";
@@ -142,7 +148,8 @@ export async function PATCH(request: Request, context: RouteContext) {
           paidAt: now,
           paidFrom: payment.paidFrom ?? payment.paidAt ?? payment.createdAt,
           placementValidUntil:
-            (payment.propertyId || paymentTransferId) && payment.placementValidUntil === null
+            (payment.propertyId || payment.excursionId || paymentTransferId) &&
+            payment.placementValidUntil === null
               ? getPlacementValidUntil(now)
               : payment.placementValidUntil,
           managerNotes: notes || null,
@@ -153,12 +160,24 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (payment.propertyId) {
         await syncPropertyPlacementFromPayment(tx, result, now);
         await autoSubmitPropertyAfterSuccessfulPayment(tx, payment.propertyId);
+        await tx.property.updateMany({
+          where: { id: payment.propertyId, status: PropertyStatus.PUBLISHED },
+          data: { isPublishedVisible: true },
+        });
       }
       if (payment.excursionId) {
         await autoSubmitExcursionAfterSuccessfulPayment(tx, payment.excursionId);
+        await tx.excursion.updateMany({
+          where: { id: payment.excursionId, status: ExcursionStatus.PUBLISHED },
+          data: { isPublishedVisible: true },
+        });
       }
       if (paymentTransferId) {
         await autoSubmitTransferAfterSuccessfulPayment(tx, paymentTransferId);
+        await tx.transfer.updateMany({
+          where: { id: paymentTransferId, status: TransferStatus.PUBLISHED },
+          data: { isPublishedVisible: true },
+        });
       }
 
       await writeAdminAuditLog(tx, {

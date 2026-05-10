@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import { serializeRoomOccupancy } from "@/lib/occupancy";
-import { markPropertyNeedsRemoderationAfterOwnerEdit } from "@/lib/properties";
 import { parseIsoDate } from "@/lib/pricing";
 import { createRoomOccupancySchema } from "@/lib/schemas";
 
@@ -143,8 +142,6 @@ export async function POST(request: Request, context: RouteContext) {
       description: data.description ?? null,
     },
   });
-
-  await markPropertyNeedsRemoderationAfterOwnerEdit(db, id);
 
   return NextResponse.json({ item: serializeRoomOccupancy(created) }, { status: 201 });
 }

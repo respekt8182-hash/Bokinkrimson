@@ -7,6 +7,7 @@
 // Vercel Cron sends the Authorization header automatically when CRON_SECRET is set.
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hideExpiredPublishedListings } from "@/lib/admin-placement-renewals";
 import { purgeExpiredExcursionDrafts } from "@/lib/excursions";
 import { purgeExpiredPropertyDrafts } from "@/lib/properties";
 import { pruneUnusedPublicUploads } from "@/lib/storage-cleanup";
@@ -27,14 +28,16 @@ export async function GET(req: NextRequest) {
       purgeExpiredPropertyDrafts(db),
       purgeExpiredExcursionDrafts(db),
     ]);
+    const hiddenExpiredListings = await hideExpiredPublishedListings({ client: db });
     const uploadCleanup = await pruneUnusedPublicUploads(db);
 
     console.log(
-      `[cron/cleanup-drafts] deletedProperties=${deletedProperties} deletedExcursions=${deletedExcursions} orphanUploadsDeleted=${uploadCleanup.deleted}`,
+      `[cron/cleanup-drafts] deletedProperties=${deletedProperties} deletedExcursions=${deletedExcursions} hiddenExpiredListings=${JSON.stringify(hiddenExpiredListings)} orphanUploadsDeleted=${uploadCleanup.deleted}`,
     );
     return NextResponse.json({
       deletedProperties,
       deletedExcursions,
+      hiddenExpiredListings,
       orphanUploadsDeleted: uploadCleanup.deleted,
       orphanUploadsScanned: uploadCleanup.scanned,
       deleted: deletedProperties + deletedExcursions,

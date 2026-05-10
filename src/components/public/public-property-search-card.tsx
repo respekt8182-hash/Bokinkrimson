@@ -35,6 +35,10 @@ import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 const SWIPE_THRESHOLD = 50;
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
+function isLocalUploadUrl(value: string | null): boolean {
+  return Boolean(value?.startsWith("/uploads/"));
+}
+
 type PublicPropertySearchCardProps = {
   item: PublicCatalogItem;
   initialIsFavorite: boolean;
@@ -367,6 +371,7 @@ function PublicPropertySearchCardInner({
   const isImageLoaded =
     currentImage !== null && (loadedImageUrl === currentImage || readyImages.has(currentImage));
   const shouldShowImageSkeleton = !isImageLoaded && loadedImageUrl === null;
+  const shouldBypassImageOptimizer = isLocalUploadUrl(currentImage);
 
   const priceSummary = useMemo(() => buildPriceSummary(item), [item]);
   const badges = useMemo(() => resolveStatusBadges(item), [item]);
@@ -481,6 +486,7 @@ function PublicPropertySearchCardInner({
             width={400}
             height={300}
             quality={72}
+            unoptimized={shouldBypassImageOptimizer}
             sizes={
               isGrid
                 ? "(min-width: 1536px) 18vw, (min-width: 1280px) 22vw, (min-width: 1024px) 28vw, (min-width: 480px) 50vw, 100vw"

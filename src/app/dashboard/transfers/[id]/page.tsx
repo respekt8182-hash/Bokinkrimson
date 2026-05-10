@@ -139,6 +139,34 @@ function parseTransferEditorStep(value: string | null): TransferEditorStep | nul
   return null;
 }
 
+function normalizeTransferComparableValue(value: unknown): unknown {
+  if (value instanceof Prisma.Decimal) {
+    return Number(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeTransferComparableValue);
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, normalizeTransferComparableValue(entryValue)]),
+    );
+  }
+
+  return value ?? null;
+}
+
+function areTransferValuesEqual(left: unknown, right: unknown): boolean {
+  return (
+    JSON.stringify(normalizeTransferComparableValue(left)) ===
+    JSON.stringify(normalizeTransferComparableValue(right))
+  );
+}
+
 export default async function DashboardTransferEditPage({
   params,
   searchParams,
@@ -306,8 +334,55 @@ export default async function DashboardTransferEditPage({
     const publishedEditSupported =
       current.status === TransferStatus.PUBLISHED &&
       (await areDatabaseColumnsAvailable("Transfer", ["pendingEditStatus", "publishedSnapshot"]));
+    const hasPublishedTransferContentEdit =
+      publishedEditSupported &&
+      !areTransferValuesEqual(
+        {
+          title,
+          transferType,
+          vehicleClass: fleetSummary.vehicleClass,
+          vehicleModel: fleetSummary.vehicleModel,
+          seats: fleetSummary.seats,
+          luggage: fleetSummary.luggage,
+          locationId,
+          locationName,
+          districtId:
+            locationIdInput === undefined
+              ? current.districtId
+              : (selectedLocation?.districtId ?? null),
+          routeExamples,
+          latitude,
+          longitude,
+          priceFrom: fleetSummary.priceFrom,
+          priceUnitLabel: fleetSummary.priceUnitLabel,
+          description,
+          photoUrls: fleetSummary.photoUrls,
+          serviceTags,
+          fleet,
+        },
+        {
+          title: current.title ?? "Новый трансфер",
+          transferType: current.transferType,
+          vehicleClass: current.vehicleClass,
+          vehicleModel: current.vehicleModel,
+          seats: current.seats,
+          luggage: current.luggage,
+          locationId: current.locationId,
+          locationName: current.locationName,
+          districtId: current.districtId,
+          routeExamples: current.routeExamples,
+          latitude: current.latitude,
+          longitude: current.longitude,
+          priceFrom: current.priceFrom,
+          priceUnitLabel: current.priceUnitLabel,
+          description: current.description,
+          photoUrls: current.photoUrls,
+          serviceTags: normalizeTransferServiceTags(current.serviceTags),
+          fleet: getTransferFleet(current),
+        },
+      );
 
-    if (publishedEditSupported) {
+    if (hasPublishedTransferContentEdit) {
       await ensurePublishedTransferSnapshotBeforeOwnerEdit(db, id);
     }
 
@@ -356,14 +431,21 @@ export default async function DashboardTransferEditPage({
       originalPublicationFeeRub,
     });
     const hasFullPaymentCoverage = transferPaymentCoverage.fullyCovered;
+    const hasPendingPublishedEdit =
+      current.pendingEditStatus !== null || hasPublishedTransferContentEdit;
     const shouldSubmitPublishedEdit =
-      publishedEditSupported && shouldPreparePayment && hasFullPaymentCoverage;
+      publishedEditSupported &&
+      hasPendingPublishedEdit &&
+      shouldPreparePayment &&
+      hasFullPaymentCoverage;
     const nextPendingEditStatus = publishedEditSupported
       ? shouldSubmitPublishedEdit
         ? TransferStatus.PENDING_MODERATION
         : current.pendingEditStatus === TransferStatus.PENDING_MODERATION
           ? TransferStatus.PENDING_MODERATION
-          : TransferStatus.DRAFT
+          : hasPublishedTransferContentEdit
+            ? TransferStatus.DRAFT
+            : current.pendingEditStatus
       : undefined;
     const shouldReturnToModeration =
       current.status === TransferStatus.PUBLISHED &&

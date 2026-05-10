@@ -2,6 +2,7 @@
 // Called client-side on transfer detail page mount; no auth required.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { recordListingViewEvent } from "@/lib/listing-analytics-service";
 import { buildPublishedTransferVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
@@ -17,28 +18,25 @@ export async function POST(_: Request, context: RouteContext) {
 
   const transferId = id.trim();
 
-  const updated = await db.transfer.updateMany({
+  const transfer = await db.transfer.findFirst({
     where: {
       id: transferId,
       ...buildPublishedTransferVisibilityWhere(),
     },
-    data: { profileViews: { increment: 1 } },
+    select: { ownerId: true },
   });
 
-  if (updated.count > 0) {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+  if (transfer) {
+    await db.transfer.update({
+      where: { id: transferId },
+      data: { profileViews: { increment: 1 } },
+      select: { id: true },
+    });
 
-    await db.viewLog.upsert({
-      where: {
-        entityType_entityId_date: {
-          entityType: "transfer",
-          entityId: transferId,
-          date: today,
-        },
-      },
-      create: { entityType: "transfer", entityId: transferId, date: today, count: 1 },
-      update: { count: { increment: 1 } },
+    await recordListingViewEvent({
+      entityType: "transfer",
+      entityId: transferId,
+      ownerId: transfer.ownerId,
     });
   }
 

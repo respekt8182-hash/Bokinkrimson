@@ -244,107 +244,120 @@ function canSubmitPublishedEdit(status: ExcursionStatus | null): boolean {
   );
 }
 
-function shouldMarkPublishedExcursionAsEdited(data: UpdateExcursionInput): boolean {
-  return (
-    data.offerType !== undefined ||
-    data.subtypeLabel !== undefined ||
-    data.title !== undefined ||
-    data.locationId !== undefined ||
-    data.locationName !== undefined ||
-    data.mainLocationId !== undefined ||
-    data.anchorLocationId !== undefined ||
-    data.districtId !== undefined ||
-    data.categoryId !== undefined ||
-    data.tags !== undefined ||
-    data.address !== undefined ||
-    data.latitude !== undefined ||
-    data.longitude !== undefined ||
-    data.startPoint !== undefined ||
-    data.meetingPointText !== undefined ||
-    data.meetingLocationId !== undefined ||
-    data.pickupAvailable !== undefined ||
-    data.pickupLocationIds !== undefined ||
-    data.routeLocations !== undefined ||
-    data.description !== undefined ||
-    data.shortDescription !== undefined ||
-    data.fullDescription !== undefined ||
-    data.routeDescription !== undefined ||
-    data.highlights !== undefined ||
-    data.durationMinutes !== undefined ||
-    data.durationDays !== undefined ||
-    data.durationNights !== undefined ||
-    data.itineraryDays !== undefined ||
-    data.finishPoint !== undefined ||
-    data.scheduleText !== undefined ||
-    data.scheduleMode !== undefined ||
-    data.availabilityMode !== undefined ||
-    data.availabilityNote !== undefined ||
-    data.format !== undefined ||
-    data.groupSizeMin !== undefined ||
-    data.groupSizeMax !== undefined ||
-    data.languageCodes !== undefined ||
-    data.ageLimit !== undefined ||
-    data.isKidFriendly !== undefined ||
-    data.difficulty !== undefined ||
-    data.priceType !== undefined ||
-    data.priceFrom !== undefined ||
-    data.priceTo !== undefined ||
-    data.currency !== undefined ||
-    data.includedText !== undefined ||
-    data.notIncludedText !== undefined ||
-    data.includedItems !== undefined ||
-    data.excludedItems !== undefined ||
-    data.cancellationPolicy !== undefined ||
-    data.cancellationPolicyType !== undefined ||
-    data.transferDetails !== undefined ||
-    data.physicalRequirements !== undefined ||
-    data.whatToBring !== undefined ||
-    data.meetingPointLat !== undefined ||
-    data.meetingPointLng !== undefined ||
-    data.minBookingNoticeHours !== undefined ||
-    data.priceUnitLabel !== undefined ||
-    data.accommodationProvided !== undefined ||
-    data.accommodationType !== undefined ||
-    data.accommodationNights !== undefined ||
-    data.accommodationFormat !== undefined ||
-    data.mealPlan !== undefined ||
-    data.mealDetails !== undefined ||
-    data.accommodationComment !== undefined ||
-    data.accommodationStars !== undefined ||
-    data.roomTypes !== undefined ||
-    data.singleSupplementAvailable !== undefined ||
-    data.singleSupplementPrice !== undefined ||
-    data.tourKind !== undefined ||
-    data.transportModes !== undefined ||
-    data.departureMode !== undefined ||
-    data.arrivalInfo !== undefined ||
-    data.departureInfo !== undefined ||
-    data.documentsRequired !== undefined ||
-    data.insuranceIncluded !== undefined ||
-    data.insuranceComment !== undefined ||
-    data.equipmentProvided !== undefined ||
-    data.safetyInfo !== undefined ||
-    data.routeConditions !== undefined ||
-    data.hasGuideLicense !== undefined ||
-    data.timeline !== undefined ||
-    data.extraOptions !== undefined ||
-    data.pricingTiers !== undefined ||
-    data.faqItems !== undefined ||
-    data.contactFirstName !== undefined ||
-    data.contactLastName !== undefined ||
-    data.contactPhone !== undefined ||
-    data.contactPhone2 !== undefined ||
-    data.contactEmail !== undefined ||
-    data.websiteUrl !== undefined ||
-    data.whatsappUrl !== undefined ||
-    data.telegramUrl !== undefined ||
-    data.vkUrl !== undefined ||
-    data.maxUrl !== undefined ||
-    data.okUrl !== undefined ||
-    data.photoUrls !== undefined ||
-    data.sectionPhotoGroups !== undefined ||
-    data.videoUrls !== undefined
-  );
+const moderatedExcursionFields = [
+  "offerType",
+  "subtypeLabel",
+  "title",
+  "locationId",
+  "locationName",
+  "mainLocationId",
+  "anchorLocationId",
+  "districtId",
+  "categoryId",
+  "tags",
+  "address",
+  "latitude",
+  "longitude",
+  "startPoint",
+  "meetingPointText",
+  "meetingLocationId",
+  "pickupAvailable",
+  "description",
+  "shortDescription",
+  "fullDescription",
+  "routeDescription",
+  "highlights",
+  "durationMinutes",
+  "durationDays",
+  "durationNights",
+  "itineraryDays",
+  "finishPoint",
+  "format",
+  "groupSizeMin",
+  "groupSizeMax",
+  "languageCodes",
+  "ageLimit",
+  "isKidFriendly",
+  "difficulty",
+  "includedText",
+  "notIncludedText",
+  "includedItems",
+  "excludedItems",
+  "cancellationPolicy",
+  "cancellationPolicyType",
+  "transferDetails",
+  "physicalRequirements",
+  "whatToBring",
+  "meetingPointLat",
+  "meetingPointLng",
+  "accommodationProvided",
+  "accommodationType",
+  "accommodationNights",
+  "accommodationFormat",
+  "mealPlan",
+  "mealDetails",
+  "accommodationComment",
+  "accommodationStars",
+  "roomTypes",
+  "singleSupplementAvailable",
+  "singleSupplementPrice",
+  "tourKind",
+  "transportModes",
+  "departureMode",
+  "arrivalInfo",
+  "departureInfo",
+  "documentsRequired",
+  "insuranceIncluded",
+  "insuranceComment",
+  "equipmentProvided",
+  "safetyInfo",
+  "routeConditions",
+  "hasGuideLicense",
+  "timeline",
+  "extraOptions",
+  "faqItems",
+] as const satisfies readonly (keyof UpdateExcursionInput)[];
+
+function normalizeComparableValue(value: unknown): unknown {
+  if (value instanceof Prisma.Decimal) {
+    return Number(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeComparableValue);
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, normalizeComparableValue(entryValue)]),
+    );
+  }
+
+  return value ?? null;
+}
+
+function areComparableValuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(normalizeComparableValue(left)) === JSON.stringify(normalizeComparableValue(right));
+}
+
+function shouldMarkPublishedExcursionAsEdited(
+  data: UpdateExcursionInput,
+  existing: ExcursionWithRelations,
+): boolean {
+  const existingRecord = existing as unknown as Record<string, unknown>;
+
+  return moderatedExcursionFields.some((field) => {
+    const nextValue = data[field];
+
+    return nextValue !== undefined && !areComparableValuesEqual(nextValue, existingRecord[field]);
+  });
 }
 
 async function getAccessibleExcursion(
@@ -483,11 +496,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const nextVideoUrls = data.videoUrls !== undefined ? dedupeUrls(data.videoUrls) : existing.videoUrls;
   const nextStatus = data.status ?? existing.status;
   const isPublishedOwnerEdit = existing.status === ExcursionStatus.PUBLISHED && !editor.isAdmin;
-  const hasPublishedContentEdit = shouldMarkPublishedExcursionAsEdited(data);
   const existingPendingEditStatus = getExcursionPendingEditStatus(existing);
-  const effectivePendingEditStatus =
-    existingPendingEditStatus ??
-    (isPublishedOwnerEdit && hasPublishedContentEdit ? ExcursionStatus.DRAFT : null);
 
   if (data.status !== undefined && !editor.isAdmin && !isOwnerAllowedStatusTransition(nextStatus)) {
     return NextResponse.json(
@@ -497,37 +506,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       },
       { status: 400 },
     );
-  }
-
-  if (isPublishedOwnerEdit && data.status === ExcursionStatus.PENDING_MODERATION) {
-    if (!effectivePendingEditStatus) {
-      return NextResponse.json(
-        { error: "Сначала внесите изменения в опубликованную экскурсию" },
-        { status: 400 },
-      );
-    }
-
-    if (!canSubmitPublishedEdit(effectivePendingEditStatus)) {
-      return NextResponse.json(
-        {
-          error: `Нельзя отправить изменения на модерацию в текущем статусе: ${getExcursionStatusLabel(
-            existing.status,
-            effectivePendingEditStatus,
-            existing.moderationNotes,
-          )}`,
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (
-    isPublishedOwnerEdit &&
-    (hasPublishedContentEdit ||
-      data.status === ExcursionStatus.PENDING_MODERATION ||
-      data.status === ExcursionStatus.DRAFT)
-  ) {
-    await prepareExcursionForPublishedOwnerEdit(db, existing.id);
   }
 
   const nextLatitude = data.latitude === undefined ? existing.latitude : data.latitude;
@@ -802,12 +780,64 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
 
+  const existingPickupLocationIds = existing.pickupLocations.map((item) => item.locationId);
+  const existingRouteLocations = existing.routeLocations.map((item) => ({
+    locationId: item.locationId,
+    sortOrder: item.sortOrder,
+  }));
+  const hasPublishedContentEdit =
+    isPublishedOwnerEdit &&
+    (shouldMarkPublishedExcursionAsEdited(data, existing) ||
+      (data.photoUrls !== undefined &&
+        !areComparableValuesEqual(nextPhotoUrls, existingSectionPhotos.photoUrls)) ||
+      (data.sectionPhotoGroups !== undefined &&
+        !areComparableValuesEqual(
+          nextSectionPhotoGroups,
+          existingSectionPhotos.sectionPhotoGroups,
+        )) ||
+      (data.videoUrls !== undefined && !areComparableValuesEqual(nextVideoUrls, existing.videoUrls)) ||
+      (nextPickupLocationIds !== null &&
+        !areComparableValuesEqual(nextPickupLocationIds, existingPickupLocationIds)) ||
+      (nextRouteLocations !== null &&
+        !areComparableValuesEqual(nextRouteLocations, existingRouteLocations)));
+  const effectivePendingEditStatus =
+    existingPendingEditStatus ?? (hasPublishedContentEdit ? ExcursionStatus.DRAFT : null);
+
   const submitPublishedEdit =
     isPublishedOwnerEdit && data.status === ExcursionStatus.PENDING_MODERATION;
   const resetPublishedEditToDraft =
     isPublishedOwnerEdit &&
     data.status === ExcursionStatus.DRAFT &&
     existingPendingEditStatus !== null;
+
+  if (submitPublishedEdit) {
+    if (!effectivePendingEditStatus) {
+      return NextResponse.json(
+        { error: "Сначала внесите изменения в опубликованную экскурсию" },
+        { status: 400 },
+      );
+    }
+
+    if (!canSubmitPublishedEdit(effectivePendingEditStatus)) {
+      return NextResponse.json(
+        {
+          error: `Нельзя отправить изменения на модерацию в текущем статусе: ${getExcursionStatusLabel(
+            existing.status,
+            effectivePendingEditStatus,
+            existing.moderationNotes,
+          )}`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (
+    isPublishedOwnerEdit &&
+    (hasPublishedContentEdit || submitPublishedEdit || resetPublishedEditToDraft)
+  ) {
+    await prepareExcursionForPublishedOwnerEdit(db, existing.id);
+  }
 
   const updateData: Prisma.ExcursionUpdateInput = {
     ...(data.offerType !== undefined ? { offerType: data.offerType } : {}),

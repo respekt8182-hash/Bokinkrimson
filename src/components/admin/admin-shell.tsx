@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
-  BarChart3,
   Compass,
   Car,
   Clock3,
@@ -44,7 +43,6 @@ const MANAGER_PAY_SEEN_KEY = "boking_admin_manager_payments_seen_at";
 
 const menu: MenuItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
-  { href: "/admin/statistics", label: "Статистика", icon: BarChart3 },
   { href: "/admin/moderation", label: "Модерация жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
   { href: "/admin/objects", label: "Жильё и размещение", icon: House },
@@ -216,6 +214,21 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    function handleHiddenStatisticsHotkey(event: KeyboardEvent) {
+      if (!event.ctrlKey || !event.shiftKey || event.code !== "KeyS") {
+        return;
+      }
+
+      event.preventDefault();
+      setDrawerOpen(false);
+      router.push("/admin/statistics");
+    }
+
+    window.addEventListener("keydown", handleHiddenStatisticsHotkey);
+    return () => window.removeEventListener("keydown", handleHiddenStatisticsHotkey);
+  }, [router]);
 
   const unreadCounts: Record<string, number> = {
     "/admin/moderation":

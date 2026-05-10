@@ -50,6 +50,7 @@ import {
   buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
 import type { MapBounds } from "@/lib/search-contracts";
+import { filterExistingLocalPublicUploadUrls } from "@/lib/storage";
 import type { FaqItem } from "@/types/excursions";
 
 // Public catalog domain layer:
@@ -1791,6 +1792,13 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       : [];
   const cardMetaById = new Map(cardMetaRows.map((entry) => [entry.id, entry]));
 
+  const displayImageUrls = Array.from(
+    new Set(pagedRows.flatMap((entry) => entry.displayState.imageUrls)),
+  );
+  const existingDisplayImageUrls = new Set(
+    await filterExistingLocalPublicUploadUrls(displayImageUrls),
+  );
+
   const items: PublicCatalogItem[] = pagedRows.map((entry) => {
     const property = entry.property;
     const displayState = entry.displayState;
@@ -1798,7 +1806,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
 
     // Use published snapshot for display content when owner edits are under moderation.
     const catalogSnap = displayState.snapshot;
-    const imageUrls = displayState.imageUrls;
+    const imageUrls = displayState.imageUrls.filter((url) => existingDisplayImageUrls.has(url));
     const stayPrice = entry.stayPrice;
     const roomSnapshot = pickRepresentativeRoom(displayState.rooms, stayPrice?.roomTitle ?? null);
     // Manual "key amenity" configuration has priority; auto-highlights are fallback.

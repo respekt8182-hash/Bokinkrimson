@@ -133,9 +133,13 @@ const PRICE_BALLOON_GAP_PX = 6;
 const DOT_BALLOON_OFFSET: [number, number] = [0, -12];
 const HOVER_CLEAR_DELAY_MS = 80;
 const MARKER_Z_INDEX_DEFAULT = 1000;
-const MARKER_Z_INDEX_HOVER = 3000;
-const MARKER_Z_INDEX_ACTIVE = 4000;
+const MARKER_Z_INDEX_HOVER = 1_000_000;
+const MARKER_Z_INDEX_ACTIVE = 2_000_000;
 const MARKER_Z_INDEX_DRAG_OFFSET = 20;
+const MARKER_OVERLAP_GRID_CELL_PX = PRICE_MARKER_MAX_WIDTH + 32;
+const MARKER_OVERLAP_PADDING_PX = 4;
+const MARKER_FAIR_ROTATION_MIN_POINTS = 3;
+const MARKER_FAIR_ROTATION_DAY_MS = 24 * 60 * 60 * 1000;
 
 let scriptPromise: Promise<void> | null = null;
 
@@ -301,9 +305,7 @@ function getMapZoom(map: YandexMapInstance): number {
   return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
 }
 
-function normalizeMapBounds(
-  value: unknown,
-): [[number, number], [number, number]] | null {
+function normalizeMapBounds(value: unknown): [[number, number], [number, number]] | null {
   if (!Array.isArray(value) || value.length !== 2) {
     return null;
   }
@@ -353,16 +355,198 @@ function shouldShowPricePlacemark(input: {
   );
 }
 
-function getMarkerZIndex(input: { isActive: boolean; isHovered: boolean }): number {
+type MarkerOverlapBounds = {
+  index: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
+function getMarkerZIndex(input: {
+  isActive: boolean;
+  isHovered: boolean;
+  baseZIndex: number;
+}): number {
   if (input.isActive) {
-    return MARKER_Z_INDEX_ACTIVE;
+    return MARKER_Z_INDEX_ACTIVE + input.baseZIndex;
   }
 
   if (input.isHovered) {
-    return MARKER_Z_INDEX_HOVER;
+    return MARKER_Z_INDEX_HOVER + input.baseZIndex;
   }
 
-  return MARKER_Z_INDEX_DEFAULT;
+  return input.baseZIndex;
+}
+
+function getMarkerFairRotationSeed(): number {
+  return Math.floor(Date.now() / MARKER_FAIR_ROTATION_DAY_MS);
+}
+
+function getStableHash(value: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+function projectPointToWorldPixels(point: YandexMapPoint, zoom: number): [number, number] {
+  const normalizedZoom = Math.max(0, Math.min(22, zoom));
+  const scale = 256 * Math.pow(2, normalizedZoom);
+  const safeLatitude = Math.max(-85.05112878, Math.min(85.05112878, point.latitude));
+  const sinLatitude = Math.sin((safeLatitude * Math.PI) / 180);
+  const x = ((point.longitude + 180) / 360) * scale;
+  const y = (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) * scale;
+
+  return [x, y];
+}
+
+function shouldUsePriceSizeForOverlap(point: YandexMapPoint, zoom: number): boolean {
+  return hasPointPriceLabel(point) && (zoom >= PRICE_MARKER_MIN_ZOOM || point.isViewed === true);
+}
+
+function getMarkerOverlapBounds(
+  point: YandexMapPoint,
+  index: number,
+  zoom: number,
+): MarkerOverlapBounds {
+  const [x, y] = projectPointToWorldPixels(point, zoom);
+
+  if (shouldUsePriceSizeForOverlap(point, zoom)) {
+    const width = estimatePriceMarkerWidth(point.priceLabel ?? "");
+    const height = PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT;
+
+    return {
+      index,
+      left: x - width / 2 - MARKER_OVERLAP_PADDING_PX,
+      right: x + width / 2 + MARKER_OVERLAP_PADDING_PX,
+      top: y - height - MARKER_OVERLAP_PADDING_PX,
+      bottom: y + MARKER_OVERLAP_PADDING_PX,
+    };
+  }
+
+  const halfSize = DOT_MARKER_SIZE / 2 + MARKER_OVERLAP_PADDING_PX;
+
+  return {
+    index,
+    left: x - halfSize,
+    right: x + halfSize,
+    top: y - halfSize,
+    bottom: y + halfSize,
+  };
+}
+
+function doMarkerBoundsOverlap(first: MarkerOverlapBounds, second: MarkerOverlapBounds): boolean {
+  return (
+    first.left <= second.right &&
+    first.right >= second.left &&
+    first.top <= second.bottom &&
+    first.bottom >= second.top
+  );
+}
+
+function findOverlappingMarkerGroups(points: YandexMapPoint[], zoom: number): number[][] {
+  const bounds = points.map((point, index) => getMarkerOverlapBounds(point, index, zoom));
+  const parents = bounds.map((_, index) => index);
+
+  const find = (index: number): number => {
+    let root = index;
+    while (parents[root] !== root) {
+      root = parents[root];
+    }
+
+    while (parents[index] !== index) {
+      const parent = parents[index];
+      parents[index] = root;
+      index = parent;
+    }
+
+    return root;
+  };
+
+  const union = (first: number, second: number) => {
+    const firstRoot = find(first);
+    const secondRoot = find(second);
+
+    if (firstRoot !== secondRoot) {
+      parents[secondRoot] = firstRoot;
+    }
+  };
+
+  const cellToBoundsIndexes = new Map<string, number[]>();
+
+  bounds.forEach((currentBounds, currentIndex) => {
+    const checkedCandidates = new Set<number>();
+    const minCellX = Math.floor(currentBounds.left / MARKER_OVERLAP_GRID_CELL_PX);
+    const maxCellX = Math.floor(currentBounds.right / MARKER_OVERLAP_GRID_CELL_PX);
+    const minCellY = Math.floor(currentBounds.top / MARKER_OVERLAP_GRID_CELL_PX);
+    const maxCellY = Math.floor(currentBounds.bottom / MARKER_OVERLAP_GRID_CELL_PX);
+
+    for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+      for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+        const cellKey = `${cellX}:${cellY}`;
+        const candidates = cellToBoundsIndexes.get(cellKey) ?? [];
+
+        candidates.forEach((candidateIndex) => {
+          if (checkedCandidates.has(candidateIndex)) {
+            return;
+          }
+
+          checkedCandidates.add(candidateIndex);
+          if (doMarkerBoundsOverlap(currentBounds, bounds[candidateIndex])) {
+            union(currentIndex, candidateIndex);
+          }
+        });
+
+        candidates.push(currentIndex);
+        cellToBoundsIndexes.set(cellKey, candidates);
+      }
+    }
+  });
+
+  const groupsByRoot = new Map<number, number[]>();
+
+  bounds.forEach((boundsItem) => {
+    const root = find(boundsItem.index);
+    const group = groupsByRoot.get(root);
+
+    if (group) {
+      group.push(boundsItem.index);
+    } else {
+      groupsByRoot.set(root, [boundsItem.index]);
+    }
+  });
+
+  return Array.from(groupsByRoot.values()).filter((group) => group.length > 1);
+}
+
+function buildMarkerBaseZIndexByPointId(
+  points: YandexMapPoint[],
+  zoom: number,
+  fairRotationSeed: number,
+): Map<string, number> {
+  const baseZIndexes = points.map((_, index) => MARKER_Z_INDEX_DEFAULT + points.length - index);
+
+  findOverlappingMarkerGroups(points, zoom).forEach((group) => {
+    if (group.length < MARKER_FAIR_ROTATION_MIN_POINTS) {
+      return;
+    }
+
+    const sortedGroup = [...group].sort((first, second) => first - second);
+    const groupKey = sortedGroup.map((pointIndex) => points[pointIndex].id).join("|");
+    const rotation = (getStableHash(groupKey) + fairRotationSeed) % sortedGroup.length;
+    const rotatedGroup = sortedGroup.slice(rotation).concat(sortedGroup.slice(0, rotation));
+    const groupBaseRank = points.length - sortedGroup[0];
+
+    rotatedGroup.forEach((pointIndex, orderIndex) => {
+      baseZIndexes[pointIndex] = MARKER_Z_INDEX_DEFAULT + groupBaseRank - orderIndex;
+    });
+  });
+
+  return new Map(points.map((point, index) => [point.id, baseZIndexes[index]]));
 }
 
 function buildMarkerLayerOptions(zIndex: number): Record<string, unknown> {
@@ -379,6 +563,7 @@ function buildPricePlacemarkOptions(input: {
   point: YandexMapPoint;
   activePointId: string | null;
   hoveredPointId: string | null;
+  baseZIndex: number;
   layouts: PriceLayouts;
 }): Record<string, unknown> {
   const isActive = input.point.id === input.activePointId;
@@ -386,7 +571,7 @@ function buildPricePlacemarkOptions(input: {
   const isViewed = input.point.isViewed === true && !isActive && !isHovered;
   const width = estimatePriceMarkerWidth(input.point.priceLabel ?? "");
   const markerHeight = PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT;
-  const zIndex = getMarkerZIndex({ isActive, isHovered });
+  const zIndex = getMarkerZIndex({ isActive, isHovered, baseZIndex: input.baseZIndex });
 
   return {
     ...buildMarkerLayerOptions(zIndex),
@@ -441,6 +626,7 @@ function buildDotPlacemarkOptions(input: {
   pointId: string;
   activePointId: string | null;
   hoveredPointId: string | null;
+  baseZIndex: number;
   layouts: DotLayouts;
   isViewed?: boolean;
 }): Record<string, unknown> {
@@ -448,7 +634,7 @@ function buildDotPlacemarkOptions(input: {
   const isHovered = input.pointId === input.hoveredPointId && !isActive;
   const isViewed = input.isViewed === true && !isActive && !isHovered;
   const halfSize = DOT_MARKER_SIZE / 2;
-  const zIndex = getMarkerZIndex({ isActive, isHovered });
+  const zIndex = getMarkerZIndex({ isActive, isHovered, baseZIndex: input.baseZIndex });
 
   return {
     ...buildMarkerLayerOptions(zIndex),
@@ -481,6 +667,7 @@ function buildMarkerVisualOptions(input: {
   activePointId: string | null;
   hoveredPointId: string | null;
   zoom: number;
+  baseZIndex: number;
   priceLayouts: PriceLayouts;
   dotLayouts: DotLayouts;
 }): Record<string, unknown> {
@@ -495,6 +682,7 @@ function buildMarkerVisualOptions(input: {
       point: input.point,
       activePointId: input.activePointId,
       hoveredPointId: input.hoveredPointId,
+      baseZIndex: input.baseZIndex,
       layouts: input.priceLayouts,
     });
   }
@@ -503,6 +691,7 @@ function buildMarkerVisualOptions(input: {
     pointId: input.point.id,
     activePointId: input.activePointId,
     hoveredPointId: input.hoveredPointId,
+    baseZIndex: input.baseZIndex,
     layouts: input.dotLayouts,
     isViewed: input.point.isViewed,
   });
@@ -605,6 +794,7 @@ export function YandexMapMultiViewer({
   const hoverHandlerRef = useRef(onPointHoverChange);
   const boundsChangeHandlerRef = useRef(onBoundsChange);
   const showBalloonsRef = useRef(showBalloons);
+  const markerBaseZIndexByPointIdRef = useRef<Map<string, number>>(new Map());
   const priceLayoutsRef = useRef<PriceLayouts | null>(null);
   const dotLayoutsRef = useRef<DotLayouts | null>(null);
   const balloonContentLayoutsRef = useRef<BalloonContentLayouts | null>(null);
@@ -619,6 +809,7 @@ export function YandexMapMultiViewer({
   const [error, setError] = useState("");
   const [mapReadyVersion, setMapReadyVersion] = useState(0);
   const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
+  const [fairRotationSeed] = useState(() => getMarkerFairRotationSeed());
   const controlsSignature = useMemo(
     () => (controls ?? ["zoomControl", "fullscreenControl"]).join("|"),
     [controls],
@@ -652,6 +843,14 @@ export function YandexMapMultiViewer({
     () => new Map(normalizedPoints.map((point) => [point.id, point])),
     [normalizedPoints],
   );
+  const markerBaseZIndexByPointId = useMemo(
+    () => buildMarkerBaseZIndexByPointId(normalizedPoints, mapZoom, fairRotationSeed),
+    [fairRotationSeed, mapZoom, normalizedPoints],
+  );
+
+  useEffect(() => {
+    markerBaseZIndexByPointIdRef.current = markerBaseZIndexByPointId;
+  }, [markerBaseZIndexByPointId]);
 
   useEffect(() => {
     clickHandlerRef.current = onPointClick;
@@ -820,6 +1019,7 @@ export function YandexMapMultiViewer({
         activePointId,
         hoveredPointId,
         zoom: mapZoom,
+        baseZIndex: markerBaseZIndexByPointId.get(point.id) ?? MARKER_Z_INDEX_DEFAULT,
         priceLayouts,
         dotLayouts,
       });
@@ -830,7 +1030,7 @@ export function YandexMapMultiViewer({
 
       applyPlacemarkOptions(placemark, visualOptions);
     });
-  }, [activePointId, hoveredPointId, mapZoom, pointById]);
+  }, [activePointId, hoveredPointId, mapZoom, markerBaseZIndexByPointId, pointById]);
 
   const removePlacemarksFromMap = useCallback(() => {
     const map = mapRef.current;
@@ -1084,6 +1284,8 @@ export function YandexMapMultiViewer({
             activePointId: currentActivePointId,
             hoveredPointId: currentHoveredPointId,
             zoom: currentZoom,
+            baseZIndex:
+              markerBaseZIndexByPointIdRef.current.get(point.id) ?? MARKER_Z_INDEX_DEFAULT,
             priceLayouts,
             dotLayouts,
           }),

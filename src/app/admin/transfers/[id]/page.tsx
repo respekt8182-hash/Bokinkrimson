@@ -2,6 +2,7 @@ import { PaymentStatus, Prisma, ReviewEntityType, TransferStatus } from "@prisma
 import { ArrowUpRight, Car, Eye, FileText, MapPin, ShieldCheck, Star } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AdminListingPaymentConfirmation } from "@/components/admin/admin-listing-payment-confirmation";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
 import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
@@ -609,6 +610,17 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
           <section className="rounded-[28px] border border-olive/10 bg-white p-5 shadow-[0_18px_48px_rgba(58,43,35,0.06)]">
             <h3 className="text-lg font-semibold text-olive">Оплата размещения</h3>
             <PlacementPromoNotice compact className="mt-3" />
+            <div className="mt-4">
+              <AdminListingPaymentConfirmation
+                entityType="transfer"
+                entityId={transfer.id}
+                entityLabel="Трансфер"
+                tariffOptions={[
+                  { value: "season", label: "Сезон" },
+                  { value: "year", label: "Год" },
+                ]}
+              />
+            </div>
             <dl className="mt-4 grid gap-2 text-sm">
               <div className="rounded-2xl bg-cream/80 px-3 py-3">
                 <dt className="text-olive/50">Тип карточки</dt>

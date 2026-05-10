@@ -2,6 +2,7 @@
 // Called client-side on excursion detail page mount; no auth required.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { recordListingViewEvent } from "@/lib/listing-analytics-service";
 import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
@@ -17,25 +18,22 @@ export async function POST(_: Request, context: RouteContext) {
 
   const excursionId = id.trim();
 
-  const updated = await db.excursion.updateMany({
+  const excursion = await db.excursion.findFirst({
     where: { id: excursionId, ...buildPublishedExcursionVisibilityWhere() },
-    data: { profileViews: { increment: 1 } },
+    select: { ownerId: true },
   });
 
-  if (updated.count > 0) {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+  if (excursion) {
+    await db.excursion.update({
+      where: { id: excursionId },
+      data: { profileViews: { increment: 1 } },
+      select: { id: true },
+    });
 
-    await db.viewLog.upsert({
-      where: {
-        entityType_entityId_date: {
-          entityType: "excursion",
-          entityId: excursionId,
-          date: today,
-        },
-      },
-      create: { entityType: "excursion", entityId: excursionId, date: today, count: 1 },
-      update: { count: { increment: 1 } },
+    await recordListingViewEvent({
+      entityType: "excursion",
+      entityId: excursionId,
+      ownerId: excursion.ownerId,
     });
   }
 

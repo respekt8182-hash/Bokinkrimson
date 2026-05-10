@@ -217,6 +217,7 @@ export function ExcursionSidebarActions({
         telegramUrl={telegramUrl}
         phone={phone}
         organizerName={organizerName}
+        tracking={tracking}
       />
     </>
   );

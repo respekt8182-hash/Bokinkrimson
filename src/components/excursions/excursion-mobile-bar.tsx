@@ -246,6 +246,7 @@ export function ExcursionMobileBar({
         currency="RUB"
         {...formProps}
         priceLabel={priceLabel}
+        tracking={tracking}
       />
     </>
   );

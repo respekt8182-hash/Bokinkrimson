@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Eye, Plus, ShieldCheck, X } from "lucide-react";
+import { BarChart3, Eye, Plus, ShieldCheck } from "lucide-react";
 import {
   AdminNotice,
   AdminPanel,
   AdminStatCard,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { HIDDEN_STATS_PIN } from "@/lib/admin-hidden-statistics";
 import {
   LISTING_ACTION_BOOST_OPTIONS,
   LISTING_ACTION_LABELS,
@@ -40,6 +41,9 @@ function formatNumber(value: number): string {
 
 export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoostPanelProps) {
   const [summary, setSummary] = useState(initialSummary);
+  const [selectedMetricPeriodKey, setSelectedMetricPeriodKey] = useState(
+    initialSummary.metricPeriods.defaultKey,
+  );
   const [viewAmount, setViewAmount] = useState(
     Math.min(5, Math.max(1, initialSummary.remainingToday)),
   );
@@ -47,83 +51,75 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
     Math.min(1, Math.max(1, initialSummary.actionRemainingToday)),
   );
   const [actionType, setActionType] = useState<ListingActionType>("phone_primary");
-  const [pendingMetric, setPendingMetric] = useState<BoostMetricType | null>(null);
-  const [password, setPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingMetric, setSubmittingMetric] = useState<BoostMetricType | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const publishedCardsCount = summary.totals.totalCards;
   const viewRemaining = summary.remainingToday;
   const actionRemaining = summary.actionRemainingToday;
-  const safeViewAmount =
-    viewRemaining <= 0 ? 0 : Math.min(Math.max(1, viewAmount), viewRemaining);
+  const safeViewAmount = viewRemaining <= 0 ? 0 : Math.min(Math.max(1, viewAmount), viewRemaining);
   const safeActionAmount =
     actionRemaining <= 0 ? 0 : Math.min(Math.max(1, actionAmount), actionRemaining);
   const isViewLimitReached = viewRemaining <= 0;
   const isActionLimitReached = actionRemaining <= 0;
-  const totalBoostedViews = safeViewAmount * summary.totals.totalCards;
-  const totalBoostedActions = safeActionAmount * summary.totals.totalCards;
+  const hasPublishedCards = publishedCardsCount > 0;
+  const totalBoostedViews = safeViewAmount * publishedCardsCount;
+  const totalBoostedActions = safeActionAmount * publishedCardsCount;
+  const isSubmittingViews = submittingMetric === "views";
+  const isSubmittingActions = submittingMetric === "actions";
+  const metricPeriodOptions = [
+    summary.metricPeriods.last6Months,
+    ...summary.metricPeriods.months,
+  ];
+  const selectedMetricPeriod =
+    metricPeriodOptions.find((period) => period.key === selectedMetricPeriodKey) ??
+    summary.metricPeriods.months.at(-1) ??
+    summary.metricPeriods.last6Months;
 
   function chooseViewAmount(nextAmount: number) {
-    setViewAmount(Math.min(nextAmount, Math.max(1, viewRemaining)));
+    setViewAmount(Math.min(Math.max(1, nextAmount), Math.max(1, viewRemaining)));
     setMessage(null);
     setError(null);
   }
 
   function chooseActionAmount(nextAmount: number) {
-    setActionAmount(Math.min(nextAmount, Math.max(1, actionRemaining)));
+    setActionAmount(Math.min(Math.max(1, nextAmount), Math.max(1, actionRemaining)));
     setMessage(null);
     setError(null);
   }
 
-  function openConfirmation(metricType: BoostMetricType) {
+  async function submitBoost(metricType: BoostMetricType) {
     setMessage(null);
     setError(null);
 
-    if (summary.totals.totalCards <= 0) {
-      setError("Нет опубликованных карточек, которым можно начислить метрику.");
+    if (!hasPublishedCards) {
+      setError("Нет опубликованных карточек для начисления статистики");
       return;
     }
 
     if (metricType === "views" && isViewLimitReached) {
-      setError(
-        `Лимит на сегодня уже исчерпан. Завтра снова будет доступно ${summary.dailyLimit} просмотров.`,
-      );
+      setError("Лимит просмотров на сегодня исчерпан");
       return;
     }
 
     if (metricType === "actions" && isActionLimitReached) {
-      setError(
-        `Лимит на сегодня уже исчерпан. Завтра снова будет доступно ${summary.actionDailyLimit} целевых действий.`,
-      );
+      setError("Лимит целевых действий на сегодня исчерпан");
       return;
     }
 
-    setPassword("");
-    setPendingMetric(metricType);
-  }
-
-  async function submitBoost(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!pendingMetric) {
-      return;
-    }
-
-    const amount = pendingMetric === "actions" ? safeActionAmount : safeViewAmount;
-    setIsSubmitting(true);
-    setError(null);
-    setMessage(null);
+    const amount = metricType === "actions" ? safeActionAmount : safeViewAmount;
+    setSubmittingMetric(metricType);
 
     try {
       const response = await fetch("/api/admin/statistics/view-boost", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          metricType: pendingMetric,
+          metricType,
           amount,
-          actionType: pendingMetric === "actions" ? actionType : undefined,
-          password,
+          actionType: metricType === "actions" ? actionType : undefined,
+          pin: HIDDEN_STATS_PIN,
         }),
       });
       const payload = (await response.json()) as BoostResponse;
@@ -133,7 +129,7 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
           setSummary(payload.summary);
         }
 
-        throw new Error(payload.error ?? "Не удалось начислить метрику.");
+        throw new Error(payload.error ?? "Не удалось сохранить изменения. Попробуйте ещё раз.");
       }
 
       if (payload.summary) {
@@ -142,71 +138,115 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
         setActionAmount(Math.min(1, Math.max(1, payload.summary.actionRemainingToday)));
       }
 
-      setPendingMetric(null);
-      setPassword("");
       setMessage(
-        pendingMetric === "actions"
-          ? `Начислено +${amount} ${LISTING_ACTION_LABELS[actionType].toLocaleLowerCase(
-              "ru-RU",
-            )} на ${formatNumber(payload.updatedCards ?? summary.totals.totalCards)} карточек.`
-          : `Начислено +${amount} просмотров на ${formatNumber(
-              payload.updatedCards ?? summary.totals.totalCards,
-            )} карточек.`,
+        metricType === "actions"
+          ? "Целевые действия успешно начислены"
+          : "Просмотры успешно начислены",
       );
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Не удалось начислить метрику.");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Не удалось сохранить изменения. Попробуйте ещё раз.",
+      );
     } finally {
-      setIsSubmitting(false);
+      setSubmittingMetric(null);
     }
   }
 
   return (
     <>
+      <AdminPanel
+        title="Период статистики"
+        description="Выберите конкретный месяц или общую динамику за последние 6 месяцев."
+        contentClassName="mt-3"
+      >
+        <div className="flex flex-wrap gap-2">
+          {metricPeriodOptions.map((period) => {
+            const active = selectedMetricPeriod.key === period.key;
+
+            return (
+              <button
+                key={period.key}
+                type="button"
+                onClick={() => setSelectedMetricPeriodKey(period.key)}
+                className={cn(
+                  "rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition",
+                  active
+                    ? "border-primary bg-primary text-white shadow-[0_12px_28px_rgba(15,118,110,0.16)]"
+                    : "border-olive/10 bg-white text-olive hover:border-primary/22 hover:text-primary",
+                )}
+              >
+                <span className="block">{period.label}</span>
+                <span
+                  className={cn(
+                    "mt-1 block text-xs",
+                    active ? "text-white/72" : "text-olive/48",
+                  )}
+                >
+                  {formatNumber(period.views)} просмотров · {formatNumber(period.actions)} действий
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </AdminPanel>
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <AdminStatCard
           label="Карточек"
-          value={formatNumber(summary.totals.totalCards)}
-          description="Жильё, экскурсии, туры и трансферы"
+          value={formatNumber(publishedCardsCount)}
+          description="Жильё, экскурсии, туры, трансферы и места"
           icon={BarChart3}
         />
         <AdminStatCard
           label="Просмотров всего"
-          value={formatNumber(summary.totals.totalViews)}
-          description="Сумма текущих счётчиков"
+          value={formatNumber(selectedMetricPeriod.views)}
+          description={`Период: ${selectedMetricPeriod.label}`}
           icon={Eye}
           tone="info"
         />
         <AdminStatCard
-          label="Целевых действий"
-          value={formatNumber(summary.totals.totalActions)}
-          description="Клики по телефонам, сайту и мессенджерам"
+          label="Целевых действий всего"
+          value={formatNumber(selectedMetricPeriod.actions)}
+          description={`Период: ${selectedMetricPeriod.label}`}
           icon={BarChart3}
           tone="success"
         />
         <AdminStatCard
           label="Лимиты сегодня"
-          value={`${summary.usedToday}/${summary.dailyLimit} · ${summary.actionUsedToday}/${summary.actionDailyLimit}`}
-          description={`Просмотры и действия за ${summary.todayLabel}`}
+          value={`${summary.usedToday}/${summary.dailyLimit} просмотров · ${summary.actionUsedToday}/${summary.actionDailyLimit} действий`}
+          description={`Осталось ${viewRemaining} просмотров · ${actionRemaining} действий`}
           icon={ShieldCheck}
           tone={isViewLimitReached && isActionLimitReached ? "warning" : "default"}
         />
       </section>
 
       <AdminPanel
-        title="Разово добавить метрики всем карточкам"
-        description="Начисление попадёт в профильные счётчики, дневные графики и журнал текущего полугодия. Просмотры ограничены 30 в сутки, целевые действия - 20 в сутки."
+        title="Начисление метрик всем опубликованным карточкам"
+        description="Лимит считается по выбранному количеству на одну карточку: просмотры - 30 в сутки, целевые действия - 20 в сутки."
       >
+        {!hasPublishedCards ? (
+          <AdminNotice className="mb-4">
+            Нет опубликованных карточек для начисления статистики
+          </AdminNotice>
+        ) : null}
+
         <div className="grid gap-5 xl:grid-cols-2">
           <div className="rounded-[26px] border border-olive/10 bg-cream/55 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-olive">Просмотры</p>
                 <p className="mt-1 text-xs text-olive/52">
-                  Осталось {viewRemaining}/{summary.dailyLimit}
+                  Просмотры: осталось {viewRemaining}/{summary.dailyLimit}
                 </p>
               </div>
               <Eye className="h-5 w-5 text-primary/70" />
             </div>
+
+            {isViewLimitReached ? (
+              <AdminNotice className="mt-4">Лимит просмотров на сегодня исчерпан</AdminNotice>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
               {VIEW_QUICK_AMOUNTS.map((quickAmount) => {
@@ -245,9 +285,7 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
                 max={Math.max(1, viewRemaining)}
                 value={safeViewAmount}
                 disabled={isViewLimitReached}
-                onChange={(event) =>
-                  chooseViewAmount(Number.parseInt(event.target.value, 10) || 1)
-                }
+                onChange={(event) => chooseViewAmount(Number.parseInt(event.target.value, 10) || 1)}
                 className={cn(adminInputClass, "mt-2 max-w-[180px]")}
               />
             </label>
@@ -260,12 +298,17 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
 
             <button
               type="button"
-              disabled={isViewLimitReached || summary.totals.totalCards <= 0}
-              onClick={() => openConfirmation("views")}
+              disabled={
+                isSubmittingViews ||
+                submittingMetric !== null ||
+                isViewLimitReached ||
+                !hasPublishedCards
+              }
+              onClick={() => submitBoost("views")}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-55"
             >
               <Plus className="h-4 w-4" />
-              Начислить просмотры
+              {isSubmittingViews ? "Начисляю..." : "Начислить просмотры"}
             </button>
           </div>
 
@@ -274,11 +317,15 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
               <div>
                 <p className="text-sm font-semibold text-olive">Целевые действия</p>
                 <p className="mt-1 text-xs text-olive/52">
-                  Осталось {actionRemaining}/{summary.actionDailyLimit}
+                  Целевые действия: осталось {actionRemaining}/{summary.actionDailyLimit}
                 </p>
               </div>
               <BarChart3 className="h-5 w-5 text-primary/70" />
             </div>
+
+            {isActionLimitReached ? (
+              <AdminNotice className="mt-4">Лимит целевых действий на сегодня исчерпан</AdminNotice>
+            ) : null}
 
             <label className="mt-4 block">
               <span className="text-xs font-semibold uppercase tracking-[0.2em] text-olive/45">
@@ -343,20 +390,23 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
 
             <div className="mt-5 rounded-2xl bg-cream/78 p-4 text-sm leading-6 text-olive/68">
               Общая прибавка составит{" "}
-              <span className="font-semibold text-olive">
-                {formatNumber(totalBoostedActions)}
-              </span>{" "}
+              <span className="font-semibold text-olive">{formatNumber(totalBoostedActions)}</span>{" "}
               целевых действий.
             </div>
 
             <button
               type="button"
-              disabled={isActionLimitReached || summary.totals.totalCards <= 0}
-              onClick={() => openConfirmation("actions")}
+              disabled={
+                isSubmittingActions ||
+                submittingMetric !== null ||
+                isActionLimitReached ||
+                !hasPublishedCards
+              }
+              onClick={() => submitBoost("actions")}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-55"
             >
               <Plus className="h-4 w-4" />
-              Начислить действия
+              {isSubmittingActions ? "Начисляю..." : "Начислить действия"}
             </button>
           </div>
         </div>
@@ -370,72 +420,6 @@ export function AdminStatisticsBoostPanel({ initialSummary }: AdminStatisticsBoo
         {error ? <AdminNotice className="mt-4">{error}</AdminNotice> : null}
       </AdminPanel>
 
-      {pendingMetric ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <button
-            type="button"
-            aria-label="Закрыть подтверждение"
-            className="absolute inset-0 bg-midnight/45 backdrop-blur-sm"
-            onClick={() => setPendingMetric(null)}
-          />
-          <form
-            onSubmit={submitBoost}
-            className="relative w-full max-w-md rounded-[30px] border border-white/70 bg-white p-5 shadow-[0_28px_90px_rgba(43,31,25,0.26)]"
-          >
-            <button
-              type="button"
-              onClick={() => setPendingMetric(null)}
-              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl bg-cream text-olive"
-              aria-label="Закрыть"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="pr-10">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary/55">
-                Подтверждение
-              </p>
-              <h2 className="mt-3 text-xl font-semibold text-olive">
-                Введите пароль администратора
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-olive/62">
-                {pendingMetric === "actions"
-                  ? `Каждая опубликованная карточка получит +${safeActionAmount} к показателю "${LISTING_ACTION_LABELS[actionType]}".`
-                  : `Каждая опубликованная карточка получит +${safeViewAmount} просмотров.`}
-              </p>
-            </div>
-
-            <label className="mt-5 block">
-              <span className="text-sm font-semibold text-olive">Пароль</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className={cn(adminInputClass, "mt-2")}
-                autoFocus
-                required
-              />
-            </label>
-
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setPendingMetric(null)}
-                className="rounded-2xl border border-olive/10 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
-              >
-                Отмена
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-65"
-              >
-                {isSubmitting ? "Начисляю..." : "Подтвердить"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
     </>
   );
 }

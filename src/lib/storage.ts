@@ -46,6 +46,8 @@ export type PublicUploadStorageObject = {
 
 const localUploadsPublicDir = path.join(process.cwd(), "public", "uploads");
 const localPrivateStorageDir = path.join(process.cwd(), "storage", "private-uploads");
+const publicUploadExistsCacheTtlMs = 30 * 1000;
+const publicUploadExistsCache = new Map<string, { checkedAt: number; exists: boolean }>();
 const fallbackContentTypeByExtension: Record<string, string> = {
   avif: "image/avif",
   gif: "image/gif",
@@ -96,10 +98,7 @@ function getFallbackLocalMeta(key: string, visibility: StorageVisibility): Store
   };
 }
 
-function parseLocalMeta(
-  rawMeta: string | null,
-  fallback: StoredObjectMeta,
-): StoredObjectMeta {
+function parseLocalMeta(rawMeta: string | null, fallback: StoredObjectMeta): StoredObjectMeta {
   if (!rawMeta) {
     return fallback;
   }
@@ -191,6 +190,9 @@ async function uploadToLocalStorage(input: UploadInput): Promise<UploadResult> {
     contentDisposition,
     visibility,
   });
+  if (visibility === "public") {
+    publicUploadExistsCache.set(normalizedKey, { checkedAt: Date.now(), exists: true });
+  }
 
   return {
     url: visibility === "public" ? `/uploads/${normalizedKey}` : null,
@@ -205,6 +207,7 @@ async function deleteFromLocalStorage(key: string): Promise<void> {
     await rm(fullPath, { force: true }).catch(() => null);
     await rm(getLocalMetaPath(fullPath), { force: true }).catch(() => null);
   }
+  publicUploadExistsCache.set(normalizedKey, { checkedAt: Date.now(), exists: false });
 }
 
 async function readFromLocalStorage(key: string): Promise<StoredObject> {
@@ -322,7 +325,9 @@ function getManagedPublicBaseUrls(config: ReturnType<typeof getConfig>): string[
 
 async function readS3Body(body: unknown): Promise<Buffer> {
   if (body && typeof body === "object" && "transformToByteArray" in body) {
-    const bytes = await (body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
+    const bytes = await (
+      body as { transformToByteArray(): Promise<Uint8Array> }
+    ).transformToByteArray();
     return Buffer.from(bytes);
   }
 
@@ -336,6 +341,44 @@ export function isStorageConfigured(): boolean {
 export function isLocalStorageBackend(): boolean {
   const config = getConfig();
   return !hasRequiredS3Config(config) || !config.bucket;
+}
+
+async function localPublicUploadExists(key: string): Promise<boolean> {
+  const normalizedKey = normalizeStorageKey(key);
+  const cached = publicUploadExistsCache.get(normalizedKey);
+  const now = Date.now();
+
+  if (cached && now - cached.checkedAt < publicUploadExistsCacheTtlMs) {
+    return cached.exists;
+  }
+
+  const fullPath = path.join(localUploadsPublicDir, ...normalizedKey.split("/"));
+  const fileStat = await stat(fullPath).catch(() => null);
+  const exists = Boolean(fileStat?.isFile());
+  publicUploadExistsCache.set(normalizedKey, { checkedAt: now, exists });
+  return exists;
+}
+
+export async function filterExistingLocalPublicUploadUrls(
+  urls: readonly string[],
+): Promise<string[]> {
+  if (!isLocalStorageBackend()) {
+    return [...urls];
+  }
+
+  const filtered = await Promise.all(
+    urls.map(async (url) => {
+      const key = getStorageKeyFromPublicUrl(url);
+
+      if (!key) {
+        return url;
+      }
+
+      return (await localPublicUploadExists(key)) ? url : null;
+    }),
+  );
+
+  return filtered.filter((url): url is string => url !== null);
 }
 
 async function listLocalPublicUploadObjects(
@@ -480,10 +523,9 @@ export async function readFromStorage(key: string): Promise<StoredObject> {
     body,
     contentLength: body.byteLength,
     contentType: response.ContentType ?? "application/octet-stream",
-    contentDisposition:
-      response.ContentDisposition?.toLowerCase().startsWith("attachment")
-        ? "attachment"
-        : "inline",
+    contentDisposition: response.ContentDisposition?.toLowerCase().startsWith("attachment")
+      ? "attachment"
+      : "inline",
     visibility: "private",
   };
 }
@@ -531,7 +573,9 @@ export function getStorageKeyFromPublicUrl(url: string): string | null {
       try {
         const parsedUrl = new URL(trimmedUrl);
         if (parsedUrl.origin === normalizedBase && parsedUrl.pathname.startsWith("/uploads/")) {
-          return normalizeStorageKey(decodeURIComponent(parsedUrl.pathname.slice("/uploads/".length)));
+          return normalizeStorageKey(
+            decodeURIComponent(parsedUrl.pathname.slice("/uploads/".length)),
+          );
         }
       } catch {
         // Continue with the managed storage base candidates below.

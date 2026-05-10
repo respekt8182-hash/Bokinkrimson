@@ -1,6 +1,7 @@
 import {
   ExcursionOfferType,
   ExcursionStatus,
+  ObjectPaymentStatus,
   PaymentProvider,
   PaymentStatus,
   Prisma,
@@ -629,4 +630,118 @@ export async function getAdminPlacementRenewals(input?: {
     if (byValidUntil !== 0) return byValidUntil;
     return left.title.localeCompare(right.title, "ru");
   });
+}
+
+export async function hideExpiredPublishedListings(input?: {
+  now?: Date;
+  client?: DbClientLike;
+}): Promise<{ properties: number; excursions: number; transfers: number }> {
+  const now = input?.now ?? new Date();
+  const client = input?.client ?? db;
+  const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
+
+  const [properties, excursions, transfers] = await Promise.all([
+    client.property.findMany({
+      where: {
+        status: PropertyStatus.PUBLISHED,
+        isPublishedVisible: true,
+        ownerDeletedAt: null,
+        payments: { some: successfulRealPaymentWhere },
+      },
+      select: {
+        id: true,
+        payments: {
+          where: successfulRealPaymentWhere,
+          orderBy: [{ placementValidUntil: "desc" }, { paidAt: "desc" }, { createdAt: "desc" }],
+          select: renewalPaymentSelect,
+        },
+      },
+    }),
+    client.excursion.findMany({
+      where: {
+        status: ExcursionStatus.PUBLISHED,
+        isPublishedVisible: true,
+        deletedAt: null,
+        payments: { some: successfulRealPaymentWhere },
+      },
+      select: {
+        id: true,
+        payments: {
+          where: successfulRealPaymentWhere,
+          orderBy: [{ placementValidUntil: "desc" }, { paidAt: "desc" }, { createdAt: "desc" }],
+          select: renewalPaymentSelect,
+        },
+      },
+    }),
+    transferPaymentsSupported
+      ? client.transfer.findMany({
+          where: {
+            status: TransferStatus.PUBLISHED,
+            isPublishedVisible: true,
+            payments: { some: successfulRealPaymentWhere },
+          },
+          select: {
+            id: true,
+            payments: {
+              where: successfulRealPaymentWhere,
+              orderBy: [
+                { placementValidUntil: "desc" },
+                { paidAt: "desc" },
+                { createdAt: "desc" },
+              ],
+              select: renewalPaymentSelect,
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const expiredPropertyIds = properties
+    .filter((row) => {
+      const latest = getLatestPlacementPayment(row.payments);
+      return latest ? latest.validUntil.getTime() <= now.getTime() : false;
+    })
+    .map((row) => row.id);
+  const expiredExcursionIds = excursions
+    .filter((row) => {
+      const latest = getLatestPlacementPayment(row.payments);
+      return latest ? latest.validUntil.getTime() <= now.getTime() : false;
+    })
+    .map((row) => row.id);
+  const expiredTransferIds = transfers
+    .filter((row) => {
+      const latest = getLatestPlacementPayment(row.payments);
+      return latest ? latest.validUntil.getTime() <= now.getTime() : false;
+    })
+    .map((row) => row.id);
+
+  const [propertyResult, excursionResult, transferResult] = await Promise.all([
+    expiredPropertyIds.length > 0
+      ? client.property.updateMany({
+          where: { id: { in: expiredPropertyIds } },
+          data: {
+            isPublishedVisible: false,
+            paymentStatus: ObjectPaymentStatus.EXPIRED,
+          },
+        })
+      : Promise.resolve({ count: 0 }),
+    expiredExcursionIds.length > 0
+      ? client.excursion.updateMany({
+          where: { id: { in: expiredExcursionIds } },
+          data: { isPublishedVisible: false },
+        })
+      : Promise.resolve({ count: 0 }),
+    expiredTransferIds.length > 0
+      ? client.transfer.updateMany({
+          where: { id: { in: expiredTransferIds } },
+          data: { isPublishedVisible: false },
+        })
+      : Promise.resolve({ count: 0 }),
+  ]);
+
+  return {
+    properties: propertyResult.count,
+    excursions: excursionResult.count,
+    transfers: transferResult.count,
+  };
 }

@@ -1,47 +1,54 @@
 import { NextResponse } from "next/server";
-import { db, isDatabaseTableAvailable } from "@/lib/db";
+import { db } from "@/lib/db";
 import {
   normalizeListingActionType,
   normalizeListingEntityType,
   type ListingEntityType,
 } from "@/lib/listing-analytics";
+import { recordListingActionEvent } from "@/lib/listing-analytics-service";
 import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
   buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
 
-async function isPublicListingAvailable(entityType: ListingEntityType, entityId: string) {
+async function getPublicListingOwnerId(
+  entityType: ListingEntityType,
+  entityId: string,
+): Promise<string | null> {
   if (entityType === "property") {
-    return (
-      (await db.property.count({
-        where: {
-          id: entityId,
-          ...buildPublishedPropertyVisibilityWhere(),
-        },
-      })) > 0
-    );
+    const property = await db.property.findFirst({
+      where: {
+        id: entityId,
+        ...buildPublishedPropertyVisibilityWhere(),
+      },
+      select: { ownerId: true },
+    });
+
+    return property?.ownerId ?? null;
   }
 
   if (entityType === "excursion") {
-    return (
-      (await db.excursion.count({
-        where: {
-          id: entityId,
-          ...buildPublishedExcursionVisibilityWhere(),
-        },
-      })) > 0
-    );
-  }
-
-  return (
-    (await db.transfer.count({
+    const excursion = await db.excursion.findFirst({
       where: {
         id: entityId,
-        ...buildPublishedTransferVisibilityWhere(),
+        ...buildPublishedExcursionVisibilityWhere(),
       },
-    })) > 0
-  );
+      select: { ownerId: true },
+    });
+
+    return excursion?.ownerId ?? null;
+  }
+
+  const transfer = await db.transfer.findFirst({
+    where: {
+      id: entityId,
+      ...buildPublishedTransferVisibilityWhere(),
+    },
+    select: { ownerId: true },
+  });
+
+  return transfer?.ownerId ?? null;
 }
 
 export async function POST(request: Request) {
@@ -59,37 +66,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректная метрика" }, { status: 400 });
   }
 
-  if (!(await isPublicListingAvailable(entityType, entityId))) {
-    return NextResponse.json({ ok: true });
-  }
+  const ownerId = await getPublicListingOwnerId(entityType, entityId);
 
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-
-  if (!(await isDatabaseTableAvailable("EngagementLog"))) {
+  if (!ownerId) {
     return NextResponse.json({ ok: true });
   }
 
   try {
-    await db.engagementLog.upsert({
-      where: {
-        entityType_entityId_actionType_date: {
-          entityType,
-          entityId,
-          actionType,
-          date: today,
-        },
-      },
-      create: {
-        entityType,
-        entityId,
-        actionType,
-        date: today,
-        count: 1,
-      },
-      update: {
-        count: { increment: 1 },
-      },
+    await recordListingActionEvent({
+      entityType,
+      entityId,
+      actionType,
+      ownerId,
     });
   } catch {
     return NextResponse.json({ ok: true });

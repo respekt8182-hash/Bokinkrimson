@@ -34,13 +34,17 @@ import {
 import type {
   PublicAttractionCatalogItem,
   PublicAttractionCatalogResult,
+  PublicAttractionMapItem,
   PublicTransferCatalogItem,
   PublicTransferCatalogResult,
 } from "@/lib/public-marketplace";
 
 type MarketplaceCatalogMapKind = "attractions" | "transfers";
 
-type MarketplaceCatalogMapItem = PublicAttractionCatalogItem | PublicTransferCatalogItem;
+type MarketplaceCatalogMapItem =
+  | PublicAttractionCatalogItem
+  | PublicAttractionMapItem
+  | PublicTransferCatalogItem;
 
 type MarketplaceCatalogMapFilters =
   | PublicAttractionCatalogResult["filters"]
@@ -52,6 +56,8 @@ type MarketplaceCatalogMapProps = {
   resultsCount?: number;
   filters: MarketplaceCatalogMapFilters;
   mapTitle: string;
+  syncBoundsToUrl?: boolean;
+  mapItemsEndpoint?: string | null;
   children: ReactNode;
 };
 
@@ -72,6 +78,8 @@ const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
 const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
+const MAP_BOUNDS_UPDATE_DELAY_MS = 1200;
+const MAP_BOUNDS_PRECISION = 4;
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -113,7 +121,7 @@ function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | nu
     return null;
   }
 
-  return [south, west, north, east].map((value) => value.toFixed(6)).join(",");
+  return [south, west, north, east].map((value) => value.toFixed(MAP_BOUNDS_PRECISION)).join(",");
 }
 
 function resolveCatalogLocationZoom(radiusKm: number): number {
@@ -302,7 +310,7 @@ function AttractionMapPopupCard({
   onClose,
   variant = "default",
 }: {
-  item: PublicAttractionCatalogItem;
+  item: PublicAttractionCatalogItem | PublicAttractionMapItem;
   className?: string;
   onClose: () => void;
   variant?: "default" | "compact";
@@ -311,7 +319,8 @@ function AttractionMapPopupCard({
     [item.locationName, item.address].filter(Boolean).join(", ") || item.districtName || "Крым";
 
   const categoryLabel = item.category || item.tags[0] || null;
-  const summaryLabel = compactText(item.shortDescription ?? item.description, 78);
+  const description = "description" in item ? item.description : null;
+  const summaryLabel = compactText(item.shortDescription ?? description, 78);
 
   if (variant === "compact") {
     return (
@@ -622,11 +631,14 @@ export function MarketplaceCatalogMap({
   resultsCount,
   filters,
   mapTitle,
+  syncBoundsToUrl = true,
+  mapItemsEndpoint = null,
   children,
 }: MarketplaceCatalogMapProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const currentBoundsParam = searchParams.get("bounds")?.trim() || null;
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
@@ -636,6 +648,7 @@ export function MarketplaceCatalogMap({
   const mobileChromeProgressRef = useRef(0);
   const boundsBootstrapHandledRef = useRef(false);
   const boundsUpdateTimerRef = useRef<number | null>(null);
+  const lastRequestedBoundsRef = useRef<string | null>(currentBoundsParam);
   const mapPlacement = useCatalogMapPlacement();
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
@@ -645,8 +658,50 @@ export function MarketplaceCatalogMap({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
+  const [loadedMapItemsState, setLoadedMapItemsState] = useState<{
+    endpoint: string;
+    items: MarketplaceCatalogMapItem[];
+  } | null>(null);
   const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
   useBodyScrollLock(mapExpanded);
+
+  useEffect(() => {
+    const endpoint = mapItemsEndpoint ?? "";
+    if (!endpoint) {
+      return;
+    }
+
+    let isDisposed = false;
+
+    async function loadMapItems() {
+      try {
+        const response = await fetch(endpoint, {
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as { items?: MarketplaceCatalogMapItem[] };
+        if (!isDisposed && Array.isArray(payload.items)) {
+          setLoadedMapItemsState({ endpoint, items: payload.items });
+        }
+      } catch {
+        // The current page items remain usable if the expanded map payload fails.
+      }
+    }
+
+    void loadMapItems();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [mapItemsEndpoint]);
+
+  const loadedMapItems =
+    loadedMapItemsState?.endpoint === mapItemsEndpoint ? loadedMapItemsState.items : null;
+  const resolvedItems = loadedMapItems ?? items;
 
   useEffect(() => {
     const shouldHideNav =
@@ -669,7 +724,7 @@ export function MarketplaceCatalogMap({
       Number.isFinite(centerLat) &&
       Number.isFinite(centerLng);
 
-    return items
+    return resolvedItems
       .filter(
         (item): item is MarketplaceCatalogMapItem & { latitude: number; longitude: number } => {
           if (!hasCoordinates(item)) {
@@ -688,13 +743,16 @@ export function MarketplaceCatalogMap({
         ...point,
         isViewed: viewedPointIds.has(point.id),
       }));
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm, items, kind, viewedPointIds]);
+  }, [filters.centerLat, filters.centerLng, filters.radiusKm, kind, resolvedItems, viewedPointIds]);
 
   const visibleMapPointIds = useMemo(
     () => new Set(mapPoints.map((point) => point.id)),
     [mapPoints],
   );
-  const mapItemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const mapItemById = useMemo(
+    () => new Map(resolvedItems.map((item) => [item.id, item])),
+    [resolvedItems],
+  );
   const activePopupItem =
     activePointId && visibleMapPointIds.has(activePointId)
       ? (mapItemById.get(activePointId) ?? null)
@@ -702,7 +760,7 @@ export function MarketplaceCatalogMap({
   const highlightedMapPointId = hoveredPointId ?? hoveredCardId;
   const mapStatsLabel = `На карте: ${mapPoints.length}`;
   const foundCountLabel = formatRuCount(
-    resultsCount ?? items.length,
+    resultsCount ?? resolvedItems.length,
     "вариант",
     "варианта",
     "вариантов",
@@ -783,8 +841,6 @@ export function MarketplaceCatalogMap({
     kind,
     mapViewport,
   ]);
-  const currentBoundsParam = searchParams.get("bounds")?.trim() || null;
-
   const openMapFully = useCallback(() => {
     setMapExpanded(true);
   }, []);
@@ -798,24 +854,37 @@ export function MarketplaceCatalogMap({
 
   const handleMapBoundsChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
-      const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (!syncBoundsToUrl) {
+        return;
+      }
 
-      if (!boundsBootstrapHandledRef.current && !currentBoundsParam) {
+      const normalizedBounds = formatMapBoundsFilter(bounds);
+      const lastRequestedBounds = lastRequestedBoundsRef.current;
+
+      if (!boundsBootstrapHandledRef.current && !lastRequestedBounds) {
         boundsBootstrapHandledRef.current = true;
         return;
       }
       boundsBootstrapHandledRef.current = true;
 
-      if (normalizedBounds === currentBoundsParam) {
+      if (normalizedBounds === lastRequestedBounds) {
         return;
       }
 
       if (boundsUpdateTimerRef.current !== null) {
         window.clearTimeout(boundsUpdateTimerRef.current);
       }
+      lastRequestedBoundsRef.current = normalizedBounds;
 
       boundsUpdateTimerRef.current = window.setTimeout(() => {
-        const nextParams = new URLSearchParams(searchParams.toString());
+        boundsUpdateTimerRef.current = null;
+        const nextParams = new URLSearchParams(window.location.search);
+        const liveBounds = nextParams.get("bounds")?.trim() || null;
+
+        if (liveBounds === normalizedBounds) {
+          return;
+        }
+
         if (normalizedBounds) {
           nextParams.set("bounds", normalizedBounds);
         } else {
@@ -824,10 +893,13 @@ export function MarketplaceCatalogMap({
         nextParams.delete("page");
 
         const nextQuery = nextParams.toString();
-        router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
-      }, 260);
+        const nextPathname = window.location.pathname || pathname;
+        router.replace(nextQuery ? `${nextPathname}?${nextQuery}` : nextPathname, {
+          scroll: false,
+        });
+      }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [currentBoundsParam, pathname, router, searchParams],
+    [pathname, router, syncBoundsToUrl],
   );
 
   const setMobileChromeProgress = useCallback((progress: number, force = false) => {
@@ -1065,6 +1137,7 @@ export function MarketplaceCatalogMap({
   }, []);
 
   useEffect(() => {
+    lastRequestedBoundsRef.current = currentBoundsParam;
     if (!currentBoundsParam) {
       boundsBootstrapHandledRef.current = false;
     }
@@ -1173,7 +1246,10 @@ export function MarketplaceCatalogMap({
       aria-expanded={mobileSheetSnap !== "collapsed"}
       aria-controls="catalog-results"
     >
-      <span className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80" aria-hidden="true" />
+      <span
+        className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
+        aria-hidden="true"
+      />
       <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
         Найдено {foundCountLabel}
         <AppIcon
@@ -1247,7 +1323,9 @@ export function MarketplaceCatalogMap({
                 onMouseOut={handleCatalogCardMouseOut}
                 className={cn(
                   "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
-                  isMobileSheetExpanded ? "h-full pt-0" : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
+                  isMobileSheetExpanded
+                    ? "h-full pt-0"
+                    : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >

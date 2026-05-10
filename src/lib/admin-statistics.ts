@@ -10,7 +10,9 @@ import {
   buildPublishedPropertyVisibilityWhere,
   buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
+import { getStaticAttractions } from "@/lib/static-attractions";
 import {
+  LISTING_ACTION_LABELS,
   normalizeListingActionType,
   type ListingActionType,
 } from "@/lib/listing-analytics";
@@ -21,11 +23,32 @@ export const ADMIN_VIEW_BOOST_TIME_ZONE = "Europe/Moscow";
 
 const VIEW_BOOST_SETTING_PREFIX = "admin_view_boost";
 const ACTION_BOOST_SETTING_PREFIX = "admin_action_boost";
-const VIEW_BOOST_ENTITY_TYPES = ["property", "excursion", "transfer"] as const;
+const BOOST_JOURNAL_SETTING_KEY = "admin_metric_boost_journal";
+const BOOST_JOURNAL_LIMIT = 20;
+const VIEW_BOOST_ENTITY_TYPES = ["property", "excursion", "transfer", "attraction"] as const;
 
 type ViewBoostEntityType = (typeof VIEW_BOOST_ENTITY_TYPES)[number];
 
 type ViewBoostTargets = Record<ViewBoostEntityType, string[]>;
+
+export type AdminStatisticsJournalEntry = {
+  id: string;
+  createdAt: string;
+  metricType: "views" | "actions";
+  actionType: ListingActionType | null;
+  actionLabel: string | null;
+  amountPerCard: number;
+  cardsCount: number;
+  totalAdded: number;
+  adminLogin: string | null;
+};
+
+export type AdminStatisticsMetricPeriod = {
+  key: "last6Months" | `month:${string}`;
+  label: string;
+  views: number;
+  actions: number;
+};
 
 export type AdminStatisticsSummary = {
   dailyLimit: number;
@@ -43,10 +66,17 @@ export type AdminStatisticsSummary = {
     publishedExcursions: number;
     publishedTours: number;
     publishedTransfers: number;
+    publishedAttractions: number;
     totalCards: number;
     totalViews: number;
     totalActions: number;
   };
+  metricPeriods: {
+    defaultKey: AdminStatisticsMetricPeriod["key"];
+    last6Months: AdminStatisticsMetricPeriod;
+    months: AdminStatisticsMetricPeriod[];
+  };
+  journal: AdminStatisticsJournalEntry[];
 };
 
 export type AdminViewBoostResult = {
@@ -94,6 +124,33 @@ function getViewLogDate(date = new Date()): Date {
   return today;
 }
 
+function toMonthKey(date: Date): string {
+  const normalized = getViewLogDate(date);
+  return `${normalized.getUTCFullYear()}-${String(normalized.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthKeyToUtcDate(monthKey: string): Date {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(Date.UTC(year, (month ?? 1) - 1, 1));
+}
+
+function formatMonthLabel(monthKey: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(monthKeyToUtcDate(monthKey));
+}
+
+function getRollingSixMonthKeys(now = new Date()): string[] {
+  const today = getViewLogDate(now);
+  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 5, 1));
+
+  return Array.from({ length: 6 }, (_, index) =>
+    toMonthKey(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1))),
+  );
+}
+
 function getUsageSettingKey(todayKey = readMoscowDateKey()): string {
   return `${VIEW_BOOST_SETTING_PREFIX}:${todayKey}`;
 }
@@ -111,8 +168,124 @@ function sumValue(value: number | null | undefined): number {
   return Math.max(0, Number(value ?? 0));
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readPositiveInteger(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function parseBoostJournal(value: string | null | undefined): AdminStatisticsJournalEntry[] {
+  if (!value) {
+    return [];
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed
+    .map((item): AdminStatisticsJournalEntry | null => {
+      if (!isPlainRecord(item)) {
+        return null;
+      }
+
+      const metricType =
+        item.metricType === "actions" ? "actions" : item.metricType === "views" ? "views" : null;
+      const createdAt = readString(item.createdAt);
+      const id = readString(item.id);
+      const amountPerCard = readPositiveInteger(item.amountPerCard);
+      const cardsCount = readPositiveInteger(item.cardsCount);
+      const totalAdded = readPositiveInteger(item.totalAdded);
+
+      if (
+        !metricType ||
+        !createdAt ||
+        !id ||
+        amountPerCard <= 0 ||
+        cardsCount <= 0 ||
+        totalAdded <= 0
+      ) {
+        return null;
+      }
+
+      const actionType =
+        metricType === "actions" ? normalizeListingActionType(item.actionType) : null;
+
+      return {
+        id,
+        createdAt,
+        metricType,
+        actionType,
+        actionLabel:
+          metricType === "actions" && actionType
+            ? LISTING_ACTION_LABELS[actionType]
+            : readString(item.actionLabel),
+        amountPerCard,
+        cardsCount,
+        totalAdded,
+        adminLogin: readString(item.adminLogin),
+      };
+    })
+    .filter((item): item is AdminStatisticsJournalEntry => item !== null)
+    .slice(0, BOOST_JOURNAL_LIMIT);
+}
+
+async function getBoostJournal(client: DbClientLike): Promise<AdminStatisticsJournalEntry[]> {
+  const setting = await client.siteSetting.findUnique({
+    where: { key: BOOST_JOURNAL_SETTING_KEY },
+    select: { value: true },
+  });
+
+  return parseBoostJournal(setting?.value);
+}
+
+async function appendBoostJournalEntry(
+  tx: DbTransactionClient,
+  entry: Omit<AdminStatisticsJournalEntry, "id" | "createdAt" | "totalAdded">,
+) {
+  const currentSetting = await tx.siteSetting.findUnique({
+    where: { key: BOOST_JOURNAL_SETTING_KEY },
+    select: { value: true },
+  });
+  const currentJournal = parseBoostJournal(currentSetting?.value);
+  const createdAt = new Date().toISOString();
+  const nextEntry: AdminStatisticsJournalEntry = {
+    ...entry,
+    id: `${createdAt}:${entry.metricType}:${entry.actionType ?? "views"}`,
+    createdAt,
+    totalAdded: entry.amountPerCard * entry.cardsCount,
+  };
+  const nextJournal = [nextEntry, ...currentJournal].slice(0, BOOST_JOURNAL_LIMIT);
+
+  await tx.siteSetting.upsert({
+    where: { key: BOOST_JOURNAL_SETTING_KEY },
+    create: {
+      key: BOOST_JOURNAL_SETTING_KEY,
+      value: JSON.stringify(nextJournal),
+    },
+    update: {
+      value: JSON.stringify(nextJournal),
+    },
+  });
+}
+
 async function getPublishedViewBoostTargets(client: DbClientLike): Promise<ViewBoostTargets> {
-  const [properties, excursions, transfers] = await Promise.all([
+  const [properties, excursions, transfers, attractions] = await Promise.all([
     client.property.findMany({
       where: buildPublishedPropertyVisibilityWhere(),
       select: { id: true },
@@ -125,13 +298,43 @@ async function getPublishedViewBoostTargets(client: DbClientLike): Promise<ViewB
       where: buildPublishedTransferVisibilityWhere(),
       select: { id: true },
     }),
+    getStaticAttractions(),
   ]);
 
   return {
     property: properties.map((item) => item.id),
     excursion: excursions.map((item) => item.id),
     transfer: transfers.map((item) => item.id),
+    attraction: attractions.map((item) => item.id),
   };
+}
+
+function countViewBoostTargets(targets: ViewBoostTargets): number {
+  return VIEW_BOOST_ENTITY_TYPES.reduce((sum, entityType) => sum + targets[entityType].length, 0);
+}
+
+async function getTotalViewLogCount(
+  client: DbClientLike,
+  entityType: ViewBoostEntityType,
+  entityIds: string[],
+): Promise<number> {
+  if (entityIds.length === 0) {
+    return 0;
+  }
+
+  try {
+    const result = await client.viewLog.aggregate({
+      where: {
+        entityType,
+        entityId: { in: entityIds },
+      },
+      _sum: { count: true },
+    });
+
+    return sumValue(result._sum.count);
+  } catch {
+    return 0;
+  }
 }
 
 async function createMissingViewLogs(
@@ -239,6 +442,10 @@ export function isAdminViewBoostLimitError(error: unknown): boolean {
   return error instanceof Error && error.message === "ADMIN_BOOST_DAILY_LIMIT_REACHED";
 }
 
+export function isAdminBoostNoTargetsError(error: unknown): boolean {
+  return error instanceof Error && error.message === "ADMIN_BOOST_NO_TARGETS";
+}
+
 export function isAdminActionStatsUnavailableError(error: unknown): boolean {
   return error instanceof Error && error.message === "ADMIN_ACTION_STATS_TABLE_MISSING";
 }
@@ -315,20 +522,130 @@ async function incrementActionLogs(
   });
 }
 
-async function getTotalActions(client: DbClientLike): Promise<number> {
+async function getTotalActions(client: DbClientLike, targets: ViewBoostTargets): Promise<number> {
   if (!(await isDatabaseTableAvailable("EngagementLog", client))) {
     return 0;
   }
 
   try {
-    const result = await client.engagementLog.aggregate({
-      _sum: { count: true },
-    });
+    const results = await Promise.all(
+      VIEW_BOOST_ENTITY_TYPES.map(async (entityType) => {
+        const entityIds = targets[entityType];
 
-    return sumValue(result._sum.count);
+        if (entityIds.length === 0) {
+          return 0;
+        }
+
+        const result = await client.engagementLog.aggregate({
+          where: {
+            entityType,
+            entityId: { in: entityIds },
+          },
+          _sum: { count: true },
+        });
+
+        return sumValue(result._sum.count);
+      }),
+    );
+
+    return results.reduce((sum, value) => sum + value, 0);
   } catch {
     return 0;
   }
+}
+
+async function getAdminMonthlyMetricPeriods(
+  client: DbClientLike,
+  targets: ViewBoostTargets,
+  now = new Date(),
+): Promise<AdminStatisticsSummary["metricPeriods"]> {
+  const monthKeys = getRollingSixMonthKeys(now);
+  const firstMonth = monthKeys[0]!;
+  const lastMonth = monthKeys[monthKeys.length - 1]!;
+  const start = monthKeyToUtcDate(firstMonth);
+  const end = new Date(
+    Date.UTC(
+      monthKeyToUtcDate(lastMonth).getUTCFullYear(),
+      monthKeyToUtcDate(lastMonth).getUTCMonth() + 1,
+      1,
+    ),
+  );
+  const targetFilters = VIEW_BOOST_ENTITY_TYPES.filter(
+    (entityType) => targets[entityType].length > 0,
+  ).map((entityType) => ({
+    entityType,
+    entityId: { in: targets[entityType] },
+  }));
+  const viewByMonth = new Map(monthKeys.map((month) => [month, 0]));
+  const actionsByMonth = new Map(monthKeys.map((month) => [month, 0]));
+
+  if (targetFilters.length > 0) {
+    const [viewRows, actionRows] = await Promise.all([
+      client.viewLog.findMany({
+        where: {
+          OR: targetFilters,
+          date: {
+            gte: start,
+            lt: end,
+          },
+        },
+        select: {
+          date: true,
+          count: true,
+        },
+      }),
+      isDatabaseTableAvailable("EngagementLog", client).then((available) =>
+        available
+          ? client.engagementLog.findMany({
+              where: {
+                OR: targetFilters,
+                date: {
+                  gte: start,
+                  lt: end,
+                },
+              },
+              select: {
+                date: true,
+                count: true,
+              },
+            })
+          : [],
+      ),
+    ]);
+
+    for (const row of viewRows) {
+      const month = toMonthKey(row.date);
+      if (viewByMonth.has(month)) {
+        viewByMonth.set(month, (viewByMonth.get(month) ?? 0) + sumValue(row.count));
+      }
+    }
+
+    for (const row of actionRows) {
+      const month = toMonthKey(row.date);
+      if (actionsByMonth.has(month)) {
+        actionsByMonth.set(month, (actionsByMonth.get(month) ?? 0) + sumValue(row.count));
+      }
+    }
+  }
+
+  const months = monthKeys.map((month): AdminStatisticsMetricPeriod => ({
+    key: `month:${month}`,
+    label: formatMonthLabel(month),
+    views: viewByMonth.get(month) ?? 0,
+    actions: actionsByMonth.get(month) ?? 0,
+  }));
+  const last6Months: AdminStatisticsMetricPeriod = {
+    key: "last6Months",
+    label: "6 месяцев",
+    views: months.reduce((sum, month) => sum + month.views, 0),
+    actions: months.reduce((sum, month) => sum + month.actions, 0),
+  };
+
+  return {
+    defaultKey: months[months.length - 1]?.key ?? "last6Months",
+    last6Months,
+    months,
+  };
 }
 
 export async function getAdminStatisticsSummary(
@@ -341,47 +658,54 @@ export async function getAdminStatisticsSummary(
   const [
     usageSetting,
     actionUsageSetting,
+    boostTargets,
+    journal,
     propertyStats,
     excursionStats,
     tourStats,
     transferStats,
-    totalActions,
   ] = await Promise.all([
-      client.siteSetting.findUnique({
-        where: { key: usageKey },
-        select: { value: true, updatedAt: true },
-      }),
-      client.siteSetting.findUnique({
-        where: { key: actionUsageKey },
-        select: { value: true, updatedAt: true },
-      }),
-      client.property.aggregate({
-        where: buildPublishedPropertyVisibilityWhere(),
-        _count: { _all: true },
-        _sum: { profileViews: true },
-      }),
-      client.excursion.aggregate({
-        where: {
-          ...buildPublishedExcursionVisibilityWhere(),
-          offerType: ExcursionOfferType.EXCURSION,
-        },
-        _count: { _all: true },
-        _sum: { profileViews: true },
-      }),
-      client.excursion.aggregate({
-        where: {
-          ...buildPublishedExcursionVisibilityWhere(),
-          offerType: ExcursionOfferType.TOUR,
-        },
-        _count: { _all: true },
-        _sum: { profileViews: true },
-      }),
-      client.transfer.aggregate({
-        where: buildPublishedTransferVisibilityWhere(),
-        _count: { _all: true },
-        _sum: { profileViews: true },
-      }),
-      getTotalActions(client),
+    client.siteSetting.findUnique({
+      where: { key: usageKey },
+      select: { value: true, updatedAt: true },
+    }),
+    client.siteSetting.findUnique({
+      where: { key: actionUsageKey },
+      select: { value: true, updatedAt: true },
+    }),
+    getPublishedViewBoostTargets(client),
+    getBoostJournal(client),
+    client.property.aggregate({
+      where: buildPublishedPropertyVisibilityWhere(),
+      _count: { _all: true },
+      _sum: { profileViews: true },
+    }),
+    client.excursion.aggregate({
+      where: {
+        ...buildPublishedExcursionVisibilityWhere(),
+        offerType: ExcursionOfferType.EXCURSION,
+      },
+      _count: { _all: true },
+      _sum: { profileViews: true },
+    }),
+    client.excursion.aggregate({
+      where: {
+        ...buildPublishedExcursionVisibilityWhere(),
+        offerType: ExcursionOfferType.TOUR,
+      },
+      _count: { _all: true },
+      _sum: { profileViews: true },
+    }),
+    client.transfer.aggregate({
+      where: buildPublishedTransferVisibilityWhere(),
+      _count: { _all: true },
+      _sum: { profileViews: true },
+    }),
+  ]);
+  const [totalActions, attractionViews, metricPeriods] = await Promise.all([
+    getTotalActions(client, boostTargets),
+    getTotalViewLogCount(client, "attraction", boostTargets.attraction),
+    getAdminMonthlyMetricPeriods(client, boostTargets),
   ]);
 
   const usedToday = Math.min(ADMIN_VIEW_BOOST_DAILY_LIMIT, parseSettingUsage(usageSetting?.value));
@@ -393,6 +717,7 @@ export async function getAdminStatisticsSummary(
   const publishedExcursions = excursionStats._count._all;
   const publishedTours = tourStats._count._all;
   const publishedTransfers = transferStats._count._all;
+  const publishedAttractions = boostTargets.attraction.length;
 
   return {
     dailyLimit: ADMIN_VIEW_BOOST_DAILY_LIMIT,
@@ -412,23 +737,38 @@ export async function getAdminStatisticsSummary(
       publishedExcursions,
       publishedTours,
       publishedTransfers,
-      totalCards: publishedProperties + publishedExcursions + publishedTours + publishedTransfers,
+      publishedAttractions,
+      totalCards:
+        publishedProperties +
+        publishedExcursions +
+        publishedTours +
+        publishedTransfers +
+        publishedAttractions,
       totalViews:
         sumValue(propertyStats._sum.profileViews) +
         sumValue(excursionStats._sum.profileViews) +
         sumValue(tourStats._sum.profileViews) +
-        sumValue(transferStats._sum.profileViews),
+        sumValue(transferStats._sum.profileViews) +
+        attractionViews,
       totalActions,
     },
+    metricPeriods,
+    journal,
   };
 }
 
-export async function applyAdminViewBoost(amount: number): Promise<AdminViewBoostResult> {
+export async function applyAdminViewBoost(
+  amount: number,
+  adminLogin: string | null = null,
+): Promise<AdminViewBoostResult> {
   return db.$transaction(
     async (tx) => {
       const targets = await getPublishedViewBoostTargets(tx);
-      const updatedCards =
-        targets.property.length + targets.excursion.length + targets.transfer.length;
+      const updatedCards = countViewBoostTargets(targets);
+
+      if (updatedCards <= 0) {
+        throw new Error("ADMIN_BOOST_NO_TARGETS");
+      }
 
       await reserveDailyViewBoostUsage(tx, amount);
 
@@ -464,6 +804,14 @@ export async function applyAdminViewBoost(amount: number): Promise<AdminViewBoos
           incrementViewLogs(tx, entityType, targets[entityType], viewLogDate, amount),
         ),
       );
+      await appendBoostJournalEntry(tx, {
+        metricType: "views",
+        actionType: null,
+        actionLabel: null,
+        amountPerCard: amount,
+        cardsCount: updatedCards,
+        adminLogin,
+      });
 
       return {
         metricType: "views",
@@ -481,6 +829,7 @@ export async function applyAdminViewBoost(amount: number): Promise<AdminViewBoos
 export async function applyAdminActionBoost(
   amount: number,
   actionType: ListingActionType,
+  adminLogin: string | null = null,
 ): Promise<AdminActionBoostResult> {
   if (!(await isDatabaseTableAvailable("EngagementLog"))) {
     throw new Error("ADMIN_ACTION_STATS_TABLE_MISSING");
@@ -489,8 +838,11 @@ export async function applyAdminActionBoost(
   return db.$transaction(
     async (tx) => {
       const targets = await getPublishedViewBoostTargets(tx);
-      const updatedCards =
-        targets.property.length + targets.excursion.length + targets.transfer.length;
+      const updatedCards = countViewBoostTargets(targets);
+
+      if (updatedCards <= 0) {
+        throw new Error("ADMIN_BOOST_NO_TARGETS");
+      }
 
       await reserveDailyActionBoostUsage(tx, amount);
 
@@ -505,6 +857,14 @@ export async function applyAdminActionBoost(
           incrementActionLogs(tx, entityType, targets[entityType], actionType, viewLogDate, amount),
         ),
       );
+      await appendBoostJournalEntry(tx, {
+        metricType: "actions",
+        actionType,
+        actionLabel: LISTING_ACTION_LABELS[actionType],
+        amountPerCard: amount,
+        cardsCount: updatedCards,
+        adminLogin,
+      });
 
       return {
         metricType: "actions",

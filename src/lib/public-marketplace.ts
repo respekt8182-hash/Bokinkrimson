@@ -30,7 +30,6 @@ import {
   createStaticAttractionDraft,
   getStaticAttractionByIdentifier,
   getStaticAttractionCatalog,
-  getStaticAttractionCategories,
   getStaticAttractions,
   type StaticAttraction,
 } from "@/lib/static-attractions";
@@ -104,6 +103,22 @@ export type PublicAttractionCatalogItem = {
   mapUrl: string | null;
   updatedAt: string;
 };
+
+export type PublicAttractionMapItem = Pick<
+  PublicAttractionCatalogItem,
+  | "id"
+  | "path"
+  | "title"
+  | "category"
+  | "tags"
+  | "locationName"
+  | "districtName"
+  | "address"
+  | "latitude"
+  | "longitude"
+  | "shortDescription"
+  | "coverImageUrl"
+>;
 
 export type PublicTransferCatalogItem = {
   id: string;
@@ -505,6 +520,25 @@ function mapAttractionCatalogItem(
   };
 }
 
+function mapAttractionMapItem(row: StaticAttraction): PublicAttractionMapItem {
+  const photoUrls = row.gallery.map((image) => image.url);
+
+  return {
+    id: row.id,
+    path: buildPublicAttractionPath({ id: row.id, title: row.title, slug: row.slug }),
+    title: row.title,
+    category: row.category,
+    tags: row.tags.slice(0, 1),
+    locationName: row.locationName,
+    districtName: row.districtName,
+    address: row.address,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    shortDescription: row.shortDescription,
+    coverImageUrl: getFirstPhotoUrl(photoUrls),
+  };
+}
+
 function mapTransferCatalogItem(
   row: TransferRow,
   distanceKm: number | null,
@@ -650,6 +684,22 @@ export async function getPublicAttractionCatalog(
   };
 }
 
+export async function getPublicAttractionMapItems(
+  query: PublicAttractionCatalogQuery,
+): Promise<{ items: PublicAttractionMapItem[]; total: number }> {
+  const result = await getStaticAttractionCatalog({
+    ...query,
+    page: 1,
+    pageSize: 5000,
+    allowLargePageSize: true,
+  });
+
+  return {
+    items: result.entries.map(({ item }) => mapAttractionMapItem(item)),
+    total: result.total,
+  };
+}
+
 export async function getPublicTransferCatalog(
   query: PublicTransferCatalogQuery,
 ): Promise<PublicTransferCatalogResult> {
@@ -787,7 +837,13 @@ export async function getPublicTransferCatalog(
         return null;
       }
 
-      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, query.bounds ?? null)) {
+      if (
+        !isPointInsideBounds(
+          point?.latitude ?? null,
+          point?.longitude ?? null,
+          query.bounds ?? null,
+        )
+      ) {
         return null;
       }
 
@@ -1007,17 +1063,81 @@ export async function getOwnerPreviewTransferByIdentifier(
   return row ? mapTransferCatalogItem(row, null) : null;
 }
 
+export async function getAttractionMarketplaceDirectoryData(): Promise<{
+  attractionCategories: string[];
+  attractionTotal: number;
+  attractionLocationSuggestions: PublicMarketplaceLocationSuggestion[];
+}> {
+  const staticAttractions = await getStaticAttractions();
+  const attractionCategories = Array.from(
+    new Set(
+      staticAttractions
+        .map((item) => item.category)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ru"));
+  const attractionLocationCounts = new Map<
+    string,
+    { name: string; count: number; searchTerms: Set<string> }
+  >();
+
+  for (const item of staticAttractions) {
+    const locationName = item.locationName;
+    if (!locationName?.trim()) {
+      continue;
+    }
+
+    const name = locationName.trim();
+    const key = normalizeText(name);
+    const current = attractionLocationCounts.get(key);
+    const searchTerms = current?.searchTerms ?? new Set<string>();
+
+    for (const term of [item.locationName, item.districtName, ...item.locationAliases]) {
+      if (term?.trim()) searchTerms.add(term.trim());
+    }
+
+    attractionLocationCounts.set(key, {
+      name: current?.name ?? name,
+      count: (current?.count ?? 0) + 1,
+      searchTerms,
+    });
+  }
+
+  return {
+    attractionCategories,
+    attractionTotal: staticAttractions.length,
+    attractionLocationSuggestions: Array.from(attractionLocationCounts.values())
+      .sort((left, right) => {
+        if (right.count !== left.count) return right.count - left.count;
+        return left.name.localeCompare(right.name, "ru");
+      })
+      .map((item) => ({
+        id: slugify(item.name) || normalizeText(item.name),
+        name: item.name,
+        subtitle: `Крым, Россия · ${item.count} ${pluralize(item.count, ["место досуга", "места досуга", "мест досуга"])}`,
+        activeListingsCount: item.count,
+        searchTerms: Array.from(item.searchTerms),
+      })),
+  };
+}
+
 export async function getMarketplaceDirectoryData(): Promise<{
   attractionCategories: string[];
   transferTypes: string[];
   locationNames: string[];
+  attractionTotal: number;
+  transferTotal: number;
   attractionLocationSuggestions: PublicMarketplaceLocationSuggestion[];
   transferLocationSuggestions: PublicMarketplaceLocationSuggestion[];
 }> {
-  const [staticAttractions, staticAttractionCategories] = await Promise.all([
-    getStaticAttractions(),
-    getStaticAttractionCategories(),
-  ]);
+  const staticAttractions = await getStaticAttractions();
+  const staticAttractionCategories = Array.from(
+    new Set(
+      staticAttractions
+        .map((item) => item.category)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ru"));
   let transfers: Array<{
     status: TransferStatus;
     pendingEditStatus: TransferStatus | null;
@@ -1130,6 +1250,8 @@ export async function getMarketplaceDirectoryData(): Promise<{
     attractionCategories: staticAttractionCategories,
     transferTypes: [...transferTypes].sort((a, b) => a.localeCompare(b, "ru")),
     locationNames: [...locationNames].sort((a, b) => a.localeCompare(b, "ru")),
+    attractionTotal: staticAttractions.length,
+    transferTotal: transfers.length,
     attractionLocationSuggestions: toLocationSuggestions(attractionLocationCounts, "attractions"),
     transferLocationSuggestions: toLocationSuggestions(transferLocationCounts, "transfers"),
   };

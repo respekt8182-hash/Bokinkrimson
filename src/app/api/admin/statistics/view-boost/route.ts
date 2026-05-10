@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { validateAdminCredentials } from "@/lib/admin-password-auth";
 import { getAdminSession } from "@/lib/admin-auth";
+import { HIDDEN_STATS_PIN } from "@/lib/admin-hidden-statistics";
 import {
   ADMIN_ACTION_BOOST_DAILY_LIMIT,
   ADMIN_VIEW_BOOST_DAILY_LIMIT,
@@ -8,6 +8,7 @@ import {
   applyAdminViewBoost,
   getAdminStatisticsSummary,
   isAdminActionStatsUnavailableError,
+  isAdminBoostNoTargetsError,
   isAdminViewBoostLimitError,
   normalizeActionBoostAmount,
   normalizeActionBoostType,
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     amount?: unknown;
     metricType?: unknown;
     actionType?: unknown;
-    password?: unknown;
+    pin?: unknown;
   } | null;
 
   const metricType = body?.metricType === "actions" ? "actions" : "views";
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     metricType === "actions"
       ? normalizeActionBoostAmount(body?.amount)
       : normalizeViewBoostAmount(body?.amount);
-  const password = typeof body?.password === "string" ? body.password : "";
+  const pin = typeof body?.pin === "string" ? body.pin : "";
 
   if (amount === null) {
     const limit =
@@ -58,35 +59,41 @@ export async function POST(request: Request) {
     );
   }
 
-  const actionType =
-    metricType === "actions" ? normalizeActionBoostType(body?.actionType) : null;
+  const actionType = metricType === "actions" ? normalizeActionBoostType(body?.actionType) : null;
 
   if (metricType === "actions" && !actionType) {
     return NextResponse.json({ error: "Выберите тип целевого действия." }, { status: 400 });
   }
 
-  if (!password) {
-    return NextResponse.json({ error: "Введите пароль администратора." }, { status: 400 });
-  }
-
-  if (!(await validateAdminCredentials(admin.login, password))) {
-    return NextResponse.json({ error: "Пароль администратора не подошёл." }, { status: 401 });
+  if (pin !== HIDDEN_STATS_PIN) {
+    return NextResponse.json({ error: "Неверный PIN-код" }, { status: 401 });
   }
 
   try {
     const result =
       metricType === "actions" && actionType
-        ? await applyAdminActionBoost(amount, actionType)
-        : await applyAdminViewBoost(amount);
+        ? await applyAdminActionBoost(amount, actionType, admin.login)
+        : await applyAdminViewBoost(amount, admin.login);
     return NextResponse.json(result);
   } catch (error) {
     if (isAdminActionStatsUnavailableError(error)) {
       return NextResponse.json(
         {
-          error: "Таблица целевых действий ещё не создана. Примените миграцию Prisma и повторите попытку.",
+          error:
+            "Таблица целевых действий ещё не создана. Примените миграцию Prisma и повторите попытку.",
           summary: await getAdminStatisticsSummary(),
         },
         { status: 503 },
+      );
+    }
+
+    if (isAdminBoostNoTargetsError(error)) {
+      return NextResponse.json(
+        {
+          error: "Нет опубликованных карточек для начисления статистики",
+          summary: await getAdminStatisticsSummary(),
+        },
+        { status: 409 },
       );
     }
 
@@ -108,7 +115,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Не удалось начислить метрику. Попробуйте ещё раз." },
+      { error: "Не удалось сохранить изменения. Попробуйте ещё раз." },
       { status: 500 },
     );
   }

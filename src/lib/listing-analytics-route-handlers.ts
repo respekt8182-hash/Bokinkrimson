@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/admin-auth";
-import { normalizeListingEntityType } from "@/lib/listing-analytics";
+import { getEditorSession } from "@/lib/editor-access";
+import type { ListingEntityType } from "@/lib/listing-analytics";
 import {
   ListingAnalyticsServiceError,
+  getListingAnalyticsEntityForEditor,
   getListingAnalyticsStatsPayload,
   runManualListingAnalyticsRefresh,
   type ListingAnalyticsPeriodKey,
@@ -53,20 +54,23 @@ function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : "Не удалось загрузить статистику.";
 }
 
-export async function GET(request: Request) {
-  const admin = await getAdminSession();
+export async function handleListingAnalyticsGet(
+  request: Request,
+  entityType: ListingEntityType,
+  entityId: string,
+) {
+  const editor = await getEditorSession();
+  const entity = await getListingAnalyticsEntityForEditor(entityType, entityId, editor);
 
-  if (!admin) {
-    return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
+  if (!editor) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  if (!entity) {
+    return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
   }
 
   const url = new URL(request.url);
-  const entityType = normalizeListingEntityType(url.searchParams.get("entityType"));
-  const entityId = url.searchParams.get("id")?.trim() ?? "";
-
-  if (!entityType || !entityId) {
-    return NextResponse.json({ error: "Некорректная карточка" }, { status: 400 });
-  }
 
   try {
     return NextResponse.json(
@@ -81,33 +85,19 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  const admin = await getAdminSession();
+export async function handleListingAnalyticsRefresh(
+  entityType: ListingEntityType,
+  entityId: string,
+) {
+  const editor = await getEditorSession();
 
-  if (!admin) {
-    return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
-  }
-
-  const url = new URL(request.url);
-  const entityType = normalizeListingEntityType(url.searchParams.get("entityType"));
-  const entityId = url.searchParams.get("id")?.trim() ?? "";
-
-  if (!entityType || !entityId) {
-    return NextResponse.json({ error: "Некорректная карточка" }, { status: 400 });
+  if (!editor) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
 
   try {
-    return NextResponse.json(
-      await runManualListingAnalyticsRefresh({
-        entityType,
-        entityId,
-        editor: {
-          kind: "admin",
-          id: admin.id,
-          isAdmin: true,
-        },
-      }),
-    );
+    const payload = await runManualListingAnalyticsRefresh({ entityType, entityId, editor });
+    return NextResponse.json(payload);
   } catch (error) {
     return NextResponse.json({ error: messageFromError(error) }, { status: statusFromError(error) });
   }
