@@ -50,7 +50,7 @@ export default async function HomePage() {
         cities={cities}
         locationSuggestions={locationDirectory.map((item) => item.name)}
         publishedPropertiesCount={homeStats.publishedPropertiesCount}
-        publishedExcursionsCount={homeStats.publishedExcursionsCount}
+        publishedAttractionsCount={homeStats.publishedAttractionsCount}
       />
 
       <Suspense fallback={null}>

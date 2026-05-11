@@ -88,7 +88,7 @@ type HomeSearchShowcaseProps = {
   cities: HomeCityShowcaseItem[];
   locationSuggestions: string[];
   publishedPropertiesCount: number | null;
-  publishedExcursionsCount: number | null;
+  publishedAttractionsCount: number;
   initialPopularSuggestionsByDirection?: Partial<Record<Direction, HomeSearchSuggestionItem[]>>;
 };
 
@@ -968,7 +968,7 @@ export function HomeSearchShowcase({
   cities,
   locationSuggestions,
   publishedPropertiesCount,
-  publishedExcursionsCount,
+  publishedAttractionsCount,
   initialPopularSuggestionsByDirection,
 }: HomeSearchShowcaseProps) {
   const router = useRouter();
@@ -1104,22 +1104,15 @@ export function HomeSearchShowcase({
     };
   }, [cities.length, publishedPropertiesCount]);
   const leisureStat = useMemo(() => {
-    if (publishedExcursionsCount !== null) {
-      return {
-        value: countFormatter.format(publishedExcursionsCount),
-        label: pluralize(publishedExcursionsCount, [
-          "вариант досуга",
-          "варианта досуга",
-          "вариантов досуга",
-        ]),
-      };
-    }
-
     return {
-      value: "0",
-      label: "вариантов досуга",
+      value: countFormatter.format(publishedAttractionsCount),
+      label: pluralize(publishedAttractionsCount, [
+        "достопримечательность",
+        "достопримечательности",
+        "достопримечательностей",
+      ]),
     };
-  }, [publishedExcursionsCount]);
+  }, [publishedAttractionsCount]);
   const starterProgram = useMemo(() => {
     if (publishedPropertiesCount === null) {
       return {
