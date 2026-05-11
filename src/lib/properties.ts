@@ -93,6 +93,7 @@ export type PropertyProgress = {
 
 export type SerializedProperty = {
   id: string;
+  publicId: number | null;
   ownerId: string;
   type: string | null;
   typeLabel: string | null;
@@ -1236,6 +1237,7 @@ export function getPropertyDisplayNumberFromOrderedIds(
 
 export function serializeProperty(property: {
   id: string;
+  publicId?: number | null;
   ownerId: string;
   type: string | null;
   locationId: string | null;
@@ -1332,6 +1334,7 @@ export function serializeProperty(property: {
 
   return {
     id: property.id,
+    publicId: property.publicId ?? null,
     ownerId: property.ownerId,
     type: property.type,
     typeLabel: property.type ? (propertyTypeById[property.type]?.name ?? property.type) : null,

@@ -48,6 +48,21 @@ type BreakdownItem = {
   count: number;
 };
 
+type ListingAnalyticsRawEvent = {
+  id: string;
+  entityType: "property" | "excursion" | "transfer";
+  entityId: string;
+  entityPublicId: number | null;
+  eventType: string;
+  occurredAt: string;
+  actorRole: "guest" | "owner" | "admin";
+  userId: string | null;
+  isUnique: boolean;
+  channel: string | null;
+  leadNumber: string | null;
+  source: string | null;
+};
+
 type AnalyticsMonth = PeriodSummary & {
   month: string;
   label: string;
@@ -59,6 +74,7 @@ type AnalyticsMonth = PeriodSummary & {
 type StatsData = {
   entityType: "property" | "excursion" | "transfer";
   entityId: string;
+  entityPublicId: number | null;
   entityName: string;
   lastUpdatedAt: string | null;
   nextAutoUpdateAt: string | null;
@@ -94,6 +110,7 @@ type StatsData = {
     lastEventAt: string | null;
     lastError: string | null;
   };
+  adminRawEvents?: ListingAnalyticsRawEvent[];
 };
 
 type ListingStatsButtonProps = {
@@ -338,6 +355,123 @@ function BreakdownPanel({ data }: { data: StatsData }) {
   );
 }
 
+const ACTOR_ROLE_LABELS: Record<ListingAnalyticsRawEvent["actorRole"], string> = {
+  guest: "Гость",
+  owner: "Владелец",
+  admin: "Админ",
+};
+
+function getRawEventLabel(eventType: string): string {
+  if (eventType === "view") return "Просмотр";
+  if (eventType === "lead_copy") return "Копирование лида";
+  if (eventType === "lead_form") return "Формирование лида";
+  if (eventType === "lead_phrase") return "Открытие формы";
+  if (eventType.startsWith("phone_")) return "Звонок";
+  if (eventType === "whatsapp") return "WhatsApp";
+  if (eventType === "telegram") return "Telegram";
+  if (eventType === "max") return "MAX";
+  if (eventType === "website") return "Сайт";
+  return eventType;
+}
+
+function RawEventsPanel({ events }: { events: ListingAnalyticsRawEvent[] }) {
+  const [roleFilter, setRoleFilter] = useState<"all" | ListingAnalyticsRawEvent["actorRole"]>(
+    "all",
+  );
+  const [eventFilter, setEventFilter] = useState("all");
+  const eventTypes = useMemo(
+    () => Array.from(new Set(events.map((event) => event.eventType))).sort(),
+    [events],
+  );
+  const filteredEvents = useMemo(
+    () =>
+      events.filter(
+        (event) =>
+          (roleFilter === "all" || event.actorRole === roleFilter) &&
+          (eventFilter === "all" || event.eventType === eventFilter),
+      ),
+    [eventFilter, events, roleFilter],
+  );
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="rounded-xl border border-olive/10 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-olive">Технические события</h3>
+          <p className="mt-0.5 text-xs text-olive/55">
+            Видны администратору: сырые клики, роли, повторы, каналы и номера обращений.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={roleFilter}
+            onChange={(event) =>
+              setRoleFilter(event.target.value as "all" | ListingAnalyticsRawEvent["actorRole"])
+            }
+            className="h-9 rounded-lg border border-olive/12 bg-white px-2.5 text-xs text-olive outline-none"
+          >
+            <option value="all">Все роли</option>
+            <option value="guest">Гости</option>
+            <option value="owner">Владельцы</option>
+            <option value="admin">Админы</option>
+          </select>
+          <select
+            value={eventFilter}
+            onChange={(event) => setEventFilter(event.target.value)}
+            className="h-9 rounded-lg border border-olive/12 bg-white px-2.5 text-xs text-olive outline-none"
+          >
+            <option value="all">Все события</option>
+            {eventTypes.map((eventType) => (
+              <option key={eventType} value={eventType}>
+                {getRawEventLabel(eventType)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-lg border border-olive/10">
+        <div className="grid grid-cols-[1.15fr_0.75fr_0.7fr_0.65fr_0.75fr_1fr] gap-2 bg-cream/70 px-3 py-2 text-[11px] font-semibold uppercase text-olive/50">
+          <span>Событие</span>
+          <span>Роль</span>
+          <span>Повтор</span>
+          <span>Канал</span>
+          <span>Обращение</span>
+          <span>Источник</span>
+        </div>
+        <div className="max-h-80 overflow-y-auto divide-y divide-olive/8">
+          {filteredEvents.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-olive/55">По выбранным фильтрам событий нет.</p>
+          ) : (
+            filteredEvents.map((event) => (
+              <div
+                key={event.id}
+                className="grid grid-cols-[1.15fr_0.75fr_0.7fr_0.65fr_0.75fr_1fr] gap-2 px-3 py-2 text-xs text-olive/68"
+              >
+                <span>
+                  <b className="block text-olive">{getRawEventLabel(event.eventType)}</b>
+                  {formatDateTime(event.occurredAt)}
+                </span>
+                <span>{ACTOR_ROLE_LABELS[event.actorRole]}</span>
+                <span>{event.isUnique ? "Уник." : "Повтор"}</span>
+                <span>{event.channel ?? "—"}</span>
+                <span>{event.leadNumber ?? "—"}</span>
+                <span className="truncate" title={event.source ?? undefined}>
+                  {event.source ?? "—"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MonthlyJournal({
   months,
   activePeriod,
@@ -539,7 +673,10 @@ function StatsModal({
                 <h2 className="truncate text-base font-semibold text-olive sm:text-lg">
                   Статистика карточки
                 </h2>
-                <p className="truncate text-xs text-olive/58">{data?.entityName ?? entityName}</p>
+                <p className="truncate text-xs text-olive/58">
+                  {data?.entityName ?? entityName}
+                  {data?.entityPublicId ? ` · ID ${data.entityPublicId}` : ""}
+                </p>
               </div>
             </div>
           </div>
@@ -742,12 +879,14 @@ function StatsModal({
                       лид-фразе или форме сообщения.
                     </p>
                     <p>
-                      Цифры не онлайн: события записываются сразу, а статистика для кабинета
-                      пересчитывается агрегатами примерно раз в сутки.
+                      Владелец видит очищенную гостевую статистику: свои действия владельца,
+                      действия администратора и короткие повторы не увеличивают целевые показатели.
                     </p>
                   </div>
                 </section>
               </div>
+
+              {data.adminRawEvents ? <RawEventsPanel events={data.adminRawEvents} /> : null}
             </div>
           ) : null}
         </div>

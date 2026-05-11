@@ -5490,7 +5490,7 @@ export function ExcursionEditor({
                           (value) => normalizeTelegramProfileUrl(value) ?? value.trim(),
                         )
                       }
-                      placeholder="Telegram: @username или username"
+                      placeholder="Telegram: @username, username или телефон"
                       aria-label="Telegram"
                       className="pl-10 pr-10"
                     />

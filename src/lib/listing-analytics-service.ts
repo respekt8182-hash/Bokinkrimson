@@ -19,10 +19,12 @@ import {
   LISTING_ANALYTICS_MANUAL_REFRESH_LIMIT,
   LISTING_ANALYTICS_REFRESH_LOCK_MINUTES,
   LISTING_ANALYTICS_STALE_AFTER_HOURS,
+  getListingAnalyticsDedupWindowMinutes,
   getListingAnalyticsAutoUpdateHour,
   getListingAnalyticsCronBatchLimit,
   getListingAnalyticsTimeZone,
 } from "@/lib/listing-analytics-config";
+import type { ListingAnalyticsActorRole } from "@/lib/listing-analytics-request";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -55,6 +57,21 @@ export type ListingAnalyticsBreakdownItem = {
   count: number;
 };
 
+export type ListingAnalyticsRawEvent = {
+  id: string;
+  entityType: ListingEntityType;
+  entityId: string;
+  entityPublicId: number | null;
+  eventType: string;
+  occurredAt: string;
+  actorRole: ListingAnalyticsActorRole;
+  userId: string | null;
+  isUnique: boolean;
+  channel: string | null;
+  leadNumber: string | null;
+  source: string | null;
+};
+
 export type ListingAnalyticsPeriodSummary = {
   views: number;
   actions: number;
@@ -78,6 +95,7 @@ export type ListingAnalyticsMonth = ListingAnalyticsPeriodSummary & {
 export type ListingAnalyticsPayload = {
   entityType: ListingEntityType;
   entityId: string;
+  entityPublicId: number | null;
   entityName: string;
   ownerId: string | null;
   lastUpdatedAt: string | null;
@@ -114,10 +132,12 @@ export type ListingAnalyticsPayload = {
     lastEventAt: string | null;
     lastError: string | null;
   };
+  adminRawEvents?: ListingAnalyticsRawEvent[];
 };
 
 type ListingAnalyticsEntity = {
   id: string;
+  publicId: number | null;
   ownerId: string;
   name: string;
   totalViews: number;
@@ -378,6 +398,7 @@ async function resolveListingEntity(
       where: { id: entityId, ownerDeletedAt: null },
       select: {
         id: true,
+        publicId: true,
         ownerId: true,
         name: true,
         profileViews: true,
@@ -393,6 +414,7 @@ async function resolveListingEntity(
 
     return {
       id: property.id,
+      publicId: property.publicId ?? null,
       ownerId: property.ownerId,
       name: property.name?.trim() || "Объект размещения",
       totalViews: Math.max(0, property.profileViews),
@@ -407,6 +429,7 @@ async function resolveListingEntity(
       where: { id: entityId, deletedAt: null },
       select: {
         id: true,
+        publicId: true,
         ownerId: true,
         title: true,
         profileViews: true,
@@ -423,6 +446,7 @@ async function resolveListingEntity(
 
     return {
       id: excursion.id,
+      publicId: excursion.publicId ?? null,
       ownerId: excursion.ownerId,
       name:
         excursion.title?.trim() ||
@@ -440,6 +464,7 @@ async function resolveListingEntity(
     where: { id: entityId },
     select: {
       id: true,
+      publicId: true,
       ownerId: true,
       title: true,
       profileViews: true,
@@ -455,6 +480,7 @@ async function resolveListingEntity(
 
   return {
     id: transfer.id,
+    publicId: transfer.publicId ?? null,
     ownerId: transfer.ownerId,
     name: transfer.title?.trim() || "Трансфер",
     totalViews: Math.max(0, transfer.profileViews),
@@ -796,6 +822,7 @@ function buildLegacyPayload(
   return {
     entityType,
     entityId: entity.id,
+    entityPublicId: entity.publicId,
     entityName: entity.name,
     ownerId: entity.ownerId,
     lastUpdatedAt: null,
@@ -964,6 +991,66 @@ function collectPeriod(
   };
 }
 
+function normalizeActorRole(value: string): ListingAnalyticsActorRole {
+  return value === "owner" || value === "admin" ? value : "guest";
+}
+
+async function getRawListingAnalyticsEvents(input: {
+  entityType: ListingEntityType;
+  entityId: string;
+  start: Date;
+  end: Date;
+  limit?: number;
+}): Promise<ListingAnalyticsRawEvent[]> {
+  if (!(await isDatabaseTableAvailable("ListingAnalyticsEvent"))) {
+    return [];
+  }
+
+  const rows = await db.listingAnalyticsEvent
+    .findMany({
+      where: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        occurredAt: {
+          gte: input.start,
+          lt: new Date(input.end.getTime() + DAY_MS),
+        },
+      },
+      select: {
+        id: true,
+        entityType: true,
+        entityId: true,
+        entityPublicId: true,
+        eventType: true,
+        occurredAt: true,
+        actorRole: true,
+        userId: true,
+        isUnique: true,
+        channel: true,
+        leadNumber: true,
+        source: true,
+      },
+      orderBy: { occurredAt: "desc" },
+      take: input.limit ?? 100,
+    })
+    .catch(() => []);
+
+  return rows.map((row) => ({
+    id: row.id,
+    entityType: row.entityType as ListingEntityType,
+    entityId: row.entityId,
+    entityPublicId: row.entityPublicId ?? null,
+    eventType: row.eventType,
+    occurredAt: row.occurredAt.toISOString(),
+    actorRole: normalizeActorRole(row.actorRole),
+    userId: row.userId ?? null,
+    isUnique: row.isUnique,
+    channel: row.channel ?? null,
+    leadNumber: row.leadNumber ?? null,
+    source: row.source ?? null,
+  }));
+}
+
 async function getManualRefreshState(
   entityType: ListingEntityType,
   entityId: string,
@@ -1010,6 +1097,7 @@ export async function getListingAnalyticsStatsPayload(input: {
   entityId: string;
   periodKey?: ListingAnalyticsPeriodKey;
   allowInitialRefresh?: boolean;
+  includeRawEvents?: boolean;
 }): Promise<ListingAnalyticsPayload> {
   const entity = await resolveListingEntity(input.entityType, input.entityId);
 
@@ -1172,10 +1260,20 @@ export async function getListingAnalyticsStatsPayload(input: {
     0,
     LISTING_ANALYTICS_MANUAL_REFRESH_LIMIT - state.usedToday,
   );
+  const adminRawEvents = input.includeRawEvents
+    ? await getRawListingAnalyticsEvents({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        start: selectedRange.start,
+        end: selectedRange.end,
+        limit: 200,
+      })
+    : undefined;
 
   return {
     entityType: input.entityType,
     entityId: input.entityId,
+    entityPublicId: entity.publicId,
     entityName: entity.name,
     ownerId: entity.ownerId,
     lastUpdatedAt: state.lastUpdatedAt?.toISOString() ?? null,
@@ -1235,6 +1333,7 @@ export async function getListingAnalyticsStatsPayload(input: {
       lastEventAt: state.lastEventAt?.toISOString() ?? null,
       lastError: state.lastError,
     },
+    ...(adminRawEvents ? { adminRawEvents } : {}),
   };
 }
 
@@ -1382,113 +1481,415 @@ async function updateRefreshStateLastEvent(input: {
   });
 }
 
+export type RecordListingAnalyticsResult = {
+  isUnique: boolean;
+  countedForOwner: boolean;
+};
+
+type RecordListingEventBaseInput = {
+  entityType: ListingEntityType;
+  entityId: string;
+  entityPublicId?: number | null;
+  ownerId?: string | null;
+  actorRole?: ListingAnalyticsActorRole;
+  userId?: string | null;
+  visitorKey?: string | null;
+  channel?: string | null;
+  leadId?: string | null;
+  leadNumber?: string | null;
+  source?: string | null;
+  metadata?: Prisma.InputJsonObject | null;
+  occurredAt?: Date;
+};
+
+export type ListingLeadResult = {
+  id: string;
+  leadNumber: string;
+  sequence: number;
+  entityPublicId: number | null;
+  createdAt: string;
+};
+
+let listingLeadStoragePromise: Promise<boolean> | null = null;
+
+function shouldCountEventForOwner(actorRole: ListingAnalyticsActorRole, isUnique: boolean): boolean {
+  return actorRole === "guest" && isUnique;
+}
+
+function getListingEventChannel(actionType: ListingActionType): string | null {
+  if (actionType.startsWith("phone_")) {
+    return "phone";
+  }
+
+  if (
+    actionType === "whatsapp" ||
+    actionType === "telegram" ||
+    actionType === "vk" ||
+    actionType === "vk_bot" ||
+    actionType === "max" ||
+    actionType === "ok" ||
+    actionType === "website"
+  ) {
+    return actionType;
+  }
+
+  if (actionType === "lead_copy") {
+    return "lead_copy";
+  }
+
+  if (actionType === "lead_form" || actionType === "lead_phrase" || actionType === "request") {
+    return "lead";
+  }
+
+  if (actionType === "booking") {
+    return "booking";
+  }
+
+  return null;
+}
+
+function formatListingLeadNumber(sequence: number): string {
+  return `KV-${String(sequence).padStart(6, "0")}`;
+}
+
+async function createListingLeadStorage(): Promise<boolean> {
+  await db.$executeRaw(Prisma.sql`CREATE SEQUENCE IF NOT EXISTS listing_lead_sequence_seq START WITH 1`);
+  await db.$executeRaw(Prisma.sql`
+    CREATE TABLE IF NOT EXISTS "ListingLead" (
+      "id" TEXT NOT NULL,
+      "sequence" INTEGER NOT NULL DEFAULT nextval('listing_lead_sequence_seq'),
+      "leadNumber" VARCHAR(20) NOT NULL,
+      "entityType" VARCHAR(20) NOT NULL,
+      "entityId" TEXT NOT NULL,
+      "entityPublicId" INTEGER,
+      "ownerId" TEXT,
+      "actorRole" VARCHAR(20) NOT NULL DEFAULT 'guest',
+      "userId" TEXT,
+      "visitorKey" VARCHAR(80),
+      "source" TEXT,
+      "metadata" JSONB,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "ListingLead_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await db.$executeRaw(
+    Prisma.sql`CREATE UNIQUE INDEX IF NOT EXISTS "ListingLead_sequence_key" ON "ListingLead"("sequence")`,
+  );
+  await db.$executeRaw(
+    Prisma.sql`CREATE UNIQUE INDEX IF NOT EXISTS "ListingLead_leadNumber_key" ON "ListingLead"("leadNumber")`,
+  );
+  await db.$executeRaw(
+    Prisma.sql`CREATE INDEX IF NOT EXISTS "listing_lead_entity_created_idx" ON "ListingLead"("entityType", "entityId", "createdAt")`,
+  );
+  await db.$executeRaw(
+    Prisma.sql`CREATE INDEX IF NOT EXISTS "listing_lead_public_entity_created_idx" ON "ListingLead"("entityType", "entityPublicId", "createdAt")`,
+  );
+  await db.$executeRaw(
+    Prisma.sql`CREATE INDEX IF NOT EXISTS "listing_lead_owner_created_idx" ON "ListingLead"("ownerId", "createdAt")`,
+  );
+  await db.$executeRaw(
+    Prisma.sql`CREATE INDEX IF NOT EXISTS "listing_lead_actor_created_idx" ON "ListingLead"("actorRole", "createdAt")`,
+  );
+
+  return isDatabaseTableAvailable("ListingLead");
+}
+
+async function ensureListingLeadStorageAvailable(): Promise<boolean> {
+  if (await isDatabaseTableAvailable("ListingLead")) {
+    return true;
+  }
+
+  listingLeadStoragePromise ??= createListingLeadStorage()
+    .catch(() => false)
+    .then((available) => {
+      if (!available) {
+        listingLeadStoragePromise = null;
+      }
+
+      return available;
+    });
+
+  return listingLeadStoragePromise;
+}
+
+async function isUniqueListingAnalyticsEvent(input: {
+  entityType: ListingEntityType;
+  entityId: string;
+  eventType: string;
+  actorRole: ListingAnalyticsActorRole;
+  visitorKey?: string | null;
+  channel?: string | null;
+  occurredAt: Date;
+}): Promise<boolean> {
+  if (!input.visitorKey || !(await isDatabaseTableAvailable("ListingAnalyticsEvent"))) {
+    return true;
+  }
+
+  const dedupWindowMs = getListingAnalyticsDedupWindowMinutes() * 60 * 1000;
+  const threshold = new Date(input.occurredAt.getTime() - dedupWindowMs);
+
+  const existing = await db.listingAnalyticsEvent
+    .findFirst({
+      where: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        eventType: input.eventType,
+        actorRole: input.actorRole,
+        visitorKey: input.visitorKey,
+        channel: input.channel ?? null,
+        occurredAt: {
+          gte: threshold,
+          lt: input.occurredAt,
+        },
+      },
+      select: { id: true },
+      orderBy: { occurredAt: "desc" },
+    })
+    .catch(() => null);
+
+  return existing === null;
+}
+
+async function createRawListingAnalyticsEvent(input: {
+  eventType: string;
+  eventDate: Date;
+  occurredAt: Date;
+  isUnique: boolean;
+} & RecordListingEventBaseInput): Promise<void> {
+  if (!(await isDatabaseTableAvailable("ListingAnalyticsEvent"))) {
+    return;
+  }
+
+  await db.listingAnalyticsEvent
+    .create({
+      data: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        entityPublicId: input.entityPublicId ?? null,
+        ownerId: input.ownerId ?? null,
+        eventType: input.eventType,
+        eventDate: input.eventDate,
+        occurredAt: input.occurredAt,
+        actorRole: input.actorRole ?? "guest",
+        userId: input.userId ?? null,
+        visitorKey: input.visitorKey ?? null,
+        isUnique: input.isUnique,
+        channel: input.channel ?? null,
+        leadId: input.leadId ?? null,
+        leadNumber: input.leadNumber ?? null,
+        source: input.source ?? null,
+        metadata: input.metadata ?? undefined,
+      },
+    })
+    .catch(() => undefined);
+}
+
 export async function recordListingViewEvent(input: {
   entityType: ListingEntityType;
   entityId: string;
+  entityPublicId?: number | null;
   ownerId?: string | null;
+  actorRole?: ListingAnalyticsActorRole;
+  userId?: string | null;
+  visitorKey?: string | null;
+  source?: string | null;
+  metadata?: Prisma.InputJsonObject | null;
   occurredAt?: Date;
-}): Promise<void> {
+}): Promise<RecordListingAnalyticsResult> {
   const occurredAt = input.occurredAt ?? new Date();
   const eventDate = normalizeUtcDate(occurredAt);
+  const actorRole = input.actorRole ?? "guest";
+  const channel = "view";
+  const isUnique = await isUniqueListingAnalyticsEvent({
+    entityType: input.entityType,
+    entityId: input.entityId,
+    eventType: "view",
+    actorRole,
+    visitorKey: input.visitorKey,
+    channel,
+    occurredAt,
+  });
+  const countedForOwner = shouldCountEventForOwner(actorRole, isUnique);
 
   await Promise.all([
-    db.viewLog.upsert({
-      where: {
-        entityType_entityId_date: {
+    countedForOwner
+      ? db.viewLog.upsert({
+          where: {
+            entityType_entityId_date: {
+              entityType: input.entityType,
+              entityId: input.entityId,
+              date: eventDate,
+            },
+          },
+          create: {
+            entityType: input.entityType,
+            entityId: input.entityId,
+            date: eventDate,
+            count: 1,
+          },
+          update: { count: { increment: 1 } },
+        })
+      : Promise.resolve(),
+    createRawListingAnalyticsEvent({
+      ...input,
+      actorRole,
+      eventType: "view",
+      eventDate,
+      occurredAt,
+      channel,
+      isUnique,
+    }),
+    countedForOwner
+      ? updateRefreshStateLastEvent({
           entityType: input.entityType,
           entityId: input.entityId,
-          date: eventDate,
-        },
-      },
-      create: {
-        entityType: input.entityType,
-        entityId: input.entityId,
-        date: eventDate,
-        count: 1,
-      },
-      update: { count: { increment: 1 } },
-    }),
-    isDatabaseTableAvailable("ListingAnalyticsEvent").then((available) =>
-      available
-        ? db.listingAnalyticsEvent
-            .create({
-              data: {
-                entityType: input.entityType,
-                entityId: input.entityId,
-                ownerId: input.ownerId ?? null,
-                eventType: "view",
-                eventDate,
-                occurredAt,
-              },
-            })
-            .catch(() => undefined)
-        : undefined,
-    ),
-    updateRefreshStateLastEvent({
-      entityType: input.entityType,
-      entityId: input.entityId,
-      ownerId: input.ownerId,
-      occurredAt,
-    }).catch(() => undefined),
+          ownerId: input.ownerId,
+          occurredAt,
+        }).catch(() => undefined)
+      : Promise.resolve(),
   ]);
+
+  return { isUnique, countedForOwner };
 }
 
 export async function recordListingActionEvent(input: {
   entityType: ListingEntityType;
   entityId: string;
   actionType: ListingActionType;
+  entityPublicId?: number | null;
   ownerId?: string | null;
+  actorRole?: ListingAnalyticsActorRole;
+  userId?: string | null;
+  visitorKey?: string | null;
+  channel?: string | null;
+  leadId?: string | null;
+  leadNumber?: string | null;
+  source?: string | null;
+  metadata?: Prisma.InputJsonObject | null;
   occurredAt?: Date;
-}): Promise<void> {
+}): Promise<RecordListingAnalyticsResult> {
   const occurredAt = input.occurredAt ?? new Date();
   const eventDate = normalizeUtcDate(occurredAt);
+  const actorRole = input.actorRole ?? "guest";
+  const channel = input.channel ?? getListingEventChannel(input.actionType);
+  const isUnique = await isUniqueListingAnalyticsEvent({
+    entityType: input.entityType,
+    entityId: input.entityId,
+    eventType: input.actionType,
+    actorRole,
+    visitorKey: input.visitorKey,
+    channel,
+    occurredAt,
+  });
+  const countedForOwner = shouldCountEventForOwner(actorRole, isUnique);
 
   await Promise.all([
-    isDatabaseTableAvailable("EngagementLog").then((available) =>
-      available
-        ? db.engagementLog.upsert({
-            where: {
-              entityType_entityId_actionType_date: {
-                entityType: input.entityType,
-                entityId: input.entityId,
-                actionType: input.actionType,
-                date: eventDate,
-              },
-            },
-            create: {
-              entityType: input.entityType,
-              entityId: input.entityId,
-              actionType: input.actionType,
-              date: eventDate,
-              count: 1,
-            },
-            update: { count: { increment: 1 } },
-          })
-        : undefined,
-    ),
-    isDatabaseTableAvailable("ListingAnalyticsEvent").then((available) =>
-      available
-        ? db.listingAnalyticsEvent
-            .create({
-              data: {
-                entityType: input.entityType,
-                entityId: input.entityId,
-                ownerId: input.ownerId ?? null,
-                eventType: input.actionType,
-                eventDate,
-                occurredAt,
-              },
-            })
-            .catch(() => undefined)
-        : undefined,
-    ),
-    updateRefreshStateLastEvent({
-      entityType: input.entityType,
-      entityId: input.entityId,
-      ownerId: input.ownerId,
+    countedForOwner
+      ? isDatabaseTableAvailable("EngagementLog").then((available) =>
+          available
+            ? db.engagementLog.upsert({
+                where: {
+                  entityType_entityId_actionType_date: {
+                    entityType: input.entityType,
+                    entityId: input.entityId,
+                    actionType: input.actionType,
+                    date: eventDate,
+                  },
+                },
+                create: {
+                  entityType: input.entityType,
+                  entityId: input.entityId,
+                  actionType: input.actionType,
+                  date: eventDate,
+                  count: 1,
+                },
+                update: { count: { increment: 1 } },
+              })
+            : undefined,
+        )
+      : Promise.resolve(),
+    createRawListingAnalyticsEvent({
+      ...input,
+      actorRole,
+      eventType: input.actionType,
+      eventDate,
       occurredAt,
-    }).catch(() => undefined),
+      channel,
+      isUnique,
+    }),
+    countedForOwner
+      ? updateRefreshStateLastEvent({
+          entityType: input.entityType,
+          entityId: input.entityId,
+          ownerId: input.ownerId,
+          occurredAt,
+        }).catch(() => undefined)
+      : Promise.resolve(),
   ]);
+
+  return { isUnique, countedForOwner };
+}
+
+export async function createListingLead(input: RecordListingEventBaseInput): Promise<ListingLeadResult> {
+  if (!(await ensureListingLeadStorageAvailable())) {
+    throw new ListingAnalyticsServiceError(
+      "TABLES_UNAVAILABLE",
+      "Таблица обращений еще не создана.",
+    );
+  }
+
+  const actorRole = input.actorRole ?? "guest";
+  const lead = await db.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ sequence: number }>>(Prisma.sql`
+      SELECT nextval('listing_lead_sequence_seq')::integer AS "sequence"
+    `);
+    const sequence = Number(rows[0]?.sequence ?? 0);
+
+    if (!Number.isInteger(sequence) || sequence <= 0) {
+      throw new Error("Lead sequence did not return a valid number.");
+    }
+
+    return tx.listingLead.create({
+      data: {
+        sequence,
+        leadNumber: formatListingLeadNumber(sequence),
+        entityType: input.entityType,
+        entityId: input.entityId,
+        entityPublicId: input.entityPublicId ?? null,
+        ownerId: input.ownerId ?? null,
+        actorRole,
+        userId: input.userId ?? null,
+        visitorKey: input.visitorKey ?? null,
+        source: input.source ?? null,
+        metadata: input.metadata ?? undefined,
+      },
+      select: {
+        id: true,
+        sequence: true,
+        leadNumber: true,
+        entityPublicId: true,
+        createdAt: true,
+      },
+    });
+  });
+
+  await recordListingActionEvent({
+    ...input,
+    actorRole,
+    actionType: "lead_form",
+    leadId: lead.id,
+    leadNumber: lead.leadNumber,
+    channel: "lead",
+  });
+
+  return {
+    id: lead.id,
+    sequence: lead.sequence,
+    leadNumber: lead.leadNumber,
+    entityPublicId: lead.entityPublicId ?? null,
+    createdAt: lead.createdAt.toISOString(),
+  };
 }
 
 async function readCronSince(): Promise<Date> {

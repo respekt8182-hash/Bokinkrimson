@@ -1234,7 +1234,7 @@ export function ObjectWizard({
                 onBlur={() =>
                   setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim())
                 }
-                placeholder="@username или username"
+                placeholder="@username, username или телефон"
               />
             </div>
             <div className="space-y-1">

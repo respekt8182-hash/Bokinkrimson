@@ -47,6 +47,7 @@ const USER_COMPAT_COLUMNS = [
 ] as const;
 
 const TRANSFER_COMPAT_COLUMNS = [
+  "publicId",
   "isPublishedVisible",
   "serviceTags",
   "fleet",
@@ -54,6 +55,7 @@ const TRANSFER_COMPAT_COLUMNS = [
   "publishedSnapshot",
 ] as const;
 const PROPERTY_COMPAT_COLUMNS = [
+  "publicId",
   "isPublishedVisible",
   "paymentStatus",
   "tariffType",
@@ -90,6 +92,7 @@ const SCHEMA_COMPAT_MODELS = {
   Property: {
     columns: PROPERTY_COMPAT_COLUMNS,
     defaults: {
+      publicId: null,
       isPublishedVisible: true,
       paymentStatus: "UNPAID",
       tariffType: null,
@@ -102,9 +105,16 @@ const SCHEMA_COMPAT_MODELS = {
     label: "Property",
   },
   Excursion: {
-    columns: [...EXCURSION_COMPAT_COLUMNS, "isPublishedVisible", "deletedAt", "deletionExpiresAt"],
+    columns: [
+      ...EXCURSION_COMPAT_COLUMNS,
+      "publicId",
+      "isPublishedVisible",
+      "deletedAt",
+      "deletionExpiresAt",
+    ],
     defaults: {
       contactPhone2: null,
+      publicId: null,
       pendingEditStatus: null,
       publishedSnapshot: null,
       tourKind: null,
@@ -134,6 +144,7 @@ const SCHEMA_COMPAT_MODELS = {
   Transfer: {
     columns: TRANSFER_COMPAT_COLUMNS,
     defaults: {
+      publicId: null,
       isPublishedVisible: true,
       serviceTags: [],
       fleet: [],
@@ -227,6 +238,9 @@ const SCALAR_FIELDS_BY_MODEL = new Map(
 const EMPTY_STRING_SET = new Set<string>();
 const EMPTY_STRING_ARRAY: readonly string[] = [];
 const EMPTY_RELATION_MAP = new Map<string, string>();
+const NORMALIZED_COMPAT_MODEL_NAMES = new Map(
+  Object.keys(SCHEMA_COMPAT_MODELS).map((modelName) => [modelName.toLowerCase(), modelName] as const),
+);
 const RECORD_RETURNING_OPERATIONS = new Set([
   "create",
   "createManyAndReturn",
@@ -265,13 +279,18 @@ function cloneCompatDefaultValue(value: unknown): unknown {
   return value;
 }
 
+function normalizeCompatModelName(modelName: string): string {
+  return NORMALIZED_COMPAT_MODEL_NAMES.get(modelName.toLowerCase()) ?? modelName;
+}
+
 function buildCompatSelect(
   modelName: string,
   missingColumnsByModel: MissingCompatColumnsByModel,
   extraSelections?: Record<string, unknown>,
 ): Record<string, unknown> {
-  const missingColumns = missingColumnsByModel.get(modelName) ?? EMPTY_STRING_SET;
-  const scalarFields = SCALAR_FIELDS_BY_MODEL.get(modelName) ?? EMPTY_STRING_ARRAY;
+  const normalizedModelName = normalizeCompatModelName(modelName);
+  const missingColumns = missingColumnsByModel.get(normalizedModelName) ?? EMPTY_STRING_SET;
+  const scalarFields = SCALAR_FIELDS_BY_MODEL.get(normalizedModelName) ?? EMPTY_STRING_ARRAY;
   const nextSelect: Record<string, unknown> = {};
 
   for (const fieldName of scalarFields) {
@@ -314,8 +333,9 @@ function sanitizeCompatArgs<T>(
     return value;
   }
 
-  const missingColumns = missingColumnsByModel.get(modelName) ?? EMPTY_STRING_SET;
-  const relationFields = RELATION_FIELDS_BY_MODEL.get(modelName) ?? EMPTY_RELATION_MAP;
+  const normalizedModelName = normalizeCompatModelName(modelName);
+  const missingColumns = missingColumnsByModel.get(normalizedModelName) ?? EMPTY_STRING_SET;
+  const relationFields = RELATION_FIELDS_BY_MODEL.get(normalizedModelName) ?? EMPTY_RELATION_MAP;
   const isModelArgs = mode === "modelArgs";
 
   let changed = false;
@@ -433,9 +453,10 @@ function hydrateCompatResult<T>(
     return value;
   }
 
-  const compatConfig = SCHEMA_COMPAT_MODELS[modelName as CompatModelName];
-  const missingColumns = missingColumnsByModel.get(modelName) ?? EMPTY_STRING_SET;
-  const relationFields = RELATION_FIELDS_BY_MODEL.get(modelName) ?? EMPTY_RELATION_MAP;
+  const normalizedModelName = normalizeCompatModelName(modelName);
+  const compatConfig = SCHEMA_COMPAT_MODELS[normalizedModelName as CompatModelName];
+  const missingColumns = missingColumnsByModel.get(normalizedModelName) ?? EMPTY_STRING_SET;
+  const relationFields = RELATION_FIELDS_BY_MODEL.get(normalizedModelName) ?? EMPTY_RELATION_MAP;
 
   let changed = false;
   const nextValue = { ...value } as Record<string, unknown>;
@@ -627,7 +648,7 @@ export async function isDatabaseTableAvailable(
     }
   }
 
-  const availabilityPromise = queryClient
+  let availabilityPromise = queryClient
     .$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
       SELECT table_name
       FROM information_schema.tables
@@ -639,6 +660,13 @@ export async function isDatabaseTableAvailable(
     .catch(() => false);
 
   if (queryClient === db) {
+    availabilityPromise = availabilityPromise.then((available) => {
+      if (!available && tableAvailabilityPromises.get(normalizedTableName) === availabilityPromise) {
+        tableAvailabilityPromises.delete(normalizedTableName);
+      }
+
+      return available;
+    });
     tableAvailabilityPromises.set(normalizedTableName, availabilityPromise);
   }
 

@@ -22,6 +22,7 @@ type ExcursionSidebarActionsProps = {
   locationName: string | null;
   phone: string | null;
   phone2: string | null;
+  entityPublicId?: number | null;
   websiteUrl: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
@@ -92,6 +93,7 @@ export function ExcursionSidebarActions({
   locationName,
   phone,
   phone2,
+  entityPublicId = null,
   websiteUrl,
   whatsappUrl,
   telegramUrl,
@@ -218,6 +220,7 @@ export function ExcursionSidebarActions({
         phone={phone}
         organizerName={organizerName}
         tracking={tracking}
+        entityPublicId={entityPublicId}
       />
     </>
   );

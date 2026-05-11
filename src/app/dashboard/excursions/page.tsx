@@ -330,6 +330,11 @@ export default async function DashboardExcursionsPage({
                     <span className="shrink-0 rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
                       #{index + 1}
                     </span>
+                    {item.publicId ? (
+                      <span className="shrink-0 rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">
+                        ID {item.publicId}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 

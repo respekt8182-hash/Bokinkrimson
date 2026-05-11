@@ -2266,6 +2266,7 @@ export default async function PublicExcursionPage({
                         locationName={item.locationName}
                         phone={item.contacts.phone}
                         phone2={item.contacts.phone2}
+                        entityPublicId={item.publicId}
                         websiteUrl={item.contacts.websiteUrl}
                         whatsappUrl={whatsappUrl}
                         telegramUrl={telegramUrl}
@@ -2396,6 +2397,7 @@ export default async function PublicExcursionPage({
           maxUrl={maxUrl}
           okUrl={okUrl}
           phone={item.contacts.phone}
+          entityPublicId={item.publicId}
           organizerName={organizerName}
           organizerAvatarUrl={item.owner.avatarUrl}
           tracking={{ entityType: "excursion", entityId: item.id }}
@@ -3480,6 +3482,7 @@ export default async function PublicExcursionPage({
                       locationName={item.locationName}
                       phone={item.contacts.phone}
                       phone2={item.contacts.phone2}
+                      entityPublicId={item.publicId}
                       websiteUrl={item.contacts.websiteUrl}
                       whatsappUrl={whatsappUrl}
                       telegramUrl={telegramUrl}
@@ -3612,6 +3615,7 @@ export default async function PublicExcursionPage({
         maxUrl={maxUrl}
         okUrl={okUrl}
         phone={item.contacts.phone}
+        entityPublicId={item.publicId}
         organizerName={organizerName}
         organizerAvatarUrl={item.owner.avatarUrl}
         tracking={{ entityType: "excursion", entityId: item.id }}

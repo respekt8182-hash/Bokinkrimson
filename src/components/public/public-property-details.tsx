@@ -40,6 +40,7 @@ import { AvatarImage } from "@/components/ui/avatar-image";
 import { parseDetailedGuestsValue } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { useListingLeadNumber } from "@/hooks/use-listing-lead-number";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildPropertyLeadMessage } from "@/lib/lead-message-author";
@@ -1182,6 +1183,12 @@ export function PublicPropertyDetails({
     okUrl: item.contacts.okUrl,
   });
   const contactTracking = { entityType: "property" as const, entityId: item.id };
+  const propertyLead = useListingLeadNumber({
+    enabled: Boolean(leadModalRoom),
+    entityType: "property",
+    entityId: item.id,
+    fallbackEntityPublicId: item.publicId,
+  });
   const seaDistanceLabel = extractSeaDistanceLabel(allAmenities);
   const mainPriceLabel =
     item.minNightPrice !== null && item.currency
@@ -2525,6 +2532,8 @@ export function PublicPropertyDetails({
               totalGuests,
               adults,
               childrenCount: childrenAges.length,
+              leadNumber: propertyLead.leadNumber,
+              entityPublicId: propertyLead.entityPublicId ?? item.publicId,
               priceLabel:
                 leadSummary.tone === "ok" && leadSummary.bigPrice
                   ? `${leadSummary.bigPrice}${leadSummary.smallLabel ? ` (${leadSummary.smallLabel})` : ""}`
@@ -2533,9 +2542,17 @@ export function PublicPropertyDetails({
             });
 
             const handleCopy = async () => {
+              if (!propertyLead.leadNumber) {
+                return;
+              }
+
               try {
                 await navigator.clipboard.writeText(fullMessage);
-                trackListingAction({ ...contactTracking, actionType: "lead_form" });
+                trackListingAction({
+                  ...contactTracking,
+                  actionType: "lead_copy",
+                  leadNumber: propertyLead.leadNumber,
+                });
                 setLeadCopied(true);
                 setTimeout(() => setLeadCopied(false), 2500);
                 setLeadModalRoom(null);
@@ -2549,7 +2566,11 @@ export function PublicPropertyDetails({
                 ta.select();
                 document.execCommand("copy");
                 document.body.removeChild(ta);
-                trackListingAction({ ...contactTracking, actionType: "lead_form" });
+                trackListingAction({
+                  ...contactTracking,
+                  actionType: "lead_copy",
+                  leadNumber: propertyLead.leadNumber,
+                });
                 setLeadCopied(true);
                 setTimeout(() => setLeadCopied(false), 2500);
                 setLeadModalRoom(null);
@@ -2629,12 +2650,18 @@ export function PublicPropertyDetails({
 
                   {/* Footer */}
                   <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
+                    {propertyLead.error ? (
+                      <p className="mb-2 text-center text-xs text-red-600">{propertyLead.error}</p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={handleCopy}
+                      disabled={propertyLead.loading || !propertyLead.leadNumber}
                       className={cn(
                         "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
-                        leadCopied
+                        propertyLead.loading || !propertyLead.leadNumber
+                          ? "cursor-not-allowed bg-olive/20 text-olive/45 shadow-none"
+                          : leadCopied
                           ? "bg-emerald-600 text-white"
                           : "bg-[#e8621a] text-white hover:bg-[#d45615]",
                       )}
@@ -2647,7 +2674,7 @@ export function PublicPropertyDetails({
                       ) : (
                         <>
                           <Copy className="h-4.5 w-4.5" />
-                          Скопировать сообщение
+                          {propertyLead.loading ? "Готовим номер обращения..." : "Скопировать сообщение"}
                         </>
                       )}
                     </button>

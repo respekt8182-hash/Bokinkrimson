@@ -1599,7 +1599,7 @@ export function ObjectAboutPage({
                     onBlur={() =>
                       setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim())
                     }
-                    placeholder="Telegram: @username или username"
+                    placeholder="Telegram: @username, username или телефон"
                     className="pl-10 pr-10"
                   />
                   <button

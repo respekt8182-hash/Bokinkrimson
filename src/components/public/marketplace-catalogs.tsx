@@ -1988,6 +1988,7 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                             triggerLabel="Заказать"
                             triggerClassName="h-10 rounded-xl bg-[#e8621a] px-4 text-[13px] text-white hover:bg-[#d45615]"
                             tracking={contactTracking}
+                            entityPublicId={item.publicId}
                           />
                         </div>
                       </div>

@@ -122,6 +122,7 @@ export type PublicAttractionMapItem = Pick<
 
 export type PublicTransferCatalogItem = {
   id: string;
+  publicId: number | null;
   slug: string;
   path: string;
   title: string;
@@ -587,6 +588,7 @@ function mapTransferCatalogItem(
 
   return {
     id: row.id,
+    publicId: row.publicId ?? null,
     slug: buildTransferPublicSlug(row.title),
     path: buildPublicTransferPath({ id: row.id, title: row.title }),
     title: row.title ?? "Трансфер без названия",

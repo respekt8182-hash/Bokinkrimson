@@ -27,6 +27,53 @@ describe("lead message author wording", () => {
     expect(message).toContain("Буду благодарен за ответ!");
   });
 
+  it("adds lead and public listing ids to generated messages", () => {
+    const propertyMessage = buildPropertyLeadMessage({
+      authorGender: "male",
+      propertyName: "Test property",
+      roomTitle: "Test room",
+      checkIn: "2026-04-21",
+      checkOut: "2026-04-22",
+      nightsLabel: "1 night",
+      totalGuests: 2,
+      adults: 2,
+      childrenCount: 0,
+      priceLabel: null,
+      extra: "",
+      leadNumber: "KV-000123",
+      entityPublicId: 1001,
+    });
+    const excursionMessage = buildExcursionLeadMessage({
+      authorGender: "female",
+      offerType: "EXCURSION",
+      organizerName: "Test",
+      excursionTitle: "Test excursion",
+      locationName: "Test city",
+      date: "",
+      guests: "",
+      message: "",
+      leadNumber: "KV-000124",
+      entityPublicId: 3001,
+    });
+    const transferMessage = buildTransferLeadMessage({
+      authorGender: "male",
+      transferTitle: "Test transfer",
+      locationName: "Test city",
+      priceLabel: null,
+      vehicleOption: null,
+      extra: "",
+      leadNumber: "KV-000125",
+      entityPublicId: 4001,
+    });
+
+    expect(propertyMessage).toContain("KV-000123");
+    expect(propertyMessage).toContain("1001");
+    expect(excursionMessage).toContain("KV-000124");
+    expect(excursionMessage).toContain("3001");
+    expect(transferMessage).toContain("KV-000125");
+    expect(transferMessage).toContain("4001");
+  });
+
   it("builds a female excursion message with matching phrasing", () => {
     const message = buildExcursionLeadMessage({
       authorGender: "female",

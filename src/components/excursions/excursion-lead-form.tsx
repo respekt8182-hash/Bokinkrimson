@@ -5,6 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { useListingLeadNumber } from "@/hooks/use-listing-lead-number";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildExcursionLeadMessage } from "@/lib/lead-message-author";
@@ -20,6 +21,7 @@ type ExcursionLeadFormProps = {
   telegramUrl: string | null;
   phone: string | null;
   organizerName: string;
+  entityPublicId?: number | null;
   onCopySuccess?: (() => void) | null;
   tracking?: {
     entityType: ListingEntityType;
@@ -32,14 +34,23 @@ export function ExcursionLeadForm({
   excursionTitle,
   locationName,
   organizerName,
+  entityPublicId = null,
   onCopySuccess = null,
   tracking = null,
 }: ExcursionLeadFormProps) {
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
+  const lead = useListingLeadNumber({
+    enabled: Boolean(tracking),
+    entityType: tracking?.entityType ?? "excursion",
+    entityId: tracking?.entityId ?? "",
+    fallbackEntityPublicId: entityPublicId,
+  });
 
   const messageId = useId();
+  const leadRequired = Boolean(tracking);
+  const copyDisabled = leadRequired && (lead.loading || !lead.leadNumber);
 
   const previewMessage = useMemo(
     () =>
@@ -52,11 +63,27 @@ export function ExcursionLeadForm({
         date: "",
         guests: "",
         message,
+        leadNumber: lead.leadNumber,
+        entityPublicId: lead.entityPublicId ?? entityPublicId,
       }),
-    [authorGender, offerType, organizerName, excursionTitle, locationName, message],
+    [
+      authorGender,
+      offerType,
+      organizerName,
+      excursionTitle,
+      locationName,
+      message,
+      lead.leadNumber,
+      lead.entityPublicId,
+      entityPublicId,
+    ],
   );
 
   async function handleCopy() {
+    if (copyDisabled) {
+      return;
+    }
+
     let didCopy = false;
 
     try {
@@ -78,7 +105,7 @@ export function ExcursionLeadForm({
     }
 
     if (tracking) {
-      trackListingAction({ ...tracking, actionType: "lead_form" });
+      trackListingAction({ ...tracking, actionType: "lead_copy", leadNumber: lead.leadNumber });
     }
 
     if (onCopySuccess) {
@@ -132,16 +159,28 @@ export function ExcursionLeadForm({
       </div>
 
       <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
+        {lead.error ? (
+          <p className="mb-2 text-center text-xs text-red-600">{lead.error}</p>
+        ) : null}
         <button
           type="button"
           onClick={handleCopy}
+          disabled={copyDisabled}
           className={cn(
             "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
-            copied ? "bg-emerald-600 text-white" : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+            copyDisabled
+              ? "cursor-not-allowed bg-olive/20 text-olive/45 shadow-none"
+              : copied
+                ? "bg-emerald-600 text-white"
+                : "bg-[#e8621a] text-white hover:bg-[#d45615]",
           )}
         >
           <AppIcon icon={copied ? Check : Copy} className="h-4.5 w-4.5" />
-          {copied ? "Скопировано!" : "Скопировать сообщение"}
+          {copied
+            ? "Скопировано!"
+            : lead.loading
+              ? "Готовим номер обращения..."
+              : "Скопировать сообщение"}
         </button>
       </div>
     </>

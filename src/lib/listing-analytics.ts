@@ -9,6 +9,7 @@ export const LISTING_ACTION_TYPES = [
   "booking",
   "lead_phrase",
   "lead_form",
+  "lead_copy",
   "request",
   "website",
   "whatsapp",
@@ -33,7 +34,7 @@ export const MESSENGER_ACTION_TYPES = [
   "ok",
 ] as const;
 
-export const LEAD_ACTION_TYPES = ["lead_phrase", "lead_form", "request"] as const;
+export const LEAD_ACTION_TYPES = ["lead_phrase", "lead_form", "lead_copy", "request"] as const;
 
 export const BOOKING_ACTION_TYPES = ["booking"] as const;
 
@@ -44,6 +45,7 @@ export const LISTING_ACTION_LABELS: Record<ListingActionType, string> = {
   booking: "Бронирование",
   lead_phrase: "Лид-фраза",
   lead_form: "Лид-форма",
+  lead_copy: "Копирование лида",
   request: "Заявка",
   website: "Сайт",
   whatsapp: "WhatsApp",
@@ -74,6 +76,7 @@ const LISTING_ACTION_ALIASES: Record<string, ListingActionType> = {
   phoneSecondary: "phone_secondary",
   vkBot: "vk_bot",
   leadForm: "lead_form",
+  leadCopy: "lead_copy",
 };
 
 export type ListingActionCounterGroup = {

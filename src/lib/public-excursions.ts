@@ -199,6 +199,7 @@ export type PublicExcursionCatalogResult = {
 
 export type PublicExcursionCard = {
   id: string;
+  publicId: number | null;
   slug: string;
   path: string;
   offerType: ExcursionOfferType;
@@ -1694,6 +1695,7 @@ async function getExcursionCardByIdentifier(input: {
 
   return {
     id: excursion.id,
+    publicId: excursion.publicId ?? null,
     slug: buildExcursionSlug(display.title, excursion.id),
     path: buildPublicExcursionPath({
       id: excursion.id,

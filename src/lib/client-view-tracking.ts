@@ -1,5 +1,7 @@
 "use client";
 
+import { getAnalyticsVisitorId } from "@/lib/client-analytics-visitor";
+
 const scheduledViewKeys = new Set<string>();
 
 type TrackPublicEntityViewInput = {
@@ -70,9 +72,11 @@ export function trackPublicEntityView({
   };
 
   const sendRequest = () => {
+    const body = JSON.stringify({ visitorId: getAnalyticsVisitorId() });
+
     if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
       try {
-        if (navigator.sendBeacon(url, new Blob([], { type: "application/json" }))) {
+        if (navigator.sendBeacon(url, new Blob([body], { type: "application/json" }))) {
           return;
         }
       } catch {
@@ -82,6 +86,8 @@ export function trackPublicEntityView({
 
     void fetch(url, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
         keepalive: true,
       }).catch(() => {
         hasSent = false;

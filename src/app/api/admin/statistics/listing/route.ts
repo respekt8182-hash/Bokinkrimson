@@ -74,6 +74,7 @@ export async function GET(request: Request) {
         entityType,
         entityId,
         periodKey: normalizePeriodKey(url.searchParams.get("period")),
+        includeRawEvents: true,
       }),
     );
   } catch (error) {

@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import {
-  normalizeListingActionType,
-  normalizeListingEntityType,
-  type ListingEntityType,
-} from "@/lib/listing-analytics";
-import { recordListingActionEvent } from "@/lib/listing-analytics-service";
+import { normalizeListingEntityType, type ListingEntityType } from "@/lib/listing-analytics";
+import { createListingLead } from "@/lib/listing-analytics-service";
 import {
   buildListingAnalyticsVisitorKey,
   getListingAnalyticsSource,
@@ -18,7 +14,7 @@ import {
   buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
 
-async function getPublicListingOwnerId(
+async function getPublicListing(
   entityType: ListingEntityType,
   entityId: string,
 ): Promise<{ ownerId: string; publicId: number | null } | null> {
@@ -61,43 +57,44 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     entityType?: unknown;
     entityId?: unknown;
-    actionType?: unknown;
     visitorId?: unknown;
-    leadNumber?: unknown;
   } | null;
 
   const entityType = normalizeListingEntityType(body?.entityType);
-  const actionType = normalizeListingActionType(body?.actionType);
   const entityId = typeof body?.entityId === "string" ? body.entityId.trim() : "";
 
-  if (!entityType || !entityId || !actionType) {
-    return NextResponse.json({ error: "Некорректная метрика" }, { status: 400 });
+  if (!entityType || !entityId) {
+    return NextResponse.json({ error: "Некорректная карточка" }, { status: 400 });
   }
 
-  const listing = await getPublicListingOwnerId(entityType, entityId);
-
+  const listing = await getPublicListing(entityType, entityId);
   if (!listing) {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
   }
 
-  try {
-    const actor = await resolveListingAnalyticsActor(listing.ownerId);
-    const visitorId = normalizeAnalyticsVisitorId(body?.visitorId);
-    await recordListingActionEvent({
-      entityType,
-      entityId,
-      actionType,
-      entityPublicId: listing.publicId,
-      ownerId: listing.ownerId,
-      actorRole: actor.role,
-      userId: actor.userId,
-      visitorKey: buildListingAnalyticsVisitorKey({ request, actor, visitorId }),
-      leadNumber: typeof body?.leadNumber === "string" ? body.leadNumber.trim() || null : null,
-      source: getListingAnalyticsSource(request),
-    });
-  } catch {
-    return NextResponse.json({ ok: true });
+  const actor = await resolveListingAnalyticsActor(listing.ownerId);
+  const visitorId = normalizeAnalyticsVisitorId(body?.visitorId);
+  const lead = await createListingLead({
+    entityType,
+    entityId,
+    entityPublicId: listing.publicId,
+    ownerId: listing.ownerId,
+    actorRole: actor.role,
+    userId: actor.userId,
+    visitorKey: buildListingAnalyticsVisitorKey({ request, actor, visitorId }),
+    source: getListingAnalyticsSource(request),
+  }).catch((error) => {
+    console.error("[listing-leads/create]", entityType, entityId, error);
+    return null;
+  });
+
+  if (!lead) {
+    return NextResponse.json({ error: "Не удалось создать номер обращения" }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    leadNumber: lead.leadNumber,
+    entityPublicId: lead.entityPublicId,
+    createdAt: lead.createdAt,
+  });
 }

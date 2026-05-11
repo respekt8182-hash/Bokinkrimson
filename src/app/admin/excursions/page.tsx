@@ -89,6 +89,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
         orderBy: [{ updatedAt: "desc" }],
         select: {
           ...EXCURSION_EMPTY_DRAFT_SELECT,
+          publicId: true,
           offerType: true,
           isPublishedVisible: true,
           deletedAt: true,
@@ -141,6 +142,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
           filteredRows,
           (item) => [
             item.title,
+            item.publicId?.toString(),
             item.locationName,
             item.description,
             item.owner.firstName,
@@ -320,7 +322,10 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-olive/50">ID: {item.id}</p>
+                    <p className="mt-1 text-xs text-olive/50">
+                      ID {item.offerType === ExcursionOfferType.TOUR ? "тура" : "экскурсии"}:{" "}
+                      {item.publicId ?? "—"} · Технический ID: {item.id}
+                    </p>
                   </div>
                 </div>
 

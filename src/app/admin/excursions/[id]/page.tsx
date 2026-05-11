@@ -198,6 +198,10 @@ export default async function AdminExcursionEditPage({
           </>
         }
       />
+      <div className="text-xs text-olive/50">
+        ID {excursion.offerType === ExcursionOfferType.TOUR ? "тура" : "экскурсии"}:{" "}
+        {excursion.publicId ?? "—"} | Технический ID: {excursion.id}
+      </div>
       <PlacementPromoNotice compact />
 
       <AdminListingPaymentConfirmation

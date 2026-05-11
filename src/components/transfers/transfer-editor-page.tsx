@@ -1316,7 +1316,7 @@ export function TransferEditorPage({
                 setShowTelegram(false);
               },
               brand: "telegram",
-              placeholder: "Telegram: @username",
+              placeholder: "Telegram: @username или телефон",
               name: "telegramUrl",
               value: telegramUrl,
               onChange: setTelegramUrl,

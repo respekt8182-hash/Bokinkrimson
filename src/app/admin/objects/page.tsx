@@ -184,6 +184,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
             item.address,
             item.description,
             item.type,
+            item.publicId?.toString(),
             item.owner.firstName,
             item.owner.lastName,
             item.owner.email,
@@ -486,7 +487,9 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-olive/50">ID: {item.id}</p>
+                    <p className="mt-1 text-xs text-olive/50">
+                      ID объекта: {item.publicId ?? "—"} · Технический ID: {item.id}
+                    </p>
                   </div>
                 </div>
 

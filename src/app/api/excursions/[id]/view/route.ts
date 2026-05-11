@@ -3,13 +3,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { recordListingViewEvent } from "@/lib/listing-analytics-service";
+import {
+  buildListingAnalyticsVisitorKey,
+  getListingAnalyticsSource,
+  normalizeAnalyticsVisitorId,
+  resolveListingAnalyticsActor,
+} from "@/lib/listing-analytics-request";
 import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-export async function POST(_: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   if (!id?.trim()) {
@@ -20,21 +26,32 @@ export async function POST(_: Request, context: RouteContext) {
 
   const excursion = await db.excursion.findFirst({
     where: { id: excursionId, ...buildPublishedExcursionVisibilityWhere() },
-    select: { ownerId: true },
+    select: { ownerId: true, publicId: true },
   });
 
   if (excursion) {
-    await db.excursion.update({
-      where: { id: excursionId },
-      data: { profileViews: { increment: 1 } },
-      select: { id: true },
-    });
+    const body = (await request.json().catch(() => null)) as { visitorId?: unknown } | null;
+    const actor = await resolveListingAnalyticsActor(excursion.ownerId);
+    const visitorId = normalizeAnalyticsVisitorId(body?.visitorId);
 
-    await recordListingViewEvent({
+    const result = await recordListingViewEvent({
       entityType: "excursion",
       entityId: excursionId,
+      entityPublicId: excursion.publicId ?? null,
       ownerId: excursion.ownerId,
+      actorRole: actor.role,
+      userId: actor.userId,
+      visitorKey: buildListingAnalyticsVisitorKey({ request, actor, visitorId }),
+      source: getListingAnalyticsSource(request),
     });
+
+    if (result.countedForOwner) {
+      await db.excursion.update({
+        where: { id: excursionId },
+        data: { profileViews: { increment: 1 } },
+        select: { id: true },
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

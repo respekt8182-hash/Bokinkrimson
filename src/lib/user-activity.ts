@@ -1,4 +1,5 @@
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { logger } from "@/lib/logger";
 import {
   USER_ACTIVITY_HEARTBEAT_INTERVAL_MS,
@@ -31,12 +32,22 @@ async function runBestEffortActivityUpdate(
   update: () => Promise<unknown>,
 ): Promise<boolean> {
   try {
-    if (!(await isUserActivitySchemaAvailable())) {
-      return false;
-    }
+    return await loadDataWithDatabaseFallback(
+      {
+        contextId: `user-activity-${kind}`,
+        unavailableMessage: `User activity (${kind}): database is unavailable. Skipping activity update.`,
+        fallbackEligibleMessage: `User activity (${kind}): database is unavailable or credentials are invalid. Skipping activity update.`,
+      },
+      async () => {
+        if (!(await isUserActivitySchemaAvailable())) {
+          return false;
+        }
 
-    await update();
-    return true;
+        await update();
+        return true;
+      },
+      false,
+    );
   } catch (error) {
     logger.warn("User activity update failed", {
       userId,

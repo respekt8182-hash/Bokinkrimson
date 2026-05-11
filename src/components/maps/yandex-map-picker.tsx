@@ -52,6 +52,11 @@ type ReverseGeocodeItem = {
   localityDisplayName?: string | null;
 };
 
+type AddressSearchItem = ReverseGeocodeItem & {
+  latitude: number;
+  longitude: number;
+};
+
 type LocationSearchItem = {
   name: string;
   latitude: number;
@@ -123,6 +128,25 @@ async function reverseGeocode(
   return body.item;
 }
 
+async function resolveAddressCoordinates(address: string): Promise<AddressSearchItem | null> {
+  const response = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const body = (await response.json()) as { item?: AddressSearchItem };
+  if (
+    !body.item?.address ||
+    !Number.isFinite(body.item.latitude) ||
+    !Number.isFinite(body.item.longitude)
+  ) {
+    return null;
+  }
+
+  return body.item;
+}
+
 async function resolveLocationCenter(location: string): Promise<LocationSearchItem | null> {
   const response = await fetch(`/api/location-center?location=${encodeURIComponent(location)}`);
 
@@ -140,6 +164,33 @@ async function resolveLocationCenter(location: string): Promise<LocationSearchIt
   }
 
   return body.item;
+}
+
+function looksLikeAddressSearch(value: string): boolean {
+  return (
+    /\d/.test(value) ||
+    /[,;]/.test(value) ||
+    /(?:^|[\s,.;:])(?:ул\.?|улица|просп(?:ект)?\.?|пр-кт|пер\.?|переулок|шоссе|пл\.?|площадь|наб\.?|набережная|бульвар|аллея|тракт|дом|д\.|корпус|к\.|строение|стр\.|отель|гостиница|санаторий|музей|парк|дворец|крепость|мыс|гора|пляж)(?:$|[\s,.;:])/i.test(
+      value,
+    )
+  );
+}
+
+function buildAddressSearchQuery(query: string, hint: string): string {
+  const normalizedQuery = query.trim().replace(/\s+/g, " ");
+  const normalizedHint = hint.trim().replace(/\s+/g, " ");
+  const parts = [normalizedQuery];
+  const queryLower = normalizedQuery.toLocaleLowerCase("ru-RU");
+
+  if (normalizedHint && !queryLower.includes(normalizedHint.toLocaleLowerCase("ru-RU"))) {
+    parts.push(normalizedHint);
+  }
+
+  if (!/(?:крым|crimea|севастополь|simferopol|ялта|алушта|евпатория|керчь|феодосия|судак)/i.test(queryLower)) {
+    parts.push("Республика Крым");
+  }
+
+  return parts.join(", ");
 }
 
 function coordinatesFromValues(
@@ -265,11 +316,24 @@ export function YandexMapPicker({
     [handleCoordinatesChange],
   );
 
+  const applyAddressSearchItem = useCallback(
+    (item: AddressSearchItem) => {
+      const coordinates: [number, number] = [item.latitude, item.longitude];
+      setLocationQuery(item.address);
+      moveMarkerToCoordinates(coordinates, 16);
+      setConfirmedCoordinates(coordinates);
+      onAddressResolvedRef.current?.(item);
+    },
+    [moveMarkerToCoordinates],
+  );
+
   const searchLocation = useCallback(async () => {
     const query = locationQuery.trim();
+    const canSearchAddress = query.length >= 5;
+    const shouldTryAddressFirst = canSearchAddress && looksLikeAddressSearch(query);
 
     if (query.length < 2) {
-      setLocationSearchError("Введите город или посёлок.");
+      setLocationSearchError("Введите город, адрес или ориентир.");
       return;
     }
 
@@ -279,14 +343,44 @@ export function YandexMapPicker({
     setLocationSearchError("");
 
     try {
+      if (shouldTryAddressFirst) {
+        const addressItem = await resolveAddressCoordinates(
+          buildAddressSearchQuery(query, initialSearchValueRef.current),
+        );
+
+        if (locationSearchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (addressItem) {
+          applyAddressSearchItem(addressItem);
+          return;
+        }
+      }
+
       const item = await resolveLocationCenter(query);
 
       if (locationSearchRequestIdRef.current !== requestId) {
         return;
       }
 
+      if (!item && canSearchAddress) {
+        const addressItem = await resolveAddressCoordinates(
+          buildAddressSearchQuery(query, initialSearchValueRef.current),
+        );
+
+        if (locationSearchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (addressItem) {
+          applyAddressSearchItem(addressItem);
+          return;
+        }
+      }
+
       if (!item) {
-        setLocationSearchError("Не удалось найти населённый пункт в Крыму.");
+        setLocationSearchError("Не удалось найти место в Крыму.");
         return;
       }
 
@@ -303,7 +397,7 @@ export function YandexMapPicker({
         setIsSearchingLocation(false);
       }
     }
-  }, [locationQuery, moveMarkerToCoordinates]);
+  }, [applyAddressSearchItem, locationQuery, moveMarkerToCoordinates]);
 
   const confirmGeoposition = useCallback(async () => {
     const coordinates = selectedCoordinatesRef.current;
@@ -507,7 +601,7 @@ export function YandexMapPicker({
               void searchLocation();
             }
           }}
-          placeholder="Найти город или посёлок"
+          placeholder="Найти город, адрес или ориентир"
           className="min-h-11 sm:flex-1"
         />
         <Button
@@ -547,8 +641,8 @@ export function YandexMapPicker({
       ) : null}
       {resolveError ? <p className="text-xs text-red-600">{resolveError}</p> : null}
       <p className="text-xs text-olive/60">
-        Клик по карте или перетаскивание метки меняет только координаты. Запрос к геокодеру
-        выполняется после подтверждения.
+        Введите адрес в поиске, чтобы сразу поставить метку. Клик по карте или перетаскивание метки
+        меняет только координаты.
       </p>
     </div>
   );

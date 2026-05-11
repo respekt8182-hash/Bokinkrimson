@@ -1,8 +1,9 @@
 // Room pricing item endpoint: read/update/delete a single room price period with overlap protection.
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import { parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
+import { updateRoomPriceCompat } from "@/lib/room-price-compat";
 import { updateRoomPriceSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -83,6 +84,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const data = parsed.data;
   const dateFrom = parseIsoDate(data.dateFrom);
   const dateTo = parseIsoDate(data.dateTo);
+  const supportsRoomPriceType = await areDatabaseColumnsAvailable("RoomPrice", ["priceType"]);
 
   if (!dateFrom || !dateTo) {
     return NextResponse.json({ error: "Некорректный формат дат" }, { status: 400 });
@@ -105,17 +107,25 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  const updated = await db.roomPrice.update({
-    where: { id: existing.id },
-    data: {
-      dateFrom,
-      dateTo,
-      price: data.price,
-      priceType: data.priceType,
-      minGuests: data.minGuests ?? null,
-      currency: data.currency,
-    },
-  });
+  const updated = supportsRoomPriceType
+    ? await db.roomPrice.update({
+        where: { id: existing.id },
+        data: {
+          dateFrom,
+          dateTo,
+          price: data.price,
+          priceType: data.priceType,
+          minGuests: data.minGuests ?? null,
+          currency: data.currency,
+        },
+      })
+    : await updateRoomPriceCompat(existing.id, {
+        dateFrom,
+        dateTo,
+        price: data.price,
+        minGuests: data.minGuests ?? null,
+        currency: data.currency,
+      });
 
   return NextResponse.json({ item: serializeRoomPrice(updated) });
 }

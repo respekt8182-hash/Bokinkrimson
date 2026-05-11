@@ -306,6 +306,7 @@ model WebhookReceipt {
 
 model Property {
   id                            String                     @id @default(cuid())
+  publicId                      Int?                       @unique @default(dbgenerated("nextval('property_public_id_seq'::regclass)"))
   ownerId                       String
   type                          String?
   locationId                    String?
@@ -561,6 +562,7 @@ model ExcursionScheduleException {
 
 model Excursion {
   id                        String                       @id @default(cuid())
+  publicId                  Int?                         @unique
   ownerId                   String
   offerType                 ExcursionOfferType           @default(EXCURSION)
   subtypeLabel              String?
@@ -710,6 +712,7 @@ model Excursion {
 
 model Attraction {
   id                 String             @id @default(cuid())
+  publicId           Int?               @unique @default(dbgenerated("nextval('attraction_public_id_seq'::regclass)"))
   title              String
   slug               String             @unique
   category           String?
@@ -739,6 +742,7 @@ model Attraction {
 
 model Transfer {
   id                 String             @id @default(cuid())
+  publicId           Int?               @unique @default(dbgenerated("nextval('transfer_public_id_seq'::regclass)"))
   ownerId            String
   title              String?
   slug               String             @unique
@@ -1166,20 +1170,54 @@ model EngagementLog {
 }
 
 model ListingAnalyticsEvent {
-  id         String   @id @default(cuid())
-  entityType String   @db.VarChar(20)
-  entityId   String
-  ownerId    String?
-  eventType  String   @db.VarChar(40)
-  eventDate  DateTime @db.Date
-  occurredAt DateTime @default(now())
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  entityType     String   @db.VarChar(20)
+  entityId       String
+  entityPublicId Int?
+  ownerId        String?
+  eventType      String   @db.VarChar(40)
+  eventDate      DateTime @db.Date
+  occurredAt     DateTime @default(now())
+  actorRole      String   @default("guest") @db.VarChar(20)
+  userId         String?
+  visitorKey     String?  @db.VarChar(80)
+  isUnique       Boolean  @default(true)
+  channel        String?  @db.VarChar(40)
+  leadId         String?
+  leadNumber     String?  @db.VarChar(20)
+  source         String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
   @@index([entityType, entityId, eventDate], map: "la_event_entity_date_idx")
+  @@index([entityType, entityPublicId, eventDate], map: "la_event_public_entity_date_idx")
   @@index([entityType, eventType, eventDate], map: "la_event_type_date_idx")
   @@index([ownerId, eventDate], map: "la_event_owner_date_idx")
+  @@index([actorRole, eventDate], map: "la_event_actor_date_idx")
+  @@index([isUnique, eventDate], map: "la_event_unique_date_idx")
+  @@index([leadNumber], map: "la_event_lead_number_idx")
   @@index([occurredAt], map: "la_event_occurred_idx")
+}
+
+model ListingLead {
+  id             String   @id @default(cuid())
+  sequence       Int      @unique @default(dbgenerated("nextval('listing_lead_sequence_seq'::regclass)"))
+  leadNumber     String   @unique @db.VarChar(20)
+  entityType     String   @db.VarChar(20)
+  entityId       String
+  entityPublicId Int?
+  ownerId        String?
+  actorRole      String   @default("guest") @db.VarChar(20)
+  userId         String?
+  visitorKey     String?  @db.VarChar(80)
+  source         String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt], map: "listing_lead_entity_created_idx")
+  @@index([entityType, entityPublicId, createdAt], map: "listing_lead_public_entity_created_idx")
+  @@index([ownerId, createdAt], map: "listing_lead_owner_created_idx")
+  @@index([actorRole, createdAt], map: "listing_lead_actor_created_idx")
 }
 
 model ListingAnalyticsDailyAggregate {

@@ -37,6 +37,7 @@ import {
 
 export type SerializedExcursion = {
   id: string;
+  publicId: number | null;
   ownerId: string;
   offerType: ExcursionOfferType;
   subtypeLabel: string | null;
@@ -198,7 +199,6 @@ export function canAdminApproveExcursionModeration(
 
   if (status === ExcursionStatus.PUBLISHED && pendingEditStatus !== null) {
     return (
-      workflowStatus === ExcursionStatus.DRAFT ||
       workflowStatus === ExcursionStatus.PENDING_MODERATION ||
       workflowStatus === ExcursionStatus.NEEDS_FIX ||
       workflowStatus === ExcursionStatus.REJECTED
@@ -1115,6 +1115,7 @@ export async function prepareExcursionForPublishedOwnerEdit(
 
 export function serializeExcursion(excursion: {
   id: string;
+  publicId?: number | null;
   ownerId: string;
   offerType: ExcursionOfferType;
   subtypeLabel: string | null;
@@ -1259,6 +1260,7 @@ export function serializeExcursion(excursion: {
 
   return {
     id: excursion.id,
+    publicId: excursion.publicId ?? null,
     ownerId: excursion.ownerId,
     offerType: excursion.offerType,
     subtypeLabel: excursion.subtypeLabel,

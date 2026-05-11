@@ -3,13 +3,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { recordListingViewEvent } from "@/lib/listing-analytics-service";
+import {
+  buildListingAnalyticsVisitorKey,
+  getListingAnalyticsSource,
+  normalizeAnalyticsVisitorId,
+  resolveListingAnalyticsActor,
+} from "@/lib/listing-analytics-request";
 import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-export async function POST(_: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   if (!id?.trim()) {
@@ -23,21 +29,32 @@ export async function POST(_: Request, context: RouteContext) {
       id: propertyId,
       ...buildPublishedPropertyVisibilityWhere(),
     },
-    select: { ownerId: true },
+    select: { ownerId: true, publicId: true },
   });
 
   if (property) {
-    await db.property.update({
-      where: { id: propertyId },
-      data: { profileViews: { increment: 1 } },
-      select: { id: true },
-    });
+    const body = (await request.json().catch(() => null)) as { visitorId?: unknown } | null;
+    const actor = await resolveListingAnalyticsActor(property.ownerId);
+    const visitorId = normalizeAnalyticsVisitorId(body?.visitorId);
 
-    await recordListingViewEvent({
+    const result = await recordListingViewEvent({
       entityType: "property",
       entityId: propertyId,
+      entityPublicId: property.publicId ?? null,
       ownerId: property.ownerId,
+      actorRole: actor.role,
+      userId: actor.userId,
+      visitorKey: buildListingAnalyticsVisitorKey({ request, actor, visitorId }),
+      source: getListingAnalyticsSource(request),
     });
+
+    if (result.countedForOwner) {
+      await db.property.update({
+        where: { id: propertyId },
+        data: { profileViews: { increment: 1 } },
+        select: { id: true },
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

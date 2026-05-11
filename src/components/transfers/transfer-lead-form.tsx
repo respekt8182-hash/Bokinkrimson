@@ -5,6 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { LeadMessageAuthorToggle } from "@/components/leads/lead-message-author-toggle";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useLeadMessageAuthorGender } from "@/hooks/use-lead-message-author-gender";
+import { useListingLeadNumber } from "@/hooks/use-listing-lead-number";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import { buildTransferLeadMessage } from "@/lib/lead-message-author";
@@ -17,6 +18,7 @@ type TransferLeadFormProps = {
   vehicleOptions: string[];
   triggerLabel?: string;
   triggerClassName?: string;
+  entityPublicId?: number | null;
   tracking?: {
     entityType: ListingEntityType;
     entityId: string;
@@ -30,6 +32,7 @@ export function TransferLeadForm({
   vehicleOptions,
   triggerLabel = "Заказать трансфер",
   triggerClassName,
+  entityPublicId = null,
   tracking = null,
 }: TransferLeadFormProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -38,6 +41,14 @@ export function TransferLeadForm({
   const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
   const extraInfoId = useId();
   const vehicleOption = vehicleOptions[0] ?? null;
+  const lead = useListingLeadNumber({
+    enabled: isOpen && Boolean(tracking),
+    entityType: tracking?.entityType ?? "transfer",
+    entityId: tracking?.entityId ?? "",
+    fallbackEntityPublicId: entityPublicId,
+  });
+  const leadRequired = Boolean(tracking);
+  const copyDisabled = leadRequired && (lead.loading || !lead.leadNumber);
 
   const previewMessage = useMemo(
     () =>
@@ -48,8 +59,20 @@ export function TransferLeadForm({
         priceLabel,
         vehicleOption,
         extra,
+        leadNumber: lead.leadNumber,
+        entityPublicId: lead.entityPublicId ?? entityPublicId,
       }),
-    [authorGender, transferTitle, locationName, priceLabel, vehicleOption, extra],
+    [
+      authorGender,
+      transferTitle,
+      locationName,
+      priceLabel,
+      vehicleOption,
+      extra,
+      lead.leadNumber,
+      lead.entityPublicId,
+      entityPublicId,
+    ],
   );
 
   function openModal() {
@@ -68,6 +91,10 @@ export function TransferLeadForm({
   }
 
   async function handleCopy() {
+    if (copyDisabled) {
+      return;
+    }
+
     let didCopy = false;
 
     try {
@@ -86,7 +113,7 @@ export function TransferLeadForm({
 
     if (didCopy) {
       if (tracking) {
-        trackListingAction({ ...tracking, actionType: "lead_form" });
+        trackListingAction({ ...tracking, actionType: "lead_copy", leadNumber: lead.leadNumber });
       }
 
       setCopied(true);
@@ -178,18 +205,28 @@ export function TransferLeadForm({
             </div>
 
             <div className="shrink-0 border-t border-olive/10 px-5 py-3.5">
+              {lead.error ? (
+                <p className="mb-2 text-center text-xs text-red-600">{lead.error}</p>
+              ) : null}
               <button
                 type="button"
                 onClick={handleCopy}
+                disabled={copyDisabled}
                 className={cn(
                   "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm transition active:scale-[0.97]",
-                  copied
-                    ? "bg-emerald-600 text-white"
-                    : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+                  copyDisabled
+                    ? "cursor-not-allowed bg-olive/20 text-olive/45 shadow-none"
+                    : copied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-[#e8621a] text-white hover:bg-[#d45615]",
                 )}
               >
                 <AppIcon icon={copied ? Check : Copy} className="h-4.5 w-4.5" />
-                {copied ? "Скопировано!" : "Скопировать сообщение"}
+                {copied
+                  ? "Скопировано!"
+                  : lead.loading
+                    ? "Готовим номер обращения..."
+                    : "Скопировать сообщение"}
               </button>
             </div>
           </div>

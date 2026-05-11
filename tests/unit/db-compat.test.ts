@@ -118,6 +118,46 @@ describe("db compatibility sanitizer", () => {
     });
   });
 
+  it("sanitizes create payloads even when Prisma exposes a lower-case model name", () => {
+    const missingColumnsByModel = new Map<string, Set<string>>([
+      ["RoomPrice", new Set(["priceType"])],
+    ]);
+
+    const args = {
+      data: {
+        roomId: "room_1",
+        dateFrom: new Date("2026-05-11T00:00:00.000Z"),
+        dateTo: new Date("2026-05-12T00:00:00.000Z"),
+        price: 1500,
+        priceType: "PER_PERSON",
+        currency: "RUB",
+      },
+    };
+
+    expect(
+      __compatTestUtils.sanitizeCompatArgs(args, "roomPrice", missingColumnsByModel, "modelArgs"),
+    ).toEqual({
+      data: {
+        roomId: "room_1",
+        dateFrom: new Date("2026-05-11T00:00:00.000Z"),
+        dateTo: new Date("2026-05-12T00:00:00.000Z"),
+        price: 1500,
+        currency: "RUB",
+      },
+      select: {
+        id: true,
+        roomId: true,
+        dateFrom: true,
+        dateTo: true,
+        price: true,
+        minGuests: true,
+        currency: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  });
+
   it("keeps relation filters clean while adding a safe root select", () => {
     const missingColumnsByModel = new Map<string, Set<string>>([
       ["Excursion", new Set(["contactPhone2", "deletedAt", "deletionExpiresAt"])],

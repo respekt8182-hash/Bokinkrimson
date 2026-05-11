@@ -1,8 +1,9 @@
 // Room pricing endpoint: list/create date periods and optionally preview stay cost for selected check-in/check-out.
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import { calculateRoomStayPrice, parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
+import { createRoomPriceCompat } from "@/lib/room-price-compat";
 import { createRoomPriceSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -108,6 +109,7 @@ export async function POST(request: Request, context: RouteContext) {
   const data = parsed.data;
   const dateFrom = parseIsoDate(data.dateFrom);
   const dateTo = parseIsoDate(data.dateTo);
+  const supportsRoomPriceType = await areDatabaseColumnsAvailable("RoomPrice", ["priceType"]);
 
   if (!dateFrom || !dateTo) {
     return NextResponse.json({ error: "Некорректный формат дат" }, { status: 400 });
@@ -129,17 +131,26 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const created = await db.roomPrice.create({
-    data: {
-      roomId: room.id,
-      dateFrom,
-      dateTo,
-      price: data.price,
-      priceType: data.priceType,
-      minGuests: data.minGuests ?? null,
-      currency: data.currency,
-    },
-  });
+  const created = supportsRoomPriceType
+    ? await db.roomPrice.create({
+        data: {
+          roomId: room.id,
+          dateFrom,
+          dateTo,
+          price: data.price,
+          priceType: data.priceType,
+          minGuests: data.minGuests ?? null,
+          currency: data.currency,
+        },
+      })
+    : await createRoomPriceCompat({
+        roomId: room.id,
+        dateFrom,
+        dateTo,
+        price: data.price,
+        minGuests: data.minGuests ?? null,
+        currency: data.currency,
+      });
 
   return NextResponse.json({ item: serializeRoomPrice(created) }, { status: 201 });
 }

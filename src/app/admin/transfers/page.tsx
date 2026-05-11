@@ -77,6 +77,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
           statusFiltered,
           (item) => [
             item.title,
+            item.publicId?.toString(),
             item.transferType,
             item.vehicleClass,
             item.vehicleModel,
@@ -224,6 +225,9 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                         {item.transferType ? ` • ${item.transferType}` : ""}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-olive/65">
+                        <span className="rounded-full bg-primary/8 px-2.5 py-1 text-primary">
+                          ID {item.publicId ?? "—"}
+                        </span>
                         <span className="rounded-full border border-olive/12 px-2.5 py-1">
                           {(item.priceFrom ?? summary.priceFrom)
                             ? `от ${Number(item.priceFrom ?? summary.priceFrom).toLocaleString("ru-RU")} ₽`

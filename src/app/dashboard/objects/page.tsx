@@ -210,6 +210,11 @@ export default async function DashboardObjectsPage() {
                       <span className="mt-2 inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
                         {item.statusLabel}
                       </span>
+                      {item.publicId ? (
+                        <span className="mt-2 ml-2 inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
+                          ID {item.publicId}
+                        </span>
+                      ) : null}
                     </div>
                   </Link>
                   <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">

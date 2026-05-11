@@ -159,7 +159,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       ) : null}
 
       <div className="text-xs text-olive/50">
-        ID: {property.id} | Номеров: {property.rooms.length} |
+        ID объекта: {property.publicId ?? "—"} | Технический ID: {property.id} | Номеров: {property.rooms.length} |
         Рейтинг: {Number(property.avgRating).toFixed(1)} ({property.reviewsCount} отз.) |
         Создано: {new Date(property.createdAt).toLocaleString("ru-RU")}
       </div>

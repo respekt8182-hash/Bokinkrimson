@@ -8,6 +8,8 @@ type PropertyLeadMessageParams = {
   authorGender: LeadMessageAuthorGender;
   propertyName: string;
   roomTitle: string;
+  leadNumber?: string | null;
+  entityPublicId?: number | null;
   checkIn?: string | null;
   checkOut?: string | null;
   nightsLabel?: string | null;
@@ -23,6 +25,8 @@ type ExcursionLeadMessageParams = {
   offerType?: string | null;
   organizerName: string;
   excursionTitle: string;
+  leadNumber?: string | null;
+  entityPublicId?: number | null;
   locationName: string | null;
   date: string;
   guests: string;
@@ -32,6 +36,8 @@ type ExcursionLeadMessageParams = {
 type TransferLeadMessageParams = {
   authorGender: LeadMessageAuthorGender;
   transferTitle: string;
+  leadNumber?: string | null;
+  entityPublicId?: number | null;
   locationName: string | null;
   priceLabel?: string | null;
   vehicleOption?: string | null;
@@ -74,6 +80,29 @@ function getAuthorPhrases(authorGender: LeadMessageAuthorGender): {
     wouldLike: "Хотел бы",
     grateful: "благодарен",
   };
+}
+
+function appendLeadTrackingFooter(
+  lines: string[],
+  params: {
+    leadNumber?: string | null;
+    entityPublicId?: number | null;
+    entityLabel: string;
+  },
+): void {
+  if (!params.leadNumber && !params.entityPublicId) {
+    return;
+  }
+
+  lines.push("");
+
+  if (params.leadNumber) {
+    lines.push(`Обращение с КрымВокруг №${params.leadNumber}`);
+  }
+
+  if (params.entityPublicId) {
+    lines.push(`${params.entityLabel}: ${params.entityPublicId}`);
+  }
 }
 
 export function readLeadMessageAuthorGender(): LeadMessageAuthorGender {
@@ -130,6 +159,12 @@ export function buildPropertyLeadMessage(params: PropertyLeadMessageParams): str
   lines.push("");
   lines.push(`Буду ${phrases.grateful} за ответ!`);
 
+  appendLeadTrackingFooter(lines, {
+    leadNumber: params.leadNumber,
+    entityPublicId: params.entityPublicId,
+    entityLabel: "ID объекта",
+  });
+
   return lines.join("\n");
 }
 
@@ -176,6 +211,12 @@ export function buildExcursionLeadMessage(params: ExcursionLeadMessageParams): s
   lines.push("Подскажите, пожалуйста, есть ли свободные места и как лучше оформить бронирование?");
   lines.push(`Буду ${phrases.grateful} за ответ.`);
 
+  appendLeadTrackingFooter(lines, {
+    leadNumber: params.leadNumber,
+    entityPublicId: params.entityPublicId,
+    entityLabel: params.offerType === "TOUR" ? "ID тура" : "ID экскурсии",
+  });
+
   return lines.join("\n");
 }
 
@@ -215,6 +256,12 @@ export function buildTransferLeadMessage(params: TransferLeadMessageParams): str
 
   lines.push("");
   lines.push(`Буду ${phrases.grateful} за ответ!`);
+
+  appendLeadTrackingFooter(lines, {
+    leadNumber: params.leadNumber,
+    entityPublicId: params.entityPublicId,
+    entityLabel: "ID трансфера",
+  });
 
   return lines.join("\n");
 }

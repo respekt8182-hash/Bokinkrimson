@@ -35,6 +35,7 @@ type ExcursionMobileBarProps = {
   maxUrl: string | null;
   okUrl: string | null;
   phone: string | null;
+  entityPublicId?: number | null;
   organizerName: string;
   organizerAvatarUrl?: string | null;
   tracking?: {

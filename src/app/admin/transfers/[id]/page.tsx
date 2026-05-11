@@ -312,6 +312,9 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
             Владелец: {transfer.owner.firstName}
             {transfer.owner.phone ? `, ${transfer.owner.phone}` : ""}.
           </p>
+          <p className="mt-1 text-xs text-olive/50">
+            ID трансфера: {transfer.publicId ?? "—"} · Технический ID: {transfer.id}
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
