@@ -968,7 +968,6 @@ export function HomeSearchShowcase({
   cities,
   locationSuggestions,
   publishedPropertiesCount,
-  publishedExcursionsCount,
   initialPopularSuggestionsByDirection,
 }: HomeSearchShowcaseProps) {
   const router = useRouter();
@@ -1103,19 +1102,6 @@ export function HomeSearchShowcase({
       label: `${pluralize(cities.length, ["курорт", "курорта", "курортов"])} на витрине`,
     };
   }, [cities.length, publishedPropertiesCount]);
-  const excursionStat = useMemo(() => {
-    if (publishedExcursionsCount !== null) {
-      return {
-        value: countFormatter.format(publishedExcursionsCount),
-        label: pluralize(publishedExcursionsCount, ["экскурсия", "экскурсии", "экскурсий"]),
-      };
-    }
-
-    return {
-      value: "2",
-      label: "направления отдыха",
-    };
-  }, [publishedExcursionsCount]);
   const starterProgram = useMemo(() => {
     if (publishedPropertiesCount === null) {
       return {
@@ -1137,12 +1123,6 @@ export function HomeSearchShowcase({
       progressPercent: Math.min(100, (used / STARTER_PROGRAM_LIMIT) * 100),
     };
   }, [publishedPropertiesCount]);
-  const locationCountLabel = `${pluralize(locationSuggestions.length, [
-    "населенный пункт",
-    "населенных пункта",
-    "населенных пунктов",
-  ])} Крыма`;
-
   const locationByNormalizedName = useMemo(() => {
     const map = new Map<string, string>();
 
@@ -4027,8 +4007,7 @@ export function HomeSearchShowcase({
               </div>
               <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                {housingStat.value} {housingStat.label}, {excursionStat.value} {excursionStat.label}{" "}
-                и {locationSuggestions.length} {locationCountLabel} — всё на одном сайте.
+                {housingStat.value} {housingStat.label} — всё на одном сайте.
               </p>
             </div>
           </div>
