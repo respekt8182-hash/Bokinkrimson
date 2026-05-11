@@ -1332,7 +1332,16 @@ export function PublicPropertyDetails({
       roomTitle: bestAutoEntry.room.title,
     } satisfies QuoteResult;
   }, [checkIn, checkOut, rankedRooms, selectedNights]);
-  const sortedRooms = rankedRooms;
+  const sortedRooms = useMemo(
+    () =>
+      [...rankedRooms].sort((left, right) => {
+        if (left.room.sortOrder !== right.room.sortOrder) {
+          return left.room.sortOrder - right.room.sortOrder;
+        }
+        return left.index - right.index;
+      }),
+    [rankedRooms],
+  );
   const sidebarNightlyLabel = sidebarQuote
     ? `${formatMoney(sidebarQuote.nightly, sidebarQuote.currency)} за ночь`
     : `${mainPriceLabel} ${getRoomPriceNightlySuffix(item.minNightPriceType)}`;

@@ -11,7 +11,8 @@ import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/db";
 import { loadDashboardPageData } from "@/lib/dashboard-page-db";
-import { getPlacementValidUntil } from "@/lib/payments";
+import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
+import { PLACEMENT_PROMO_SHORT_END_LABEL } from "@/lib/placement-promo";
 import {
   getPropertyWorkflowStatus,
   type PropertyProgress,
@@ -94,8 +95,14 @@ export default async function DashboardObjectsPage() {
             orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
             take: 1,
             select: {
+              amount: true,
+              tariffCode: true,
+              tariffType: true,
+              paidFrom: true,
               paidAt: true,
               createdAt: true,
+              placementValidUntil: true,
+              providerPayload: true,
             },
           },
         },
@@ -126,14 +133,20 @@ export default async function DashboardObjectsPage() {
 
   const items = properties.map((item) => serializeProperty(item));
   const todayUtcMs = getUtcDayStart(new Date());
-  const publicationUntilByPropertyId = new Map(
+  const paymentDisplayByPropertyId = new Map(
     properties.map((property) => {
       const latestSucceededPayment = property.payments[0] ?? null;
-      if (!latestSucceededPayment) {
-        return [property.id, null] as const;
-      }
-      const anchorDate = latestSucceededPayment.paidAt ?? latestSucceededPayment.createdAt;
-      return [property.id, getPlacementValidUntil(anchorDate)] as const;
+      const paymentDisplay = getObjectPaymentDisplay({
+        paymentStatus: property.paymentStatus,
+        tariffType: property.tariffType,
+        paidFrom: property.paidFrom,
+        paidUntil: property.paidUntil,
+        paidAmount: property.paidAmount,
+        paidAt: property.paidAt,
+        latestPayment: latestSucceededPayment,
+      });
+
+      return [property.id, paymentDisplay] as const;
     }),
   );
   const workflowStatusByPropertyId = new Map(
@@ -165,7 +178,14 @@ export default async function DashboardObjectsPage() {
             const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
             const completedStages = getCompletedDashboardStages(item.progress);
             const isDone = completedStages >= 5;
-            const publicationUntilDate = publicationUntilByPropertyId.get(item.id) ?? null;
+            const paymentDisplay = paymentDisplayByPropertyId.get(item.id) ?? null;
+            const publicationUntilDate = paymentDisplay?.paidUntil ?? null;
+            const publicationUntilLabel =
+              paymentDisplay?.status === "demo"
+                ? PLACEMENT_PROMO_SHORT_END_LABEL
+                : (publicationUntilDate?.toLocaleDateString("ru-RU") ?? null);
+            const publicationCaption =
+              paymentDisplay?.status === "demo" ? "Тестовый период до" : "Размещается до";
             const daysLeft = publicationUntilDate
               ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)
               : null;
@@ -276,7 +296,7 @@ export default async function DashboardObjectsPage() {
                       </div>
                     )}
                   </div>
-                  {publicationUntilDate ? (
+                  {publicationUntilDate && publicationUntilLabel ? (
                     <div
                       className={cn(
                         "flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:w-auto",
@@ -309,7 +329,7 @@ export default async function DashboardObjectsPage() {
                                 : "text-emerald-500",
                           )}
                         >
-                          Размещается до
+                          {publicationCaption}
                         </p>
                         <p
                           className={cn(
@@ -321,7 +341,7 @@ export default async function DashboardObjectsPage() {
                                 : "text-emerald-700",
                           )}
                         >
-                          {publicationUntilDate.toLocaleDateString("ru-RU")}
+                          {publicationUntilLabel}
                         </p>
                       </div>
                     </div>
