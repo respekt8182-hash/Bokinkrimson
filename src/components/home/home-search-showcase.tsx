@@ -968,6 +968,7 @@ export function HomeSearchShowcase({
   cities,
   locationSuggestions,
   publishedPropertiesCount,
+  publishedExcursionsCount,
   initialPopularSuggestionsByDirection,
 }: HomeSearchShowcaseProps) {
   const router = useRouter();
@@ -1102,6 +1103,23 @@ export function HomeSearchShowcase({
       label: `${pluralize(cities.length, ["курорт", "курорта", "курортов"])} на витрине`,
     };
   }, [cities.length, publishedPropertiesCount]);
+  const leisureStat = useMemo(() => {
+    if (publishedExcursionsCount !== null) {
+      return {
+        value: countFormatter.format(publishedExcursionsCount),
+        label: pluralize(publishedExcursionsCount, [
+          "вариант досуга",
+          "варианта досуга",
+          "вариантов досуга",
+        ]),
+      };
+    }
+
+    return {
+      value: "0",
+      label: "вариантов досуга",
+    };
+  }, [publishedExcursionsCount]);
   const starterProgram = useMemo(() => {
     if (publishedPropertiesCount === null) {
       return {
@@ -4007,7 +4025,8 @@ export function HomeSearchShowcase({
               </div>
               <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                {housingStat.value} {housingStat.label} — всё на одном сайте.
+                {housingStat.value} {housingStat.label} и {leisureStat.value} {leisureStat.label}
+                {" "}— всё на одном сайте.
               </p>
             </div>
           </div>
