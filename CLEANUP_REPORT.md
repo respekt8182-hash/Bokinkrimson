@@ -12,7 +12,6 @@
 ## Simplified
 
 - payment release surface now centers on:
-  - `YOOKASSA`
   - `MANAGER`
 - admin payment list `ALL` filter now excludes mock provider data
 - Playwright local config now defaults to `localhost`, matching app behavior
@@ -29,7 +28,6 @@
 - `src/components/maps/catalog-map-preview-card.tsx`
 - `RELEASE_AUDIT.md`
 - `BUGFIX_LOG.md`
-- `YOOKASSA_INTEGRATION.md`
 - `SECURITY_AUDIT.md`
 - `PERFORMANCE_AUDIT.md`
 - `CLEANUP_REPORT.md`

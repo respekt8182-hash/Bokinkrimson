@@ -5,11 +5,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PROPERTY_OWNER_DELETE_RETENTION_DAYS } from "@/lib/property-owner-delete";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 type DeletePropertyButtonProps = {
   propertyId: string;
   propertyName: string;
   propertyStatus: string;
+  className?: string;
+  buttonClassName?: string;
 };
 
 type DeletePropertyResponse = {
@@ -23,6 +26,8 @@ export function DeletePropertyButton({
   propertyId,
   propertyName,
   propertyStatus,
+  className,
+  buttonClassName,
 }: DeletePropertyButtonProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -87,12 +92,15 @@ export function DeletePropertyButton({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <Button
         type="button"
         variant="ghost"
         onClick={openModal}
-        className="border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra"
+        className={cn(
+          "border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra",
+          buttonClassName,
+        )}
       >
         Удалить объект
       </Button>

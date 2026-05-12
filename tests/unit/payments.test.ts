@@ -9,7 +9,6 @@ import {
   getTransferPaymentReference,
   getTransferPaymentTariffCode,
   getTransferPlacementCoverageState,
-  mapYookassaStatus,
   resolvePaymentStatusTransition,
   serializePayment,
   setPaymentAdminRevenueIncluded,
@@ -18,13 +17,6 @@ import {
 import { buildPlacementPromoPayload } from "../../src/lib/placement-promo";
 
 describe("payments domain", () => {
-  it("maps YooKassa statuses", () => {
-    expect(mapYookassaStatus("pending")).toBe(PaymentStatus.PENDING);
-    expect(mapYookassaStatus("waiting_for_capture")).toBe(PaymentStatus.PENDING);
-    expect(mapYookassaStatus("succeeded")).toBe(PaymentStatus.SUCCEEDED);
-    expect(mapYookassaStatus("canceled")).toBe(PaymentStatus.CANCELED);
-  });
-
   it("keeps terminal success status", () => {
     expect(resolvePaymentStatusTransition(PaymentStatus.SUCCEEDED, PaymentStatus.CANCELED)).toBe(
       PaymentStatus.SUCCEEDED,

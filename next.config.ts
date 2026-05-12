@@ -29,7 +29,6 @@ function buildCspValue(): string {
     "https://mc.yandex.com",
     "wss://mc.yandex.ru",
     "wss://mc.yandex.com",
-    "https://api.yookassa.ru",
     "https://api-maps.yandex.ru",
     "https://geocode-maps.yandex.ru",
     ...publicAssetOrigins,
@@ -47,7 +46,7 @@ function buildCspValue(): string {
     `connect-src ${connectSources.join(" ")}`,
     "font-src 'self' data:",
     "frame-src 'self' https://yandex.ru https://*.yandex.ru",
-    "form-action 'self' https://yookassa.ru https://*.yookassa.ru",
+    "form-action 'self'",
   ];
 
   return policy.join("; ");

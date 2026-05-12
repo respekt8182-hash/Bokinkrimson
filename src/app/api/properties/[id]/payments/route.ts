@@ -4,18 +4,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildFreePlacementPaymentPayload,
+  buildPostLaunchTrialPaymentPayload,
   getPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { buildPlacementPricingPayload } from "@/lib/placement-pricing";
 import {
-  buildPlacementPromoMetadata,
   buildPlacementPromoPayload,
   getPlacementPromoDemoValidUntil,
+  getPostLaunchTrialValidUntil,
+  isPostLaunchTrialEligible,
 } from "@/lib/placement-promo";
 import {
   getPropertyPaymentReadinessIssues,
@@ -24,7 +25,6 @@ import {
   purgeExpiredPropertyDraftsForOwner,
   syncPropertyPlacementFromPayment,
 } from "@/lib/properties";
-import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -62,6 +62,7 @@ async function buildReadiness(
   property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
   ownerId: string,
   tariffType?: string | null,
+  freeTrialUntil?: Date | null,
 ) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
@@ -88,6 +89,7 @@ async function buildReadiness(
             roomCount,
             propertyType: property.type,
             tariffType,
+            freeTrialUntil,
           })
         : null,
   };
@@ -112,7 +114,7 @@ async function listPropertyPayments(propertyId: string, ownerId: string) {
       propertyId,
       ownerId,
       provider: {
-        in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+        in: [PaymentProvider.MANAGER],
       },
     },
     orderBy: [{ createdAt: "desc" }],
@@ -142,7 +144,18 @@ export async function GET(request: Request, context: RouteContext) {
 
   const payments = await listPropertyPayments(property.id, session.id);
   const { searchParams } = new URL(request.url);
-  const readiness = await buildReadiness(property, session.id, searchParams.get("tariffType"));
+  const freeTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: property.createdAt,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil()
+    : null;
+  const readiness = await buildReadiness(
+    property,
+    session.id,
+    searchParams.get("tariffType"),
+    freeTrialUntil,
+  );
   const placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -159,7 +172,7 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 const createPaymentSchema = z.object({
-  provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("MANAGER"),
+  provider: z.literal("MANAGER").optional().default("MANAGER"),
   tariffType: z.enum(["season", "offseason", "yearly"]).optional(),
 });
 
@@ -174,9 +187,10 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
-    if (parsed.success) {
-      body = parsed.data;
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Онлайн-оплата отключена. Используйте заявку менеджеру." }, { status: 400 });
     }
+    body = parsed.data;
   } catch {
     // Empty body is fine.
   }
@@ -190,7 +204,16 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const readiness = await buildReadiness(property, session.id, body.tariffType);
+  const payments = await listPropertyPayments(property.id, session.id);
+  const now = new Date();
+  const freeTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: property.createdAt,
+    now,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil(now)
+    : null;
+  const readiness = await buildReadiness(property, session.id, body.tariffType, freeTrialUntil);
 
   if (!readiness.ready || !readiness.quote) {
     return NextResponse.json(
@@ -202,7 +225,6 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const payments = await listPropertyPayments(property.id, session.id);
   const placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -226,6 +248,21 @@ export async function POST(request: Request, context: RouteContext) {
     ? placement.requiredOriginalPaymentAmount
     : readiness.quote.originalAmount;
 
+  const latestOpenPayment =
+    payments.find(
+      (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
+    ) ?? null;
+
+  if (latestOpenPayment) {
+    return NextResponse.json(
+      {
+        error: "У вас уже есть незавершенный платеж по этому объекту",
+        item: serializePayment(latestOpenPayment),
+      },
+      { status: 409 },
+    );
+  }
+
   if (amount <= 0) {
     const now = new Date();
     const created = await db.payment.create({
@@ -242,12 +279,19 @@ export async function POST(request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom: now,
         paidAt: now,
-        placementValidUntil: getPlacementPromoDemoValidUntil(),
-        providerPayload: buildFreePlacementPaymentPayload({
-          originalAmountRub: originalAmount,
-          now,
-          placementPricing: readiness.quote.placementPricing,
-        }),
+        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(),
+        providerPayload: freeTrialUntil
+          ? buildPostLaunchTrialPaymentPayload({
+              originalAmountRub: originalAmount,
+              now,
+              validUntil: freeTrialUntil,
+              placementPricing: readiness.quote.placementPricing,
+            })
+          : buildFreePlacementPaymentPayload({
+              originalAmountRub: originalAmount,
+              now,
+              placementPricing: readiness.quote.placementPricing,
+            }),
       },
       include: {
         property: { select: { name: true } },
@@ -264,32 +308,7 @@ export async function POST(request: Request, context: RouteContext) {
     });
   }
 
-  try {
-    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
-  } catch {
-    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
-  }
-
-  const latestOpenPayment =
-    payments.find(
-      (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
-    ) ?? null;
-
-  if (latestOpenPayment) {
-    return NextResponse.json(
-      {
-        error: "У вас уже есть незавершенный платеж по этому объекту",
-        item: serializePayment(latestOpenPayment),
-      },
-      { status: 409 },
-    );
-  }
-
   const placementPromo = buildPlacementPromoPayload({
-    originalAmountRub: originalAmount,
-    discountedAmountRub: Number(amount),
-  });
-  const promoMetadata = buildPlacementPromoMetadata({
     originalAmountRub: originalAmount,
     discountedAmountRub: Number(amount),
   });
@@ -299,47 +318,6 @@ export async function POST(request: Request, context: RouteContext) {
   const paidUntil = new Date(readiness.quote.paidUntil);
   const selectedTariffType = toPrismaObjectTariffType(readiness.quote.tariffType);
 
-  if (body.provider === "MANAGER") {
-    const created = await db.payment.create({
-      data: {
-        propertyId: property.id,
-        ownerId: session.id,
-        amount,
-        tariffCode: readiness.quote.tariff.code,
-        tariffType: selectedTariffType,
-        roomCount: readiness.quote.roomCount,
-        status: PaymentStatus.PENDING,
-        provider: PaymentProvider.MANAGER,
-        idempotenceKey,
-        confirmationUrl: null,
-        paidFrom,
-        placementValidUntil: paidUntil,
-        providerPayload: {
-          ...(placementPromo ? { placementPromo } : {}),
-          ...(readiness.quote.placementPricing
-            ? buildPlacementPricingPayload(readiness.quote.placementPricing)
-            : {}),
-        },
-      },
-      include: {
-        property: { select: { name: true } },
-      },
-    });
-
-    return NextResponse.json({
-      item: serializePayment(created),
-      redirectUrl: null,
-      managerRequested: true,
-    });
-  }
-
-  if (!isYookassaConfigured()) {
-    return NextResponse.json(
-      { error: "YooKassa временно недоступна. Используйте оплату через менеджера." },
-      { status: 503 },
-    );
-  }
-
   const created = await db.payment.create({
     data: {
       propertyId: property.id,
@@ -348,64 +326,27 @@ export async function POST(request: Request, context: RouteContext) {
       tariffCode: readiness.quote.tariff.code,
       tariffType: selectedTariffType,
       roomCount: readiness.quote.roomCount,
-      status: PaymentStatus.CREATED,
-      provider: PaymentProvider.YOOKASSA,
+      status: PaymentStatus.PENDING,
+      provider: PaymentProvider.MANAGER,
       idempotenceKey,
+      confirmationUrl: null,
       paidFrom,
       placementValidUntil: paidUntil,
-      providerPayload: readiness.quote.placementPricing
-        ? buildPlacementPricingPayload(readiness.quote.placementPricing)
-        : undefined,
+      providerPayload: {
+        ...(placementPromo ? { placementPromo } : {}),
+        ...(readiness.quote.placementPricing
+          ? buildPlacementPricingPayload(readiness.quote.placementPricing)
+          : {}),
+      },
     },
     include: {
       property: { select: { name: true } },
     },
   });
 
-  try {
-    const yooPayment = await createYookassaPayment({
-      idempotenceKey,
-      amountRub: Number(amount),
-      description: `${readiness.quote.tariff.title}: «${property.name ?? "Без названия"}»`,
-      metadata: { paymentId: created.id, propertyId: property.id, ...promoMetadata },
-    });
-    const providerPayload = {
-      ...yooPayment,
-      metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
-    };
-
-    const updated = await db.payment.update({
-      where: { id: created.id },
-      data: {
-        providerPaymentId: yooPayment.id,
-        confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload: {
-          ...providerPayload,
-          ...(readiness.quote.placementPricing
-            ? buildPlacementPricingPayload(readiness.quote.placementPricing)
-            : {}),
-        },
-        status: PaymentStatus.PENDING,
-      },
-      include: {
-        property: { select: { name: true } },
-      },
-    });
-
-    return NextResponse.json({
-      item: serializePayment(updated),
-      redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
-    });
-  } catch (error) {
-    await db.payment.update({
-      where: { id: created.id },
-      data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
-    });
-
-    console.error("YooKassa payment creation failed", error);
-    return NextResponse.json(
-      { error: "Не удалось создать платеж. Попробуйте позже или выберите оплату через менеджера." },
-      { status: 502 },
-    );
-  }
+  return NextResponse.json({
+    item: serializePayment(created),
+    redirectUrl: null,
+    managerRequested: true,
+  });
 }

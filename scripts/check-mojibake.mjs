@@ -2,7 +2,7 @@
 // Maintenance script that scans repository text files for mojibake and obvious encoding corruption.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { TextDecoder } from "node:util";
 
@@ -89,6 +89,10 @@ function main() {
   const allHits = [];
 
   for (const filePath of files) {
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
     allHits.push(...scanFile(filePath));
   }
 

@@ -157,10 +157,10 @@ export default async function DashboardObjectsPage() {
   ).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col items-start gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
-        <div>
-          <h1 className="text-3xl text-olive">Объекты</h1>
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-col items-stretch gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl text-olive sm:text-3xl">Объекты</h1>
         </div>
         <CreatePropertyButton />
       </div>
@@ -201,13 +201,16 @@ export default async function DashboardObjectsPage() {
             const reviewCount = stats?.count ?? 0;
 
             return (
-              <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
+              <article
+                key={item.id}
+                className="overflow-hidden rounded-2xl border border-olive/10 bg-white p-3 sm:p-4"
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <Link
                     href={`/dashboard/objects/${item.id}/about`}
-                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
+                    className="flex w-full min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
                   >
-                    <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 sm:h-16 sm:w-24">
+                    <div className="h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 min-[380px]:w-24">
                       {firstImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -222,22 +225,24 @@ export default async function DashboardObjectsPage() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1 py-1">
-                      <h2 className="truncate text-xl text-olive">{item.name ?? "Новый объект"}</h2>
+                      <h2 className="truncate text-lg text-olive sm:text-xl">{item.name ?? "Новый объект"}</h2>
                       <p className="mt-1 text-xs leading-snug text-olive/60">
                         {item.locationName ?? "Локация не выбрана"} •{" "}
                         {item.typeLabel ?? "Тип не указан"}
                       </p>
-                      <span className="mt-2 inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
-                        {item.statusLabel}
-                      </span>
-                      {item.publicId ? (
-                        <span className="mt-2 ml-2 inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
-                          ID {item.publicId}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
+                          {item.statusLabel}
                         </span>
-                      ) : null}
+                        {item.publicId ? (
+                          <span className="inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
+                            ID {item.publicId}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </Link>
-                  <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+                  <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map((i) => {
                         const fill = Math.min(1, Math.max(0, avgRating - (i - 1)));
@@ -318,7 +323,7 @@ export default async function DashboardObjectsPage() {
                               : "text-emerald-600",
                         )}
                       />
-                      <div>
+                      <div className="min-w-0">
                         <p
                           className={cn(
                             "text-[10px] leading-none",
@@ -389,16 +394,16 @@ export default async function DashboardObjectsPage() {
                   <p className="text-xs text-olive/60">
                     Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid w-full grid-cols-2 gap-2 min-[520px]:flex min-[520px]:w-auto min-[520px]:flex-wrap">
                     <Link
                       href={`/dashboard/objects/${item.id}/about`}
-                      className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+                      className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white min-[520px]:w-auto"
                     >
                       Карточка
                     </Link>
                     <Link
                       href={`/dashboard/objects/${item.id}/payment`}
-                      className="rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream min-[520px]:w-auto"
                     >
                       Оплата
                     </Link>
@@ -406,17 +411,23 @@ export default async function DashboardObjectsPage() {
                       <>
                         <Link
                           href={publicPath}
-                          className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
+                          className="inline-flex w-full items-center justify-center rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 min-[520px]:w-auto"
                         >
                           Публичная страница
                         </Link>
-                        <StatsButton propertyId={item.id} propertyName={item.name ?? "Объект"} />
+                        <StatsButton
+                          propertyId={item.id}
+                          propertyName={item.name ?? "Объект"}
+                          className="w-full justify-center min-[520px]:w-auto"
+                        />
                       </>
                     )}
                     <DeletePropertyButton
                       propertyId={item.id}
                       propertyName={item.name ?? "Новый объект"}
                       propertyStatus={item.status}
+                      className="col-span-2 min-[520px]:col-span-1"
+                      buttonClassName="w-full justify-center min-[520px]:w-auto"
                     />
                   </div>
                 </div>

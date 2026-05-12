@@ -134,6 +134,9 @@ function resolveActiveMenuKey(pathname: string): DrawerItemKey | null {
 function shouldShowDashboardBottomNav(pathname: string) {
   return (
     pathname === "/dashboard" ||
+    pathname === "/dashboard/objects" ||
+    pathname === "/dashboard/excursions" ||
+    pathname === "/dashboard/transfers" ||
     pathname.startsWith("/dashboard/chessboard") ||
     pathname.startsWith("/dashboard/reviews") ||
     pathname.startsWith("/dashboard/payments") ||

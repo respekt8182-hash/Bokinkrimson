@@ -92,7 +92,6 @@ node scripts/hash-admin-password.mjs "VeryStrongAdminPassword123!"
 Если позже подключите внешние сервисы, можно дополнительно заполнить:
 
 - `S3_*` для объектного хранилища
-- `YOOKASSA_*` и `YOOKASSA_WEBHOOK_IP_ALLOWLIST` для онлайн-оплаты
 - `SMTP_*` и `SECURITY_EMAIL_FROM` для реальной отправки security email
 - `UPSTASH_REDIS_*` и `RATE_LIMIT_MODE="upstash"` если захотите вынести rate-limit из памяти
 

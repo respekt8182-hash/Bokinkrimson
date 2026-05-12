@@ -52,8 +52,10 @@ export function CreatePropertyButton() {
   }
 
   return (
-    <div className="space-y-2">
-      <Button onClick={openModal}>Добавить объект</Button>
+    <div className="w-full space-y-2 min-[420px]:w-auto">
+      <Button onClick={openModal} className="w-full justify-center min-[420px]:w-auto">
+        Добавить объект
+      </Button>
 
       {isModalVisible ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-midnight/55 p-4">

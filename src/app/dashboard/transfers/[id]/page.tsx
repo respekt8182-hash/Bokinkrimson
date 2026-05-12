@@ -9,9 +9,9 @@ import {
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
-import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
   buildFreePlacementPaymentPayload,
+  buildPostLaunchTrialPaymentPayload,
   buildTransferPaymentPayload,
   getTransferPaymentTariffCode,
   getTransferPlacementCoverageState,
@@ -22,10 +22,12 @@ import {
   TRANSFER_EXTRA_VEHICLE_FEE_RUB,
 } from "@/lib/site-tariffs";
 import {
-  buildPlacementPromoMetadata,
+  applyPlacementFreePeriodToPricing,
   buildPlacementPromoPayload,
   getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
+  getPostLaunchTrialValidUntil,
+  isPostLaunchTrialEligible,
 } from "@/lib/placement-promo";
 import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
@@ -44,7 +46,6 @@ import {
   normalizeTransferServiceTags,
   submitTransferToModerationIfReady,
 } from "@/lib/transfers";
-import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type DashboardTransferPageProps = {
   params: Promise<{ id: string }>;
@@ -111,10 +112,6 @@ function parseOptionalJsonField(formData: FormData, key: string): unknown | unde
   }
 
   return parseJsonField(formData, key);
-}
-
-function parseTransferPaymentProvider(value: string | null): PaymentProvider {
-  return value === "YOOKASSA" ? PaymentProvider.YOOKASSA : PaymentProvider.MANAGER;
 }
 
 function getFirstSearchParam(value: string | string[] | undefined): string | null {
@@ -210,6 +207,7 @@ export default async function DashboardTransferEditPage({
       where: { id },
       select: {
         ownerId: true,
+        createdAt: true,
         status: true,
         pendingEditStatus: true,
         publishedSnapshot: true,
@@ -280,7 +278,6 @@ export default async function DashboardTransferEditPage({
       priceUnitLabel: current.priceUnitLabel,
     });
     const intent = formString(formData, "intent");
-    const paymentProvider = parseTransferPaymentProvider(formString(formData, "paymentProvider"));
     const previewPath = `${buildPublicTransferPath({ id, title })}?preview=1`;
     const transferType = resolveString("transferType", current.transferType);
     const locationName =
@@ -386,16 +383,16 @@ export default async function DashboardTransferEditPage({
       await ensurePublishedTransferSnapshotBeforeOwnerEdit(db, id);
     }
 
-    const transferPlacementPricing = await getPlacementPrice({
+    const now = new Date();
+    const baseTransferPlacementPricing = await getPlacementPrice({
       userId: currentSession.id,
       category: "transfer",
       period: "year",
       additionalOptions: { additionalCars: Math.max(0, fleet.length - 1) },
+      now,
     });
-    const publicationFeeRub = getPlacementPromoPrice(transferPlacementPricing.totalPrice)
-      .finalAmountRub;
     const originalPublicationFeeRub =
-      transferPlacementPricing.basePrice + transferPlacementPricing.additionalOptionsPrice;
+      baseTransferPlacementPricing.basePrice + baseTransferPlacementPricing.additionalOptionsPrice;
     const shouldPreparePayment = intent === "submit" && publishReady;
     const transferPaymentsSupported = shouldPreparePayment
       ? await areDatabaseColumnsAvailable("Payment", ["transferId"])
@@ -408,7 +405,7 @@ export default async function DashboardTransferEditPage({
       ? {
           ownerId: currentSession.id,
           provider: {
-            in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+            in: [PaymentProvider.MANAGER],
           },
           OR: [{ transferId: id }, { tariffCode: legacyTransferPaymentTariffCode }],
         }
@@ -416,7 +413,7 @@ export default async function DashboardTransferEditPage({
           ownerId: currentSession.id,
           tariffCode: transferPaymentTariffCode,
           provider: {
-            in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+            in: [PaymentProvider.MANAGER],
           },
         };
     const payments = shouldPreparePayment
@@ -425,6 +422,20 @@ export default async function DashboardTransferEditPage({
           orderBy: [{ createdAt: "desc" }],
         })
       : [];
+    const trialUntil = isPostLaunchTrialEligible({
+      listingCreatedAt: current.createdAt,
+      now,
+      hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+    })
+      ? getPostLaunchTrialValidUntil(now)
+      : null;
+    const transferPlacementPricing = trialUntil
+      ? applyPlacementFreePeriodToPricing(baseTransferPlacementPricing, { validUntil: trialUntil })
+      : baseTransferPlacementPricing;
+    const publicationPrice = getPlacementPromoPrice(transferPlacementPricing.totalPrice, now);
+    const publicationFeeRub = transferPlacementPricing.freePeriodActive
+      ? 0
+      : publicationPrice.finalAmountRub;
     const transferPaymentCoverage = getTransferPlacementCoverageState({
       payments,
       publicationFeeRub,
@@ -521,7 +532,6 @@ export default async function DashboardTransferEditPage({
 
       if (hasFullPaymentCoverage) {
         if (publicationFeeRub <= 0 && !transferPaymentCoverage.hasActivePlacement) {
-          const now = new Date();
           const freeTransferPaymentPayload = buildTransferPaymentPayload({
             transferId: id,
             transferTitle: title,
@@ -542,14 +552,23 @@ export default async function DashboardTransferEditPage({
               status: PaymentStatus.SUCCEEDED,
               provider: PaymentProvider.MANAGER,
               idempotenceKey: crypto.randomUUID(),
+              paidFrom: now,
               paidAt: now,
-              placementValidUntil: getPlacementPromoDemoValidUntil(),
-              providerPayload: buildFreePlacementPaymentPayload({
-                originalAmountRub: originalPublicationFeeRub,
-                now,
-                context: freeTransferPaymentPayload,
-                placementPricing: transferPlacementPricing,
-              }),
+              placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(),
+              providerPayload: trialUntil
+                ? buildPostLaunchTrialPaymentPayload({
+                    originalAmountRub: originalPublicationFeeRub,
+                    now,
+                    validUntil: trialUntil,
+                    context: freeTransferPaymentPayload,
+                    placementPricing: transferPlacementPricing,
+                  })
+                : buildFreePlacementPaymentPayload({
+                    originalAmountRub: originalPublicationFeeRub,
+                    now,
+                    context: freeTransferPaymentPayload,
+                    placementPricing: transferPlacementPricing,
+                  }),
             },
           });
         }
@@ -566,22 +585,12 @@ export default async function DashboardTransferEditPage({
         redirect(`/dashboard/transfers/${id}?saved=1&payment=paid`);
       }
 
-      try {
-        ensurePaymentProviderAllowed(paymentProvider);
-      } catch {
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=provider-disabled`);
-      }
-
       const requiredPaymentAmount = transferPaymentCoverage.requiredPaymentAmount;
       const requiredOriginalPaymentAmount = transferPaymentCoverage.requiredOriginalPaymentAmount;
       const paymentReason = transferPaymentCoverage.hasActivePlacement
         ? "fleet_topup"
         : "publication";
       const placementPromo = buildPlacementPromoPayload({
-        originalAmountRub: requiredOriginalPaymentAmount,
-        discountedAmountRub: requiredPaymentAmount,
-      });
-      const promoMetadata = buildPlacementPromoMetadata({
         originalAmountRub: requiredOriginalPaymentAmount,
         discountedAmountRub: requiredPaymentAmount,
       });
@@ -619,53 +628,20 @@ export default async function DashboardTransferEditPage({
           }
         }
 
-        if (openPayment.provider === PaymentProvider.YOOKASSA && openPayment.confirmationUrl) {
-          redirect(openPayment.confirmationUrl);
-        }
-
         redirect(`/dashboard/transfers/${id}?saved=1&payment=pending`);
       }
 
       const idempotenceKey = crypto.randomUUID();
 
-      if (paymentProvider === PaymentProvider.MANAGER) {
-        await db.payment.create({
-          data: {
-            ...(transferPaymentsSupported ? { transferId: id } : {}),
-            ownerId: currentSession.id,
-            amount: requiredPaymentAmount,
-            tariffCode: transferPaymentTariffCode,
-            roomCount: fleet.length,
-            status: PaymentStatus.PENDING,
-            provider: PaymentProvider.MANAGER,
-            idempotenceKey,
-            providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
-            placementValidUntil: transferPaymentCoverage.paidUntil
-              ? new Date(transferPaymentCoverage.paidUntil)
-              : null,
-          },
-        });
-
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=manager`);
-      }
-
-      if (!transferPaymentsSupported) {
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-unavailable`);
-      }
-
-      if (!isYookassaConfigured()) {
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-unavailable`);
-      }
-
-      const created = await db.payment.create({
+      await db.payment.create({
         data: {
           ...(transferPaymentsSupported ? { transferId: id } : {}),
           ownerId: currentSession.id,
           amount: requiredPaymentAmount,
           tariffCode: transferPaymentTariffCode,
           roomCount: fleet.length,
-          status: PaymentStatus.CREATED,
-          provider: PaymentProvider.YOOKASSA,
+          status: PaymentStatus.PENDING,
+          provider: PaymentProvider.MANAGER,
           idempotenceKey,
           providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
           placementValidUntil: transferPaymentCoverage.paidUntil
@@ -674,54 +650,7 @@ export default async function DashboardTransferEditPage({
         },
       });
 
-      let paymentRedirectUrl: string | null = null;
-
-      try {
-        const yooPayment = await createYookassaPayment({
-          idempotenceKey,
-          amountRub: requiredPaymentAmount,
-          description:
-            paymentReason === "fleet_topup"
-              ? `Доплата за автопарк трансфера «${title}»`
-              : `Публикация трансфера «${title}»`,
-          metadata: {
-            paymentId: created.id,
-            transferId: id,
-            ...promoMetadata,
-          },
-        });
-        const providerPayload = {
-          ...yooPayment,
-          metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
-          ...placementPricingPayload,
-        };
-
-        const updated = await db.payment.update({
-          where: { id: created.id },
-          data: {
-            providerPaymentId: yooPayment.id,
-            confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-            providerPayload,
-            status: PaymentStatus.PENDING,
-          },
-        });
-
-        paymentRedirectUrl = updated.confirmationUrl;
-      } catch (error) {
-        await db.payment.update({
-          where: { id: created.id },
-          data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
-        });
-
-        console.error("YooKassa transfer payment creation failed", error);
-        redirect(`/dashboard/transfers/${id}?saved=1&payment=yookassa-error`);
-      }
-
-      if (paymentRedirectUrl) {
-        redirect(paymentRedirectUrl);
-      }
-
-      redirect(`/dashboard/transfers/${id}?saved=1&payment=pending`);
+      redirect(`/dashboard/transfers/${id}?saved=1&payment=manager`);
     }
 
     redirect(`/dashboard/transfers/${id}?saved=1`);
@@ -747,7 +676,7 @@ export default async function DashboardTransferEditPage({
     ? {
         ownerId: session.id,
         provider: {
-          in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+          in: [PaymentProvider.MANAGER],
         },
         OR: [{ transferId: id }, { tariffCode: transferPaymentTariffCode }],
       }
@@ -755,7 +684,7 @@ export default async function DashboardTransferEditPage({
         ownerId: session.id,
         tariffCode: transferPaymentTariffCode,
         provider: {
-          in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+          in: [PaymentProvider.MANAGER],
         },
       };
   const payments = await db.payment.findMany({
@@ -771,13 +700,30 @@ export default async function DashboardTransferEditPage({
         }
       : undefined,
   });
-  const initialTransferPlacementPricing = await getPlacementPrice({
+  const initialPricingNow = new Date();
+  const baseInitialTransferPlacementPricing = await getPlacementPrice({
     userId: session.id,
     category: "transfer",
     period: "year",
     additionalOptions: { additionalCars: Math.max(0, fleet.length - 1) },
+    now: initialPricingNow,
   });
-  const transferPublicationPrice = getPlacementPromoPrice(initialTransferPlacementPricing.finalPrice);
+  const initialTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: transfer.createdAt,
+    now: initialPricingNow,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil(initialPricingNow)
+    : null;
+  const initialTransferPlacementPricing = initialTrialUntil
+    ? applyPlacementFreePeriodToPricing(baseInitialTransferPlacementPricing, {
+        validUntil: initialTrialUntil,
+      })
+    : baseInitialTransferPlacementPricing;
+  const transferPublicationPrice = getPlacementPromoPrice(
+    initialTransferPlacementPricing.totalPrice,
+    initialPricingNow,
+  );
 
   return (
     <TransferEditorPage
@@ -813,7 +759,9 @@ export default async function DashboardTransferEditPage({
       initialFleet={fleet}
       initialServiceTags={serviceTags}
       publicPath={publicPath}
-      publicationFeeRub={transferPublicationPrice.finalAmountRub}
+      publicationFeeRub={
+        initialTransferPlacementPricing.freePeriodActive ? 0 : transferPublicationPrice.finalAmountRub
+      }
       originalPublicationFeeRub={initialTransferPlacementPricing.basePrice}
       extraVehicleFeeRub={TRANSFER_EXTRA_VEHICLE_FEE_RUB}
       initialPayments={payments.map(serializePayment)}

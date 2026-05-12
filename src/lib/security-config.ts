@@ -87,15 +87,6 @@ export function getRateLimitMode(): RateLimitMode {
   return "auto";
 }
 
-export function getYookassaWebhookAllowlist(): string[] {
-  const value = process.env.YOOKASSA_WEBHOOK_IP_ALLOWLIST?.trim() ?? "";
-
-  return value
-    .split(/[\s,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function toOrigin(value: string): string | null {
   try {
     return new URL(value).origin;
@@ -165,24 +156,6 @@ export function getSecurityConfigurationIssues(): string[] {
     (isBlank(process.env.UPSTASH_REDIS_REST_URL) || isBlank(process.env.UPSTASH_REDIS_REST_TOKEN))
   ) {
     issues.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required");
-  }
-
-  const hasAnyYookassaConfig = [
-    process.env.YOOKASSA_SHOP_ID,
-    process.env.YOOKASSA_SECRET_KEY,
-    process.env.YOOKASSA_RETURN_URL,
-  ].some((value) => !isBlank(value));
-  const hasCompleteYookassaConfig =
-    !isBlank(process.env.YOOKASSA_SHOP_ID) &&
-    !isBlank(process.env.YOOKASSA_SECRET_KEY) &&
-    !isBlank(process.env.YOOKASSA_RETURN_URL);
-
-  if (hasAnyYookassaConfig && !hasCompleteYookassaConfig) {
-    issues.push("YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY and YOOKASSA_RETURN_URL are required");
-  }
-
-  if (hasCompleteYookassaConfig && getYookassaWebhookAllowlist().length === 0) {
-    issues.push("YOOKASSA_WEBHOOK_IP_ALLOWLIST is required");
   }
 
   if (getEmailDeliveryMode() === "smtp") {

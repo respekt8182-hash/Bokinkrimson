@@ -35,7 +35,7 @@
   - `properties.ts`, `rooms.ts`, `pricing.ts`, `occupancy.ts`, `payments.ts`, `reviews.ts`, `excursions.ts` — ядро домена.
   - `public-properties.ts`, `public-excursions.ts` — read-модели публичного каталога.
   - `auth.ts`, `session.ts`, `security.ts`, `rate-limit.ts` — безопасность и сессии.
-  - `storage.ts`, `yandex-geocoder.ts`, `yookassa.ts` — внешние интеграции.
+  - `storage.ts`, `yandex-geocoder.ts` — внешние интеграции.
 - `prisma/`
   - `schema.prisma` — единый источник правды по моделям.
   - `migrations/*` — история изменений БД.
@@ -76,7 +76,7 @@
 - Экран оплаты: `src/components/payments/property-payment-panel.tsx`
 - API оплаты: `src/app/api/properties/[id]/payments/route.ts`
 - API quote: `src/app/api/properties/[id]/payments/quote/route.ts`
-- Интеграция YooKassa: `src/lib/yookassa.ts`
+- Оплата размещения фиксируется заявкой менеджеру; онлайн-эквайринг отключен.
 
 ### Экскурсии
 

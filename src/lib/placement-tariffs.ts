@@ -22,7 +22,6 @@ export const placementTariffs = {
     label: "Объект",
     yearPrice: OBJECT_YEARLY_PRICE_RUB,
     firstYearDiscountPercent: 20,
-    repeatYearDiscountPercent: 10,
     discountsOnlyForPeriod: "year",
   },
   excursion: {
@@ -30,7 +29,6 @@ export const placementTariffs = {
     seasonPrice: 990,
     yearPrice: 1490,
     firstYearDiscountPercent: 20,
-    repeatYearDiscountPercent: 10,
     discountsOnlyForPeriod: "year",
   },
   tour: {
@@ -38,7 +36,6 @@ export const placementTariffs = {
     seasonPrice: 1290,
     yearPrice: 1790,
     firstYearDiscountPercent: 20,
-    repeatYearDiscountPercent: 10,
     discountsOnlyForPeriod: "year",
   },
   transfer: {
@@ -46,7 +43,6 @@ export const placementTariffs = {
     seasonPrice: 990,
     yearPrice: 1490,
     firstYearDiscountPercent: 20,
-    repeatYearDiscountPercent: 10,
     discountsOnlyForPeriod: "year",
     includedCars: 1,
     additionalCarPrice: 490,
@@ -72,7 +68,7 @@ export function calculateDiscountedPlacementPrice(
   return roundDownToTenRub((basePrice * (100 - discountPercent)) / 100);
 }
 
-export type PlacementDiscountType = "first_category_year_20" | "repeat_category_year_10" | null;
+export type PlacementDiscountType = "launch_renewal_year_20" | null;
 
 export type PlacementAdditionalOptions = {
   additionalCars?: number;
@@ -86,7 +82,7 @@ export type PlacementPriceResult = {
   finalPrice: number;
   discountPercent: number;
   discountType: PlacementDiscountType;
-  discountLabel: "Стартовая скидка 20%" | "Скидка 10%" | null;
+  discountLabel: "Скидка 20% после тестового периода" | null;
   discountText: string;
   discountReason: string;
   isDiscountApplied: boolean;
@@ -99,6 +95,7 @@ export type PlacementPriceResult = {
   priceVersion: string;
   freePeriodActive: boolean;
   freePeriodUntil: string | null;
+  freePeriodEndsAtIso?: string | null;
   priceAfterFreePeriod: number;
 };
 
@@ -147,6 +144,7 @@ export function buildPlacementPricingPayload(
     totalPrice: pricing.totalPrice,
     freePeriodActive: pricing.freePeriodActive,
     freePeriodUntil: pricing.freePeriodUntil,
+    freePeriodEndsAtIso: pricing.freePeriodEndsAtIso ?? null,
     priceAfterFreePeriod: pricing.priceAfterFreePeriod,
     currency: pricing.currency,
   };

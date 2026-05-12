@@ -1,7 +1,9 @@
 import { ExcursionOfferType, PaymentProvider, PaymentStatus, type Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  PLACEMENT_PROMO_ENDS_AT_ISO,
   PLACEMENT_PROMO_END_LABEL,
+  isLaunchPlacementDemoPayload,
   isPlacementPromoActive,
 } from "@/lib/placement-promo";
 import {
@@ -30,13 +32,6 @@ export {
   type PlacementPeriod,
   type PlacementPriceResult,
 } from "@/lib/placement-tariffs";
-
-const categoryAccusativeLabels: Record<PlacementCategory, string> = {
-  object: "объект",
-  excursion: "экскурсию",
-  tour: "тур",
-  transfer: "трансфер",
-};
 
 const categoryGenitiveLabels: Record<PlacementCategory, string> = {
   object: "объекта",
@@ -190,6 +185,47 @@ async function hasSuccessfulPaidYearPlacementInCategory(input: {
   });
 }
 
+async function hasSuccessfulLaunchDemoPlacementInCategory(input: {
+  userId: string;
+  category: PlacementCategory;
+  client?: Prisma.TransactionClient;
+}): Promise<boolean> {
+  const client = input.client ?? db;
+  const payments = await client.payment.findMany({
+    where: {
+      ownerId: input.userId,
+      status: PaymentStatus.SUCCEEDED,
+      provider: { not: PaymentProvider.MOCK },
+      amount: 0,
+      ...(input.category === "object"
+        ? {
+            propertyId: { not: null },
+          }
+        : input.category === "excursion"
+          ? {
+              excursion: { offerType: ExcursionOfferType.EXCURSION },
+            }
+          : input.category === "tour"
+            ? {
+                excursion: { offerType: ExcursionOfferType.TOUR },
+              }
+            : {
+                OR: [
+                  { transferId: { not: null } },
+                  { tariffCode: { startsWith: "transfer_standard" } },
+                  { tariffCode: "transfer_year" },
+                ],
+              }),
+    },
+    select: {
+      providerPayload: true,
+    },
+    take: 50,
+  });
+
+  return payments.some((payment) => isLaunchPlacementDemoPayload(payment.providerPayload));
+}
+
 export async function getPlacementPrice(input: {
   userId?: string | null;
   category: PlacementCategory;
@@ -197,10 +233,12 @@ export async function getPlacementPrice(input: {
   additionalOptions?: PlacementAdditionalOptions | null;
   basePrice?: number | null;
   hasPriorPaidYearPlacementInCategory?: boolean;
+  hasLaunchDemoPlacementInCategory?: boolean;
   excludePaymentId?: string | null;
   now?: Date;
   client?: Prisma.TransactionClient;
 }): Promise<PlacementPriceResult> {
+  const now = input.now ?? new Date();
   const period = normalizePeriod(input.period);
   const tariff = placementTariffs[input.category];
   const basePrice = Math.max(
@@ -225,36 +263,36 @@ export async function getPlacementPrice(input: {
         })
       : false);
 
-  const discountPercent = canApplyDiscount
-    ? hasPriorPaidYearPlacement
-      ? tariff.repeatYearDiscountPercent
-      : tariff.firstYearDiscountPercent
-    : 0;
+  const hasLaunchDemoPlacement =
+    input.hasLaunchDemoPlacementInCategory ??
+    (input.userId
+      ? await hasSuccessfulLaunchDemoPlacementInCategory({
+          userId: input.userId,
+          category: input.category,
+          client: input.client,
+        })
+      : false);
+  const canApplyLaunchRenewalDiscount =
+    canApplyDiscount &&
+    !hasPriorPaidYearPlacement &&
+    (isPlacementPromoActive(now) || hasLaunchDemoPlacement);
+  const discountPercent = canApplyLaunchRenewalDiscount ? tariff.firstYearDiscountPercent : 0;
   const finalPrice = calculateDiscountedPlacementPrice(basePrice, discountPercent);
   const isDiscountApplied = discountPercent > 0 && finalPrice < basePrice;
-  const discountType: PlacementDiscountType = isDiscountApplied
-    ? hasPriorPaidYearPlacement
-      ? "repeat_category_year_10"
-      : "first_category_year_20"
-    : null;
+  const discountType: PlacementDiscountType = isDiscountApplied ? "launch_renewal_year_20" : null;
   const discountLabel =
-    discountType === "first_category_year_20"
-      ? "Стартовая скидка 20%"
-      : discountType === "repeat_category_year_10"
-        ? "Скидка 10%"
-        : null;
+    discountType === "launch_renewal_year_20" ? "Скидка 20% после тестового периода" : null;
   const discountText = !canApplyDiscount
-    ? "Для этого тарифа скидка не применяется. Скидки 20% и 10% доступны только на годовое размещение."
-    : discountType === "first_category_year_20"
-      ? `Вы впервые размещаете ${categoryAccusativeLabels[input.category]} в этой категории. Для первого годового размещения действует стартовая скидка 20%.`
-      : `Для повторного годового размещения ${categoryGenitiveLabels[input.category]} действует скидка 10%.`;
+    ? "Для этого тарифа скидка не применяется. Скидка 20% доступна только участникам тестового периода на первое годовое продление."
+    : discountType === "launch_renewal_year_20"
+      ? `Для первого годового продления после тестового периода действует скидка 20% на размещение ${categoryGenitiveLabels[input.category]}.`
+      : "После 20 июня новые карточки получают пробный месяц; дополнительные скидки на сезонные, межсезонные и годовые тарифы для них не применяются.";
   const discountReason = !canApplyDiscount
-    ? "Скидки применяются только к годовому размещению."
-    : discountType === "first_category_year_20"
-      ? `Пользователь впервые оплачивает годовое размещение в категории ${placementTariffs[input.category].label.toLowerCase()}.`
-      : `Пользователь уже оплачивал годовое размещение в категории ${placementTariffs[input.category].label.toLowerCase()}.`;
+    ? "Скидка применяется только к годовому размещению."
+    : discountType === "launch_renewal_year_20"
+      ? `Пользователь участвовал в тестовом периоде в категории ${placementTariffs[input.category].label.toLowerCase()} и впервые продлевает ее на год.`
+      : "Пользователь не относится к участникам тестового периода с первым годовым продлением.";
   const totalPrice = finalPrice + additionalOptionsPrice;
-  const now = input.now ?? new Date();
   const freePeriodActive = isPlacementPromoActive(now);
 
   return {
@@ -268,8 +306,8 @@ export async function getPlacementPrice(input: {
     discountText,
     discountReason,
     isDiscountApplied,
-    isFirstPlacementInCategory: canApplyDiscount && !hasPriorPaidYearPlacement,
-    isRepeatPlacementInCategory: canApplyDiscount && hasPriorPaidYearPlacement,
+    isFirstPlacementInCategory: isDiscountApplied,
+    isRepeatPlacementInCategory: false,
     additionalOptionsPrice,
     additionalOptions,
     totalPrice,
@@ -277,6 +315,7 @@ export async function getPlacementPrice(input: {
     priceVersion: PLACEMENT_PRICE_VERSION,
     freePeriodActive,
     freePeriodUntil: freePeriodActive ? PLACEMENT_PROMO_END_LABEL : null,
+    freePeriodEndsAtIso: freePeriodActive ? PLACEMENT_PROMO_ENDS_AT_ISO : null,
     priceAfterFreePeriod: totalPrice,
   };
 }

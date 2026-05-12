@@ -6,27 +6,28 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   buildFreePlacementPaymentPayload,
+  buildPostLaunchTrialPaymentPayload,
   resolvePaymentPlacementValidUntil,
   serializePayment,
 } from "@/lib/payments";
 import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
-import { ensurePaymentProviderAllowed } from "@/lib/payment-security";
 import {
-  buildPlacementPromoMetadata,
+  applyPlacementFreePeriodToPricing,
   buildPlacementPromoPayload,
   getPlacementPromoDemoValidUntil,
   getPlacementPromoPrice,
+  getPostLaunchTrialValidUntil,
+  isPostLaunchTrialEligible,
 } from "@/lib/placement-promo";
 import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
-import { createYookassaPayment, isYookassaConfigured } from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 const createPaymentSchema = z.object({
-  provider: z.enum(["YOOKASSA", "MANAGER"]).optional().default("MANAGER"),
+  provider: z.literal("MANAGER").optional().default("MANAGER"),
   period: z.enum(["season", "year"]).optional().default("year"),
 });
 
@@ -38,6 +39,7 @@ async function getOwnedExcursion(excursionId: string) {
       ownerId: true,
       offerType: true,
       title: true,
+      createdAt: true,
       status: true,
       pendingEditStatus: true,
     },
@@ -50,7 +52,7 @@ async function listExcursionPayments(excursionId: string, ownerId: string) {
       excursionId,
       ownerId,
       provider: {
-        in: [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER],
+        in: [PaymentProvider.MANAGER],
       },
     },
     orderBy: [{ createdAt: "desc" }],
@@ -94,7 +96,14 @@ export async function GET(_request: Request, context: RouteContext) {
   const payments = await listExcursionPayments(excursion.id, session.id);
   const now = new Date();
   const category = excursion.offerType === ExcursionOfferType.TOUR ? "tour" : "excursion";
-  const [yearPrice, seasonPrice] = await Promise.all([
+  const trialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: excursion.createdAt,
+    now,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil(now)
+    : null;
+  const [baseYearPrice, baseSeasonPrice] = await Promise.all([
     getPlacementPrice({
       userId: session.id,
       category,
@@ -112,6 +121,12 @@ export async function GET(_request: Request, context: RouteContext) {
       now,
     }),
   ]);
+  const yearPrice = trialUntil
+    ? applyPlacementFreePeriodToPricing(baseYearPrice, { validUntil: trialUntil })
+    : baseYearPrice;
+  const seasonPrice = trialUntil
+    ? applyPlacementFreePeriodToPricing(baseSeasonPrice, { validUntil: trialUntil })
+    : baseSeasonPrice;
   const latestOpenPayment =
     payments.find(
       (item) => item.status === PaymentStatus.CREATED || item.status === PaymentStatus.PENDING,
@@ -142,9 +157,10 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
-    if (parsed.success) {
-      body = parsed.data;
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Онлайн-оплата отключена. Используйте заявку менеджеру." }, { status: 400 });
     }
+    body = parsed.data;
   } catch {
     // Empty body is allowed.
   }
@@ -198,7 +214,14 @@ export async function POST(request: Request, context: RouteContext) {
       : excursion.offerType === ExcursionOfferType.TOUR
         ? "tour_year"
         : "excursion_year";
-  const placementPricing = await getPlacementPrice({
+  const trialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: excursion.createdAt,
+    now,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil(now)
+    : null;
+  const basePlacementPricing = await getPlacementPrice({
     userId: session.id,
     category,
     period: body.period,
@@ -210,13 +233,12 @@ export async function POST(request: Request, context: RouteContext) {
         : undefined,
     now,
   });
-  const publicationPrice = getPlacementPromoPrice(placementPricing.totalPrice);
-  const amount = publicationPrice.finalAmountRub;
+  const placementPricing = trialUntil
+    ? applyPlacementFreePeriodToPricing(basePlacementPricing, { validUntil: trialUntil })
+    : basePlacementPricing;
+  const publicationPrice = getPlacementPromoPrice(placementPricing.totalPrice, now);
+  const amount = placementPricing.freePeriodActive ? 0 : publicationPrice.finalAmountRub;
   const placementPromo = buildPlacementPromoPayload({
-    originalAmountRub: publicationPrice.originalAmountRub,
-    discountedAmountRub: amount,
-  });
-  const promoMetadata = buildPlacementPromoMetadata({
     originalAmountRub: publicationPrice.originalAmountRub,
     discountedAmountRub: amount,
   });
@@ -233,13 +255,21 @@ export async function POST(request: Request, context: RouteContext) {
         provider: PaymentProvider.MANAGER,
         idempotenceKey,
         confirmationUrl: null,
+        paidFrom: now,
         paidAt: now,
-        placementValidUntil: getPlacementPromoDemoValidUntil(),
-        providerPayload: buildFreePlacementPaymentPayload({
-          originalAmountRub: publicationPrice.originalAmountRub,
-          now,
-          placementPricing,
-        }),
+        placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(),
+        providerPayload: trialUntil
+          ? buildPostLaunchTrialPaymentPayload({
+              originalAmountRub: publicationPrice.originalAmountRub,
+              now,
+              validUntil: trialUntil,
+              placementPricing,
+            })
+          : buildFreePlacementPaymentPayload({
+              originalAmountRub: publicationPrice.originalAmountRub,
+              now,
+              placementPricing,
+            }),
       },
       include: {
         excursion: {
@@ -260,51 +290,6 @@ export async function POST(request: Request, context: RouteContext) {
     });
   }
 
-  try {
-    ensurePaymentProviderAllowed(PaymentProvider[body.provider]);
-  } catch {
-    return NextResponse.json({ error: "Выбранный способ оплаты недоступен" }, { status: 403 });
-  }
-
-  if (body.provider === "MANAGER") {
-    const created = await db.payment.create({
-      data: {
-        excursionId: excursion.id,
-        ownerId: session.id,
-        amount,
-        tariffCode,
-        roomCount: 0,
-        status: PaymentStatus.PENDING,
-        provider: PaymentProvider.MANAGER,
-        idempotenceKey,
-        providerPayload: {
-          ...(placementPromo ? { placementPromo } : {}),
-          ...buildPlacementPricingPayload(placementPricing),
-        },
-      },
-      include: {
-        excursion: {
-          select: {
-            title: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json({
-      item: serializePayment(created),
-      managerRequested: true,
-      redirectUrl: null,
-    });
-  }
-
-  if (!isYookassaConfigured()) {
-    return NextResponse.json(
-      { error: "YooKassa временно недоступна. Используйте оплату через менеджера." },
-      { status: 503 },
-    );
-  }
-
   const created = await db.payment.create({
     data: {
       excursionId: excursion.id,
@@ -312,10 +297,13 @@ export async function POST(request: Request, context: RouteContext) {
       amount,
       tariffCode,
       roomCount: 0,
-      status: PaymentStatus.CREATED,
-      provider: PaymentProvider.YOOKASSA,
+      status: PaymentStatus.PENDING,
+      provider: PaymentProvider.MANAGER,
       idempotenceKey,
-      providerPayload: buildPlacementPricingPayload(placementPricing),
+      providerPayload: {
+        ...(placementPromo ? { placementPromo } : {}),
+        ...buildPlacementPricingPayload(placementPricing),
+      },
     },
     include: {
       excursion: {
@@ -326,58 +314,9 @@ export async function POST(request: Request, context: RouteContext) {
     },
   });
 
-  try {
-    const offerLabels = getOfferLabels(excursion.offerType);
-    const yooPayment = await createYookassaPayment({
-      idempotenceKey,
-      amountRub: amount,
-      description: `Публикация ${offerLabels.genitive} «${excursion.title ?? "Без названия"}»`,
-      metadata: {
-        paymentId: created.id,
-        excursionId: excursion.id,
-        offerType: excursion.offerType,
-        ...promoMetadata,
-      },
-    });
-    const providerPayload = {
-      ...yooPayment,
-      metadata: { ...(yooPayment.metadata ?? {}), ...promoMetadata },
-    };
-
-    const updated = await db.payment.update({
-      where: { id: created.id },
-      data: {
-        providerPaymentId: yooPayment.id,
-        confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
-        providerPayload: {
-          ...providerPayload,
-          ...buildPlacementPricingPayload(placementPricing),
-        },
-        status: PaymentStatus.PENDING,
-      },
-      include: {
-        excursion: {
-          select: {
-            title: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json({
-      item: serializePayment(updated),
-      redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
-    });
-  } catch (error) {
-    await db.payment.update({
-      where: { id: created.id },
-      data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
-    });
-
-    console.error("YooKassa excursion payment creation failed", error);
-    return NextResponse.json(
-      { error: "Не удалось создать платеж. Попробуйте позже или выберите оплату через менеджера." },
-      { status: 502 },
-    );
-  }
+  return NextResponse.json({
+    item: serializePayment(created),
+    managerRequested: true,
+    redirectUrl: null,
+  });
 }

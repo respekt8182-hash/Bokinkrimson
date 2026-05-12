@@ -16,10 +16,10 @@ import { resolveAdminRelationUserId } from "@/lib/admin-user-reference";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import { OBJECT_TARIFF_CODES, type ObjectPlacementTariffType } from "@/lib/object-placement-tariffs";
+import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import {
   buildTransferPaymentPayload,
   getPlacementValidUntil,
-  getTariffQuote,
   getTransferPaymentTariffCode,
   serializePayment,
 } from "@/lib/payments";
@@ -85,7 +85,8 @@ async function createPropertyPayment(input: {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const quote = getTariffQuote({
+  const quote = await getPersonalTariffQuote({
+    userId: property.ownerId,
     roomCount: Math.max(1, property.rooms.length),
     propertyType: property.type,
     tariffType: input.tariff,

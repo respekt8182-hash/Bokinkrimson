@@ -10,10 +10,6 @@ const originalEnv = {
   RATE_LIMIT_MODE: process.env.RATE_LIMIT_MODE,
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
-  YOOKASSA_SHOP_ID: process.env.YOOKASSA_SHOP_ID,
-  YOOKASSA_SECRET_KEY: process.env.YOOKASSA_SECRET_KEY,
-  YOOKASSA_RETURN_URL: process.env.YOOKASSA_RETURN_URL,
-  YOOKASSA_WEBHOOK_IP_ALLOWLIST: process.env.YOOKASSA_WEBHOOK_IP_ALLOWLIST,
   SECURITY_EMAIL_DELIVERY_MODE: process.env.SECURITY_EMAIL_DELIVERY_MODE,
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_PORT: process.env.SMTP_PORT,
@@ -49,10 +45,6 @@ function applySelfHostedProductionBaseline() {
   delete process.env.RATE_LIMIT_MODE;
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
-  delete process.env.YOOKASSA_SHOP_ID;
-  delete process.env.YOOKASSA_SECRET_KEY;
-  delete process.env.YOOKASSA_RETURN_URL;
-  delete process.env.YOOKASSA_WEBHOOK_IP_ALLOWLIST;
   delete process.env.SMTP_HOST;
   delete process.env.SMTP_PORT;
   delete process.env.SMTP_USER;
@@ -61,19 +53,10 @@ function applySelfHostedProductionBaseline() {
 }
 
 describe("self-hosted production security configuration", () => {
-  it("allows a single-node production deployment without Upstash or YooKassa", () => {
+  it("allows a single-node production deployment without external payment provider", () => {
     applySelfHostedProductionBaseline();
 
     expect(getSecurityConfigurationIssues()).toEqual([]);
-  });
-
-  it("requires the webhook allowlist only when YooKassa is configured", () => {
-    applySelfHostedProductionBaseline();
-    process.env.YOOKASSA_SHOP_ID = "shop-id";
-    process.env.YOOKASSA_SECRET_KEY = "secret";
-    process.env.YOOKASSA_RETURN_URL = "https://krymvokrug.ru/dashboard/objects";
-
-    expect(getSecurityConfigurationIssues()).toContain("YOOKASSA_WEBHOOK_IP_ALLOWLIST is required");
   });
 
   it("requires Upstash credentials when rate-limit mode is forced to upstash", () => {

@@ -16,9 +16,6 @@ Date: 2026-04-15
 - `TEST_USER_ACCOUNT`: no dedicated plaintext fixture found; public auth was verified by registering a fresh local user and logging in/out
 - `TEST_MANAGER_ACCOUNT`: no separate manager role found in schema/routes; manager payment flow is admin-confirmed
 - `TEST_ADMIN_ACCOUNT`: `ADMIN_LOGIN=admin`, password is local-only and no longer stored in plaintext in `.env.local`
-- `YOOKASSA_SHOP_ID_ENV`: `YOOKASSA_SHOP_ID`
-- `YOOKASSA_SECRET_KEY_ENV`: `YOOKASSA_SECRET_KEY`
-- `YOOKASSA_WEBHOOK_URL`: `<public-base-url>/api/payments/yookassa/webhook`
 - `EXTERNAL_SERVICES`: PostgreSQL, Yandex Maps, optional Upstash Redis, optional SMTP, optional S3-compatible storage
 
 ## Architecture Snapshot
@@ -32,7 +29,7 @@ Date: 2026-04-15
   - properties / rooms / media / moderation
   - excursions / tours / sessions
   - applications / reviews / favorites
-  - payments / YooKassa / admin payment confirmations
+  - payments / admin payment confirmations
 
 ## What Was Verified
 
@@ -92,7 +89,7 @@ Date: 2026-04-15
 - Fix:
   - removed `/api/payments/[id]/mock`
   - removed mock-specific UI branches from payment panels
-  - filtered payment history/conflict checks to real release providers (`YOOKASSA`, `MANAGER`)
+  - filtered payment history/conflict checks to manager-confirmed release payments
   - placement coverage now ignores legacy `MOCK` successes
   - admin payment list no longer includes mock entries in `ALL`
 - Verification:
@@ -145,21 +142,6 @@ Date: 2026-04-15
   - credentials for DB owner/superuser
   - or ownership transfer of project tables/migration table to deployment user
 
-### BLOCKER-2: Live YooKassa cannot be fully E2E-verified without real production secrets and public webhook target
-
-- Current code status:
-  - server-side create/check flow implemented
-  - idempotence keys used
-  - webhook dedupe + provider-side verification implemented
-- Missing to close:
-  - `YOOKASSA_SHOP_ID`
-  - `YOOKASSA_SECRET_KEY`
-  - `YOOKASSA_RETURN_URL`
-  - `YOOKASSA_WEBHOOK_IP_ALLOWLIST`
-  - public HTTPS base URL reachable by YooKassa
-- Impact:
-  - no real payment / return / webhook round-trip was possible in this local audit
-
 ## Residual Non-Blockers
 
 - No dedicated manager role found in schema; “manager payment flow” is currently an admin-confirmed payment path.
@@ -183,4 +165,4 @@ The codebase is materially cleaner and more release-ready than at audit start:
 Final production release should be considered **blocked** until:
 
 1. DB ownership/migration issue is resolved.
-2. Real YooKassa secrets + public webhook/return URL are provided and verified end-to-end.
+2. Full public reset-password completion is verified against target email delivery.

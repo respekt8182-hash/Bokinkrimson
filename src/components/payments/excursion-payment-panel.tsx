@@ -5,13 +5,12 @@ import {
   ChevronLeft,
   CircleAlert,
   CircleCheckBig,
-  CreditCard,
   LoaderCircle,
   Phone,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
@@ -126,26 +125,6 @@ function getOfferCopy(offerType: ExcursionOfferTypeValue) {
   };
 }
 
-function buildSuccessfulPaymentMessage(
-  offerType: ExcursionOfferTypeValue,
-  nextState: ExcursionPaymentsApiResponse | null,
-): string {
-  const copy = getOfferCopy(offerType);
-  const nextWorkflowStatus = nextState
-    ? getWorkflowStatus(nextState.status, nextState.pendingEditStatus)
-    : null;
-
-  if (nextWorkflowStatus === "PENDING_MODERATION") {
-    return `${copy.singular[0].toUpperCase()}${copy.singular.slice(1)} автоматически отправлен${offerType === "TOUR" ? "" : "а"} на модерацию.`;
-  }
-
-  if (nextWorkflowStatus === "PUBLISHED") {
-    return `${copy.singular[0].toUpperCase()}${copy.singular.slice(1)} уже опубликован${offerType === "TOUR" ? "" : "а"}.`;
-  }
-
-  return `Оплата подтверждена. Если ${copy.singular} ещё не уш${offerType === "TOUR" ? "ел" : "ла"} на модерацию автоматически, можно отправить ${copy.singularAccusative} кнопкой ниже.`;
-}
-
 export function ExcursionPaymentPanel({
   excursionId,
   offerType,
@@ -169,7 +148,6 @@ export function ExcursionPaymentPanel({
     initialPendingEditStatus,
   );
   const [payments, setPayments] = useState<SerializedPayment[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [selectedPeriod, setSelectedPeriod] = useState<"year" | "season">("year");
   const [availablePrices, setAvailablePrices] = useState<PlacementPriceResult[]>([]);
   const [managerRequested, setManagerRequested] = useState(false);
@@ -178,7 +156,6 @@ export function ExcursionPaymentPanel({
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const initialProviderSyncDoneRef = useRef(false);
 
   const resolvedListHref =
     listHref ?? (adminMode ? "/admin/excursions" : `/dashboard/excursions/${excursionId}`);
@@ -197,10 +174,12 @@ export function ExcursionPaymentPanel({
     availablePrices.find((item) => item.period === selectedPeriod) ??
     availablePrices.find((item) => item.period === "year") ??
     null;
-  const publicationPrice = getPlacementPromoPrice(
-    selectedPlacementPrice?.totalPrice ?? fallbackYearPrice,
-  );
-  const isFreePublication = publicationPrice.finalAmountRub <= 0;
+  const publicationBasePrice = selectedPlacementPrice?.totalPrice ?? fallbackYearPrice;
+  const publicationPrice = getPlacementPromoPrice(publicationBasePrice);
+  const publicationFinalAmount = selectedPlacementPrice?.freePeriodActive
+    ? 0
+    : publicationPrice.finalAmountRub;
+  const isFreePublication = publicationFinalAmount <= 0;
   const canPay =
     !adminMode &&
     isReady &&
@@ -226,48 +205,8 @@ export function ExcursionPaymentPanel({
     });
   }
 
-  async function refreshLatestPaymentStatus(
-    paymentId: string,
-    options: { silent?: boolean; keepMessage?: boolean } = {},
-  ): Promise<SerializedPayment | null> {
-    if (adminMode) {
-      return null;
-    }
-
-    if (!options.silent) {
-      setIsRefreshing(true);
-    }
-    setError("");
-    if (!options.keepMessage) {
-      setMessage("");
-    }
-
-    try {
-      const response = await fetch(`/api/payments/${paymentId}`);
-      const body = (await response.json()) as { error?: string; item?: SerializedPayment };
-
-      if (!response.ok || !body.item) {
-        setError(body.error ?? "Не удалось обновить статус платежа");
-        return null;
-      }
-
-      updatePaymentInState(body.item);
-
-      if (body.item.status === "SUCCEEDED") {
-        const nextState = await refreshPayments({ silent: true, keepMessage: true });
-        setMessage(buildSuccessfulPaymentMessage(offerType, nextState));
-      }
-
-      return body.item;
-    } finally {
-      if (!options.silent) {
-        setIsRefreshing(false);
-      }
-    }
-  }
-
   async function refreshPayments(
-    options: { silent?: boolean; keepMessage?: boolean; syncLatestYookassa?: boolean } = {},
+    options: { silent?: boolean; keepMessage?: boolean } = {},
   ): Promise<ExcursionPaymentsApiResponse | null> {
     if (adminMode) {
       return null;
@@ -300,22 +239,6 @@ export function ExcursionPaymentPanel({
         onStatusChange?.("PENDING_MODERATION");
       }
 
-      if (options.syncLatestYookassa && !initialProviderSyncDoneRef.current) {
-        initialProviderSyncDoneRef.current = true;
-        const latestOpenYookassa = body.items.find(
-          (item) =>
-            (item.status === "CREATED" || item.status === "PENDING") &&
-            item.provider === "YOOKASSA",
-        );
-
-        if (latestOpenYookassa) {
-          await refreshLatestPaymentStatus(latestOpenYookassa.id, {
-            silent: true,
-            keepMessage: true,
-          });
-        }
-      }
-
       return body;
     } finally {
       if (!options.silent) {
@@ -339,8 +262,7 @@ export function ExcursionPaymentPanel({
       return;
     }
 
-    initialProviderSyncDoneRef.current = false;
-    void refreshPaymentsEvent({ silent: true, syncLatestYookassa: true, keepMessage: true });
+    void refreshPaymentsEvent({ silent: true, keepMessage: true });
   }, [adminMode, excursionId]);
 
   async function sendToModeration(): Promise<boolean> {
@@ -421,7 +343,7 @@ export function ExcursionPaymentPanel({
       const response = await fetch(`/api/excursions/${excursionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: paymentMethod, period: selectedPeriod }),
+        body: JSON.stringify({ provider: "MANAGER", period: selectedPeriod }),
       });
 
       const body = (await response.json()) as {
@@ -500,7 +422,7 @@ export function ExcursionPaymentPanel({
 
         <div className="mt-4 flex items-center gap-4 rounded-xl bg-cream p-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <AppIcon icon={adminMode ? ShieldCheck : CreditCard} className="h-6 w-6 text-primary" />
+            <AppIcon icon={adminMode ? ShieldCheck : Phone} className="h-6 w-6 text-primary" />
           </div>
           <div>
             {adminMode ? (
@@ -514,7 +436,7 @@ export function ExcursionPaymentPanel({
               <>
                 <PlacementPromoPrice
                   originalAmountRub={selectedPlacementPrice?.basePrice ?? fallbackYearPrice}
-                  finalAmountRub={publicationPrice.finalAmountRub}
+                  finalAmountRub={publicationFinalAmount}
                   finalClassName="text-2xl"
                 />
                 {selectedPlacementPrice?.discountLabel ? (
@@ -524,7 +446,9 @@ export function ExcursionPaymentPanel({
                 ) : null}
                 <p className="text-xs text-olive/55">
                   {isFreePublication
-                    ? `Бесплатное размещение ${copy.genitive} до 20 июня`
+                    ? selectedPlacementPrice?.freePeriodUntil
+                      ? `Бесплатное размещение ${copy.genitive}: ${selectedPlacementPrice.freePeriodUntil}`
+                      : `Бесплатное размещение ${copy.genitive}`
                     : `Единоразовая оплата за публикацию ${copy.genitive}`}
                 </p>
               </>
@@ -537,6 +461,8 @@ export function ExcursionPaymentPanel({
             {availablePrices.map((price) => {
               const isSelected = selectedPeriod === price.period;
               const promoPrice = getPlacementPromoPrice(price.totalPrice);
+              const finalAmountRub =
+                price.freePeriodActive || promoPrice.isDiscounted ? 0 : promoPrice.finalAmountRub;
               return (
                 <button
                   key={price.period}
@@ -554,7 +480,7 @@ export function ExcursionPaymentPanel({
                   </p>
                   <PlacementPromoPrice
                     originalAmountRub={price.basePrice}
-                    finalAmountRub={promoPrice.finalAmountRub}
+                    finalAmountRub={finalAmountRub}
                     className="mt-1"
                     finalClassName="text-xl"
                   />
@@ -632,11 +558,19 @@ export function ExcursionPaymentPanel({
           <div className="mt-4 space-y-3">
             {isFreePublication ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                <p className="font-semibold">Сейчас размещение бесплатно до 20 июня 2026.</p>
+                <p className="font-semibold">
+                  {selectedPlacementPrice?.freePeriodUntil
+                    ? `Сейчас размещение бесплатно: ${selectedPlacementPrice.freePeriodUntil}.`
+                    : "Сейчас размещение бесплатно."}
+                </p>
                 <p className="mt-1">
                   После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
                   <strong>
-                    {formatMoney(selectedPlacementPrice?.totalPrice ?? fallbackYearPrice)}
+                    {formatMoney(
+                      selectedPlacementPrice?.priceAfterFreePeriod ??
+                        selectedPlacementPrice?.totalPrice ??
+                        fallbackYearPrice,
+                    )}
                   </strong>
                   {selectedPlacementPrice?.isDiscountApplied
                     ? ` вместо ${formatMoney(selectedPlacementPrice.basePrice)}.`
@@ -644,81 +578,22 @@ export function ExcursionPaymentPanel({
                 </p>
                 <p className="mt-1">
                   {selectedPlacementPrice?.discountText ??
-                    "Скидки 20% и 10% применяются только к годовому размещению."}
+                    "Скидка 20% применяется только к первому годовому продлению после тестового периода."}
                 </p>
               </div>
             ) : null}
             {!isFreePublication ? (
-              <>
-                <p className="text-sm font-semibold text-olive">Выберите способ оплаты</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("YOOKASSA")}
-                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                      paymentMethod === "YOOKASSA"
-                        ? "border-primary bg-primary/5"
-                        : "border-olive/15 bg-white hover:border-olive/30"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
-                      }`}
-                    >
-                      <AppIcon
-                        icon={CreditCard}
-                        className={`h-5 w-5 ${
-                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
-                        }`}
-                      >
-                        Онлайн-оплата
-                      </p>
-                      <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("MANAGER")}
-                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                      paymentMethod === "MANAGER"
-                        ? "border-primary bg-primary/5"
-                        : "border-olive/15 bg-white hover:border-olive/30"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        paymentMethod === "MANAGER" ? "bg-primary/15" : "bg-olive/8"
-                      }`}
-                    >
-                      <AppIcon
-                        icon={Phone}
-                        className={`h-5 w-5 ${
-                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive/50"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive"
-                        }`}
-                      >
-                        Через менеджера
-                      </p>
-                      <p className="text-xs text-olive/55">Перевод на карту или по реквизитам</p>
-                    </div>
-                  </button>
+              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                  <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
                 </div>
-              </>
+                <div>
+                  <p className="text-sm font-semibold text-primary">Оплата через менеджера</p>
+                  <p className="text-xs text-olive/60">
+                    Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                  </p>
+                </div>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -741,13 +616,8 @@ export function ExcursionPaymentPanel({
                 "Отправить на модерацию"
               ) : isFreePublication ? (
                 "Отправить на модерацию"
-              ) : paymentMethod === "MANAGER" ? (
-                "Отправить заявку менеджеру"
               ) : (
-                <>
-                  <AppIcon icon={CreditCard} className="h-4 w-4" />
-                  Оплатить
-                </>
+                "Отправить заявку менеджеру"
               )}
             </Button>
           ) : null}
@@ -827,25 +697,11 @@ export function ExcursionPaymentPanel({
           </div>
 
           {isOpenPayment(latestPayment) ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {latestPayment.provider === "YOOKASSA" && latestPayment.confirmationUrl ? (
-                <a
-                  href={latestPayment.confirmationUrl}
-                  className="inline-flex items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Открыть YooKassa
-                </a>
-              ) : null}
-
-              {latestPayment.provider === "YOOKASSA" ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => void refreshLatestPaymentStatus(latestPayment.id)}
-                  disabled={isRefreshing}
-                >
-                  Проверить статус
-                </Button>
-              ) : null}
+            <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="font-medium">Ожидает подтверждения менеджером</p>
+              <p className="mt-0.5 text-xs text-amber-700/70">
+                После подтверждения карточка будет отправлена на модерацию автоматически.
+              </p>
             </div>
           ) : null}
 

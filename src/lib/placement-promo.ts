@@ -1,3 +1,5 @@
+import type { PlacementPriceResult } from "@/lib/placement-tariffs";
+
 export const PLACEMENT_PROMO_CODE = "launch-free-placement-2026";
 export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 100;
 export const PLACEMENT_PROMO_RENEWAL_DISCOUNT_PERCENT = 20;
@@ -11,6 +13,10 @@ export const PLACEMENT_PROMO_DEMO_MODE = "demo";
 export const PLACEMENT_PROMO_DEMO_LABEL = "Демо-режим";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
 export const PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS = 7;
+export const PLACEMENT_POST_LAUNCH_TRIAL_CODE = "post-launch-new-listing-trial-2026";
+export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE =
+  "post_launch_new_listing_trial_1_month";
+export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 месяц";
 
 const LEGACY_PLACEMENT_PROMO_CODES = new Map<string, number>([["season-start-2026-20", 20]]);
 
@@ -32,6 +38,16 @@ export type PlacementPromoPayload = {
   originalAmountRub: number;
   discountedAmountRub: number;
   discountAmountRub: number;
+  endsAtIso: string;
+  createdAtIso: string;
+};
+
+export type PlacementPostLaunchTrialPayload = {
+  code: string;
+  originalAmountRub: number;
+  discountedAmountRub: number;
+  discountAmountRub: number;
+  startsAtIso: string;
   endsAtIso: string;
   createdAtIso: string;
 };
@@ -79,8 +95,52 @@ export function isPlacementPromoActive(now = new Date()): boolean {
   return now.getTime() < promoEndsAtMs;
 }
 
+function formatRuDate(value: Date): string {
+  return value.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function getPlacementPromoDemoValidUntil(): Date {
   return new Date(PLACEMENT_PROMO_DEMO_ENDS_AT_ISO);
+}
+
+export function getPostLaunchTrialValidUntil(now = new Date()): Date {
+  const validUntil = new Date(now);
+  validUntil.setMonth(validUntil.getMonth() + 1);
+  return validUntil;
+}
+
+export function getPostLaunchTrialEndLabel(validUntil: Date): string {
+  return `пробный период до ${formatRuDate(validUntil)}`;
+}
+
+export function isPostLaunchTrialEligible(input: {
+  listingCreatedAt: Date | string | null | undefined;
+  now?: Date;
+  hasSuccessfulPlacement?: boolean;
+}): boolean {
+  if (input.hasSuccessfulPlacement) {
+    return false;
+  }
+
+  const now = input.now ?? new Date();
+  if (now.getTime() < promoEndsAtMs) {
+    return false;
+  }
+
+  if (!input.listingCreatedAt) {
+    return false;
+  }
+
+  const listingCreatedAt =
+    input.listingCreatedAt instanceof Date
+      ? input.listingCreatedAt
+      : new Date(input.listingCreatedAt);
+
+  return Number.isFinite(listingCreatedAt.getTime()) && listingCreatedAt.getTime() >= promoEndsAtMs;
 }
 
 export function getPlacementPromoPrice(
@@ -103,6 +163,46 @@ export function getPlacementPromoPrice(
     endsAtIso: PLACEMENT_PROMO_ENDS_AT_ISO,
     endsLabel: PLACEMENT_PROMO_END_LABEL,
     shortEndsLabel: PLACEMENT_PROMO_SHORT_END_LABEL,
+  };
+}
+
+export function getPlacementFreePeriodPrice(input: {
+  originalAmountRub: number;
+  code: string;
+  endsAtIso: string;
+  endsLabel: string;
+  shortEndsLabel?: string;
+}): PlacementPromoPrice {
+  const originalAmount = normalizeRubAmount(input.originalAmountRub);
+
+  return {
+    code: input.code,
+    discountPercent: PLACEMENT_PROMO_DISCOUNT_PERCENT,
+    originalAmountRub: originalAmount,
+    finalAmountRub: 0,
+    discountAmountRub: originalAmount,
+    isDiscounted: originalAmount > 0,
+    endsAtIso: input.endsAtIso,
+    endsLabel: input.endsLabel,
+    shortEndsLabel: input.shortEndsLabel ?? input.endsLabel,
+  };
+}
+
+export function applyPlacementFreePeriodToPricing(
+  pricing: PlacementPriceResult,
+  input: {
+    validUntil: Date;
+    label?: string;
+  },
+): PlacementPriceResult {
+  const label = input.label ?? getPostLaunchTrialEndLabel(input.validUntil);
+
+  return {
+    ...pricing,
+    freePeriodActive: true,
+    freePeriodUntil: label,
+    freePeriodEndsAtIso: input.validUntil.toISOString(),
+    priceAfterFreePeriod: pricing.totalPrice,
   };
 }
 
@@ -133,6 +233,36 @@ export function buildPlacementPromoPayload(input: {
   };
 }
 
+export function buildPostLaunchTrialPayload(input: {
+  originalAmountRub: number;
+  discountedAmountRub?: number;
+  now?: Date;
+  validUntil?: Date;
+}): PlacementPostLaunchTrialPayload | null {
+  const now = input.now ?? new Date();
+  if (now.getTime() < promoEndsAtMs) {
+    return null;
+  }
+
+  const originalAmountRub = normalizeRubAmount(input.originalAmountRub);
+  const discountedAmountRub = normalizeRubAmount(input.discountedAmountRub ?? 0);
+  if (originalAmountRub <= 0 || discountedAmountRub >= originalAmountRub) {
+    return null;
+  }
+
+  const validUntil = input.validUntil ?? getPostLaunchTrialValidUntil(now);
+
+  return {
+    code: PLACEMENT_POST_LAUNCH_TRIAL_CODE,
+    originalAmountRub,
+    discountedAmountRub,
+    discountAmountRub: originalAmountRub - discountedAmountRub,
+    startsAtIso: now.toISOString(),
+    endsAtIso: validUntil.toISOString(),
+    createdAtIso: now.toISOString(),
+  };
+}
+
 export function buildPlacementPromoMetadata(input: {
   originalAmountRub: number;
   discountedAmountRub: number;
@@ -151,6 +281,39 @@ export function buildPlacementPromoMetadata(input: {
     placementPromoDiscountedAmountRub: String(payload.discountedAmountRub),
     placementPromoDiscountAmountRub: String(payload.discountAmountRub),
     placementPromoEndsAtIso: payload.endsAtIso,
+  };
+}
+
+function parsePostLaunchTrialRecord(
+  value: Record<string, unknown>,
+): PlacementPostLaunchTrialPayload | null {
+  const code = typeof value.code === "string" ? value.code : null;
+  const originalAmountRub = toNumber(value.originalAmountRub);
+  const discountedAmountRub = toNumber(value.discountedAmountRub);
+  const discountAmountRub = toNumber(value.discountAmountRub);
+  const startsAtIso = typeof value.startsAtIso === "string" ? value.startsAtIso : null;
+  const endsAtIso = typeof value.endsAtIso === "string" ? value.endsAtIso : null;
+
+  if (
+    code !== PLACEMENT_POST_LAUNCH_TRIAL_CODE ||
+    originalAmountRub === null ||
+    discountedAmountRub === null ||
+    discountAmountRub === null ||
+    !startsAtIso ||
+    !endsAtIso
+  ) {
+    return null;
+  }
+
+  return {
+    code,
+    originalAmountRub,
+    discountedAmountRub,
+    discountAmountRub,
+    startsAtIso,
+    endsAtIso,
+    createdAtIso:
+      typeof value.createdAtIso === "string" ? value.createdAtIso : new Date(0).toISOString(),
   };
 }
 
@@ -233,7 +396,34 @@ export function getPlacementPromoPayload(value: unknown): PlacementPromoPayload 
   return isRecord(value.metadata) ? parsePlacementPromoMetadata(value.metadata) : null;
 }
 
-export function isFreePlacementDemoPayload(value: unknown): boolean {
+export function getPostLaunchTrialPayload(value: unknown): PlacementPostLaunchTrialPayload | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const directPayload = isRecord(value.postLaunchTrial)
+    ? parsePostLaunchTrialRecord(value.postLaunchTrial)
+    : null;
+  if (directPayload) {
+    return directPayload;
+  }
+
+  return parsePostLaunchTrialRecord(value);
+}
+
+export function isPostLaunchTrialPayload(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (value.placementCampaignType === PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE) {
+    return true;
+  }
+
+  return getPostLaunchTrialPayload(value) !== null;
+}
+
+export function isLaunchPlacementDemoPayload(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
@@ -254,11 +444,32 @@ export function isFreePlacementDemoPayload(value: unknown): boolean {
   );
 }
 
+export function isFreePlacementDemoPayload(value: unknown): boolean {
+  return isLaunchPlacementDemoPayload(value) || isPostLaunchTrialPayload(value);
+}
+
+export function getFreePlacementDemoValidUntil(value: unknown): Date {
+  const postLaunchTrial = getPostLaunchTrialPayload(value);
+  if (postLaunchTrial) {
+    const validUntil = new Date(postLaunchTrial.endsAtIso);
+    if (Number.isFinite(validUntil.getTime())) {
+      return validUntil;
+    }
+  }
+
+  return getPlacementPromoDemoValidUntil();
+}
+
 export function getPlacementPromoOriginalCoverageAmount(
   providerPayload: unknown,
   fallbackAmountRub: number,
 ): number {
   const fallbackAmount = normalizeRubAmount(fallbackAmountRub);
+  const postLaunchTrial = getPostLaunchTrialPayload(providerPayload);
+  if (postLaunchTrial) {
+    return Math.max(fallbackAmount, normalizeRubAmount(postLaunchTrial.originalAmountRub));
+  }
+
   const promoPayload = getPlacementPromoPayload(providerPayload);
 
   if (!promoPayload) {

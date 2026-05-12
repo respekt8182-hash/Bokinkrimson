@@ -93,10 +93,6 @@ function requiresStrictSecurityConfiguration(pathname: string, method: string): 
   return isOwnerSpaceApiPath(pathname);
 }
 
-function isCsrfExemptApiPath(pathname: string): boolean {
-  return pathname === "/api/payments/yookassa/webhook";
-}
-
 function isOwnerSpaceApiPath(pathname: string): boolean {
   if (pathname.startsWith("/api/admin/")) {
     return false;
@@ -257,7 +253,6 @@ export async function proxy(request: NextRequest) {
 
     if (
       mutatingMethods.has(requestMethod) &&
-      !isCsrfExemptApiPath(pathname) &&
       !isSameOrigin(request)
     ) {
       return applySecurityHeaders(

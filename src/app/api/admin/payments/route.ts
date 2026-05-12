@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const statusFilter = searchParams.get("status") ?? "PENDING";
-  const providerFilter = searchParams.get("provider") ?? "MANAGER";
   const pagination = parsePagination({ request, defaultLimit: 25, maxLimit: 100 });
   const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
 
@@ -35,10 +34,7 @@ export async function GET(request: NextRequest) {
         ? [PaymentStatus.CREATED, PaymentStatus.PENDING]
         : [statusFilter as PaymentStatus];
 
-  const whereProvider: PaymentProvider[] =
-    providerFilter === "ALL"
-      ? [PaymentProvider.YOOKASSA, PaymentProvider.MANAGER]
-      : [providerFilter as PaymentProvider];
+  const whereProvider: PaymentProvider[] = [PaymentProvider.MANAGER];
 
   const [payments, total] = await Promise.all([
     db.payment.findMany({

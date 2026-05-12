@@ -5,7 +5,6 @@
 - Node.js LTS + npm
 - PostgreSQL (prod/staging)
 - S3-compatible storage
-- YooKassa keys (or mock mode for non-prod)
 - Domain + SSL certificate
 - For single-node VPS deploy with Docker/Caddy see `docs/VPS_DEPLOY.md`
 
@@ -17,7 +16,6 @@ Use `.env.example` as baseline and set production secrets:
 - `JWT_SECRET` (strong random secret)
 - `NEXT_PUBLIC_APP_URL` (public HTTPS domain)
 - `S3_*` variables
-- `YOOKASSA_*` variables
 - `NEXT_PUBLIC_YANDEX_MAPS_API_KEY`
 - `YANDEX_GEOCODER_API_KEY`
 
@@ -84,7 +82,7 @@ Use `.env.example` as baseline and set production secrets:
 
 - HTTP-only session cookie + `sameSite=lax`
 - Security headers applied via `src/proxy.ts`
-- Same-origin CSRF guard for mutating `/api/*` requests (webhook excluded)
+- Same-origin CSRF guard for mutating `/api/*` requests
 - Rate-limit on auth endpoints (login/register/forgot-password)
 - File validation on media uploads (type + size + count limits)
 

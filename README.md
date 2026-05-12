@@ -11,7 +11,7 @@ Stage 13 implementation for the booking service focused on Crimea:
 - Public housing catalog and property cards without authorization
 - Guest applications from property card to owner dashboard (stage 8)
 - Owner request management with statuses (new / in progress / closed)
-- Placement payments with tariff calculation and YooKassa/mock flow (stage 9)
+- Placement payments with tariff calculation and manager-confirmed flow (stage 9)
 - Admin panel with moderation queue, object review, users/objects lists (stage 10)
 - RBAC for `/admin` routes and admin moderation action log
 - Separate admin workspace: isolated from owner dashboard + unread moderation badges
@@ -62,9 +62,6 @@ S3_ACCESS_KEY_ID="your-key"
 S3_SECRET_ACCESS_KEY="your-secret"
 S3_FORCE_PATH_STYLE="true"
 S3_PUBLIC_BASE_URL="https://cdn.example.com"
-YOOKASSA_SHOP_ID="your-shop-id"
-YOOKASSA_SECRET_KEY="your-secret-key"
-YOOKASSA_RETURN_URL="http://localhost:3000/dashboard/objects"
 ```
 
 `NEXT_PUBLIC_YANDEX_MAPS_API_KEY` is used by the client map widget.  
@@ -72,7 +69,7 @@ YOOKASSA_RETURN_URL="http://localhost:3000/dashboard/objects"
 `CSRF_TRUSTED_ORIGINS` is optional and lets you explicitly allow extra origins for mutating `/api/*` requests, for example when testing from a phone over local network or behind a reverse proxy.
 `RATE_LIMIT_MODE="memory"` is a good default for a single VPS node. Use `upstash` when you need a shared external rate-limit backend.
 When you store a bcrypt hash in `.env` / `.env.local`, escape each `$` as `\$`, otherwise Next.js treats parts of the hash as variable expansion and `ADMIN_PASSWORD_HASH` may become empty at runtime.
-If YooKassa variables are empty, the project still starts normally; online payments stay disabled until you configure them, while the manager payment flow remains available.
+Online acquiring is disabled; publication payments are created as manager-confirmed requests.
 If you run multiple local projects against one PostgreSQL server, give each project its own database name (and ideally its own DB user) in `.env` to avoid mixing credentials and data.
 
 ## Run locally
@@ -218,7 +215,6 @@ If Playwright browsers are not installed, run `npx playwright install`.
 - `PATCH /api/applications/[id]`
 - `GET /api/payments/[id]`
 - `POST /api/payments/[id]/mock`
-- `POST /api/payments/yookassa/webhook`
 - `GET /api/admin/moderation`
 - `GET /api/admin/properties/[id]`
 - `PATCH /api/admin/properties/[id]/moderation`

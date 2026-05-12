@@ -3,6 +3,7 @@ import {
   type ObjectPlacementTariffType,
 } from "@/lib/object-placement-tariffs";
 import { getTariffQuote, type TariffQuote } from "@/lib/payments";
+import { applyPlacementFreePeriodToPricing } from "@/lib/placement-promo";
 import { getPlacementPrice } from "@/lib/placement-pricing";
 import type { PlacementPriceResult } from "@/lib/placement-tariffs";
 
@@ -12,6 +13,7 @@ export async function getPersonalTariffQuote(input: {
   propertyType: string | null;
   tariffType?: string | null;
   now?: Date;
+  freeTrialUntil?: Date | null;
 }): Promise<TariffQuote> {
   const now = input.now ?? new Date();
   const options = getObjectPlacementTariffOptions(now);
@@ -25,7 +27,12 @@ export async function getPersonalTariffQuote(input: {
         basePrice: option.amountRub,
         now,
       });
-      return [option.type, pricing] as const;
+      return [
+        option.type,
+        input.freeTrialUntil
+          ? applyPlacementFreePeriodToPricing(pricing, { validUntil: input.freeTrialUntil })
+          : pricing,
+      ] as const;
     }),
   );
 

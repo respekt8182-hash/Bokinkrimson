@@ -8,8 +8,7 @@ Date: 2026-04-15
 - CSRF protections are present for mutating app requests
 - auth endpoints are rate-limited
 - upload validation exists for file type/size/count
-- YooKassa webhook processing verifies trusted source and provider-side payment state
-- duplicate webhook handling is implemented
+- placement payments are created as manager-confirmed requests
 
 ## Closed Findings
 
@@ -54,7 +53,7 @@ Date: 2026-04-15
   - potential false “already paid” or blocked real payment attempts
 - Fix:
   - coverage ignores `MOCK`
-  - payment history/open conflicts use only `YOOKASSA` and `MANAGER`
+  - payment history/open conflicts use only manager-confirmed payment requests
 - Verification:
   - payment routes/build/tests pass after cleanup
 - Residual risk:
@@ -62,23 +61,7 @@ Date: 2026-04-15
 
 ## Open Security / Release Risks
 
-### RISK-001 Missing production YooKassa security configuration
-
-- Severity: `blocker`
-- Missing:
-  - `YOOKASSA_SHOP_ID`
-  - `YOOKASSA_SECRET_KEY`
-  - `YOOKASSA_RETURN_URL`
-  - `YOOKASSA_WEBHOOK_IP_ALLOWLIST`
-- Impact:
-  - live payments and trusted webhook processing cannot be launch-verified
-- How to verify after access:
-  1. configure real secrets in secret storage
-  2. expose public HTTPS URL
-  3. register webhook URL in YooKassa
-  4. run success/cancel/retry/replay tests
-
-### RISK-002 Database schema hardening is blocked by ownership mismatch
+### RISK-001 Database schema hardening is blocked by ownership mismatch
 
 - Severity: `blocker`
 - Reproduction:

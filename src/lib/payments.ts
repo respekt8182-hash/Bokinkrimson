@@ -18,11 +18,15 @@ import {
   type SerializedObjectPlacementTariffOption,
 } from "@/lib/object-placement-tariffs";
 import {
+  PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE,
+  PLACEMENT_POST_LAUNCH_TRIAL_CODE,
   PLACEMENT_PROMO_CODE,
   PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
   PLACEMENT_PROMO_DEMO_MODE,
+  buildPostLaunchTrialPayload,
   buildPlacementPromoPayload,
-  getPlacementPromoDemoValidUntil,
+  getFreePlacementDemoValidUntil,
+  getPlacementFreePeriodPrice,
   getPlacementPromoOriginalCoverageAmount,
   getPlacementPromoPrice,
   isFreePlacementDemoPayload,
@@ -161,8 +165,6 @@ export function getPaymentStatusLabel(status: PaymentStatus, provider?: PaymentP
 
 export function getProviderLabel(provider: PaymentProvider): string {
   switch (provider) {
-    case PaymentProvider.YOOKASSA:
-      return "ЮKassa";
     case PaymentProvider.MANAGER:
       return "Через менеджера";
     case PaymentProvider.MOCK:
@@ -351,20 +353,29 @@ export function buildFreePlacementPaymentPayload(input: {
   };
 }
 
-export type YookassaStatus = "pending" | "waiting_for_capture" | "succeeded" | "canceled";
+export function buildPostLaunchTrialPaymentPayload(input: {
+  originalAmountRub: number;
+  discountedAmountRub?: number;
+  now?: Date;
+  validUntil?: Date;
+  context?: Prisma.InputJsonObject;
+  placementPricing?: PlacementPriceResult | null;
+}): Prisma.InputJsonObject {
+  const postLaunchTrial = buildPostLaunchTrialPayload({
+    originalAmountRub: input.originalAmountRub,
+    discountedAmountRub: input.discountedAmountRub ?? 0,
+    now: input.now,
+    validUntil: input.validUntil,
+  });
 
-export function mapYookassaStatus(status: YookassaStatus): PaymentStatus {
-  switch (status) {
-    case "pending":
-    case "waiting_for_capture":
-      return PaymentStatus.PENDING;
-    case "succeeded":
-      return PaymentStatus.SUCCEEDED;
-    case "canceled":
-      return PaymentStatus.CANCELED;
-    default:
-      return PaymentStatus.PENDING;
-  }
+  return {
+    ...(input.context ?? {}),
+    placementCampaign: PLACEMENT_POST_LAUNCH_TRIAL_CODE,
+    placementCampaignType: PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE,
+    includeInAdminRevenue: false,
+    ...(postLaunchTrial ? { postLaunchTrial } : {}),
+    ...(input.placementPricing ? buildPlacementPricingPayload(input.placementPricing) : {}),
+  };
 }
 
 export function isPaymentAwaitingCompletion(status: PaymentStatus): boolean {
@@ -459,7 +470,18 @@ export function getTariffQuote(input: {
     };
   });
   const amountBeforePromo = selectedPlacementPricing?.totalPrice ?? tariff.amountRub;
-  const promoPrice = getPlacementPromoPrice(amountBeforePromo, now);
+  const promoPrice = selectedPlacementPricing?.freePeriodActive
+    ? getPlacementFreePeriodPrice({
+        originalAmountRub: amountBeforePromo,
+        code:
+          selectedPlacementPricing.freePeriodEndsAtIso === PLACEMENT_PROMO_DEMO_ENDS_AT_ISO
+            ? PLACEMENT_PROMO_CODE
+            : PLACEMENT_POST_LAUNCH_TRIAL_CODE,
+        endsAtIso: selectedPlacementPricing.freePeriodEndsAtIso ?? PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
+        endsLabel: selectedPlacementPricing.freePeriodUntil ?? tariff.periodLabel,
+        shortEndsLabel: selectedPlacementPricing.freePeriodUntil ?? tariff.periodLabel,
+      })
+    : getPlacementPromoPrice(amountBeforePromo, now);
 
   return {
     tariff,
@@ -512,7 +534,7 @@ export function serializePayment(payment: {
     providerPayload: payment.providerPayload,
   });
   const serializedPlacementValidUntil = isFreePlacementDemoPayload(payment.providerPayload)
-    ? getPlacementPromoDemoValidUntil().toISOString()
+    ? getFreePlacementDemoValidUntil(payment.providerPayload).toISOString()
     : payment.placementValidUntil
       ? payment.placementValidUntil.toISOString()
       : null;
@@ -578,7 +600,7 @@ export function resolvePaymentPlacementValidUntil(payment: {
   providerPayload?: Prisma.JsonValue | null;
 }): Date {
   if (isFreePlacementDemoPayload(payment.providerPayload)) {
-    return getPlacementPromoDemoValidUntil();
+    return getFreePlacementDemoValidUntil(payment.providerPayload);
   }
 
   return payment.placementValidUntil ?? getPlacementValidUntil(payment.paidAt ?? payment.createdAt);

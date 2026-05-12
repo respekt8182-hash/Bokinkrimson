@@ -23,7 +23,6 @@ export type PublicServiceTariffRow = {
   priceRub: number;
   seasonPriceRub?: number;
   firstYearPriceRub?: number;
-  repeatYearPriceRub?: number;
   conditionsLabel: string;
   durationLabel: string;
   extraLabel?: string;
@@ -70,10 +69,6 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
       EXCURSION_PUBLICATION_FEE_RUB,
       placementTariffs.excursion.firstYearDiscountPercent,
     ),
-    repeatYearPriceRub: calculateDiscountedPlacementPrice(
-      EXCURSION_PUBLICATION_FEE_RUB,
-      placementTariffs.excursion.repeatYearDiscountPercent,
-    ),
     conditionsLabel: "Скидки применяются только к годовому размещению.",
     durationLabel: "Сезон до 31 октября или 365 дней",
   },
@@ -87,10 +82,6 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
       TOUR_PUBLICATION_FEE_RUB,
       placementTariffs.tour.firstYearDiscountPercent,
     ),
-    repeatYearPriceRub: calculateDiscountedPlacementPrice(
-      TOUR_PUBLICATION_FEE_RUB,
-      placementTariffs.tour.repeatYearDiscountPercent,
-    ),
     conditionsLabel: "Скидки применяются только к годовому размещению.",
     durationLabel: "Сезон до 31 октября или 365 дней",
   },
@@ -103,10 +94,6 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
     firstYearPriceRub: calculateDiscountedPlacementPrice(
       TRANSFER_PUBLICATION_FEE_RUB,
       placementTariffs.transfer.firstYearDiscountPercent,
-    ),
-    repeatYearPriceRub: calculateDiscountedPlacementPrice(
-      TRANSFER_PUBLICATION_FEE_RUB,
-      placementTariffs.transfer.repeatYearDiscountPercent,
     ),
     conditionsLabel: "Дополнительные автомобили считаются без скидки.",
     durationLabel: "Сезон до 31 октября или 365 дней",
@@ -143,11 +130,11 @@ export const publicObjectTariffCards: PublicObjectTariffCard[] = [
     title: "Годовое размещение",
     priceLabel: formatTariffPrice(OBJECT_YEARLY_PRICE_RUB),
     description:
-      "Самый выгодный тариф: для первого годового размещения в категории доступна стартовая скидка 20%, для повторного — 10%.",
+      "Самый выгодный тариф: участникам тестового периода доступна скидка 20% на первое годовое продление.",
     periodLabel: "12 месяцев с даты оплаты",
     monthlyLabel: "375 ₽ в месяц до персональной скидки",
     buttonLabel: "Выбрать годовой тариф",
-    badgeLabel: "Скидки 20% / 10%",
+    badgeLabel: "Скидка 20% после теста",
     savingsLabel: `Первое годовое размещение: ${formatTariffPrice(
       calculateDiscountedPlacementPrice(
         OBJECT_YEARLY_PRICE_RUB,
@@ -199,14 +186,14 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 export const publicTariffHighlights = [
   "Скидки действуют только на годовое размещение. Месячные и сезонные тарифы уже рассчитаны как краткосрочные, поэтому дополнительные скидки на них не применяются.",
   "Скидка действует отдельно для каждой категории: объект, экскурсия, тур и трансфер.",
-  "Один пользователь может получить стартовую скидку 20% на первое годовое размещение в каждой категории.",
-  "Для повторного годового размещения в той же категории применяется скидка 10%.",
+  "Участники тестового периода получают скидку 20% на первое годовое продление в каждой категории.",
+  "Новые карточки после 20 июня получают пробный месяц без дополнительных скидок на дальнейшие тарифы.",
   "Дополнительные опции, например дополнительные автомобили в трансфере, добавляются после скидки.",
   `Годовой тариф объекта выгоднее на ${formatTariffPrice(OBJECT_YEARLY_SAVINGS_RUB)} до персональной скидки.`,
 ];
 
 export const annualTariffBenefitText =
-  "Скидки 20% и 10% применяются только к годовому размещению. Месячные и сезонные тарифы уже снижены, поэтому дополнительные скидки на них не применяются.";
+  "Скидка 20% применяется только к первому годовому продлению после тестового периода. Месячные и сезонные тарифы уже снижены, поэтому дополнительные скидки на них не применяются.";
 
 export function formatTariffPrice(priceRub: number): string {
   return `${new Intl.NumberFormat("ru-RU").format(priceRub)} ₽`;

@@ -5,11 +5,16 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   buildFreePlacementPaymentPayload,
+  buildPostLaunchTrialPaymentPayload,
   getPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
-import { getPlacementPromoDemoValidUntil } from "@/lib/placement-promo";
+import {
+  getPlacementPromoDemoValidUntil,
+  getPostLaunchTrialValidUntil,
+  isPostLaunchTrialEligible,
+} from "@/lib/placement-promo";
 import {
   getPropertyPaymentReadinessIssues,
   getPropertyProgress,
@@ -54,6 +59,7 @@ async function getOwnedPropertyForPayment(propertyId: string) {
 async function buildReadiness(
   property: NonNullable<Awaited<ReturnType<typeof getOwnedPropertyForPayment>>>,
   ownerId: string,
+  freeTrialUntil?: Date | null,
 ) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
@@ -72,6 +78,7 @@ async function buildReadiness(
             userId: ownerId,
             roomCount,
             propertyType: property.type,
+            freeTrialUntil,
           })
         : null,
   };
@@ -107,7 +114,28 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const readiness = await buildReadiness(property, session.id);
+  let payments = await db.payment.findMany({
+    where: {
+      propertyId: property.id,
+      ownerId: session.id,
+      provider: PaymentProvider.MANAGER,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      property: {
+        select: { name: true },
+      },
+    },
+  });
+  const now = new Date();
+  const freeTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: property.createdAt,
+    now,
+    hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
+  })
+    ? getPostLaunchTrialValidUntil(now)
+    : null;
+  const readiness = await buildReadiness(property, session.id, freeTrialUntil);
   if (!readiness.ready || !readiness.quote) {
     return NextResponse.json(
       {
@@ -118,18 +146,6 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  let payments = await db.payment.findMany({
-    where: {
-      propertyId: property.id,
-      ownerId: session.id,
-    },
-    orderBy: [{ createdAt: "desc" }],
-    include: {
-      property: {
-        select: { name: true },
-      },
-    },
-  });
   let placement = getPlacementCoverageState({
     payments,
     quote: readiness.quote,
@@ -137,7 +153,6 @@ export async function POST(_request: Request, context: RouteContext) {
   const freePlacementAvailable = placement.fullyCovered && readiness.quote.amount <= 0;
 
   if (!placement.hasActivePlacement && freePlacementAvailable) {
-    const now = new Date();
     const freePayment = await db.payment.create({
       data: {
         propertyId: property.id,
@@ -152,12 +167,19 @@ export async function POST(_request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom: now,
         paidAt: now,
-        placementValidUntil: getPlacementPromoDemoValidUntil(),
-        providerPayload: buildFreePlacementPaymentPayload({
-          originalAmountRub: readiness.quote.originalAmount,
-          now,
-          placementPricing: readiness.quote.placementPricing,
-        }),
+        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(),
+        providerPayload: freeTrialUntil
+          ? buildPostLaunchTrialPaymentPayload({
+              originalAmountRub: readiness.quote.originalAmount,
+              now,
+              validUntil: freeTrialUntil,
+              placementPricing: readiness.quote.placementPricing,
+            })
+          : buildFreePlacementPaymentPayload({
+              originalAmountRub: readiness.quote.originalAmount,
+              now,
+              placementPricing: readiness.quote.placementPricing,
+            }),
       },
       include: {
         property: {

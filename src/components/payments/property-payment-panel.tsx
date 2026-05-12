@@ -7,7 +7,6 @@ import {
   CircleAlert,
   CircleCheckBig,
   CircleX,
-  CreditCard,
   Phone,
   TriangleAlert,
 } from "lucide-react";
@@ -131,7 +130,6 @@ export function PropertyPaymentPanel({
   const [isCreating, setIsCreating] = useState(false);
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"YOOKASSA" | "MANAGER">("MANAGER");
   const [selectedTariffType, setSelectedTariffType] = useState(
     initialReadiness.quote?.tariffType ?? "yearly",
   );
@@ -160,10 +158,14 @@ export function PropertyPaymentPanel({
   const selectedTariffPrice = selectedTariff
     ? getPlacementPromoPrice(selectedFinalBeforePromo)
     : null;
+  const hasSelectedFreePeriod =
+    Boolean(selectedPlacementPricing?.freePeriodActive) || Boolean(selectedTariffPrice?.isDiscounted);
   const amountDue = selectedTariff
     ? hasActivePlacement
       ? 0
-      : (selectedTariffPrice?.finalAmountRub ?? selectedFinalBeforePromo)
+      : hasSelectedFreePeriod
+        ? 0
+        : (selectedTariffPrice?.finalAmountRub ?? selectedFinalBeforePromo)
     : 0;
   const originalAmountDue = selectedTariff ? selectedBaseAmount : 0;
   const hasFreePlacementCoverage = Boolean(selectedTariff) && !hasActivePlacement && amountDue <= 0;
@@ -190,7 +192,9 @@ export function PropertyPaymentPanel({
         return "Оплата уже активна. Карточку можно отправить на модерацию без повторной оплаты.";
       }
       if (hasFreePlacementCoverage) {
-        return "Размещение бесплатно до 20 июня 2026 включительно. Карточку можно отправить на модерацию без оплаты.";
+        return selectedPlacementPricing?.freePeriodUntil
+          ? `Размещение бесплатно: ${selectedPlacementPricing.freePeriodUntil}. Карточку можно отправить на модерацию без оплаты.`
+          : "Размещение бесплатно. Карточку можно отправить на модерацию без оплаты.";
       }
       return "Карточка готова к оплате и последующей отправке на модерацию.";
     }
@@ -200,24 +204,8 @@ export function PropertyPaymentPanel({
     hasActivePlacement,
     hasFreePlacementCoverage,
     readiness.ready,
+    selectedPlacementPricing?.freePeriodUntil,
   ]);
-
-  function getSuccessfulPaymentMessage(nextState: PaymentsApiResponse | null): string {
-    if (!nextState) {
-      return "Оплата подтверждена. Обновите статус карточки чуть позже.";
-    }
-
-    const nextWorkflowStatus = getWorkflowStatus(nextState.status, nextState.pendingEditStatus);
-    if (nextWorkflowStatus === "PENDING_MODERATION") {
-      return "Оплата подтверждена. Карточка автоматически отправлена на модерацию.";
-    }
-
-    if (nextWorkflowStatus === "PUBLISHED") {
-      return "Оплата подтверждена. Размещение активно.";
-    }
-
-    return "Оплата подтверждена. Размещение активно. Если карточка ещё не ушла на модерацию, можно отправить её кнопкой ниже.";
-  }
 
   async function refreshPayments(): Promise<PaymentsApiResponse | null> {
     setIsUpdating(true);
@@ -254,7 +242,7 @@ export function PropertyPaymentPanel({
       const response = await fetch(`/api/properties/${propertyId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: paymentMethod, tariffType: selectedTariff?.type }),
+        body: JSON.stringify({ provider: "MANAGER", tariffType: selectedTariff?.type }),
       });
 
       const body = (await response.json()) as PaymentRouteResponse & { managerRequested?: boolean };
@@ -332,40 +320,6 @@ export function PropertyPaymentPanel({
       await refreshPayments();
     } finally {
       setIsSubmittingModeration(false);
-    }
-  }
-
-  async function refreshLatestPaymentStatus() {
-    if (!latestPayment) {
-      return;
-    }
-
-    setIsUpdating(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/payments/${latestPayment.id}`);
-
-      if (!response.ok) {
-        const body = (await response.json()) as { error?: string };
-        setError(body.error ?? "Не удалось обновить статус платежа");
-        return;
-      }
-
-      const body = (await response.json()) as { item: SerializedPayment };
-      setPayments((prev) => {
-        const next = prev.map((item) => (item.id === body.item.id ? body.item : item));
-        if (!next.some((item) => item.id === body.item.id)) {
-          return [body.item, ...next];
-        }
-        return next;
-      });
-
-      if (body.item.status === "SUCCEEDED") {
-        const nextState = await refreshPayments();
-        setMessage(getSuccessfulPaymentMessage(nextState));
-      }
-    } finally {
-      setIsUpdating(false);
     }
   }
 
@@ -481,8 +435,8 @@ export function PropertyPaymentPanel({
               <li>
                 Убедитесь, что все предыдущие разделы заполнены (объект, правила, номера, удобства)
               </li>
-              <li>До 20 июня размещение бесплатно — тариф показывается справочно</li>
-              <li>Отправьте карточку на модерацию без оплаты</li>
+              <li>Если действует бесплатный период, тариф показывается справочно</li>
+              <li>Отправьте карточку на модерацию или заявку менеджеру</li>
               <li>После прохождения модерации объект появится в каталоге</li>
             </ol>
             <p className="mt-2 text-xs text-olive/55">
@@ -548,7 +502,11 @@ export function PropertyPaymentPanel({
 
           {selectedTariff && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              <p className="font-semibold">Сейчас размещение бесплатно до 20 июня 2026.</p>
+              <p className="font-semibold">
+                {selectedPlacementPricing?.freePeriodUntil
+                  ? `Сейчас размещение бесплатно: ${selectedPlacementPricing.freePeriodUntil}.`
+                  : "Сейчас размещение бесплатно."}
+              </p>
               <p className="mt-1">
                 После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
                 <strong>{formatMoney(selectedFinalBeforePromo)}</strong>
@@ -558,7 +516,7 @@ export function PropertyPaymentPanel({
               </p>
               <p className="mt-1">
                 {selectedPlacementPricing?.discountText ??
-                  "Скидки 20% и 10% применяются только к годовому размещению."}
+                  "Скидка 20% применяется только к первому годовому продлению после тестового периода."}
               </p>
             </div>
           ) : null}
@@ -570,6 +528,10 @@ export function PropertyPaymentPanel({
                 const optionBaseAmount = option.baseAmountRub ?? option.amountRub;
                 const optionFinalAmount = option.finalAmountRub ?? option.amountRub;
                 const optionPromoPrice = getPlacementPromoPrice(optionFinalAmount);
+                const optionAmountDue =
+                  option.placementPricing?.freePeriodActive || optionPromoPrice.isDiscounted
+                    ? 0
+                    : optionPromoPrice.finalAmountRub;
                 return (
                   <button
                     key={option.type}
@@ -589,7 +551,7 @@ export function PropertyPaymentPanel({
                     <p className="pr-20 text-sm font-semibold text-olive">{option.shortTitle}</p>
                     <PlacementPromoPrice
                       originalAmountRub={optionBaseAmount}
-                      finalAmountRub={optionPromoPrice.finalAmountRub}
+                      finalAmountRub={optionAmountDue}
                       className="mt-2"
                       finalClassName="text-2xl"
                     />
@@ -755,73 +717,15 @@ export function PropertyPaymentPanel({
             readiness.ready &&
             amountDue > 0 &&
             !managerRequested && (
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-olive">Выберите способ оплаты</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("MANAGER")}
-                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                      paymentMethod === "MANAGER"
-                        ? "border-primary bg-primary/5"
-                        : "border-olive/15 bg-white hover:border-olive/30"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        paymentMethod === "MANAGER" ? "bg-primary/15" : "bg-olive/8"
-                      }`}
-                    >
-                      <AppIcon
-                        icon={Phone}
-                        className={`h-5 w-5 ${
-                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive/50"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          paymentMethod === "MANAGER" ? "text-primary" : "text-olive"
-                        }`}
-                      >
-                        Через менеджера
-                      </p>
-                      <p className="text-xs text-olive/55">Перевод на карту / по реквизитам</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("YOOKASSA")}
-                    className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                      paymentMethod === "YOOKASSA"
-                        ? "border-primary bg-primary/5"
-                        : "border-olive/15 bg-white hover:border-olive/30"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        paymentMethod === "YOOKASSA" ? "bg-primary/15" : "bg-olive/8"
-                      }`}
-                    >
-                      <AppIcon
-                        icon={CreditCard}
-                        className={`h-5 w-5 ${
-                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive/50"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <p
-                        className={`text-sm font-semibold ${
-                          paymentMethod === "YOOKASSA" ? "text-primary" : "text-olive"
-                        }`}
-                      >
-                        Онлайн-оплата
-                      </p>
-                      <p className="text-xs text-olive/55">Банковская карта через ЮKassa</p>
-                    </div>
-                  </button>
+              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                  <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-primary">Оплата через менеджера</p>
+                  <p className="text-xs text-olive/60">
+                    Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                  </p>
                 </div>
               </div>
             )}
@@ -841,9 +745,7 @@ export function PropertyPaymentPanel({
                   ? primaryActionPendingLabel
                   : canSubmitModerationWithPaidPlacement
                     ? primaryActionLabel
-                    : paymentMethod === "MANAGER"
-                      ? "Отправить заявку менеджеру"
-                      : "Перейти к оплате"}
+                    : "Отправить заявку менеджеру"}
               </Button>
             )}
             {readiness.ready && previewHref ? (
@@ -898,25 +800,6 @@ export function PropertyPaymentPanel({
                     будет отправлена на модерацию автоматически.
                   </p>
                 </div>
-              ) : null}
-
-              {latestPayment.provider === "YOOKASSA" && latestPayment.confirmationUrl ? (
-                <a
-                  href={latestPayment.confirmationUrl}
-                  className="inline-flex items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Открыть YooKassa
-                </a>
-              ) : null}
-
-              {latestPayment.provider === "YOOKASSA" ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => void refreshLatestPaymentStatus()}
-                  disabled={isUpdating}
-                >
-                  Проверить статус
-                </Button>
               ) : null}
             </div>
           ) : null}

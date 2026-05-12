@@ -126,7 +126,6 @@ export default function RootLayout({
       <head>
         <link rel="dns-prefetch" href="https://mc.yandex.ru" />
         <link rel="dns-prefetch" href="https://api-maps.yandex.ru" />
-        <link rel="dns-prefetch" href="https://api.yookassa.ru" />
         <link rel="preconnect" href="https://mc.yandex.ru" crossOrigin="" />
         <link rel="preconnect" href="https://api-maps.yandex.ru" crossOrigin="" />
         <Script id="yandex-metrika" strategy="beforeInteractive">

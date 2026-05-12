@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   LockKeyhole,
+  LogOut,
   UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -33,6 +34,10 @@ function UserIcon({ className }: { className?: string }) {
 
 function LockIcon({ className }: { className?: string }) {
   return <AppIcon icon={LockKeyhole} className={className} />;
+}
+
+function LogoutIcon({ className }: { className?: string }) {
+  return <AppIcon icon={LogOut} className={className} />;
 }
 
 function EyeIcon() {
@@ -333,6 +338,7 @@ export function ProfileSettings({
   const [avatarError, setAvatarError] = useState("");
   const [avatarSuccess, setAvatarSuccess] = useState("");
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const initials = useMemo(
     () => getInitials({ firstName: profile.firstName }),
@@ -528,6 +534,17 @@ export function ProfileSettings({
       router.refresh();
     } finally {
       setIsAvatarSaving(false);
+    }
+  }
+
+  async function logout() {
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
     }
   }
 
@@ -803,6 +820,29 @@ export function ProfileSettings({
               Форма скрыта для безопасности. Нажмите «Открыть», чтобы сменить пароль.
             </div>
           )}
+        </section>
+
+        <section className="overflow-hidden rounded-2xl bg-red-50/70 p-4 ring-1 ring-red-100 lg:hidden">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-red-700 ring-1 ring-red-100">
+              <LogoutIcon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-red-900">Выйти из аккаунта</h2>
+              <p className="mt-1 text-sm leading-snug text-red-900/65">
+                Завершите сессию на этом устройстве, если больше не планируете работать в кабинете.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void logout()}
+            disabled={isLoggingOut}
+            className="mt-4 w-full border-red-200 bg-white text-red-700 ring-red-100 hover:bg-red-100 hover:text-red-800"
+          >
+            {isLoggingOut ? "Выходим..." : "Выйти"}
+          </Button>
         </section>
       </div>
     </>

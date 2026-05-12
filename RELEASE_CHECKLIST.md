@@ -17,14 +17,13 @@
 - [x] Forgot-password request creation verified
 - [x] Legacy mock payment route removed from release surface
 - [x] Payment coverage/conflict logic filtered to real providers
-- [x] YooKassa code reviewed against official documentation
+- [x] Online acquiring removed from release surface
+- [x] Manager-confirmed payment flow verified in code
 
 ## Blocked / Requires External Access
 
 - [ ] Apply latest Prisma migrations on target DB
   - blocked by table ownership mismatch (`postgres` owns tables, app uses `boking`)
-- [ ] Run live YooKassa payment matrix
-  - blocked by missing `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL`, `YOOKASSA_WEBHOOK_IP_ALLOWLIST`, public HTTPS domain
 - [ ] Verify full public reset-password completion
   - token delivery chain needs real admin-issued token capture and/or target email delivery setup
 

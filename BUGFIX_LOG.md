@@ -76,7 +76,7 @@
   - `tests/unit/property-documents-route.test.ts`
   - `tests/unit/restore-route.test.ts`
   - `tests/unit/review-route-security.test.ts`
-  - `tests/unit/yookassa-webhook-route.test.ts`
+  - removed obsolete payment-provider webhook test
 - Verified after fix:
   - `npx vitest run` -> `127 passed`
 - Residual risk:
