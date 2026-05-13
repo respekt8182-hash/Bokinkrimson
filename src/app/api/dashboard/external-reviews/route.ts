@@ -1,0 +1,120 @@
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import {
+  createExternalReview,
+  findExternalReviewEntity,
+  getExternalReviewEntityLabel,
+  hasExternalReviewSupport,
+  listExternalReviews,
+  parseExternalReviewEntityType,
+} from "@/lib/external-reviews";
+import { importExternalReviewSchema } from "@/lib/schemas";
+
+function parseEntity(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const entityType = parseExternalReviewEntityType(searchParams.get("entityType"));
+  const entityId = searchParams.get("entityId")?.trim() || null;
+
+  return entityType && entityId ? { entityType, entityId } : null;
+}
+
+export async function GET(request: Request) {
+  const session = await getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  const entity = parseEntity(request);
+  if (!entity) {
+    return NextResponse.json({ error: "Укажите корректные entityType и entityId" }, { status: 400 });
+  }
+
+  const ownedEntity = await findExternalReviewEntity({
+    ...entity,
+    ownerId: session.id,
+  });
+
+  if (!ownedEntity) {
+    return NextResponse.json(
+      { error: `${getExternalReviewEntityLabel(entity.entityType)} не найден` },
+      { status: 404 },
+    );
+  }
+
+  const schemaAvailable = await hasExternalReviewSupport(entity.entityType);
+  if (!schemaAvailable) {
+    return NextResponse.json({
+      items: [],
+      schemaAvailable: false,
+    });
+  }
+
+  return NextResponse.json({
+    items: await listExternalReviews(entity),
+    schemaAvailable: true,
+  });
+}
+
+export async function POST(request: Request) {
+  const session = await getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  const entity = parseEntity(request);
+  if (!entity) {
+    return NextResponse.json({ error: "Укажите корректные entityType и entityId" }, { status: 400 });
+  }
+
+  const ownedEntity = await findExternalReviewEntity({
+    ...entity,
+    ownerId: session.id,
+  });
+
+  if (!ownedEntity) {
+    return NextResponse.json(
+      { error: `${getExternalReviewEntityLabel(entity.entityType)} не найден` },
+      { status: 404 },
+    );
+  }
+
+  if (!(await hasExternalReviewSupport(entity.entityType))) {
+    return NextResponse.json(
+      {
+        error:
+          "База данных ещё не обновлена для отзывов с других сайтов. Примените последнюю Prisma-миграцию.",
+        code: "EXTERNAL_REVIEW_SCHEMA_MISSING",
+      },
+      { status: 503 },
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+
+  const parsed = importExternalReviewSchema.safeParse(payload);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Проверьте данные отзыва" }, { status: 400 });
+  }
+
+  const result = await createExternalReview({
+    ...entity,
+    actorId: session.id,
+    actorRole: "owner",
+    authorName: parsed.data.authorName,
+    rating: parsed.data.rating,
+    text: parsed.data.text,
+    sourceUrl: parsed.data.sourceUrl,
+    sourceName: parsed.data.sourceName,
+    guestCity: parsed.data.guestCity,
+    reviewedAt: parsed.data.reviewedAt,
+  });
+
+  return NextResponse.json(result, { status: 201 });
+}

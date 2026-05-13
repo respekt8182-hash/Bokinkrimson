@@ -1,5 +1,5 @@
 // Next.js page for route /dashboard/objects/[id]/room-categories.
-import { BedDouble, Plus } from "lucide-react";
+import { BedDouble, MessageSquareText, Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
@@ -84,7 +84,14 @@ export default async function DashboardObjectRoomCategoriesPage({
                 </div>
               </div>
 
-              <div className="flex w-full shrink-0 items-center justify-between gap-3 sm:w-auto sm:flex-col sm:items-end">
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                <Link
+                  href={`/dashboard/objects/${property.id}/external-reviews`}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/15 active:scale-95"
+                >
+                  <AppIcon icon={MessageSquareText} className="h-4 w-4" />
+                  Добавить отзывы
+                </Link>
                 {!isCreateRequested ? (
                   <Link
                     href={`/dashboard/objects/${property.id}/room-categories?create=1#room-category-form`}
@@ -113,12 +120,14 @@ export default async function DashboardObjectRoomCategoriesPage({
           >
             Назад
           </Link>
-          <Link
-            href={`/dashboard/objects/${property.id}/amenities`}
-            className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
-          >
-            Далее
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/dashboard/objects/${property.id}/amenities`}
+              className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+            >
+              Далее
+            </Link>
+          </div>
         </div>
       </div>
     </div>

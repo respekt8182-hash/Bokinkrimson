@@ -1,11 +1,12 @@
 // UI component for property/excursion reviews section.
 "use client";
 
-import { MessageSquareText, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Info, MessageSquareText, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { SerializedReview } from "@/lib/reviews";
 
 type PropertyReviewsSectionProps = {
@@ -40,6 +41,8 @@ type ReviewsListResponse = {
   };
 };
 
+const REVIEWS_PAGE_SIZE = 5;
+
 function clampRating(value: number): number {
   const safe = Math.max(0.5, Math.min(5, value));
   return Math.round(safe * 2) / 2;
@@ -65,6 +68,10 @@ function formatReviewMonth(value: string): string {
     month: "long",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function getReviewDisplayDate(review: SerializedReview): string {
+  return review.reviewedAt ?? review.createdAt;
 }
 
 function formatReviewsCountLabel(count: number): string {
@@ -126,6 +133,8 @@ export function PropertyReviewsSection({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
+  const [guestCity, setGuestCity] = useState("");
+  const [reviewedAt, setReviewedAt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [error, setError] = useState("");
@@ -191,6 +200,8 @@ export function PropertyReviewsSection({
         body: JSON.stringify({
           rating,
           text: text.trim(),
+          guestCity: guestCity.trim(),
+          reviewedAt,
         }),
       });
 
@@ -217,6 +228,8 @@ export function PropertyReviewsSection({
 
       if (body.item.status === "PENDING" || body.moderationStatus === "PENDING") {
         setText("");
+        setGuestCity("");
+        setReviewedAt("");
         setRating(5);
         setIsComposerOpen(false);
         setSuccess("Отзыв отправлен на модерацию. Он появится после проверки администратором.");
@@ -225,6 +238,8 @@ export function PropertyReviewsSection({
 
       setItems((previous) => [body.item!, ...previous]);
       setText("");
+      setGuestCity("");
+      setReviewedAt("");
       setRating(5);
       setIsComposerOpen(false);
       setSuccess("Спасибо, отзыв опубликован.");
@@ -242,9 +257,12 @@ export function PropertyReviewsSection({
     setIsLoadingMore(true);
     try {
       const separator = loadMoreUrl.includes("?") ? "&" : "?";
-      const response = await fetch(`${loadMoreUrl}${separator}offset=${items.length}&limit=3`, {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `${loadMoreUrl}${separator}offset=${items.length}&limit=${REVIEWS_PAGE_SIZE}`,
+        {
+          cache: "no-store",
+        },
+      );
       const body = (await response.json()) as ReviewsListResponse;
 
       if (!response.ok) {
@@ -474,6 +492,22 @@ export function PropertyReviewsSection({
             </span>
           </div>
 
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <Input
+              value={guestCity}
+              onChange={(event) => setGuestCity(event.target.value)}
+              placeholder="Город, откуда вы приехали (необязательно)"
+              maxLength={80}
+            />
+            <Input
+              value={reviewedAt}
+              onChange={(event) => setReviewedAt(event.target.value)}
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              aria-label="Дата отзыва или поездки"
+            />
+          </div>
+
           <textarea
             className="mt-4 w-full rounded-2xl border border-olive/16 bg-white px-4 py-3 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-terra focus:ring-2 focus:ring-terra/18"
             rows={5}
@@ -514,6 +548,13 @@ export function PropertyReviewsSection({
             const likeActive = review.currentUserReaction === "LIKE";
             const dislikeActive = review.currentUserReaction === "DISLIKE";
             const isReactionSaving = reactionSavingById[review.id] ?? false;
+            const reactionsTotal = review.likesCount + review.dislikesCount;
+            const helpfulPercent =
+              reactionsTotal > 0 ? Math.round((review.likesCount / reactionsTotal) * 100) : null;
+            const externalSourceTitle = review.externalSourceName
+              ? `Источник: ${review.externalSourceName}`
+              : "Источник: внешний сайт";
+            const displayDate = getReviewDisplayDate(review);
 
             return (
               <article
@@ -542,8 +583,25 @@ export function PropertyReviewsSection({
                           {review.userName}
                         </p>
                         <span className="text-sm text-olive/55">
-                          {formatReviewMonth(review.createdAt)}
+                          {formatReviewMonth(displayDate)}
                         </span>
+                        {review.guestCity ? (
+                          <span className="rounded-full bg-olive/[0.04] px-2 py-0.5 text-xs font-medium text-olive/58">
+                            из {review.guestCity}
+                          </span>
+                        ) : null}
+                        {review.isImported ? (
+                          <span
+                            title={externalSourceTitle}
+                            aria-label={externalSourceTitle}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          >
+                            <AppIcon
+                              icon={review.externalSourceName ? ShieldCheck : Info}
+                              className="h-3.5 w-3.5"
+                            />
+                          </span>
+                        ) : null}
                       </div>
                       <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-terra">
                         <div className="inline-flex items-center gap-0.5">
@@ -578,9 +636,7 @@ export function PropertyReviewsSection({
                   >
                     <AppIcon icon={ThumbsUp} className="h-3.5 w-3.5" />
                     <span>Да</span>
-                    {review.likesCount > 0 ? (
-                      <span className="text-xs opacity-70">{review.likesCount}</span>
-                    ) : null}
+                    <span className="text-xs opacity-70">{review.likesCount}</span>
                   </button>
                   <button
                     type="button"
@@ -594,10 +650,11 @@ export function PropertyReviewsSection({
                   >
                     <AppIcon icon={ThumbsDown} className="h-3.5 w-3.5" />
                     <span>Нет</span>
-                    {review.dislikesCount > 0 ? (
-                      <span className="text-xs opacity-70">{review.dislikesCount}</span>
-                    ) : null}
+                    <span className="text-xs opacity-70">{review.dislikesCount}</span>
                   </button>
+                  <span className="rounded-full bg-olive/[0.04] px-3 py-1.5 text-xs font-medium text-olive/58">
+                    {helpfulPercent === null ? "Оценок пока нет" : `${helpfulPercent}% полезно`}
+                  </span>
                   {reactionErrorById[review.id] ? (
                     <span className="text-xs text-red-600">{reactionErrorById[review.id]}</span>
                   ) : null}
@@ -667,7 +724,7 @@ export function PropertyReviewsSection({
                 onClick={() => void loadMoreReviews()}
                 disabled={isLoadingMore}
               >
-                {isLoadingMore ? "Загружаем..." : "Еще отзывы"}
+                {isLoadingMore ? "Загружаем..." : "Показать ещё отзывы"}
               </Button>
             </div>
           ) : null}

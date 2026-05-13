@@ -3,10 +3,19 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { reviewRateLimit } from "@/lib/constants";
 import { db } from "@/lib/db";
+import {
+  getExternalReviewSummaryWithFallback,
+  getMergedExternalReviewList,
+} from "@/lib/external-reviews";
 import { normalizePlainText } from "@/lib/plain-text";
 import { extractPropertyId } from "@/lib/public-properties";
 import { buildPublishedTransferVisibilityWhere } from "@/lib/public-visibility";
-import { serializeReview } from "@/lib/reviews";
+import {
+  normalizeReviewGuestCity,
+  parseReviewDateInput,
+  PUBLIC_REVIEWS_PAGE_SIZE,
+  serializeReview,
+} from "@/lib/reviews";
 import { createReviewSchema } from "@/lib/schemas";
 import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
 
@@ -17,11 +26,14 @@ type RouteContext = {
 function parsePagination(request: Request): { offset: number; limit: number } {
   const { searchParams } = new URL(request.url);
   const rawOffset = Number.parseInt(searchParams.get("offset") ?? "0", 10);
-  const rawLimit = Number.parseInt(searchParams.get("limit") ?? "9", 10);
+  const rawLimit = Number.parseInt(
+    searchParams.get("limit") ?? String(PUBLIC_REVIEWS_PAGE_SIZE),
+    10,
+  );
 
   return {
     offset: Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0,
-    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 12) : 9,
+    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 10) : PUBLIC_REVIEWS_PAGE_SIZE,
   };
 }
 
@@ -48,62 +60,58 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Transfer not found" }, { status: 404 });
   }
 
-  if (!(await hasTransferReviewSupport())) {
-    return NextResponse.json({
-      summary: {
-        avgRating: Number(transfer.avgRating),
-        reviewsCount: transfer.reviewsCount,
-      },
-      items: [],
-      pagination: {
-        offset,
-        limit,
-        nextOffset: offset,
-        hasMore: false,
-        total: transfer.reviewsCount,
-      },
-    });
-  }
+  const transferReviewSupport = await hasTransferReviewSupport();
+  const databaseItems = transferReviewSupport
+    ? await db.review.findMany({
+        where: {
+          entityType: ReviewEntityType.TRANSFER,
+          transferId: transfer.id,
+          status: ReviewStatus.ACTIVE,
+        },
+        orderBy: [{ createdAt: "desc" }],
+        include: {
+          user: {
+            select: { firstName: true, avatarUrl: true },
+          },
+          ...(session
+            ? {
+                reactions: {
+                  where: { userId: session.id },
+                  select: { value: true },
+                  take: 1,
+                },
+              }
+            : {}),
+        },
+      })
+    : [];
 
-  const items = await db.review.findMany({
-    where: {
-      entityType: ReviewEntityType.TRANSFER,
-      transferId: transfer.id,
-      status: ReviewStatus.ACTIVE,
-    },
-    orderBy: [{ createdAt: "desc" }],
-    skip: offset,
-    take: limit,
-    include: {
-      user: {
-        select: { firstName: true, avatarUrl: true },
-      },
-      ...(session
-        ? {
-            reactions: {
-              where: { userId: session.id },
-              select: { value: true },
-              take: 1,
-            },
-          }
-        : {}),
-    },
+  const summary = await getExternalReviewSummaryWithFallback({
+    entityType: "transfer",
+    entityId: transfer.id,
+    avgRating: Number(transfer.avgRating),
+    reviewsCount: transfer.reviewsCount,
   });
-
-  const nextOffset = offset + items.length;
+  const merged = await getMergedExternalReviewList({
+    entityType: "transfer",
+    entityId: transfer.id,
+    databaseItems: databaseItems.map(serializeReview),
+    databaseTotal: transfer.reviewsCount,
+    currentUserId: session?.id ?? null,
+    offset,
+    limit,
+  });
+  const nextOffset = offset + merged.items.length;
 
   return NextResponse.json({
-    summary: {
-      avgRating: Number(transfer.avgRating),
-      reviewsCount: transfer.reviewsCount,
-    },
-    items: items.map(serializeReview),
+    summary,
+    items: merged.items,
     pagination: {
       offset,
       limit,
       nextOffset,
-      hasMore: nextOffset < transfer.reviewsCount,
-      total: transfer.reviewsCount,
+      hasMore: nextOffset < merged.total,
+      total: merged.total,
     },
   });
 }
@@ -144,8 +152,7 @@ export async function POST(request: Request, context: RouteContext) {
   if (!(await hasTransferReviewSupport())) {
     return NextResponse.json(
       {
-        error:
-          "Отзывы для трансферов станут доступны после обновления схемы базы данных администратором.",
+        error: "Отзывы для трансферов станут доступны после обновления схемы базы данных администратором.",
         code: "TRANSFER_REVIEW_SCHEMA_MISSING",
       },
       { status: 503 },
@@ -228,6 +235,8 @@ export async function POST(request: Request, context: RouteContext) {
         userId: session.id,
         rating: parsed.data.rating,
         text: normalizePlainText(parsed.data.text),
+        guestCity: normalizeReviewGuestCity(parsed.data.guestCity),
+        reviewedAt: parseReviewDateInput(parsed.data.reviewedAt),
         status: ReviewStatus.PENDING,
       },
       include: {
@@ -240,10 +249,12 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         item: serializeReview(created),
-        summary: {
+        summary: await getExternalReviewSummaryWithFallback({
+          entityType: "transfer",
+          entityId: transfer.id,
           avgRating: Number(transfer.avgRating),
           reviewsCount: transfer.reviewsCount,
-        },
+        }),
         moderationStatus: ReviewStatus.PENDING,
         message: "Review submitted for moderation",
       },

@@ -2,7 +2,9 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { AppIcon } from "@/components/ui/app-icon";
 import { PROPERTY_OWNER_DELETE_RETENTION_DAYS } from "@/lib/property-owner-delete";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -13,6 +15,7 @@ type DeletePropertyButtonProps = {
   propertyStatus: string;
   className?: string;
   buttonClassName?: string;
+  label?: string;
 };
 
 type DeletePropertyResponse = {
@@ -28,6 +31,7 @@ export function DeletePropertyButton({
   propertyStatus,
   className,
   buttonClassName,
+  label = "Удалить объект",
 }: DeletePropertyButtonProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,7 +106,8 @@ export function DeletePropertyButton({
           buttonClassName,
         )}
       >
-        Удалить объект
+        <AppIcon icon={Trash2} className="h-3.5 w-3.5 shrink-0" />
+        {label}
       </Button>
 
       {success ? <p className="max-w-xl text-xs text-green-700">{success}</p> : null}

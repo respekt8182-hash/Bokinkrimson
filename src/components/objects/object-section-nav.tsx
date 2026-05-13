@@ -6,7 +6,14 @@ import {
 import { db } from "@/lib/db";
 import { getPropertyProgress } from "@/lib/properties";
 
-type SectionSlug = "about" | "rules" | "room-categories" | "amenities" | "chessboard" | "payment";
+type SectionSlug =
+  | "about"
+  | "rules"
+  | "room-categories"
+  | "external-reviews"
+  | "amenities"
+  | "chessboard"
+  | "payment";
 
 type ObjectSectionNavProps = {
   propertyId: string;
@@ -15,6 +22,7 @@ type ObjectSectionNavProps = {
   backHref?: string;
   backLabel?: string;
   includePayment?: boolean;
+  includeExternalReviews?: boolean;
   showChessboardTab?: boolean;
 };
 
@@ -44,6 +52,12 @@ const sections: SectionItem[] = [
     label: "\u041d\u043e\u043c\u0435\u0440\u0430",
     iconName: "bed-double",
     tone: "terra",
+  },
+  {
+    slug: "external-reviews",
+    label: "\u041e\u0442\u0437\u044b\u0432\u044b \u0441 \u0441\u0430\u0439\u0442\u043e\u0432",
+    iconName: "reviews",
+    tone: "sky",
   },
   {
     slug: "amenities",
@@ -149,6 +163,7 @@ async function getSectionCompletion(
     about: aboutDone,
     rules: progress.step6,
     "room-categories": progress.step9,
+    "external-reviews": true,
     amenities: enabledRoomAmenitiesCount > 0,
     payment: progress.step10,
     chessboard: progress.step10,
@@ -162,10 +177,15 @@ export async function ObjectSectionNav({
   backHref = basePath,
   backLabel = "Все объекты",
   includePayment = true,
+  includeExternalReviews,
   showChessboardTab = false,
 }: ObjectSectionNavProps) {
+  const shouldIncludeExternalReviews =
+    includeExternalReviews ?? activeSection === "external-reviews";
   const availableSections = sections.filter(
-    (section) => includePayment || section.slug !== "payment",
+    (section) =>
+      (includePayment || section.slug !== "payment") &&
+      (shouldIncludeExternalReviews || section.slug !== "external-reviews"),
   );
   const activeIndex = availableSections.findIndex((section) => section.slug === activeSection);
   const currentStep = activeIndex >= 0 ? activeIndex : 0;
@@ -216,13 +236,9 @@ export async function ObjectSectionNav({
         nav={{
           backHref,
           backLabel,
-          prevHref: prevSection
-            ? `${basePath}/${propertyId}/${prevSection.slug}`
-            : undefined,
+          prevHref: prevSection ? `${basePath}/${propertyId}/${prevSection.slug}` : undefined,
           prevLabel: prevSection?.label,
-          nextHref: nextSection
-            ? `${basePath}/${propertyId}/${nextSection.slug}`
-            : undefined,
+          nextHref: nextSection ? `${basePath}/${propertyId}/${nextSection.slug}` : undefined,
           nextLabel: nextSection?.label,
           counter: `${currentStep + 1}/${visibleSections.length}`,
         }}

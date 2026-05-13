@@ -856,6 +856,30 @@ export const updateApplicationStatusSchema = z.object({
   status: z.nativeEnum(ApplicationStatus),
 });
 
+const optionalReviewDateSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .refine((value) => {
+    if (!value) {
+      return true;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return false;
+    }
+
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      return false;
+    }
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return parsed.getTime() <= today.getTime();
+  }, "Дата отзыва не может быть в будущем");
+
 export const createReviewSchema = z.object({
   rating: z
     .number()
@@ -869,6 +893,43 @@ export const createReviewSchema = z.object({
     .trim()
     .min(10, "Текст отзыва должен содержать минимум 10 символов")
     .max(2000, "Текст отзыва слишком длинный"),
+  guestCity: z.string().trim().max(80, "Город слишком длинный").optional().or(z.literal("")),
+  reviewedAt: optionalReviewDateSchema,
+});
+
+export const importExternalReviewSchema = createReviewSchema.extend({
+  authorName: z
+    .string()
+    .trim()
+    .min(2, "Укажите имя автора отзыва")
+    .max(80, "Имя автора слишком длинное"),
+  sourceUrl: z
+    .string()
+    .trim()
+    .max(500, "Ссылка слишком длинная")
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "Ссылка должна начинаться с http:// или https://")
+    .optional()
+    .or(z.literal("")),
+  sourceName: z.string().trim().max(80, "Название сайта слишком длинное").optional().or(z.literal("")),
+}).superRefine((data, ctx) => {
+  if (!data.sourceUrl && !data.sourceName) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Укажите название сайта или ссылку на источник",
+      path: ["sourceName"],
+    });
+  }
 });
 
 export const createAdminMessageSchema = z
@@ -1180,6 +1241,7 @@ export const updateExcursionSchema = z
       .refine((value) => isLikelyPhoneNumber(value), "Введите корректный номер телефона")
       .nullable()
       .optional(),
+    contactPhoneName: z.string().trim().max(80, "Имя слишком длинное").nullable().optional(),
     contactPhone2: z
       .string()
       .trim()
@@ -1189,6 +1251,17 @@ export const updateExcursionSchema = z
       .refine((value) => isLikelyPhoneNumber(value), "Введите корректный номер телефона")
       .nullable()
       .optional(),
+    contactPhone2Name: z.string().trim().max(80, "Имя слишком длинное").nullable().optional(),
+    contactPhone3: z
+      .string()
+      .trim()
+      .min(10, "Введите корректный номер телефона")
+      .max(24, "Телефон слишком длинный")
+      .regex(/^[+0-9()\s-]+$/, "Телефон содержит недопустимые символы")
+      .refine((value) => isLikelyPhoneNumber(value), "Введите корректный номер телефона")
+      .nullable()
+      .optional(),
+    contactPhone3Name: z.string().trim().max(80, "Имя слишком длинное").nullable().optional(),
     contactEmail: z
       .string()
       .trim()

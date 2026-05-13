@@ -4,10 +4,11 @@ import {
   PaymentProvider,
   PaymentStatus,
   PropertyStatus,
+  ReviewStatus,
   TransferStatus,
 } from "@prisma/client";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
-import { areDatabaseColumnsAvailable, db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db, isDatabaseTableAvailable } from "@/lib/db";
 import { buildPropertyWorkflowStatusWhere } from "@/lib/properties";
 import { buildTransferWorkflowStatusWhere } from "@/lib/transfers";
 
@@ -35,6 +36,10 @@ export type AdminModerationSnapshot = {
     pendingCount: number;
     latestCreatedAtMs: number | null;
   };
+  reviews: {
+    pendingCount: number;
+    latestCreatedAtMs: number | null;
+  };
 };
 
 const emptyAdminModerationSnapshot: AdminModerationSnapshot = {
@@ -58,6 +63,10 @@ const emptyAdminModerationSnapshot: AdminModerationSnapshot = {
     waitingCount: 0,
   },
   managerPayments: {
+    pendingCount: 0,
+    latestCreatedAtMs: null,
+  },
+  reviews: {
     pendingCount: 0,
     latestCreatedAtMs: null,
   },
@@ -102,6 +111,35 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
             )
           )
         `;
+      const hasImportedReviewColumns = await areDatabaseColumnsAvailable("Review", [
+        "isImported",
+      ]);
+      const hasFallbackExternalReviews = await isDatabaseTableAvailable("ExternalReviewFallback");
+      const databaseImportedReviewsQuery = hasImportedReviewColumns
+        ? Promise.all([
+            db.review.count({
+              where: {
+                isImported: true,
+                status: ReviewStatus.PENDING,
+              },
+            }),
+            db.review.findFirst({
+              where: {
+                isImported: true,
+                status: ReviewStatus.PENDING,
+              },
+              orderBy: [{ createdAt: "desc" }],
+              select: { createdAt: true },
+            }),
+          ])
+        : Promise.resolve([0, null] as const);
+      const fallbackImportedReviewsQuery = hasFallbackExternalReviews
+        ? db.$queryRaw<Array<{ count: bigint; latestCreatedAt: Date | null }>>`
+            SELECT COUNT(*) AS count, MAX("createdAt") AS "latestCreatedAt"
+            FROM "ExternalReviewFallback"
+            WHERE "status" = ${ReviewStatus.PENDING}
+          `
+        : Promise.resolve([{ count: BigInt(0), latestCreatedAt: null }]);
       const [
         propertyPendingCount,
         latestPropertyPending,
@@ -114,6 +152,8 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         managerPaymentCount,
         latestManagerPayment,
         supportChatWaiting,
+        databaseImportedReviews,
+        fallbackImportedReviews,
       ] = await Promise.all([
         db.property.count({
           where: {
@@ -213,7 +253,18 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         }),
         // Count support chats where the last message is from a user (waiting for moderator).
         supportChatWaitingQuery.then((r) => Number(r[0]?.count ?? 0)),
+        databaseImportedReviewsQuery,
+        fallbackImportedReviewsQuery,
       ]);
+      const databaseImportedReviewCount = databaseImportedReviews[0] ?? 0;
+      const latestDatabaseImportedReview = databaseImportedReviews[1]?.createdAt ?? null;
+      const fallbackImportedReviewRow = fallbackImportedReviews[0];
+      const fallbackImportedReviewCount = Number(fallbackImportedReviewRow?.count ?? 0);
+      const latestFallbackImportedReview = fallbackImportedReviewRow?.latestCreatedAt ?? null;
+      const latestImportedReviewCreatedAtMs = Math.max(
+        latestDatabaseImportedReview?.getTime() ?? 0,
+        latestFallbackImportedReview?.getTime() ?? 0,
+      );
 
       return {
         properties: {
@@ -238,6 +289,11 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         managerPayments: {
           pendingCount: managerPaymentCount,
           latestCreatedAtMs: latestManagerPayment?.createdAt.getTime() ?? null,
+        },
+        reviews: {
+          pendingCount: databaseImportedReviewCount + fallbackImportedReviewCount,
+          latestCreatedAtMs:
+            latestImportedReviewCreatedAtMs > 0 ? latestImportedReviewCreatedAtMs : null,
         },
       };
     },

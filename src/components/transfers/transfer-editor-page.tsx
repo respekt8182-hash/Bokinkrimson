@@ -9,9 +9,13 @@ import {
   CircleX,
   FileText,
   Globe,
+  Mail,
   MapPin,
+  MessageSquareText,
   Phone,
+  Plus,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -69,8 +73,13 @@ type TransferEditorPageProps = {
     longitude: string;
     contactName: string;
     phone: string;
+    phoneName: string;
     phone2: string;
+    phone2Name: string;
+    phone3: string;
+    phone3Name: string;
     websiteUrl: string;
+    contactEmail: string;
     whatsappUrl: string;
     telegramUrl: string;
     vkUrl: string;
@@ -94,6 +103,7 @@ type TransferEditorPageProps = {
   saved: boolean;
   paymentNotice?: string | null;
   initialStep?: StepId | null;
+  externalReviewsHref?: string | null;
 };
 
 const stepOrder: StepId[] = ["info", "location", "fleet", "contacts", "publish"];
@@ -301,6 +311,7 @@ export function TransferEditorPage({
   saved,
   paymentNotice = null,
   initialStep = null,
+  externalReviewsHref = null,
 }: TransferEditorPageProps) {
   const initialSuggestedTitle = buildTransferTitleSuggestion({
     transferType: transfer.transferType,
@@ -333,15 +344,22 @@ export function TransferEditorPage({
   );
   const [contactName, setContactName] = useState(transfer.contactName);
   const [phone, setPhone] = useState(transfer.phone);
+  const [phoneName, setPhoneName] = useState(transfer.phoneName);
   const [phone2, setPhone2] = useState(transfer.phone2);
+  const [phone2Name, setPhone2Name] = useState(transfer.phone2Name);
+  const [phone3, setPhone3] = useState(transfer.phone3);
+  const [phone3Name, setPhone3Name] = useState(transfer.phone3Name);
   const [websiteUrl, setWebsiteUrl] = useState(transfer.websiteUrl);
+  const [contactEmail, setContactEmail] = useState(transfer.contactEmail);
   const [whatsappUrl, setWhatsappUrl] = useState(transfer.whatsappUrl);
   const [telegramUrl, setTelegramUrl] = useState(transfer.telegramUrl);
   const [vkUrl, setVkUrl] = useState(transfer.vkUrl);
   const [maxUrl, setMaxUrl] = useState(transfer.maxUrl);
   const [okUrl, setOkUrl] = useState(transfer.okUrl);
   const [showPhone2, setShowPhone2] = useState(Boolean(transfer.phone2));
+  const [showPhone3, setShowPhone3] = useState(Boolean(transfer.phone3));
   const [showWebsite, setShowWebsite] = useState(Boolean(transfer.websiteUrl));
+  const [showContactEmail, setShowContactEmail] = useState(Boolean(transfer.contactEmail));
   const [showWhatsapp, setShowWhatsapp] = useState(Boolean(transfer.whatsappUrl));
   const [showTelegram, setShowTelegram] = useState(Boolean(transfer.telegramUrl));
   const [showVk, setShowVk] = useState(Boolean(transfer.vkUrl));
@@ -684,8 +702,22 @@ export function TransferEditorPage({
       <input type="hidden" name="latitude" value={latitude !== null ? String(latitude) : ""} />
       <input type="hidden" name="longitude" value={longitude !== null ? String(longitude) : ""} />
       <input type="hidden" name="paymentProvider" value="MANAGER" />
-      {!showPhone2 ? <input type="hidden" name="phone2" value={phone2} /> : null}
+      {!showPhone2 ? (
+        <>
+          <input type="hidden" name="phone2" value={phone2} />
+          <input type="hidden" name="phone2Name" value={phone2Name} />
+        </>
+      ) : null}
+      {!showPhone3 ? (
+        <>
+          <input type="hidden" name="phone3" value={phone3} />
+          <input type="hidden" name="phone3Name" value={phone3Name} />
+        </>
+      ) : null}
       {!showWebsite ? <input type="hidden" name="websiteUrl" value={websiteUrl} /> : null}
+      {!showContactEmail ? (
+        <input type="hidden" name="contactEmail" value={contactEmail} />
+      ) : null}
       {!showWhatsapp ? <input type="hidden" name="whatsappUrl" value={whatsappUrl} /> : null}
       {!showTelegram ? <input type="hidden" name="telegramUrl" value={telegramUrl} /> : null}
       {!showVk ? <input type="hidden" name="vkUrl" value={vkUrl} /> : null}
@@ -735,6 +767,15 @@ export function TransferEditorPage({
                 className="inline-flex items-center rounded-full border border-olive/12 bg-white/85 px-3 py-1 text-xs font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
               >
                 Публичная страница
+              </Link>
+            ) : null}
+            {externalReviewsHref ? (
+              <Link
+                href={externalReviewsHref}
+                className="inline-flex items-center gap-1.5 rounded-full border border-olive/12 bg-white/85 px-3 py-1 text-xs font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
+              >
+                <AppIcon icon={MessageSquareText} className="h-3.5 w-3.5" />
+                Отзывы с других сайтов
               </Link>
             ) : null}
           </div>
@@ -1137,7 +1178,7 @@ export function TransferEditorPage({
           <div className="space-y-2.5">
             <div className="relative">
               <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                <AppIcon icon={Phone} className="h-4 w-4" />
+                <AppIcon icon={UserRound} className="h-4 w-4" />
               </span>
               <Input
                 name="contactName"
@@ -1147,17 +1188,31 @@ export function TransferEditorPage({
                 className="pl-10"
               />
             </div>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                <AppIcon icon={Phone} className="h-4 w-4" />
-              </span>
-              <Input
-                name="phone"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="+7 (978) 000-00-00"
-                className="pl-10"
-              />
+            <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                  <AppIcon icon={Phone} className="h-4 w-4" />
+                </span>
+                <Input
+                  name="phone"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="+7 (978) 000-00-00"
+                  className="pl-10"
+                />
+              </div>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                  <AppIcon icon={UserRound} className="h-4 w-4" />
+                </span>
+                <Input
+                  name="phoneName"
+                  value={phoneName}
+                  onChange={(event) => setPhoneName(event.target.value)}
+                  placeholder="Имя у телефона"
+                  className="pl-10"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1168,28 +1223,84 @@ export function TransferEditorPage({
           </p>
           <div className="space-y-2.5">
             {showPhone2 ? (
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                  <AppIcon icon={Phone} className="h-4 w-4" />
-                </span>
-                <Input
-                  name="phone2"
-                  value={phone2}
-                  onChange={(event) => setPhone2(event.target.value)}
-                  placeholder="Второй телефон"
-                  className="pl-10 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhone2("");
-                    setShowPhone2(false);
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
-                  aria-label="Убрать второй телефон"
-                >
-                  <AppIcon icon={X} className="h-4 w-4" />
-                </button>
+              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    name="phone2"
+                    value={phone2}
+                    onChange={(event) => setPhone2(event.target.value)}
+                    placeholder="Второй телефон"
+                    className="pl-10"
+                  />
+                </div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    name="phone2Name"
+                    value={phone2Name}
+                    onChange={(event) => setPhone2Name(event.target.value)}
+                    placeholder="Имя у телефона 2"
+                    className="pl-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhone2("");
+                      setPhone2Name("");
+                      setShowPhone2(false);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
+                    aria-label="Убрать второй телефон"
+                  >
+                    <AppIcon icon={X} className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {showPhone3 ? (
+              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    name="phone3"
+                    value={phone3}
+                    onChange={(event) => setPhone3(event.target.value)}
+                    placeholder="Третий телефон"
+                    className="pl-10"
+                  />
+                </div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    name="phone3Name"
+                    value={phone3Name}
+                    onChange={(event) => setPhone3Name(event.target.value)}
+                    placeholder="Имя у телефона 3"
+                    className="pl-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhone3("");
+                      setPhone3Name("");
+                      setShowPhone3(false);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
+                    aria-label="Убрать третий телефон"
+                  >
+                    <AppIcon icon={X} className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             ) : null}
 
@@ -1206,7 +1317,20 @@ export function TransferEditorPage({
               onChange: setWebsiteUrl,
             })}
 
-            {!showPhone2 || !showWebsite ? (
+            {removableField({
+              shown: showContactEmail,
+              onHide: () => {
+                setContactEmail("");
+                setShowContactEmail(false);
+              },
+              icon: Mail,
+              placeholder: "Email",
+              name: "contactEmail",
+              value: contactEmail,
+              onChange: setContactEmail,
+            })}
+
+            {!showPhone2 || !showPhone3 || !showWebsite || !showContactEmail ? (
               <div className="flex flex-wrap gap-2">
                 {!showPhone2 ? (
                   <button
@@ -1218,6 +1342,16 @@ export function TransferEditorPage({
                     Второй телефон
                   </button>
                 ) : null}
+                {!showPhone3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPhone3(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                  >
+                    <AppIcon icon={Plus} className="h-4 w-4" />
+                    Третий телефон
+                  </button>
+                ) : null}
                 {!showWebsite ? (
                   <button
                     type="button"
@@ -1226,6 +1360,16 @@ export function TransferEditorPage({
                   >
                     <AppIcon icon={Globe} className="h-4 w-4" />
                     Сайт
+                  </button>
+                ) : null}
+                {!showContactEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowContactEmail(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:border-amber-500/55 hover:bg-amber-500/10"
+                  >
+                    <AppIcon icon={Mail} className="h-4 w-4" />
+                    Email
                   </button>
                 ) : null}
               </div>

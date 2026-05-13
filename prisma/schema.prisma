@@ -163,6 +163,12 @@ enum OccupancyStatus {
   CHECKED_IN @map("checked_in")
 }
 
+enum CalendarSyncStatus {
+  SUCCESS @map("success")
+  PARTIAL @map("partial")
+  ERROR   @map("error")
+}
+
 enum ReviewStatus {
   PENDING @map("pending")
   ACTIVE  @map("active")
@@ -620,7 +626,11 @@ model Excursion {
   contactFirstName          String?
   contactLastName           String?
   contactPhone              String?
+  contactPhoneName          String?
   contactPhone2             String?
+  contactPhone2Name         String?
+  contactPhone3             String?
+  contactPhone3Name         String?
   contactEmail              String?
   websiteUrl                String?
   whatsappUrl               String?
@@ -768,8 +778,13 @@ model Transfer {
   fleet              Json               @default("[]")
   contactName        String?
   phone              String?
+  phoneName          String?
   phone2             String?
+  phone2Name         String?
+  phone3             String?
+  phone3Name         String?
   websiteUrl         String?
+  contactEmail       String?
   whatsappUrl        String?
   telegramUrl        String?
   vkUrl              String?
@@ -801,28 +816,37 @@ model Transfer {
 }
 
 model Review {
-  id             String           @id @default(cuid())
-  entityType     ReviewEntityType @default(PROPERTY)
-  propertyId     String?
-  excursionId    String?
-  transferId     String?
-  userId         String
-  rating         Decimal          @db.Decimal(2, 1)
-  text           String
-  likesCount     Int              @default(0)
-  dislikesCount  Int              @default(0)
-  status         ReviewStatus     @default(PENDING)
-  ownerReply     String?
-  ownerRepliedAt DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  deletedAt      DateTime?
-  property       Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion      Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  transfer       Transfer?        @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reactions      ReviewReaction[]
-  reports        ReviewReport[]
+  id                 String           @id @default(cuid())
+  entityType         ReviewEntityType @default(PROPERTY)
+  propertyId         String?
+  excursionId        String?
+  transferId         String?
+  userId             String?
+  rating             Decimal          @db.Decimal(2, 1)
+  text               String
+  likesCount         Int              @default(0)
+  dislikesCount      Int              @default(0)
+  status             ReviewStatus     @default(PENDING)
+  ownerReply         String?
+  ownerRepliedAt     DateTime?
+  isImported         Boolean          @default(false)
+  importedAuthorName String?
+  externalSourceUrl  String?
+  externalSourceName String?
+  importedByOwnerId  String?
+  verifiedAt         DateTime?
+  verifiedByAdminId  String?
+  guestCity          String?
+  reviewedAt         DateTime?        @db.Date
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  deletedAt          DateTime?
+  property           Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion          Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  transfer           Transfer?        @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  user               User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions          ReviewReaction[]
+  reports            ReviewReport[]
 
   @@unique([userId, propertyId])
   @@unique([userId, excursionId])
@@ -832,6 +856,8 @@ model Review {
   @@index([excursionId, status, createdAt])
   @@index([transferId, status, createdAt])
   @@index([userId, entityType, createdAt])
+  @@index([isImported, status, createdAt])
+  @@index([importedByOwnerId, createdAt])
 }
 
 model ReviewReaction {
@@ -952,6 +978,7 @@ model Room {
   media          Media[]
   prices         RoomPrice[]
   occupancies    RoomOccupancy[]
+  calendarSync   RoomCalendarSync?
   applications   Application[]
 
   @@index([propertyId, isActive, sortOrder])
@@ -988,34 +1015,34 @@ model Application {
 }
 
 model Payment {
-  id                  String          @id @default(cuid())
+  id                  String            @id @default(cuid())
   propertyId          String?
   excursionId         String?
   transferId          String?
   ownerId             String
-  amount              Decimal         @db.Decimal(10, 2)
+  amount              Decimal           @db.Decimal(10, 2)
   tariffCode          String
   tariffType          ObjectTariffType?
   roomCount           Int
-  status              PaymentStatus   @default(CREATED)
-  provider            PaymentProvider @default(MOCK)
+  status              PaymentStatus     @default(CREATED)
+  provider            PaymentProvider   @default(MOCK)
   providerPaymentId   String?
-  idempotenceKey      String          @unique
+  idempotenceKey      String            @unique
   confirmationUrl     String?
   providerPayload     Json?
   paidFrom            DateTime?
   placementValidUntil DateTime?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
   paidAt              DateTime?
   canceledAt          DateTime?
   managerNotes        String?
   confirmedById       String?
-  confirmedBy         User?           @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
-  property            Property?       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion           Excursion?      @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  transfer            Transfer?       @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  owner               User            @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
+  confirmedBy         User?             @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
+  property            Property?         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion           Excursion?        @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  transfer            Transfer?         @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  owner               User              @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
@@ -1045,28 +1072,50 @@ model RoomPrice {
 }
 
 model RoomOccupancy {
-  id            String          @id @default(cuid())
-  roomId        String
-  dateFrom      DateTime        @db.Date
-  dateTo        DateTime        @db.Date
-  timeFrom      String?
-  timeTo        String?
-  status        OccupancyStatus @default(CONFIRMED)
-  tag           String?         @db.VarChar(80)
-  source        String?         @db.VarChar(80)
-  color         String?         @db.VarChar(16)
-  adultsCount   Int             @default(1)
-  childrenCount Int             @default(0)
-  guestName     String?
-  guestPhone    String?
-  guestContacts String?
-  description   String?         @db.VarChar(250)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  id                     String            @id @default(cuid())
+  roomId                 String
+  dateFrom               DateTime          @db.Date
+  dateTo                 DateTime          @db.Date
+  timeFrom               String?
+  timeTo                 String?
+  status                 OccupancyStatus   @default(CONFIRMED)
+  tag                    String?           @db.VarChar(80)
+  source                 String?           @db.VarChar(80)
+  color                  String?           @db.VarChar(16)
+  adultsCount            Int               @default(1)
+  childrenCount          Int               @default(0)
+  guestName              String?
+  guestPhone             String?
+  guestContacts          String?
+  description            String?           @db.VarChar(250)
+  externalCalendarSyncId String?
+  externalCalendarUid    String?           @db.VarChar(255)
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  room                   Room              @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  externalCalendarSync   RoomCalendarSync? @relation(fields: [externalCalendarSyncId], references: [id], onDelete: SetNull)
 
+  @@unique([externalCalendarSyncId, externalCalendarUid])
   @@index([roomId, dateFrom, dateTo])
   @@index([roomId, createdAt])
+  @@index([externalCalendarSyncId])
+}
+
+model RoomCalendarSync {
+  id                  String              @id @default(cuid())
+  roomId              String              @unique
+  exportToken         String              @unique @db.VarChar(64)
+  importUrl           String?
+  isImportEnabled     Boolean             @default(false)
+  lastSyncedAt        DateTime?
+  lastSyncStatus      CalendarSyncStatus?
+  lastSyncMessage     String?             @db.VarChar(255)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  room                Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  importedOccupancies RoomOccupancy[]
+
+  @@index([roomId])
 }
 
 model RoomFeature {

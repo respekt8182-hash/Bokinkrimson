@@ -1,7 +1,15 @@
 import { TransferStatus } from "@prisma/client";
-import { Car, CircleCheckBig, Plus } from "lucide-react";
+import { Car, CircleCheckBig, CreditCard, Eye, PenLine, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  DashboardListingActions,
+  dashboardActionIconClass,
+  dashboardDangerActionClass,
+  dashboardMainActionClass,
+  dashboardSecondaryActionClass,
+  dashboardStatsActionClass,
+} from "@/components/dashboard/listing-actions";
 import { DeleteTransferButton } from "@/components/transfers/delete-transfer-button";
 import { TransferStatsButton } from "@/components/transfers/transfer-stats-button";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -243,41 +251,49 @@ export default async function DashboardTransfersPage() {
                   </p>
                 ) : null}
 
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-olive/60">
-                    Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/dashboard/transfers/${item.id}`}
-                      className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Карточка
-                    </Link>
-                    <Link
-                      href={`/dashboard/transfers/${item.id}?step=publish`}
-                      className="rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
-                    >
-                      Оплата
-                    </Link>
-                    {publicPath ? (
+                <DashboardListingActions
+                  updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
+                  primaryActions={
+                    publicPath ? (
                       <>
-                        <Link
-                          href={publicPath}
-                          className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
-                        >
+                        <Link href={publicPath} className={dashboardMainActionClass}>
+                          <AppIcon icon={Eye} className={dashboardActionIconClass} />
                           Публичная страница
                         </Link>
-                        <TransferStatsButton transferId={item.id} transferTitle={title} />
+                        <TransferStatsButton
+                          transferId={item.id}
+                          transferTitle={title}
+                          className={dashboardStatsActionClass}
+                        />
                       </>
-                    ) : null}
-                    <DeleteTransferButton
-                      transferId={item.id}
-                      transferTitle={title}
-                      transferStatus={item.status}
-                    />
-                  </div>
-                </div>
+                    ) : null
+                  }
+                  secondaryActions={
+                    <>
+                      <Link
+                        href={`/dashboard/transfers/${item.id}`}
+                        className={dashboardSecondaryActionClass}
+                      >
+                        <AppIcon icon={PenLine} className={dashboardActionIconClass} />
+                        Редактирование
+                      </Link>
+                      <Link
+                        href={`/dashboard/transfers/${item.id}?step=publish`}
+                        className={dashboardSecondaryActionClass}
+                      >
+                        <AppIcon icon={CreditCard} className={dashboardActionIconClass} />
+                        Оплата
+                      </Link>
+                      <DeleteTransferButton
+                        transferId={item.id}
+                        transferTitle={title}
+                        transferStatus={item.status}
+                        buttonClassName={dashboardDangerActionClass}
+                        label="Удалить"
+                      />
+                    </>
+                  }
+                />
               </article>
             );
           })}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWhatsappUrl } from "@/lib/contact-links";
+import { normalizeEmailAddress, normalizeEmailHref, normalizeWhatsappUrl } from "@/lib/contact-links";
 
 describe("normalizeWhatsappUrl", () => {
   it("keeps existing http links", () => {
@@ -13,5 +13,19 @@ describe("normalizeWhatsappUrl", () => {
 
   it("ignores invalid plain text", () => {
     expect(normalizeWhatsappUrl("not a phone")).toBeNull();
+  });
+});
+
+describe("normalizeEmailHref", () => {
+  it("normalizes valid email addresses to mailto links", () => {
+    expect(normalizeEmailAddress(" OWNER@Example.COM ")).toBe("owner@example.com");
+    expect(normalizeEmailHref(" OWNER@Example.COM ")).toBe("mailto:owner@example.com");
+  });
+
+  it("ignores invalid email values", () => {
+    expect(normalizeEmailHref("not an email")).toBeNull();
+    expect(normalizeEmailHref("owner@example")).toBeNull();
+    expect(normalizeEmailHref("owner@example.com?subject=test")).toBeNull();
+    expect(normalizeEmailHref("mailto:owner@example.com")).toBeNull();
   });
 });

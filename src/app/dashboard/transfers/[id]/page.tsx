@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { TransferEditorPage } from "@/components/transfers/transfer-editor-page";
 import { getSession } from "@/lib/auth";
 import {
+  normalizeEmailAddress,
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
@@ -232,8 +233,13 @@ export default async function DashboardTransferEditPage({
         fleet: true,
         contactName: true,
         phone: true,
+        phoneName: true,
         phone2: true,
+        phone2Name: true,
+        phone3: true,
+        phone3Name: true,
         websiteUrl: true,
+        contactEmail: true,
         whatsappUrl: true,
         telegramUrl: true,
         vkUrl: true,
@@ -289,8 +295,13 @@ export default async function DashboardTransferEditPage({
     const routeExamples = resolveString("routeExamples", current.routeExamples);
     const contactName = resolveString("contactName", current.contactName);
     const phone = resolveString("phone", current.phone);
+    const phoneName = resolveString("phoneName", current.phoneName);
     const phone2 = resolveString("phone2", current.phone2);
+    const phone2Name = resolveString("phone2Name", current.phone2Name);
+    const phone3 = resolveString("phone3", current.phone3);
+    const phone3Name = resolveString("phone3Name", current.phone3Name);
     const websiteUrl = resolveString("websiteUrl", current.websiteUrl);
+    const contactEmail = normalizeEmailAddress(resolveString("contactEmail", current.contactEmail));
     const whatsappInput = formOptionalString(formData, "whatsappUrl");
     const telegramInput = formOptionalString(formData, "telegramUrl");
     const vkInput = formOptionalString(formData, "vkUrl");
@@ -356,6 +367,20 @@ export default async function DashboardTransferEditPage({
           photoUrls: fleetSummary.photoUrls,
           serviceTags,
           fleet,
+          contactName,
+          phone,
+          phoneName,
+          phone2,
+          phone2Name,
+          phone3,
+          phone3Name,
+          websiteUrl,
+          contactEmail,
+          whatsappUrl,
+          telegramUrl,
+          vkUrl,
+          maxUrl,
+          okUrl,
         },
         {
           title: current.title ?? "Новый трансфер",
@@ -376,6 +401,20 @@ export default async function DashboardTransferEditPage({
           photoUrls: current.photoUrls,
           serviceTags: normalizeTransferServiceTags(current.serviceTags),
           fleet: getTransferFleet(current),
+          contactName: current.contactName,
+          phone: current.phone,
+          phoneName: current.phoneName,
+          phone2: current.phone2,
+          phone2Name: current.phone2Name,
+          phone3: current.phone3,
+          phone3Name: current.phone3Name,
+          websiteUrl: current.websiteUrl,
+          contactEmail: current.contactEmail,
+          whatsappUrl: current.whatsappUrl,
+          telegramUrl: current.telegramUrl,
+          vkUrl: current.vkUrl,
+          maxUrl: current.maxUrl,
+          okUrl: current.okUrl,
         },
       );
 
@@ -500,8 +539,13 @@ export default async function DashboardTransferEditPage({
         fleet,
         contactName,
         phone,
+        phoneName,
         phone2,
+        phone2Name,
+        phone3,
+        phone3Name,
         websiteUrl,
+        contactEmail,
         whatsappUrl,
         telegramUrl,
         vkUrl,
@@ -744,8 +788,13 @@ export default async function DashboardTransferEditPage({
         longitude: transfer.longitude ? Number(transfer.longitude).toString() : "",
         contactName: transfer.contactName ?? session.firstName.trim(),
         phone: transfer.phone ?? session.phone,
+        phoneName: transfer.phoneName ?? "",
         phone2: transfer.phone2 ?? "",
+        phone2Name: transfer.phone2Name ?? "",
+        phone3: transfer.phone3 ?? "",
+        phone3Name: transfer.phone3Name ?? "",
         websiteUrl: transfer.websiteUrl ?? "",
+        contactEmail: transfer.contactEmail ?? "",
         whatsappUrl: transfer.whatsappUrl ?? "",
         telegramUrl: transfer.telegramUrl ?? "",
         vkUrl: transfer.vkUrl ?? "",
@@ -768,6 +817,7 @@ export default async function DashboardTransferEditPage({
       saved={saved}
       paymentNotice={paymentNotice}
       initialStep={initialStep}
+      externalReviewsHref={`/dashboard/transfers/${transfer.id}/external-reviews`}
     />
   );
 }

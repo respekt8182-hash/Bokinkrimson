@@ -26,8 +26,13 @@ export type PublishedTransferSnapshot = {
     fleet: Prisma.JsonValue;
     contactName: string | null;
     phone: string | null;
+    phoneName: string | null;
     phone2: string | null;
+    phone2Name: string | null;
+    phone3: string | null;
+    phone3Name: string | null;
     websiteUrl: string | null;
+    contactEmail: string | null;
     whatsappUrl: string | null;
     telegramUrl: string | null;
     vkUrl: string | null;
@@ -120,8 +125,13 @@ export function buildPublishedTransferSnapshot(
       fleet: transfer.fleet,
       contactName: transfer.contactName,
       phone: transfer.phone,
+      phoneName: transfer.phoneName,
       phone2: transfer.phone2,
+      phone2Name: transfer.phone2Name,
+      phone3: transfer.phone3,
+      phone3Name: transfer.phone3Name,
       websiteUrl: transfer.websiteUrl,
+      contactEmail: transfer.contactEmail,
       whatsappUrl: transfer.whatsappUrl,
       telegramUrl: transfer.telegramUrl,
       vkUrl: transfer.vkUrl,

@@ -109,7 +109,11 @@ export type SerializedExcursion = {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhoneName: string | null;
   contactPhone2: string | null;
+  contactPhone2Name: string | null;
+  contactPhone3: string | null;
+  contactPhone3Name: string | null;
   contactEmail: string | null;
   websiteUrl: string | null;
   whatsappUrl: string | null;
@@ -437,7 +441,11 @@ const EXCURSION_AUTO_MODERATION_SELECT = {
   contactFirstName: true,
   contactLastName: true,
   contactPhone: true,
+  contactPhoneName: true,
   contactPhone2: true,
+  contactPhone2Name: true,
+  contactPhone3: true,
+  contactPhone3Name: true,
   accommodationProvided: true,
   accommodationType: true,
   photoUrls: true,
@@ -604,7 +612,11 @@ type ExcursionEmptyDraftCandidate = {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhoneName: string | null;
   contactPhone2: string | null;
+  contactPhone2Name: string | null;
+  contactPhone3: string | null;
+  contactPhone3Name: string | null;
   contactEmail: string | null;
   websiteUrl: string | null;
   whatsappUrl: string | null;
@@ -694,7 +706,11 @@ export const EXCURSION_EMPTY_DRAFT_SELECT = {
   contactFirstName: true,
   contactLastName: true,
   contactPhone: true,
+  contactPhoneName: true,
   contactPhone2: true,
+  contactPhone2Name: true,
+  contactPhone3: true,
+  contactPhone3Name: true,
   contactEmail: true,
   websiteUrl: true,
   whatsappUrl: true,
@@ -778,7 +794,11 @@ export function isExcursionEmptyDraft(candidate: ExcursionEmptyDraftCandidate): 
     candidate.contactFirstName,
     candidate.contactLastName,
     candidate.contactPhone,
+    candidate.contactPhoneName,
     candidate.contactPhone2,
+    candidate.contactPhone2Name,
+    candidate.contactPhone3,
+    candidate.contactPhone3Name,
     candidate.contactEmail,
     candidate.websiteUrl,
     candidate.whatsappUrl,
@@ -1180,7 +1200,11 @@ export function serializeExcursion(excursion: {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhoneName: string | null;
   contactPhone2: string | null;
+  contactPhone2Name: string | null;
+  contactPhone3: string | null;
+  contactPhone3Name: string | null;
   contactEmail: string | null;
   websiteUrl: string | null;
   whatsappUrl: string | null;
@@ -1341,7 +1365,11 @@ export function serializeExcursion(excursion: {
     contactFirstName: excursion.contactFirstName,
     contactLastName: excursion.contactLastName,
     contactPhone: excursion.contactPhone,
+    contactPhoneName: excursion.contactPhoneName,
     contactPhone2: excursion.contactPhone2,
+    contactPhone2Name: excursion.contactPhone2Name,
+    contactPhone3: excursion.contactPhone3,
+    contactPhone3Name: excursion.contactPhone3Name,
     contactEmail: excursion.contactEmail,
     websiteUrl: excursion.websiteUrl,
     whatsappUrl: excursion.whatsappUrl,

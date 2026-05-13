@@ -222,6 +222,7 @@ export default async function AdminExcursionEditPage({
         backLabel="Все экскурсии"
         listHref="/admin/excursions"
         moderationHref={`/admin/moderation/excursions/${excursion.id}`}
+        externalReviewsHref={`/admin/excursions/${excursion.id}/external-reviews`}
       />
     </div>
   );

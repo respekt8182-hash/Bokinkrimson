@@ -192,8 +192,8 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title="Модерация жилья"
-        description="Очередь карточек, которые требуют проверки и решения модератора."
+        title="Проверка жилья"
+        description="Очередь карточек жилья и правок, которые требуют решения администратора."
       />
 
       {isDatabaseFallback ? (
@@ -334,9 +334,7 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                 <dl className="mt-4 grid gap-2 text-sm md:grid-cols-4">
                   <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Владелец</dt>
-                    <dd className="font-medium text-olive">
-                      {item.owner.firstName}
-                    </dd>
+                    <dd className="font-medium text-olive">{item.owner.firstName}</dd>
                   </div>
                   {ownerEmail ? (
                     <div className="rounded-2xl bg-cream px-3 py-3">

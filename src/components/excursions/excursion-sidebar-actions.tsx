@@ -21,9 +21,14 @@ type ExcursionSidebarActionsProps = {
   durationLabel: string;
   locationName: string | null;
   phone: string | null;
+  phoneName: string | null;
   phone2: string | null;
+  phone2Name: string | null;
+  phone3: string | null;
+  phone3Name: string | null;
   entityPublicId?: number | null;
   websiteUrl: string | null;
+  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
@@ -49,6 +54,10 @@ export const excursionContactPanelText = {
     "\u0421\u0430\u0439\u0442 \u043E\u0440\u0433\u0430\u043D\u0438\u0437\u0430\u0442\u043E\u0440\u0430",
   websiteCaptionFallback:
     "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0441\u0430\u0439\u0442 \u043E\u0440\u0433\u0430\u043D\u0438\u0437\u0430\u0442\u043E\u0440\u0430",
+  emailLabel:
+    "\u041D\u0430\u043F\u0438\u0441\u0430\u0442\u044C \u043D\u0430 email",
+  emailCaption:
+    "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0438\u0441\u044C\u043C\u043E \u043E\u0440\u0433\u0430\u043D\u0438\u0437\u0430\u0442\u043E\u0440\u0443",
   whatsappCaption:
     "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0447\u0430\u0442 \u0441 \u043E\u0440\u0433\u0430\u043D\u0438\u0437\u0430\u0442\u043E\u0440\u043E\u043C",
   telegramCaption: "\u041D\u0430\u043F\u0438\u0441\u0430\u0442\u044C \u0432 Telegram",
@@ -92,9 +101,14 @@ export function ExcursionSidebarActions({
   durationLabel,
   locationName,
   phone,
+  phoneName,
   phone2,
+  phone2Name,
+  phone3,
+  phone3Name,
   entityPublicId = null,
   websiteUrl,
+  email,
   whatsappUrl,
   telegramUrl,
   vkUrl,
@@ -108,19 +122,27 @@ export function ExcursionSidebarActions({
   const [open, setOpen] = useState(false);
   const organizerInitial = organizerName.trim()[0]?.toUpperCase() ?? "?";
   const primaryPhoneLabel = formatPhoneLabel(phone);
-  const extraPhones = phone2?.trim()
-    ? [
-        {
-          phone: phone2.trim(),
-          label: formatPhoneLabel(phone2) ?? phone2.trim(),
-        },
-      ]
-    : [];
-  const contactPersonName = organizerName.trim().split(/\s+/).filter(Boolean)[0] ?? null;
+  const extraPhones = [
+    { phone: phone2, name: phone2Name },
+    { phone: phone3, name: phone3Name },
+  ]
+    .map((item) => {
+      const preparedPhone = item.phone?.trim() ?? "";
+      return preparedPhone
+        ? {
+            phone: preparedPhone,
+            label: formatPhoneLabel(preparedPhone) ?? preparedPhone,
+            name: item.name?.trim() || null,
+          }
+        : null;
+    })
+    .filter((item): item is { phone: string; label: string; name: string | null } => item !== null);
   const hasContacts = [
     phone,
     phone2,
+    phone3,
     websiteUrl,
+    email,
     whatsappUrl,
     telegramUrl,
     vkUrl,
@@ -166,9 +188,10 @@ export function ExcursionSidebarActions({
             <PropertyContactsPanel
               phone={phone}
               phoneLabel={primaryPhoneLabel}
-              phoneName={contactPersonName}
+              phoneName={phoneName}
               extraPhones={extraPhones}
               websiteUrl={websiteUrl}
+              email={email}
               whatsappUrl={whatsappUrl}
               telegramUrl={telegramUrl}
               vkUrl={vkUrl}

@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquareText, Phone } from "lucide-react";
+import { Mail, MessageSquareText, Phone } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ExcursionLeadModal } from "./excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -10,12 +10,18 @@ import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
+  normalizeEmailHref,
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
-import { getContactActionTypeFromChannel, type ListingEntityType } from "@/lib/listing-analytics";
+import {
+  getContactActionTypeFromChannel,
+  getPhoneListingActionType,
+  type ListingActionType,
+  type ListingEntityType,
+} from "@/lib/listing-analytics";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { normalizeWebsiteUrl } from "@/lib/website-favicon";
 
@@ -29,12 +35,15 @@ type ExcursionMobileBarProps = {
   durationLabel: string;
   locationName: string | null;
   websiteUrl: string | null;
+  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
   maxUrl: string | null;
   okUrl: string | null;
   phone: string | null;
+  phone2: string | null;
+  phone3: string | null;
   entityPublicId?: number | null;
   organizerName: string;
   organizerAvatarUrl?: string | null;
@@ -45,11 +54,12 @@ type ExcursionMobileBarProps = {
 };
 
 type MobileQuickAction = {
-  id: "website" | "whatsapp" | "telegram" | "vk" | "max" | "ok" | "phone";
+  id: "website" | "email" | "whatsapp" | "telegram" | "vk" | "max" | "ok" | "phone" | "phone2" | "phone3";
   label: string;
   href: string;
   icon: ReactNode;
   className: string;
+  actionType?: ListingActionType;
 };
 
 const DATES_FALLBACK_LABEL =
@@ -75,7 +85,10 @@ export function ExcursionMobileBar({
 }: ExcursionMobileBarProps) {
   const [open, setOpen] = useState(false);
   const phoneHref = normalizePhoneHref(formProps.phone);
+  const phone2Href = normalizePhoneHref(formProps.phone2);
+  const phone3Href = normalizePhoneHref(formProps.phone3);
   const normalizedWebsiteUrl = websiteUrl?.trim() ? normalizeWebsiteUrl(websiteUrl) : null;
+  const emailHref = normalizeEmailHref(formProps.email);
   const whatsappUrl = normalizeWhatsappUrl(formProps.whatsappUrl);
   const telegramUrl = normalizeTelegramProfileUrl(formProps.telegramUrl);
   const vkUrl = normalizeVkProfileUrl(formProps.vkUrl);
@@ -100,6 +113,17 @@ export function ExcursionMobileBar({
       ),
       className:
         "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]",
+    });
+  }
+
+  if (emailHref) {
+    quickActions.push({
+      id: "email",
+      label: "Email",
+      href: emailHref,
+      icon: <AppIcon icon={Mail} className="h-4 w-4 text-amber-700" />,
+      className:
+        "border-amber-500/22 bg-amber-500/10 text-amber-700 shadow-[0_8px_18px_rgba(245,158,11,0.14)]",
     });
   }
 
@@ -164,8 +188,33 @@ export function ExcursionMobileBar({
     });
   }
 
+  if (phone2Href) {
+    quickActions.push({
+      id: "phone2",
+      label: "Телефон 2",
+      href: phone2Href,
+      icon: <AppIcon icon={Phone} className="h-4 w-4 text-primary" />,
+      className:
+        "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]",
+      actionType: getPhoneListingActionType(1),
+    });
+  }
+
+  if (phone3Href) {
+    quickActions.push({
+      id: "phone3",
+      label: "Телефон 3",
+      href: phone3Href,
+      icon: <AppIcon icon={Phone} className="h-4 w-4 text-primary" />,
+      className:
+        "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]",
+      actionType: getPhoneListingActionType(2),
+    });
+  }
+
   function trackQuickAction(actionId: MobileQuickAction["id"]) {
-    const actionType = getContactActionTypeFromChannel(actionId);
+    const action = quickActions.find((item) => item.id === actionId);
+    const actionType = action?.actionType ?? getContactActionTypeFromChannel(actionId);
     if (tracking && actionType) {
       trackListingAction({ ...tracking, actionType });
     }
@@ -200,8 +249,22 @@ export function ExcursionMobileBar({
                   <a
                     key={action.id}
                     href={action.href}
-                    target={action.id === "phone" ? undefined : "_blank"}
-                    rel={action.id === "phone" ? undefined : "noreferrer noopener"}
+                    target={
+                      action.id === "phone" ||
+                      action.id === "phone2" ||
+                      action.id === "phone3" ||
+                      action.id === "email"
+                        ? undefined
+                        : "_blank"
+                    }
+                    rel={
+                      action.id === "phone" ||
+                      action.id === "phone2" ||
+                      action.id === "phone3" ||
+                      action.id === "email"
+                        ? undefined
+                        : "noreferrer noopener"
+                    }
                     title={action.label}
                     aria-label={action.label}
                     onClick={() => trackQuickAction(action.id)}

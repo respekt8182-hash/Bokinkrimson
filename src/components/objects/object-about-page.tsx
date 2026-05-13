@@ -7,8 +7,11 @@ import {
   Check,
   Globe,
   ListChecks,
+  Mail,
   MapPin,
   Phone,
+  Plus,
+  UserRound,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -190,7 +193,11 @@ export function ObjectAboutPage({
   );
 
   const [phone, setPhone] = useState(initialProperty.phone ?? "");
+  const [phoneName, setPhoneName] = useState(initialProperty.phoneName ?? "");
   const [phone2, setPhone2] = useState(initialProperty.phone2 ?? "");
+  const [phone2Name, setPhone2Name] = useState(initialProperty.phone2Name ?? "");
+  const [phone3, setPhone3] = useState(initialProperty.phone3 ?? "");
+  const [phone3Name, setPhone3Name] = useState(initialProperty.phone3Name ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialProperty.websiteUrl ?? "");
   const [contactEmail, setContactEmail] = useState(initialProperty.contactEmail ?? "");
   const [contactPersonName, setContactPersonName] = useState(
@@ -209,6 +216,8 @@ export function ObjectAboutPage({
   const [showContactRole, setShowContactRole] = useState(
     Boolean(initialProperty.contactPersonRole),
   );
+  const [showPhone3, setShowPhone3] = useState(Boolean(initialProperty.phone3));
+  const [showContactEmail, setShowContactEmail] = useState(Boolean(initialProperty.contactEmail));
   const [showWebsite, setShowWebsite] = useState(Boolean(initialProperty.websiteUrl));
   const [showListingChannels, setShowListingChannels] = useState(
     Boolean(initialProperty.listingChannels),
@@ -498,7 +507,11 @@ export function ObjectAboutPage({
     setMapDraftLocationName(item.locationName ?? "");
     setMapDraftLocationId(item.locationId ?? "");
     setPhone(item.phone ?? "");
+    setPhoneName(item.phoneName ?? "");
     setPhone2(item.phone2 ?? "");
+    setPhone2Name(item.phone2Name ?? "");
+    setPhone3(item.phone3 ?? "");
+    setPhone3Name(item.phone3Name ?? "");
     setWebsiteUrl(item.websiteUrl ?? "");
     setContactEmail(item.contactEmail ?? "");
     setContactPersonName(item.contactPersonName ?? "");
@@ -509,6 +522,8 @@ export function ObjectAboutPage({
     setVkUrl(item.vkUrl ?? "");
     setMaxUrl(item.maxUrl ?? "");
     setOkUrl(item.okUrl ?? "");
+    setShowPhone3(Boolean(item.phone3));
+    setShowContactEmail(Boolean(item.contactEmail));
     setRegistryNumber(item.registryNumberPending ?? item.registryNumber ?? "");
   }
 
@@ -667,18 +682,16 @@ export function ObjectAboutPage({
 
     setIsSavingContacts(true);
     try {
-      const normalizedContactPersonName = contactPersonName.trim();
-
       const updated = await patchStep(4, {
         phone: phone.trim(),
-        phoneName: normalizedContactPersonName || (property.phoneName ?? ""),
+        phoneName: phoneName.trim(),
         phone2: phone2.trim(),
-        phone2Name: normalizedContactPersonName || (property.phone2Name ?? ""),
-        phone3: property.phone3 ?? "",
-        phone3Name: property.phone3Name ?? "",
+        phone2Name: phone2Name.trim(),
+        phone3: phone3.trim(),
+        phone3Name: phone3Name.trim(),
         websiteUrl: websiteUrl.trim(),
         contactEmail: contactEmail.trim(),
-        contactPersonName: normalizedContactPersonName,
+        contactPersonName: contactPersonName.trim(),
         contactPersonRole: contactPersonRole.trim(),
         listingChannels: listingChannels.trim(),
         whatsappUrl: normalizeWhatsappUrl(whatsappUrl) ?? "",
@@ -1435,30 +1448,103 @@ export function ObjectAboutPage({
               Основные данные (обязательно)
             </p>
             <div className="space-y-2.5">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                  <AppIcon icon={Phone} className="h-4 w-4" />
-                </span>
-                <Input
-                  type="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="Телефон *"
-                  className="pl-10"
-                />
+              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="Телефон *"
+                    className="pl-10"
+                  />
+                </div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    value={phoneName}
+                    onChange={(event) => setPhoneName(event.target.value)}
+                    placeholder="Имя у телефона"
+                    className="pl-10"
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                  <AppIcon icon={Phone} className="h-4 w-4" />
-                </span>
-                <Input
-                  type="tel"
-                  value={phone2}
-                  onChange={(event) => setPhone2(event.target.value)}
-                  placeholder="Телефон 2"
-                  className="pl-10"
-                />
+              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="tel"
+                    value={phone2}
+                    onChange={(event) => setPhone2(event.target.value)}
+                    placeholder="Телефон 2"
+                    className="pl-10"
+                  />
+                </div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    value={phone2Name}
+                    onChange={(event) => setPhone2Name(event.target.value)}
+                    placeholder="Имя у телефона 2"
+                    className="pl-10"
+                  />
+                </div>
               </div>
+              {showPhone3 ? (
+                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={Phone} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="tel"
+                      value={phone3}
+                      onChange={(event) => setPhone3(event.target.value)}
+                      placeholder="Телефон 3"
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={UserRound} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={phone3Name}
+                      onChange={(event) => setPhone3Name(event.target.value)}
+                      placeholder="Имя у телефона 3"
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhone3("");
+                        setPhone3Name("");
+                        setShowPhone3(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowPhone3(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                >
+                  <AppIcon icon={Plus} className="h-4 w-4" />
+                  Добавить телефон
+                </button>
+              )}
             </div>
           </div>
 
@@ -1468,6 +1554,39 @@ export function ObjectAboutPage({
               Дополнительно
             </p>
             <div className="space-y-2.5">
+              {showContactEmail ? (
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                    <AppIcon icon={Mail} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(event) => setContactEmail(event.target.value)}
+                    placeholder="Email"
+                    className="pl-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContactEmail("");
+                      setShowContactEmail(false);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                  >
+                    <AppIcon icon={X} className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowContactEmail(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:border-amber-500/55 hover:bg-amber-500/10 focus:outline-none"
+                >
+                  <AppIcon icon={Mail} className="h-4 w-4" />
+                  Email
+                </button>
+              )}
               {showContactRole && (
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">

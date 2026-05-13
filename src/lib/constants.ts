@@ -92,7 +92,7 @@ export const petsPolicyOptions = [
 
 export const smokingPolicyOptions = [
   { id: "FORBIDDEN", label: "Запрещено" },
-  { id: "ON_REQUEST", label: "По согласованию" },
+  { id: "ON_REQUEST", label: "Разрешено в специальных местах" },
   { id: "ALLOWED", label: "Разрешено" },
 ] as const;
 

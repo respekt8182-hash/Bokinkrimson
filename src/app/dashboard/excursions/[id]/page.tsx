@@ -62,6 +62,7 @@ export default async function DashboardExcursionByIdPage({ params }: ExcursionPa
       initialExcursion={serializeExcursion(excursion)}
       displayExcursionNumber={displayExcursionNumber}
       previewHref={previewHref}
+      externalReviewsHref={`/dashboard/excursions/${excursion.id}/external-reviews`}
     />
   );
 }

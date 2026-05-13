@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Copy,
   Images,
+  Mail,
   MapPin,
   PanelsTopLeft,
   Phone,
@@ -66,6 +67,7 @@ import {
 } from "@/lib/property-rules";
 import {
   normalizeMaxProfileUrl,
+  normalizeEmailHref,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
@@ -116,6 +118,8 @@ type MobilePhoneOption = {
   label: string;
   name: string | null;
 };
+
+const ROOM_VARIANTS_PAGE_SIZE = 5;
 
 function getLocalTodayIso(): string {
   const now = new Date();
@@ -170,6 +174,24 @@ function formatReviewsCountLabel(count: number): string {
   return `${count} отзывов`;
 }
 
+function formatRoomVariantsLabel(count: number): string {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} вариантов`;
+  if (last === 1) return `${count} вариант`;
+  if (last >= 2 && last <= 4) return `${count} варианта`;
+  return `${count} вариантов`;
+}
+
+function formatRoomDetailItemsCountLabel(count: number): string {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return `${count} пунктов`;
+  if (last === 1) return `${count} пункт`;
+  if (last >= 2 && last <= 4) return `${count} пункта`;
+  return `${count} пунктов`;
+}
+
 function formatRoomArea(value: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 }
@@ -182,10 +204,6 @@ function formatRoomsCountLabel(value: number): string {
   if (last === 1) return `${rooms} комната`;
   if (last >= 2 && last <= 4) return `${rooms} комнаты`;
   return `${rooms} комнат`;
-}
-
-function formatRoomsCompactLabel(value: number): string {
-  return `${Math.max(1, Math.floor(value))}К`;
 }
 
 function formatPlacesLabel(value: number): string {
@@ -298,6 +316,53 @@ function getRoomAmenityCategory(name: string): RoomAmenityItem["category"] {
   return "equipment";
 }
 
+function getRoomDetailCategoryVisual(category: RoomAmenityItem["category"]): {
+  icon: LucideIcon;
+  sectionClassName: string;
+  iconShellClassName: string;
+  headingClassName: string;
+  itemClassName: string;
+  itemIconShellClassName: string;
+  itemIconClassName: string;
+} {
+  if (category === "beds") {
+    return {
+      icon: Users,
+      sectionClassName:
+        "border-primary/12 bg-[linear-gradient(135deg,rgba(240,253,250,0.94),rgba(255,255,255,0.98))]",
+      iconShellClassName: "bg-primary/10 text-primary ring-primary/15",
+      headingClassName: "text-primary",
+      itemClassName: "border-primary/12 bg-white",
+      itemIconShellClassName: "bg-primary/10 text-primary",
+      itemIconClassName: "text-primary",
+    };
+  }
+
+  if (category === "bathroom") {
+    return {
+      icon: Toilet,
+      sectionClassName:
+        "border-sun/16 bg-[linear-gradient(135deg,rgba(236,253,255,0.94),rgba(255,255,255,0.98))]",
+      iconShellClassName: "bg-sun/10 text-sun ring-sun/15",
+      headingClassName: "text-sun",
+      itemClassName: "border-sun/12 bg-white",
+      itemIconShellClassName: "bg-sun/10 text-sun",
+      itemIconClassName: "text-sun",
+    };
+  }
+
+  return {
+    icon: BadgeCheck,
+    sectionClassName:
+      "border-terra/14 bg-[linear-gradient(135deg,rgba(250,248,245,0.98),rgba(255,247,237,0.76))]",
+    iconShellClassName: "bg-terra/10 text-terra ring-terra/15",
+    headingClassName: "text-terra-ink",
+    itemClassName: "border-terra/12 bg-white",
+    itemIconShellClassName: "bg-terra/10 text-terra",
+    itemIconClassName: "text-terra",
+  };
+}
+
 function formatBathroomSectionLabel(bathroomTypeLabel?: string | null): string {
   if (!bathroomTypeLabel) {
     return "Ванная комната";
@@ -350,7 +415,7 @@ type MobileMessengerLink = {
   key: string;
   href: string;
   label: string;
-  brand: ContactBrand | "website";
+  brand: ContactBrand | "website" | "email";
 };
 
 function MediaPreview({ media, alt, className, loading = "lazy" }: MediaPreviewProps) {
@@ -429,7 +494,7 @@ function toPetsLabel(value: "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null): stri
 
 function toSmokingLabel(value: "FORBIDDEN" | "ON_REQUEST" | "ALLOWED" | null): string {
   if (value === "FORBIDDEN") return "Запрещено";
-  if (value === "ON_REQUEST") return "По согласованию";
+  if (value === "ON_REQUEST") return "Разрешено в специальных местах";
   if (value === "ALLOWED") return "Разрешено";
   return "Не указано";
 }
@@ -499,6 +564,7 @@ function buildMobilePhoneOption(params: {
 
 function buildMobileMessengerLinks(params: {
   websiteUrl: string | null;
+  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
@@ -508,6 +574,7 @@ function buildMobileMessengerLinks(params: {
   const preparedWebsiteUrl = params.websiteUrl?.trim()
     ? normalizeWebsiteUrl(params.websiteUrl)
     : null;
+  const preparedEmailHref = normalizeEmailHref(params.email);
   const preparedWhatsappUrl = normalizeWhatsappUrl(params.whatsappUrl);
   const preparedTelegramUrl = normalizeTelegramProfileUrl(params.telegramUrl);
   const preparedVkUrl = normalizeVkProfileUrl(params.vkUrl);
@@ -521,6 +588,14 @@ function buildMobileMessengerLinks(params: {
           href: preparedWebsiteUrl,
           label: "Сайт",
           brand: "website" as const,
+        }
+      : null,
+    preparedEmailHref
+      ? {
+          key: "email",
+          href: preparedEmailHref,
+          label: "Email",
+          brand: "email" as const,
         }
       : null,
     preparedWhatsappUrl
@@ -566,9 +641,13 @@ function buildMobileMessengerLinks(params: {
   ].filter((item): item is MobileMessengerLink => item !== null);
 }
 
-function getMobileMessengerChipClasses(brand: ContactBrand | "website"): string {
+function getMobileMessengerChipClasses(brand: ContactBrand | "website" | "email"): string {
   if (brand === "website") {
     return "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]";
+  }
+
+  if (brand === "email") {
+    return "border-amber-500/22 bg-amber-500/10 text-amber-700 shadow-[0_8px_18px_rgba(245,158,11,0.14)]";
   }
 
   if (brand === "whatsapp") {
@@ -1080,6 +1159,7 @@ export function PublicPropertyDetails({
   const [roomMediaIndexByRoom, setRoomMediaIndexByRoom] = useState<Record<string, number>>({});
   const [roomPhotoGallery, setRoomPhotoGallery] = useState<RoomPhotoGalleryState | null>(null);
   const [activeRoomDetailsId, setActiveRoomDetailsId] = useState<string | null>(null);
+  const [visibleRoomCountByItem, setVisibleRoomCountByItem] = useState<Record<string, number>>({});
   const [isMobileBookingOpen, setIsMobileBookingOpen] = useState(false);
   const [isMobileCallSheetOpen, setIsMobileCallSheetOpen] = useState(false);
   const [showAllAmenities, setShowAllAmenities] = useState(false);
@@ -1090,9 +1170,10 @@ export function PublicPropertyDetails({
   const [leadExtra, setLeadExtra] = useState("");
   const [leadCopied, setLeadCopied] = useState(false);
   const { authorGender, setAuthorGender } = useLeadMessageAuthorGender();
+  const hasActiveRoomDetails = item.rooms.some((room) => room.id === activeRoomDetailsId);
   useBodyScrollLock(
     Boolean(
-      activeRoomDetailsId ||
+      hasActiveRoomDetails ||
       roomPhotoGallery ||
       isMobileBookingOpen ||
       leadModalRoom ||
@@ -1176,6 +1257,7 @@ export function PublicPropertyDetails({
   const hasMultipleMobileCallPhones = mobileCallPhones.length > 1;
   const mobileMessengerLinks = buildMobileMessengerLinks({
     websiteUrl: item.contacts.websiteUrl,
+    email: item.contacts.email,
     whatsappUrl: item.contacts.whatsappUrl,
     telegramUrl: item.contacts.telegramUrl,
     vkUrl: item.contacts.vkUrl,
@@ -1342,6 +1424,10 @@ export function PublicPropertyDetails({
       }),
     [rankedRooms],
   );
+  const visibleRoomCount = visibleRoomCountByItem[item.id] ?? ROOM_VARIANTS_PAGE_SIZE;
+  const visibleSortedRooms = sortedRooms.slice(0, Math.min(visibleRoomCount, sortedRooms.length));
+  const remainingRoomCount = Math.max(sortedRooms.length - visibleSortedRooms.length, 0);
+  const nextRoomBatchCount = Math.min(ROOM_VARIANTS_PAGE_SIZE, remainingRoomCount);
   const sidebarNightlyLabel = sidebarQuote
     ? `${formatMoney(sidebarQuote.nightly, sidebarQuote.currency)} за ночь`
     : `${mainPriceLabel} ${getRoomPriceNightlySuffix(item.minNightPriceType)}`;
@@ -1520,6 +1606,10 @@ export function PublicPropertyDetails({
       const actionType = getContactActionTypeFromChannel(firstMessenger.key);
       if (actionType) {
         trackListingAction({ ...contactTracking, actionType });
+      }
+      if (firstMessenger.brand === "email") {
+        window.location.assign(firstMessenger.href);
+        return;
       }
       window.open(firstMessenger.href, "_blank", "noopener,noreferrer");
       return;
@@ -1731,13 +1821,7 @@ export function PublicPropertyDetails({
               <div>
                 <h2 className="text-2xl text-olive md:text-[1.85rem]">Доступные варианты</h2>
                 <p className="mt-1 text-sm text-olive/68">
-                  {item.rooms.length}{" "}
-                  {item.rooms.length === 1
-                    ? "вариант"
-                    : item.rooms.length >= 2 && item.rooms.length <= 4
-                      ? "варианта"
-                      : "вариантов"}{" "}
-                  размещения
+                  {formatRoomVariantsLabel(item.rooms.length)} размещения
                 </p>
               </div>
             </div>
@@ -1745,7 +1829,7 @@ export function PublicPropertyDetails({
               <p className="relative mt-3 text-sm text-olive/70">Номера пока не добавлены.</p>
             ) : (
               <div className="relative mt-5 space-y-4">
-                {sortedRooms.map(({ room }) => {
+                {visibleSortedRooms.map(({ room }) => {
                   const roomMedia = room.media
                     .filter((media) => media.type === "IMAGE" || media.type === "VIDEO")
                     .slice(0, 10);
@@ -1769,39 +1853,11 @@ export function PublicPropertyDetails({
                           .map((bc, i) => ({
                             key: `${room.id}-bed-type-${i}-${bc.type}`,
                             featureId: "beds_base",
-                            name:
-                              bc.count > 1
-                                ? `${bc.count} Г— ${bedLabelById[bc.type] ?? bc.type}`
-                                : (bedLabelById[bc.type] ?? bc.type),
+                            name: bedLabelById[bc.type] ?? bc.type,
                             category: "beds" as const,
                           }))
                       : [];
                   const roomAmenityItems: RoomAmenityItem[] = [
-                    {
-                      key: `${room.id}-beds-base`,
-                      featureId: "beds_base",
-                      name:
-                        room.extraBeds > 0
-                          ? `Спальные места: ${room.beds} + ${room.extraBeds} доп.`
-                          : `Спальные места: ${room.beds}`,
-                      category: "beds",
-                    },
-                    ...(room.areaSqm !== null
-                      ? [
-                          {
-                            key: `${room.id}-area`,
-                            featureId: "room_area",
-                            name: `Площадь: ${formatRoomArea(room.areaSqm)} м²`,
-                            category: "equipment" as const,
-                          },
-                        ]
-                      : []),
-                    {
-                      key: `${room.id}-rooms-count`,
-                      featureId: "room_rooms",
-                      name: `Количество комнат: ${room.roomsCount} (${formatRoomsCompactLabel(room.roomsCount)})`,
-                      category: "equipment",
-                    },
                     ...bedConfigItems,
                     ...room.features.map((feature, index) => ({
                       key: `${room.id}-feature-${index}-${feature.id}`,
@@ -1851,6 +1907,49 @@ export function PublicPropertyDetails({
                         ]
                       : []),
                     ...visibleRoomAmenities,
+                  ];
+                  const roomDetailHighlights = [
+                    {
+                      key: `${room.id}-detail-capacity`,
+                      icon: Users,
+                      label: "Места",
+                      value: formatRoomCapacityLabel(room.beds, room.extraBeds),
+                      className: "border-primary/14 bg-primary/7",
+                      iconClassName: "bg-primary/10 text-primary ring-primary/14",
+                    },
+                    ...(room.areaSqm !== null
+                      ? [
+                          {
+                            key: `${room.id}-detail-area`,
+                            icon: RulerDimensionLine,
+                            label: "Площадь",
+                            value: `${formatRoomArea(room.areaSqm)} м²`,
+                            className: "border-sun/16 bg-sun/7",
+                            iconClassName: "bg-sun/10 text-sun ring-sun/14",
+                          },
+                        ]
+                      : []),
+                    {
+                      key: `${room.id}-detail-rooms`,
+                      icon: PanelsTopLeft,
+                      label: "Планировка",
+                      value: formatRoomsCountLabel(room.roomsCount),
+                      className: "border-terra/16 bg-terra/7",
+                      iconClassName: "bg-terra/10 text-terra ring-terra/14",
+                    },
+                    ...(room.bathroomTypeLabel
+                      ? [
+                          {
+                            key: `${room.id}-detail-bathroom`,
+                            icon: Toilet,
+                            label: "Санузел",
+                            value: room.bathroomTypeLabel,
+                            className: "border-emerald-500/16 bg-emerald-50/80",
+                            iconClassName:
+                              "bg-emerald-500/10 text-emerald-700 ring-emerald-500/14",
+                          },
+                        ]
+                      : []),
                   ];
                   const roomDetailsDialogId = `room-details-${room.id}`;
                   const roomDetailsTitleId = `room-details-title-${room.id}`;
@@ -2057,134 +2156,205 @@ export function PublicPropertyDetails({
                             type="button"
                             aria-label="Закрыть подробности номера"
                             onClick={() => setActiveRoomDetailsId(null)}
-                            className="fixed inset-x-0 -top-8 z-[49] h-[calc(100dvh_+_160px)] min-h-[calc(100svh_+_160px)] bg-black/45 backdrop-blur-[1px]"
+                            className="fixed inset-x-0 -top-8 z-[49] h-[calc(100dvh_+_160px)] min-h-[calc(100svh_+_160px)] bg-black/50 backdrop-blur-[2px]"
                           />
-                          {/* Bottom sheet on mobile, centered modal on lg+ */}
                           <div
                             id={roomDetailsDialogId}
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby={roomDetailsTitleId}
-                            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[72vh] flex-col rounded-t-2xl border-t border-olive/12 bg-white shadow-2xl lg:inset-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:max-h-[64vh] lg:w-full lg:max-w-[520px] lg:rounded-2xl lg:border"
+                            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[86vh] flex-col overflow-hidden rounded-t-[26px] border-t border-olive/12 bg-white shadow-2xl lg:inset-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:max-h-[82vh] lg:w-full lg:max-w-[680px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-[28px] lg:border"
                           >
-                            {/* Header */}
-                            <div className="shrink-0">
-                              {/* Drag handle (mobile only) */}
+                            <div className="shrink-0 border-b border-olive/8 bg-[linear-gradient(135deg,rgba(240,253,250,0.96),rgba(255,255,255,0.98)_58%,rgba(255,247,237,0.82))]">
                               <div className="flex justify-center pb-1 pt-2 lg:hidden">
-                                <div className="h-1 w-8 rounded-full bg-olive/15" />
+                                <div className="h-1 w-9 rounded-full bg-olive/18" />
                               </div>
-                              <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-1.5 lg:pt-3.5">
-                                <div>
-                                  <p
-                                    id={roomDetailsTitleId}
-                                    className="text-sm font-semibold text-olive"
-                                  >
-                                    {room.title}
-                                  </p>
-                                  <div className="mt-1.5 flex flex-wrap gap-1">
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                      {formatPlacesLabel(room.beds)}
-                                      {room.extraBeds > 0 ? ` + ${room.extraBeds} доп.` : ""}
-                                    </span>
-                                    {room.areaSqm !== null ? (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                        {formatRoomArea(room.areaSqm)}&nbsp;м²
-                                      </span>
-                                    ) : null}
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                      {formatRoomsCountLabel(room.roomsCount)}
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-cream px-2 py-0.5 text-[11px] text-olive/70 ring-1 ring-olive/10">
-                                      {room.bathroomTypeLabel}
-                                    </span>
+                              <div className="px-4 pb-4 pt-2 sm:px-5 lg:px-6 lg:pt-5">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/70">
+                                      Подробное описание номера
+                                    </p>
+                                    <h3
+                                      id={roomDetailsTitleId}
+                                      className="mt-1 text-xl font-bold leading-tight text-olive md:text-2xl"
+                                    >
+                                      {room.title}
+                                    </h3>
                                   </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveRoomDetailsId(null)}
+                                    aria-label="Закрыть"
+                                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-olive/14 bg-white/78 text-olive/70 shadow-sm transition hover:bg-white hover:text-olive"
+                                  >
+                                    <CloseIcon className="h-4.5 w-4.5" />
+                                  </button>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveRoomDetailsId(null)}
-                                  aria-label="Закрыть"
-                                  className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-olive/18 text-olive/70 transition hover:bg-cream hover:text-olive"
-                                >
-                                  <CloseIcon className="h-4 w-4" />
-                                </button>
+
+                                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                                  {roomDetailHighlights.map((highlight) => (
+                                    <div
+                                      key={highlight.key}
+                                      className={cn(
+                                        "min-w-0 rounded-2xl border px-3 py-2.5",
+                                        highlight.className,
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "inline-flex h-8 w-8 items-center justify-center rounded-xl ring-1",
+                                          highlight.iconClassName,
+                                        )}
+                                      >
+                                        <AppIcon icon={highlight.icon} className="h-4 w-4" />
+                                      </span>
+                                      <p className="mt-2 text-[11px] font-semibold uppercase text-olive/48">
+                                        {highlight.label}
+                                      </p>
+                                      <p className="mt-0.5 truncate text-sm font-bold leading-snug text-olive">
+                                        {highlight.value}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="h-px bg-olive/8" />
                             </div>
 
-                            {/* Scrollable amenities */}
-                            <div className="flex-1 overflow-y-auto">
-                              <div className="p-4">
+                            <div className="custom-scrollbar flex-1 overflow-y-auto">
+                              <div className="space-y-4 p-4 sm:p-5 lg:p-6">
                                 {roomAmenityItems.length > 0 ? (
-                                  <div className="space-y-4">
-                                    {(["beds", "bathroom", "equipment"] as const).map((cat) => {
-                                      const catItems = roomAmenityItems.filter(
-                                        (a) => a.category === cat,
-                                      );
-                                      if (catItems.length === 0) return null;
-                                      const catLabel =
-                                        cat === "beds"
-                                          ? "Спальные места"
-                                          : cat === "bathroom"
-                                            ? formatBathroomSectionLabel(room.bathroomTypeLabel)
-                                            : "Оснащение и удобства";
-                                      return (
-                                        <div key={cat}>
-                                          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-olive/40">
-                                            {catLabel}
-                                          </h4>
-                                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                            {catItems.map((amenity) => (
-                                              <div
-                                                key={amenity.key}
-                                                className="flex items-center gap-2.5 rounded-lg bg-cream/70 px-2.5 py-2 ring-1 ring-olive/10"
+                                  (["beds", "bathroom", "equipment"] as const).map((cat) => {
+                                    const catItems = roomAmenityItems.filter(
+                                      (a) => a.category === cat,
+                                    );
+                                    if (catItems.length === 0) return null;
+
+                                    const visual = getRoomDetailCategoryVisual(cat);
+                                    const catLabel =
+                                      cat === "beds"
+                                        ? "Кровати"
+                                        : cat === "bathroom"
+                                          ? formatBathroomSectionLabel(room.bathroomTypeLabel)
+                                          : "Оснащение и удобства";
+
+                                    return (
+                                      <section
+                                        key={cat}
+                                        className={cn(
+                                          "rounded-[20px] border p-3.5 sm:p-4",
+                                          visual.sectionClassName,
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <span
+                                            className={cn(
+                                              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1",
+                                              visual.iconShellClassName,
+                                            )}
+                                          >
+                                            <AppIcon icon={visual.icon} className="h-5 w-5" />
+                                          </span>
+                                          <div className="min-w-0">
+                                            <h4
+                                              className={cn(
+                                                "text-base font-bold leading-tight",
+                                                visual.headingClassName,
+                                              )}
+                                            >
+                                              {catLabel}
+                                            </h4>
+                                            {cat === "beds" ? null : (
+                                              <p className="mt-0.5 text-xs text-olive/52">
+                                                {formatRoomDetailItemsCountLabel(catItems.length)}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                          {catItems.map((amenity) => (
+                                            <div
+                                              key={amenity.key}
+                                              className={cn(
+                                                "flex min-h-[50px] items-center gap-3 rounded-2xl border px-3 py-2.5 shadow-[0_6px_18px_rgba(58,43,35,0.04)]",
+                                                visual.itemClassName,
+                                              )}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
+                                                  visual.itemIconShellClassName,
+                                                )}
                                               >
                                                 <RoomFeatureIcon
                                                   name={amenity.name}
                                                   featureId={amenity.featureId}
-                                                  className="h-4 w-4 shrink-0 text-terra/80"
+                                                  className={cn("h-4 w-4", visual.itemIconClassName)}
                                                 />
-                                                <span className="text-[11px] leading-snug text-olive/80">
-                                                  {amenity.name}
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
+                                              </span>
+                                              <span className="min-w-0 text-sm font-medium leading-snug text-olive/84">
+                                                {amenity.name}
+                                              </span>
+                                            </div>
+                                          ))}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
+                                      </section>
+                                    );
+                                  })
                                 ) : (
-                                  <p className="text-xs text-olive/60">
+                                  <div className="rounded-2xl border border-dashed border-olive/16 bg-cream/60 p-4 text-sm text-olive/64">
                                     Оснащение номера не указано
-                                  </p>
+                                  </div>
                                 )}
                               </div>
                             </div>
 
-                            {/* Sticky price footer */}
-                            {summary.tone === "ok" && summary.bigPrice ? (
-                              <div className="shrink-0 border-t border-olive/8 px-4 py-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <p className="truncate text-xl font-bold leading-none text-olive">
+                            <div className="shrink-0 border-t border-olive/8 bg-white/96 px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] sm:px-5 lg:px-6">
+                              {summary.tone === "ok" && summary.bigPrice ? (
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                      <p className="text-2xl font-bold leading-none text-olive">
                                         {summary.bigPrice}
                                       </p>
                                       {summary.sideLabel ? (
-                                        <p className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-olive/70">
+                                        <p className="text-xs font-semibold text-primary/75">
                                           {summary.sideLabel}
                                         </p>
                                       ) : null}
                                     </div>
                                     {summary.smallLabel ? (
-                                      <p className="mt-0.5 text-[11px] text-olive/60">
+                                      <p className="mt-1 text-sm text-olive/58">
                                         {summary.smallLabel}
                                       </p>
                                     ) : null}
                                   </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      trackListingAction({
+                                        ...contactTracking,
+                                        actionType: "booking",
+                                      });
+                                      setActiveRoomDetailsId(null);
+                                      setLeadModalRoom(room);
+                                      setLeadExtra("");
+                                      setLeadCopied(false);
+                                    }}
+                                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#e8621a] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(232,98,26,0.24)] transition hover:bg-[#d45615] active:scale-[0.98] sm:w-auto"
+                                  >
+                                    <AppIcon icon={Check} className="h-4 w-4" />
+                                    Забронировать
+                                  </button>
                                 </div>
-                              </div>
-                            ) : null}
+                              ) : (
+                                <div className="flex items-start gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/85 px-3.5 py-3 text-sm text-amber-800">
+                                  <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                                  <span>{summary.text}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </>
                       ) : null}
@@ -2201,6 +2371,32 @@ export function PublicPropertyDetails({
                     </Fragment>
                   );
                 })}
+                {remainingRoomCount > 0 ? (
+                  <div className="flex flex-col items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibleRoomCountByItem((counts) => {
+                          const currentCount = counts[item.id] ?? ROOM_VARIANTS_PAGE_SIZE;
+                          return {
+                            ...counts,
+                            [item.id]: Math.min(
+                              currentCount + ROOM_VARIANTS_PAGE_SIZE,
+                              sortedRooms.length,
+                            ),
+                          };
+                        })
+                      }
+                      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-primary/18 bg-primary/9 px-4 text-sm font-semibold text-primary shadow-[0_8px_20px_rgba(15,118,110,0.08)] transition hover:border-primary/28 hover:bg-primary/12 active:scale-[0.98] sm:w-auto"
+                    >
+                      <ChevronDownIcon className="h-4 w-4" />
+                      Показать ещё {formatRoomVariantsLabel(nextRoomBatchCount)}
+                    </button>
+                    <p className="text-xs text-olive/52">
+                      Показано {visibleSortedRooms.length} из {sortedRooms.length}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             )}
           </section>
@@ -2351,6 +2547,7 @@ export function PublicPropertyDetails({
                 phoneName={item.contacts.phoneName}
                 extraPhones={extraContactPhones}
                 websiteUrl={item.contacts.websiteUrl}
+                email={item.contacts.email}
                 whatsappUrl={item.contacts.whatsappUrl}
                 telegramUrl={item.contacts.telegramUrl}
                 vkUrl={item.contacts.vkUrl}
@@ -2392,8 +2589,8 @@ export function PublicPropertyDetails({
                   <a
                     key={channel.key}
                     href={channel.href}
-                    target="_blank"
-                    rel="noreferrer noopener"
+                    target={channel.brand === "email" ? undefined : "_blank"}
+                    rel={channel.brand === "email" ? undefined : "noreferrer noopener"}
                     title={channel.label}
                     aria-label={channel.label}
                     onClick={() => {
@@ -2413,6 +2610,8 @@ export function PublicPropertyDetails({
                         className="h-4 w-4"
                         iconClassName="text-primary"
                       />
+                    ) : channel.brand === "email" ? (
+                      <AppIcon icon={Mail} className="h-4 w-4" />
                     ) : (
                       <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
                     )}

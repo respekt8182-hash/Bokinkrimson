@@ -8,17 +8,26 @@ import {
 import type { DbTransactionClient } from "@/lib/db";
 import { formatPublicPersonName } from "@/lib/public-display-name";
 
+export const PUBLIC_REVIEWS_PAGE_SIZE = 5;
+
 export type SerializedReview = {
   id: string;
   entityType: ReviewEntityType;
   propertyId: string | null;
   excursionId: string | null;
   transferId: string | null;
-  userId: string;
+  userId: string | null;
   userName: string;
   userAvatarUrl: string | null;
   rating: number;
   text: string;
+  isImported: boolean;
+  importedAuthorName: string | null;
+  externalSourceUrl: string | null;
+  externalSourceName: string | null;
+  verifiedAt: string | null;
+  guestCity: string | null;
+  reviewedAt: string | null;
   likesCount: number;
   dislikesCount: number;
   currentUserReaction: ReviewReactionValue | null;
@@ -36,9 +45,16 @@ export function serializeReview(review: {
   propertyId: string | null;
   excursionId: string | null;
   transferId?: string | null;
-  userId: string;
+  userId: string | null;
   rating: Prisma.Decimal | number;
   text: string;
+  isImported?: boolean | null;
+  importedAuthorName?: string | null;
+  externalSourceUrl?: string | null;
+  externalSourceName?: string | null;
+  verifiedAt?: Date | null;
+  guestCity?: string | null;
+  reviewedAt?: Date | null;
   likesCount?: number | null;
   dislikesCount?: number | null;
   ownerReply: string | null;
@@ -53,6 +69,14 @@ export function serializeReview(review: {
 }): SerializedReview {
   const currentUserReaction =
     review.currentUserReaction ?? review.reactions?.[0]?.value ?? null;
+  const importedAuthorName = review.importedAuthorName?.trim() || null;
+  const isImported = Boolean(review.isImported);
+  const userName =
+    isImported && importedAuthorName
+      ? importedAuthorName
+      : review.user
+        ? formatPublicPersonName(review.user, "Пользователь")
+        : "Пользователь";
 
   return {
     id: review.id,
@@ -61,10 +85,17 @@ export function serializeReview(review: {
     excursionId: review.excursionId,
     transferId: review.transferId ?? null,
     userId: review.userId,
-    userName: review.user ? formatPublicPersonName(review.user, "Пользователь") : "Пользователь",
+    userName,
     userAvatarUrl: review.user?.avatarUrl ?? null,
     rating: Number(review.rating),
     text: review.text,
+    isImported,
+    importedAuthorName,
+    externalSourceUrl: review.externalSourceUrl ?? null,
+    externalSourceName: review.externalSourceName ?? null,
+    verifiedAt: review.verifiedAt ? review.verifiedAt.toISOString() : null,
+    guestCity: normalizeReviewGuestCity(review.guestCity),
+    reviewedAt: review.reviewedAt ? review.reviewedAt.toISOString() : null,
     likesCount: Math.max(0, Number(review.likesCount ?? 0)),
     dislikesCount: Math.max(0, Number(review.dislikesCount ?? 0)),
     currentUserReaction,
@@ -75,6 +106,21 @@ export function serializeReview(review: {
     updatedAt: review.updatedAt.toISOString(),
     deletedAt: review.deletedAt ? review.deletedAt.toISOString() : null,
   };
+}
+
+export function normalizeReviewGuestCity(value?: string | null): string | null {
+  const normalized = value?.trim().replace(/\s+/g, " ") ?? "";
+  return normalized || null;
+}
+
+export function parseReviewDateInput(value?: string | null): Date | null {
+  const normalized = value?.trim() ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export async function refreshEntityReviewStats(

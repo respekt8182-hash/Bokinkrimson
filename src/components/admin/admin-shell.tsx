@@ -40,11 +40,13 @@ const EXCURSION_SEEN_KEY = "boking_admin_excursion_moderation_seen_at";
 const TRANSFER_SEEN_KEY = "boking_admin_transfer_moderation_seen_at";
 const MESSAGE_SEEN_KEY = "boking_admin_messages_seen_at";
 const MANAGER_PAY_SEEN_KEY = "boking_admin_manager_payments_seen_at";
+const REVIEW_SEEN_KEY = "boking_admin_reviews_seen_at";
 
 const menu: MenuItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
-  { href: "/admin/moderation", label: "Модерация жилья", icon: ShieldCheck },
+  { href: "/admin/moderation", label: "Проверка жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
+  { href: "/admin/reviews", label: "Проверка отзывов", icon: MessageSquareText },
   { href: "/admin/objects", label: "Жильё и размещение", icon: House },
   { href: "/admin/attractions", label: "Достопримечательности", icon: Landmark },
   { href: "/admin/excursions", label: "Каталог экскурсий", icon: Compass },
@@ -104,7 +106,7 @@ function getPageTitle(pathname: string): string {
   }
 
   if (pathname.startsWith("/admin/moderation")) {
-    return "Модерация жилья";
+    return "Проверка жилья";
   }
 
   if (pathname.startsWith("/admin/statistics")) {
@@ -129,6 +131,10 @@ function getPageTitle(pathname: string): string {
 
   if (pathname.startsWith("/admin/users")) {
     return "Пользователи";
+  }
+
+  if (pathname.startsWith("/admin/reviews")) {
+    return "Проверка отзывов";
   }
 
   if (pathname.startsWith("/admin/payments")) {
@@ -170,6 +176,7 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
   const transferSeenAt = isHydrated ? readSeenValue(TRANSFER_SEEN_KEY) : 0;
   const messageSeenAt = isHydrated ? readSeenValue(MESSAGE_SEEN_KEY) : 0;
   const managerPaySeenAt = isHydrated ? readSeenValue(MANAGER_PAY_SEEN_KEY) : 0;
+  const reviewSeenAt = isHydrated ? readSeenValue(REVIEW_SEEN_KEY) : 0;
 
   useEffect(() => {
     if (pathname.startsWith("/admin/moderation/excursions")) {
@@ -193,6 +200,12 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
     if (pathname.startsWith("/admin/messages")) {
       const seen = Math.max(Date.now(), moderationSnapshot.messages.latestCreatedAtMs ?? 0);
       writeSeenValue(MESSAGE_SEEN_KEY, seen);
+      return;
+    }
+
+    if (pathname.startsWith("/admin/reviews")) {
+      const seen = Math.max(Date.now(), moderationSnapshot.reviews?.latestCreatedAtMs ?? 0);
+      writeSeenValue(REVIEW_SEEN_KEY, seen);
       return;
     }
 
@@ -252,6 +265,11 @@ export function AdminShell({ moderationSnapshot, children }: Props) {
         ? moderationSnapshot.transfers.pendingCount
         : 0,
     "/admin/support-chat": moderationSnapshot.supportChat?.waitingCount ?? 0,
+    "/admin/reviews":
+      (moderationSnapshot.reviews?.pendingCount ?? 0) > 0 &&
+      (moderationSnapshot.reviews?.latestCreatedAtMs ?? 0) > reviewSeenAt
+        ? moderationSnapshot.reviews.pendingCount
+        : 0,
     "/admin/payments":
       (moderationSnapshot.managerPayments?.pendingCount ?? 0) > 0 &&
       (moderationSnapshot.managerPayments?.latestCreatedAtMs ?? 0) > managerPaySeenAt

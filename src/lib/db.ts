@@ -9,7 +9,11 @@ import {
 } from "@/lib/prisma-errors";
 
 const EXCURSION_COMPAT_COLUMNS = [
+  "contactPhoneName",
   "contactPhone2",
+  "contactPhone2Name",
+  "contactPhone3",
+  "contactPhone3Name",
   "pendingEditStatus",
   "publishedSnapshot",
   "tourKind",
@@ -51,6 +55,11 @@ const TRANSFER_COMPAT_COLUMNS = [
   "isPublishedVisible",
   "serviceTags",
   "fleet",
+  "phoneName",
+  "phone2Name",
+  "phone3",
+  "phone3Name",
+  "contactEmail",
   "pendingEditStatus",
   "publishedSnapshot",
 ] as const;
@@ -66,7 +75,22 @@ const PROPERTY_COMPAT_COLUMNS = [
 ] as const;
 const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
 const ROOM_PRICE_COMPAT_COLUMNS = ["priceType"] as const;
-const REVIEW_COMPAT_COLUMNS = ["transferId"] as const;
+const ROOM_OCCUPANCY_COMPAT_COLUMNS = [
+  "externalCalendarSyncId",
+  "externalCalendarUid",
+] as const;
+const REVIEW_COMPAT_COLUMNS = [
+  "transferId",
+  "isImported",
+  "importedAuthorName",
+  "externalSourceUrl",
+  "externalSourceName",
+  "importedByOwnerId",
+  "verifiedAt",
+  "verifiedByAdminId",
+  "guestCity",
+  "reviewedAt",
+] as const;
 const PAYMENT_COMPAT_COLUMNS = ["transferId", "tariffType", "paidFrom"] as const;
 
 const SCHEMA_COMPAT_MODELS = {
@@ -113,7 +137,11 @@ const SCHEMA_COMPAT_MODELS = {
       "deletionExpiresAt",
     ],
     defaults: {
+      contactPhoneName: null,
       contactPhone2: null,
+      contactPhone2Name: null,
+      contactPhone3: null,
+      contactPhone3Name: null,
       publicId: null,
       pendingEditStatus: null,
       publishedSnapshot: null,
@@ -148,6 +176,11 @@ const SCHEMA_COMPAT_MODELS = {
       isPublishedVisible: true,
       serviceTags: [],
       fleet: [],
+      phoneName: null,
+      phone2Name: null,
+      phone3: null,
+      phone3Name: null,
+      contactEmail: null,
       pendingEditStatus: null,
       publishedSnapshot: null,
     },
@@ -170,10 +203,28 @@ const SCHEMA_COMPAT_MODELS = {
     logContext: "room-price-schema-compat",
     label: "RoomPrice",
   },
+  RoomOccupancy: {
+    columns: ROOM_OCCUPANCY_COMPAT_COLUMNS,
+    defaults: {
+      externalCalendarSyncId: null,
+      externalCalendarUid: null,
+    },
+    logContext: "room-occupancy-schema-compat",
+    label: "RoomOccupancy",
+  },
   Review: {
     columns: REVIEW_COMPAT_COLUMNS,
     defaults: {
       transferId: null,
+      isImported: false,
+      importedAuthorName: null,
+      externalSourceUrl: null,
+      externalSourceName: null,
+      importedByOwnerId: null,
+      verifiedAt: null,
+      verifiedByAdminId: null,
+      guestCity: null,
+      reviewedAt: null,
     },
     logContext: "review-schema-compat",
     label: "Review",

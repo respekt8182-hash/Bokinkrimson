@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { tryUpdateFallbackExternalReviewReaction } from "@/lib/external-reviews";
 import { serializeReview } from "@/lib/reviews";
 
 type RouteContext = {
@@ -13,6 +14,31 @@ type RouteContext = {
 const reviewReactionSchema = z.object({
   value: z.nativeEnum(ReviewReactionValue).nullable(),
 });
+
+function isFallbackExternalReviewId(id: string): boolean {
+  return id.startsWith("ext_");
+}
+
+async function updateFallbackExternalReviewReaction(input: {
+  id: string;
+  userId: string;
+  value: ReviewReactionValue | null;
+}): Promise<NextResponse | null> {
+  const fallbackResult = await tryUpdateFallbackExternalReviewReaction(input);
+
+  if (fallbackResult?.ok) {
+    return NextResponse.json({ item: fallbackResult.item });
+  }
+
+  if (fallbackResult && !fallbackResult.ok) {
+    return NextResponse.json(
+      { error: fallbackResult.error },
+      { status: fallbackResult.status },
+    );
+  }
+
+  return null;
+}
 
 export async function PUT(request: Request, context: RouteContext) {
   const session = await getSession();
@@ -41,19 +67,56 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Проверьте значение реакции" }, { status: 400 });
   }
 
-  const review = await db.review.findUnique({
-    where: { id },
-    include: {
-      user: {
-        select: {
-          firstName: true,
-          avatarUrl: true,
+  if (isFallbackExternalReviewId(id)) {
+    const fallbackResponse = await updateFallbackExternalReviewReaction({
+      id,
+      userId: session.id,
+      value: parsed.data.value,
+    });
+
+    if (fallbackResponse) {
+      return fallbackResponse;
+    }
+  }
+
+  let review;
+  try {
+    review = await db.review.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            avatarUrl: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (error) {
+    const fallbackResponse = await updateFallbackExternalReviewReaction({
+      id,
+      userId: session.id,
+      value: parsed.data.value,
+    });
+
+    if (fallbackResponse) {
+      return fallbackResponse;
+    }
+
+    throw error;
+  }
 
   if (!review) {
+    const fallbackResponse = await updateFallbackExternalReviewReaction({
+      id,
+      userId: session.id,
+      value: parsed.data.value,
+    });
+
+    if (fallbackResponse) {
+      return fallbackResponse;
+    }
+
     return NextResponse.json({ error: "Отзыв не найден" }, { status: 404 });
   }
 

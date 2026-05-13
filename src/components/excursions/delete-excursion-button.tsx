@@ -2,14 +2,20 @@
 
 // Client component for delete excursion button in the excursions module.
 import { ExcursionStatus } from "@prisma/client";
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 type DeleteExcursionButtonProps = {
   excursionId: string;
   excursionTitle: string;
   excursionStatus: ExcursionStatus;
+  className?: string;
+  buttonClassName?: string;
+  label?: string;
 };
 
 type DeleteExcursionResponse = {
@@ -40,6 +46,9 @@ export function DeleteExcursionButton({
   excursionId,
   excursionTitle,
   excursionStatus,
+  className,
+  buttonClassName,
+  label = "Удалить программу",
 }: DeleteExcursionButtonProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,14 +94,18 @@ export function DeleteExcursionButton({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <Button
         type="button"
         variant="ghost"
         onClick={openModal}
-        className="border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra"
+        className={cn(
+          "border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra",
+          buttonClassName,
+        )}
       >
-        Удалить программу
+        <AppIcon icon={Trash2} className="h-3.5 w-3.5 shrink-0" />
+        {label}
       </Button>
 
       {success ? <p className="max-w-xl text-xs text-green-700">{success}</p> : null}
@@ -103,9 +116,12 @@ export function DeleteExcursionButton({
           <div className="w-full max-w-xl rounded-2xl border border-olive/15 bg-white p-4 shadow-xl">
             <h3 className="text-xl text-olive">Подтверждение удаления</h3>
             <p className="mt-2 text-sm text-olive/80">
-              Вы удаляете программу <span className="font-semibold text-olive">{excursionTitle}</span>.
+              Вы удаляете программу{" "}
+              <span className="font-semibold text-olive">{excursionTitle}</span>.
             </p>
-            <p className="mt-2 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">{warningText}</p>
+            <p className="mt-2 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
+              {warningText}
+            </p>
 
             <label className="mt-3 flex items-start gap-2 text-sm text-olive">
               <input

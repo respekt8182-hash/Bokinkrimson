@@ -7,6 +7,7 @@ import {
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
 import { db } from "@/lib/db";
+import { getExternalReviewSummaryWithFallback } from "@/lib/external-reviews";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { resolveExcursionLocation } from "@/lib/excursion-directory";
 import {
@@ -25,6 +26,15 @@ import {
 import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
+import { getRankingStatsByEntity } from "@/lib/ranking-stats";
+import {
+  buildSearchFingerprint,
+  clamp,
+  compareRankedItems,
+  median,
+  rankItems,
+  scoreRankingCandidate,
+} from "@/lib/ranking-v2";
 import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
 import {
   createStaticAttractionDraft,
@@ -153,8 +163,13 @@ export type PublicTransferCatalogItem = {
   contacts: {
     contactName: string | null;
     phone: string | null;
+    phoneName: string | null;
     phone2: string | null;
+    phone2Name: string | null;
+    phone3: string | null;
+    phone3Name: string | null;
     websiteUrl: string | null;
+    email: string | null;
     whatsappUrl: string | null;
     telegramUrl: string | null;
     vkUrl: string | null;
@@ -226,6 +241,7 @@ const transferInclude = {
     select: {
       id: true,
       firstName: true,
+      email: true,
       phone: true,
       avatarUrl: true,
     },
@@ -408,53 +424,94 @@ function buildFallbackSlug(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 }
 
-function getDailyRotationKey(): string {
-  const now = new Date();
-  const dayIso = now.toISOString().slice(0, 10);
-  const hourBucket = Math.floor(now.getUTCHours() / 4);
-  return `${dayIso}:${hourBucket}`;
+function getTransferIntentScore(input: {
+  hasSearch: boolean;
+  searchScore: number;
+  hasLocationQuery: boolean;
+  primaryLocationMatch: boolean;
+  nearbyLocationMatch: boolean;
+  transferTypeMatch: boolean;
+  distanceKm: number | null;
+  radiusKm: number;
+}): number {
+  const routeAndTextScore = input.hasSearch ? clamp((input.searchScore / 1.2) * 100, 20, 100) : 72;
+  const locationScore = !input.hasLocationQuery
+    ? 72
+    : input.primaryLocationMatch
+      ? 100
+      : input.nearbyLocationMatch
+        ? clamp(82 - ((input.distanceKm ?? input.radiusKm) / Math.max(input.radiusKm, 1)) * 30, 45, 82)
+        : 25;
+  const typeScore = input.transferTypeMatch ? 100 : 72;
+
+  return clamp(routeAndTextScore * 0.45 + locationScore * 0.35 + typeScore * 0.2, 0, 100);
 }
 
-function stableHash(input: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-
-  return hash >>> 0;
-}
-
-function getTransferCatalogRankScore(row: TransferRow): number {
-  const rating = Number(row.avgRating);
-  const reviewsCount = row.reviewsCount;
-  const fleetSummary = deriveTransferSummaryFromFleet(row);
-  const publishedAt = row.publishedAt ?? row.createdAt;
-  const daysSincePublished = Math.max(0, (Date.now() - publishedAt.getTime()) / 86_400_000);
-  const daysSinceUpdate = Math.max(0, (Date.now() - row.updatedAt.getTime()) / 86_400_000);
-
-  const credibility = Math.min(1, 0.28 + 0.72 * Math.sqrt(reviewsCount / 16));
-  const ratingScore = rating > 0 ? rating * 90 * credibility : 0;
-  const reviewVolumeScore = Math.log1p(reviewsCount) * 14;
-  const viewsScore = Math.log1p(row.profileViews / 20) * 5;
-  const completenessScore =
-    (fleetSummary.photoUrls.length > 0 ? 8 : 0) +
-    (fleetSummary.fleet.length > 0 ? 5 : 0) +
-    (row.description ? 4 : 0) +
-    (row.phone || row.whatsappUrl || row.telegramUrl ? 3 : 0);
-  const newListingBoost = Math.max(0, 24 - Math.log1p(daysSincePublished) * 8);
-  const freshnessScore = Math.max(0, 5 - Math.log1p(daysSinceUpdate / 7) * 2);
-  const rotation = (stableHash(`${getDailyRotationKey()}:transfer:${row.id}`) % 1000) / 1000;
-
-  return (
-    ratingScore +
-    reviewVolumeScore +
-    viewsScore +
-    completenessScore +
-    newListingBoost +
-    freshnessScore +
-    rotation * 0.4
+function getTransferAvailabilityScore(input: {
+  priceFrom: number | null;
+  hasFleet: boolean;
+  seats: number | null;
+  luggage: number | null;
+  hasContactPath: boolean;
+  locationMatched: boolean;
+}): number {
+  return clamp(
+    (input.priceFrom !== null ? 28 : 0) +
+      (input.hasFleet ? 22 : 0) +
+      (input.seats !== null && input.seats > 0 ? 16 : 0) +
+      (input.luggage !== null && input.luggage >= 0 ? 8 : 0) +
+      (input.hasContactPath ? 16 : 0) +
+      (input.locationMatched ? 10 : 0),
+    0,
+    100,
   );
+}
+
+function getTransferCompletenessScore(input: {
+  photoCount: number;
+  fleetCount: number;
+  description: string | null;
+  serviceArea: string | null;
+  routeExamples: string | null;
+  priceFrom: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  hasContactPath: boolean;
+  seats: number | null;
+  luggage: number | null;
+  serviceTagsCount: number;
+}): number {
+  return clamp(
+    (input.photoCount > 0 ? 16 : 0) +
+      Math.min(input.photoCount, 6) * 3 +
+      (input.fleetCount > 0 ? 14 : 0) +
+      (input.description ? 8 : 0) +
+      (input.serviceArea ? 8 : 0) +
+      (input.routeExamples ? 8 : 0) +
+      (input.priceFrom !== null ? 12 : 0) +
+      (input.latitude !== null && input.longitude !== null ? 8 : 0) +
+      (input.hasContactPath ? 8 : 0) +
+      (input.seats !== null && input.seats > 0 ? 5 : 0) +
+      (input.luggage !== null && input.luggage >= 0 ? 3 : 0) +
+      Math.min(input.serviceTagsCount, 4) * 2,
+    0,
+    100,
+  );
+}
+
+function getTransferFreshnessScore(input: {
+  now: Date;
+  createdAt: Date;
+  publishedAt: Date | null;
+  updatedAt: Date;
+}): number {
+  const publishedAt = input.publishedAt ?? input.createdAt;
+  const ageDays = Math.max(0, (input.now.getTime() - publishedAt.getTime()) / 86_400_000);
+  const updateAgeDays = Math.max(0, (input.now.getTime() - input.updatedAt.getTime()) / 86_400_000);
+  const newness = ageDays <= 30 ? (1 - ageDays / 30) * 55 : 0;
+  const weakMeaningfulUpdate = updateAgeDays <= 45 ? (1 - updateAgeDays / 45) * 25 : 0;
+
+  return clamp(20 + newness + weakMeaningfulUpdate, 0, 100);
 }
 
 export function buildAttractionSlug(title: string | null, id: string): string {
@@ -643,8 +700,13 @@ function mapTransferCatalogItem(
     contacts: {
       contactName,
       phone: row.phone ?? row.owner.phone,
+      phoneName: row.phoneName,
       phone2: row.phone2,
+      phone2Name: row.phone2Name,
+      phone3: row.phone3,
+      phone3Name: row.phone3Name,
       websiteUrl: row.websiteUrl,
+      email: row.contactEmail ?? row.owner.email,
       whatsappUrl: normalizeWhatsappUrl(row.whatsappUrl),
       telegramUrl: normalizeTelegramProfileUrl(row.telegramUrl),
       vkUrl: normalizeVkProfileUrl(row.vkUrl),
@@ -714,6 +776,7 @@ export async function getPublicTransferCatalog(
   const sort = parseTransferSort(query.sort);
   const minPrice = parseMoney(query.minPrice);
   const maxPrice = parseMoney(query.maxPrice);
+  const rankingNow = new Date();
 
   const resolvedLocation = await resolveExcursionLocation({
     location: locationQuery,
@@ -775,6 +838,26 @@ export async function getPublicTransferCatalog(
   }
 
   const effectiveRows = rows.map((row) => applyPublishedTransferSnapshotToRow(row));
+  const rankingStatsById = await getRankingStatsByEntity(
+    "transfer",
+    effectiveRows.map((row) => row.id),
+    rankingNow,
+  );
+  const impressionsMedian = Math.max(
+    1,
+    median(effectiveRows.map((row) => rankingStatsById.get(row.id)?.last30Days.cardViews ?? 0)),
+  );
+  const searchFingerprint = buildSearchFingerprint({
+    vertical: "transfer",
+    query: searchQuery,
+    location: (resolvedLocation?.id ?? locationQuery) || null,
+    transferType,
+    radiusKm,
+    minPrice,
+    maxPrice,
+    sort,
+    bounds: query.bounds ?? null,
+  });
 
   const searchScores = getSearchScoreMap(searchQuery, effectiveRows, (item) => [
     item.title,
@@ -882,20 +965,126 @@ export async function getPublicTransferCatalog(
       const exactLocationScore =
         resolvedLocation && row.locationId === resolvedLocation.id ? 35 : 0;
       const relevance = searchScore * 70 + distanceScore + exactLocationScore;
-      const catalogRank = getTransferCatalogRankScore(row);
+      const stats = rankingStatsById.get(row.id)?.last30Days;
+      const hasContactPath = Boolean(
+        row.phone ||
+          row.owner.phone ||
+          row.whatsappUrl ||
+          row.telegramUrl ||
+          row.contactEmail ||
+          row.receiveRequests,
+      );
+      const photoCount =
+        row.photoUrls.length > 0 ? row.photoUrls.length : fleetSummary.photoUrls.length;
+      const intentScore = getTransferIntentScore({
+        hasSearch: searchQuery.length >= 2,
+        searchScore,
+        hasLocationQuery: Boolean(locationQuery),
+        primaryLocationMatch,
+        nearbyLocationMatch,
+        transferTypeMatch: !transferType || normalizeText(row.transferType) === normalizeText(transferType),
+        distanceKm,
+        radiusKm,
+      });
+      const availabilityScore = getTransferAvailabilityScore({
+        priceFrom,
+        hasFleet: fleetSummary.fleet.length > 0,
+        seats: fleetSummary.seats ?? row.seats,
+        luggage: fleetSummary.luggage ?? row.luggage,
+        hasContactPath,
+        locationMatched: locationMatch,
+      });
+      const completenessScore = getTransferCompletenessScore({
+        photoCount,
+        fleetCount: fleetSummary.fleet.length,
+        description: row.shortDescription ?? row.description,
+        serviceArea: row.serviceArea,
+        routeExamples: row.routeExamples,
+        priceFrom,
+        latitude: point?.latitude ?? null,
+        longitude: point?.longitude ?? null,
+        hasContactPath,
+        seats: fleetSummary.seats ?? row.seats,
+        luggage: fleetSummary.luggage ?? row.luggage,
+        serviceTagsCount: normalizeTransferServiceTags(row.serviceTags).length,
+      });
+      const freshnessScore = getTransferFreshnessScore({
+        now: rankingNow,
+        createdAt: row.createdAt,
+        publishedAt: row.publishedAt,
+        updatedAt: row.updatedAt,
+      });
+      const ranking = scoreRankingCandidate(
+        {
+          id: row.id,
+          ownerId: row.ownerId,
+          vertical: "transfer",
+          avgRating: Number(row.avgRating),
+          reviewsCount: row.reviewsCount,
+          createdAt: row.createdAt,
+          publishedAt: row.publishedAt ?? row.createdAt,
+          updatedAt: row.updatedAt,
+          exposureCount: stats?.cardViews ?? 0,
+          componentScores: {
+            intentScore,
+            availabilityScore,
+            completenessScore,
+            freshnessScore,
+          },
+          behaviorMetrics: {
+            cardViews: stats?.cardViews ?? 0,
+            favorites: stats?.favorites ?? 0,
+            phoneClicks: stats?.phoneClicks ?? 0,
+            messengerClicks: stats?.messengerClicks ?? 0,
+            emailClicks: stats?.emailClicks ?? 0,
+            createBookingClicks: stats?.createBookingClicks ?? 0,
+          },
+        },
+        {
+          now: rankingNow,
+          searchFingerprint,
+          impressionsMedian,
+          targetTestImpressions: 100,
+        },
+      );
 
-      return { row, distanceKm, searchMatchKind, relevance, priceFrom, catalogRank };
+      return {
+        id: row.id,
+        ownerId: row.ownerId,
+        row,
+        distanceKm,
+        searchMatchKind,
+        relevance: ranking.finalScore || relevance,
+        priceFrom,
+        ranking,
+        sortValues: {
+          price: priceFrom,
+          distance: distanceKm,
+          createdAt: row.createdAt,
+          publishedAt: row.publishedAt ?? row.createdAt,
+          updatedAt: row.updatedAt,
+        },
+      };
     })
     .filter(
       (
         item,
       ): item is {
+        id: string;
+        ownerId: string;
         row: TransferRow;
         distanceKm: number | null;
         searchMatchKind: CatalogSearchMatchKind;
         relevance: number;
         priceFrom: number | null;
-        catalogRank: number;
+        ranking: ReturnType<typeof scoreRankingCandidate>;
+        sortValues: {
+          price: number | null;
+          distance: number | null;
+          createdAt: Date;
+          publishedAt: Date;
+          updatedAt: Date;
+        };
       } => Boolean(item),
     );
 
@@ -906,60 +1095,31 @@ export async function getPublicTransferCatalog(
       );
     }
 
-    if (sort === "distance_asc") {
-      if (left.distanceKm === null && right.distanceKm === null) return 0;
-      if (left.distanceKm === null) return 1;
-      if (right.distanceKm === null) return -1;
-      return left.distanceKm - right.distanceKm;
-    }
-
-    if (sort === "price_asc") {
-      if (left.priceFrom === null && right.priceFrom === null) return 0;
-      if (left.priceFrom === null) return 1;
-      if (right.priceFrom === null) return -1;
-      return left.priceFrom - right.priceFrom;
-    }
-
-    if (sort === "price_desc") {
-      if (left.priceFrom === null && right.priceFrom === null) return 0;
-      if (left.priceFrom === null) return 1;
-      if (right.priceFrom === null) return -1;
-      return right.priceFrom - left.priceFrom;
-    }
-
-    if (sort === "newest") {
-      return right.row.updatedAt.getTime() - left.row.updatedAt.getTime();
-    }
-
-    if (sort === "rating_desc") {
-      const byRating = Number(right.row.avgRating) - Number(left.row.avgRating);
-      if (Math.abs(byRating) > 0.00001) return byRating;
-      const byReviews = right.row.reviewsCount - left.row.reviewsCount;
-      if (byReviews !== 0) return byReviews;
-    }
-
-    if (sort === "popular_desc") {
-      const byReviews = right.row.reviewsCount - left.row.reviewsCount;
-      if (byReviews !== 0) return byReviews;
-      const byRating = Number(right.row.avgRating) - Number(left.row.avgRating);
-      if (Math.abs(byRating) > 0.00001) return byRating;
-    }
-
-    const byRelevance =
-      searchQuery.length >= 2 || locationQuery || locationCenter
-        ? right.relevance - left.relevance
-        : right.catalogRank - left.catalogRank;
-    if (Math.abs(byRelevance) > 0.00001) return byRelevance;
-
-    const byCatalogRank = right.catalogRank - left.catalogRank;
-    if (Math.abs(byCatalogRank) > 0.00001) return byCatalogRank;
-    return right.row.updatedAt.getTime() - left.row.updatedAt.getTime();
+    return compareRankedItems(left, right, sort);
   });
 
-  const total = filtered.length;
+  const rankedRows =
+    sort === "relevance"
+      ? locationQuery
+        ? [
+            ...rankItems(
+              filtered.filter((entry) => entry.searchMatchKind === "primary"),
+              sort,
+              { pageSize },
+            ),
+            ...rankItems(
+              filtered.filter((entry) => entry.searchMatchKind !== "primary"),
+              sort,
+              { pageSize },
+            ),
+          ]
+        : rankItems(filtered, sort, { pageSize })
+      : filtered;
+
+  const total = rankedRows.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paged = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return {
     items: paged.map(({ row, distanceKm, searchMatchKind }) =>
@@ -1025,7 +1185,23 @@ export async function getPublicTransferByIdentifier(
     return null;
   }
 
-  return row ? mapTransferCatalogItem(applyPublishedTransferSnapshotToRow(row), null) : null;
+  if (!row) {
+    return null;
+  }
+
+  const item = mapTransferCatalogItem(applyPublishedTransferSnapshotToRow(row), null);
+  const summary = await getExternalReviewSummaryWithFallback({
+    entityType: "transfer",
+    entityId: row.id,
+    avgRating: item.avgRating,
+    reviewsCount: item.reviewsCount,
+  });
+
+  return {
+    ...item,
+    avgRating: summary.avgRating,
+    reviewsCount: summary.reviewsCount,
+  };
 }
 
 export async function getOwnerPreviewTransferByIdentifier(
@@ -1062,7 +1238,23 @@ export async function getOwnerPreviewTransferByIdentifier(
     return null;
   }
 
-  return row ? mapTransferCatalogItem(row, null) : null;
+  if (!row) {
+    return null;
+  }
+
+  const item = mapTransferCatalogItem(row, null);
+  const summary = await getExternalReviewSummaryWithFallback({
+    entityType: "transfer",
+    entityId: row.id,
+    avgRating: item.avgRating,
+    reviewsCount: item.reviewsCount,
+  });
+
+  return {
+    ...item,
+    avgRating: summary.avgRating,
+    reviewsCount: summary.reviewsCount,
+  };
 }
 
 export async function getAttractionMarketplaceDirectoryData(): Promise<{

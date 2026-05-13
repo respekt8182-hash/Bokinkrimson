@@ -335,7 +335,7 @@ export default async function AdminHomePage() {
               className="justify-start rounded-[22px] px-4 py-4"
             >
               <ShieldCheck className="h-4 w-4" />
-              Модерация жилья
+              Проверка жилья
             </AdminLinkButton>
             <AdminLinkButton
               href="/admin/moderation/excursions"

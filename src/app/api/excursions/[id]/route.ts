@@ -953,7 +953,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     ...(data.contactFirstName !== undefined ? { contactFirstName: data.contactFirstName } : {}),
     ...(data.contactLastName !== undefined ? { contactLastName: data.contactLastName } : {}),
     ...(data.contactPhone !== undefined ? { contactPhone: data.contactPhone } : {}),
+    ...(data.contactPhoneName !== undefined ? { contactPhoneName: data.contactPhoneName } : {}),
     ...(data.contactPhone2 !== undefined ? { contactPhone2: data.contactPhone2 } : {}),
+    ...(data.contactPhone2Name !== undefined
+      ? { contactPhone2Name: data.contactPhone2Name }
+      : {}),
+    ...(data.contactPhone3 !== undefined ? { contactPhone3: data.contactPhone3 } : {}),
+    ...(data.contactPhone3Name !== undefined
+      ? { contactPhone3Name: data.contactPhone3Name }
+      : {}),
     ...(data.contactEmail !== undefined ? { contactEmail: data.contactEmail } : {}),
     ...(data.websiteUrl !== undefined ? { websiteUrl: data.websiteUrl } : {}),
     ...(data.whatsappUrl !== undefined ? { whatsappUrl: data.whatsappUrl } : {}),

@@ -1528,7 +1528,8 @@ function getListingEventChannel(actionType: ListingActionType): string | null {
     actionType === "vk_bot" ||
     actionType === "max" ||
     actionType === "ok" ||
-    actionType === "website"
+    actionType === "website" ||
+    actionType === "email"
   ) {
     return actionType;
   }

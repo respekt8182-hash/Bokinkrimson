@@ -211,24 +211,36 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             const activityStatus = getUserActivityStatus(user.lastSeenAt, now);
 
             return (
-              <AdminPanel key={user.id} className="p-5" contentClassName="space-y-4">
+              <AdminPanel key={user.id} className="p-4" contentClassName="space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-semibold text-olive">
-                        {fullName}
+                        {fullName || "Пользователь без имени"}
                       </h2>
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${activityStatus.toneClassName}`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${activityStatus.dotClassName}`}
+                          aria-hidden="true"
+                        />
+                        {isUserActivityAvailable ? activityStatus.label : "Нет данных"}
+                      </span>
                       {isPendingDeletion ? (
                         <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
                           Удаляется
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-olive/70">
-                      {user.phone}
-                      {user.email ? ` • ${user.email}` : ""}
-                    </p>
-                    <p className="mt-1 font-mono text-[11px] text-olive/45">{user.id}</p>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-olive/72">
+                      <span className="font-semibold text-olive">{user.phone}</span>
+                      {user.email ? <span>{user.email}</span> : null}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-olive/55">
+                      <span>Последний визит: {formatUserActivityTime(user.lastSeenAt, now)}</span>
+                      <span>Последний вход: {formatAbsoluteActivityDate(user.lastLoginAt)}</span>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -252,135 +264,129 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
 
                 {isPendingDeletion ? (
                   <AdminNotice tone="warning">
-                    Профиль снят с доступа {user.deletedAt?.toLocaleString("ru-RU")}. Отменить удаление можно до{" "}
-                    {user.deletionExpiresAt
-                      ? user.deletionExpiresAt.toLocaleString("ru-RU")
-                      : "—"}
-                    .
+                    Профиль снят с доступа {user.deletedAt?.toLocaleString("ru-RU")}. Отменить
+                    удаление можно до{" "}
+                    {user.deletionExpiresAt ? user.deletionExpiresAt.toLocaleString("ru-RU") : "—"}.
                   </AdminNotice>
                 ) : null}
 
-                <div className="rounded-2xl border border-olive/10 bg-white/72 px-3 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${activityStatus.toneClassName}`}
-                    >
-                      <span
-                        className={`h-2 w-2 rounded-full ${activityStatus.dotClassName}`}
-                        aria-hidden="true"
-                      />
-                      {isUserActivityAvailable ? activityStatus.label : "Нет данных"}
-                    </span>
-                    <span className="text-xs text-olive/55">
-                      {isUserActivityAvailable
-                        ? activityStatus.description
-                        : "Нужно применить миграцию для записи активности"}
-                    </span>
-                  </div>
-                  <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl bg-cream/80 px-3 py-2">
-                      <dt className="text-olive/50">Последний визит</dt>
-                      <dd className="mt-0.5 font-semibold text-olive">
-                        {formatUserActivityTime(user.lastSeenAt, now)}
-                      </dd>
-                    </div>
-                    <div className="rounded-xl bg-cream/80 px-3 py-2">
-                      <dt className="text-olive/50">Последний вход</dt>
-                      <dd className="mt-0.5 font-semibold text-olive">
-                        {formatAbsoluteActivityDate(user.lastLoginAt)}
-                      </dd>
-                    </div>
-                    <div className="rounded-xl bg-cream/80 px-3 py-2">
-                      <dt className="text-olive/50">Последний выход</dt>
-                      <dd className="mt-0.5 font-semibold text-olive">
-                        {formatAbsoluteActivityDate(user.lastLogoutAt)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
+                <details className="rounded-2xl border border-olive/10 bg-white/72 px-3 py-3">
+                  <summary className="cursor-pointer select-none text-sm font-semibold text-olive">
+                    Детали профиля, статистика и объекты
+                  </summary>
 
-                <div className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Объекты</dt>
-                    <dd className="font-medium text-olive">{user._count.properties}</dd>
-                  </div>
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Экскурсии и туры</dt>
-                    <dd className="font-medium text-olive">{user._count.excursions}</dd>
-                  </div>
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Заявки</dt>
-                    <dd className="font-medium text-olive">{user._count.applications}</dd>
-                  </div>
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Платежи</dt>
-                    <dd className="font-medium text-olive">{user._count.payments}</dd>
-                  </div>
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Отзывы</dt>
-                    <dd className="font-medium text-olive">{user._count.reviews}</dd>
-                  </div>
-                  <div className="rounded-2xl bg-cream/80 px-3 py-3">
-                    <dt className="text-olive/50">Сбросы пароля</dt>
-                    <dd className="font-medium text-olive">
-                      {user.passwordResetRequests.length} активн. / {user._count.passwordResetRequests} всего
-                    </dd>
-                  </div>
-                </div>
+                  <div className="mt-4 space-y-4">
+                    <dl className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl bg-cream/80 px-3 py-2">
+                        <dt className="text-olive/50">Активность</dt>
+                        <dd className="mt-0.5 font-semibold text-olive">
+                          {isUserActivityAvailable
+                            ? activityStatus.description
+                            : "Нужно применить миграцию"}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-cream/80 px-3 py-2">
+                        <dt className="text-olive/50">Последний выход</dt>
+                        <dd className="mt-0.5 font-semibold text-olive">
+                          {formatAbsoluteActivityDate(user.lastLogoutAt)}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-cream/80 px-3 py-2">
+                        <dt className="text-olive/50">Зарегистрирован</dt>
+                        <dd className="mt-0.5 font-semibold text-olive">
+                          {new Date(user.createdAt).toLocaleString("ru-RU")}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-cream/80 px-3 py-2">
+                        <dt className="text-olive/50">ID</dt>
+                        <dd className="mt-0.5 break-all font-mono text-[11px] text-olive">
+                          {user.id}
+                        </dd>
+                      </div>
+                    </dl>
 
-                <p className="text-xs text-olive/55">
-                  Зарегистрирован: {new Date(user.createdAt).toLocaleString("ru-RU")}
-                </p>
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Объекты</dt>
+                        <dd className="font-medium text-olive">{user._count.properties}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Экскурсии и туры</dt>
+                        <dd className="font-medium text-olive">{user._count.excursions}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Заявки</dt>
+                        <dd className="font-medium text-olive">{user._count.applications}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Платежи</dt>
+                        <dd className="font-medium text-olive">{user._count.payments}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Отзывы</dt>
+                        <dd className="font-medium text-olive">{user._count.reviews}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-cream/80 px-3 py-3">
+                        <dt className="text-olive/50">Сбросы пароля</dt>
+                        <dd className="font-medium text-olive">
+                          {user.passwordResetRequests.length} активн. /{" "}
+                          {user._count.passwordResetRequests} всего
+                        </dd>
+                      </div>
+                    </dl>
 
-                {user.properties.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/50">
-                      Связанные объекты
-                    </p>
-                    {user.properties.map((property) => {
-                      const payment = getObjectPaymentDisplay({
-                        paymentStatus: property.paymentStatus,
-                        tariffType: property.tariffType,
-                        paidFrom: property.paidFrom,
-                        paidUntil: property.paidUntil,
-                        paidAmount: property.paidAmount,
-                        paidAt: property.paidAt,
-                        latestPayment: property.payments[0] ?? null,
-                        now,
-                      });
+                    {user.properties.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-olive/50">
+                          Связанные объекты
+                        </p>
+                        {user.properties.map((property) => {
+                          const payment = getObjectPaymentDisplay({
+                            paymentStatus: property.paymentStatus,
+                            tariffType: property.tariffType,
+                            paidFrom: property.paidFrom,
+                            paidUntil: property.paidUntil,
+                            paidAmount: property.paidAmount,
+                            paidAt: property.paidAt,
+                            latestPayment: property.payments[0] ?? null,
+                            now,
+                          });
 
-                      return (
-                        <div
-                          key={property.id}
-                          className="rounded-2xl border border-olive/10 bg-white/70 px-3 py-3 text-sm"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <Link
-                              href={`/admin/objects/${property.id}`}
-                              className="font-semibold text-olive hover:text-primary"
+                          return (
+                            <div
+                              key={property.id}
+                              className="rounded-2xl border border-olive/10 bg-white/70 px-3 py-3 text-sm"
                             >
-                              {property.name ?? "Объект без названия"}
-                            </Link>
-                            <span
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${payment.toneClassName}`}
-                            >
-                              {payment.label}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-olive/55">
-                            {property.locationName ?? "Локация не указана"} · {payment.tariffLabel}
-                            {payment.paidUntil
-                              ? ` · до ${payment.paidUntil.toLocaleDateString("ru-RU")}`
-                              : ""}
-                            {payment.paidAmount !== null
-                              ? ` · ${payment.paidAmount.toLocaleString("ru-RU")} ₽`
-                              : ""}
-                          </p>
-                        </div>
-                      );
-                    })}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <Link
+                                  href={`/admin/objects/${property.id}`}
+                                  className="font-semibold text-olive hover:text-primary"
+                                >
+                                  {property.name ?? "Объект без названия"}
+                                </Link>
+                                <span
+                                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${payment.toneClassName}`}
+                                >
+                                  {payment.label}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-olive/55">
+                                {property.locationName ?? "Локация не указана"} ·{" "}
+                                {payment.tariffLabel}
+                                {payment.paidUntil
+                                  ? ` · до ${payment.paidUntil.toLocaleDateString("ru-RU")}`
+                                  : ""}
+                                {payment.paidAmount !== null
+                                  ? ` · ${payment.paidAmount.toLocaleString("ru-RU")} ₽`
+                                  : ""}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                </details>
               </AdminPanel>
             );
           })}

@@ -3,28 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  AirVent,
   ArrowRight,
   Camera,
   ChevronLeft,
   ChevronRight,
-  CircleCheckBig,
-  CircleParking,
-  Coffee,
-  CookingPot,
   MapPin,
-  Mountain,
-  PanelsTopLeft,
-  PawPrint,
   RulerDimensionLine,
   Users,
-  Van,
-  WashingMachine,
   Waves,
-  Wifi,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
+import { NameBasedAmenityIcon } from "@/components/ui/amenity-icon";
+import { AppIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
@@ -259,24 +249,6 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
     secondary: null,
     roomLabel: null,
   };
-}
-
-function resolveAmenityIcon(name: string): LucideIcon {
-  const normalized = name.toLowerCase();
-  if (/wi-?fi|интернет/.test(normalized)) return Wifi;
-  if (/парков|parking/.test(normalized)) return CircleParking;
-  if (/кухн|мини[\s-]?кух|плит|печь|stove/.test(normalized)) return CookingPot;
-  if (/басс|pool/.test(normalized)) return Waves;
-  if (/кондиц|ac|air/.test(normalized)) return AirVent;
-  if (/вид на море|sea view/.test(normalized)) return Waves;
-  if (/вид на гор|mountain view/.test(normalized)) return Mountain;
-  if (/панорам/.test(normalized)) return PanelsTopLeft;
-  if (/балкон|террас|balcony|terrace/.test(normalized)) return PanelsTopLeft;
-  if (/живот|pets|pet/.test(normalized)) return PawPrint;
-  if (/завтрак|breakfast/.test(normalized)) return Coffee;
-  if (/трансфер|shuttle|transfer/.test(normalized)) return Van;
-  if (/стирал|washer|laundry/.test(normalized)) return WashingMachine;
-  return CircleCheckBig;
 }
 
 function formatAmenityLabel(name: string): string {
@@ -649,7 +621,7 @@ function PublicPropertySearchCardInner({
               role="listitem"
               className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
             >
-              <AppIcon icon={resolveAmenityIcon(amenity)} className="h-3.5 w-3.5 shrink-0" />
+              <NameBasedAmenityIcon name={amenity} className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{label}</span>
             </span>
           );

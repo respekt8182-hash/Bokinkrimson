@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
+  MessageSquareText,
   ShieldCheck,
   Sparkles,
   WalletCards,
@@ -23,6 +24,7 @@ export type UnifiedStepIconName =
   | "building"
   | "shield-check"
   | "bed-double"
+  | "reviews"
   | "sparkles"
   | "wallet-cards";
 
@@ -92,6 +94,7 @@ const STEP_ICON_BY_NAME: Record<UnifiedStepIconName, LucideIcon> = {
   building: Building2,
   "shield-check": ShieldCheck,
   "bed-double": BedDouble,
+  reviews: MessageSquareText,
   sparkles: Sparkles,
   "wallet-cards": WalletCards,
 };

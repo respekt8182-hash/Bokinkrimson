@@ -17,6 +17,7 @@ import {
   ListChecks,
   Mail,
   MapPin,
+  MessageSquareText,
   Phone,
   Plus,
   TriangleAlert,
@@ -24,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -116,6 +118,7 @@ type ExcursionEditorProps = {
   listHref?: string;
   moderationHref?: string | null;
   previewHref?: string | null;
+  externalReviewsHref?: string | null;
 };
 
 type UpdateExcursionResponse = {
@@ -636,12 +639,14 @@ function buildScheduleSummary(params: {
 
 export function ExcursionEditor({
   initialExcursion,
+  displayExcursionNumber,
   adminMode = false,
   backHref = "/dashboard/excursions",
   backLabel = "Все программы",
   listHref = "/dashboard/excursions",
   moderationHref = null,
   previewHref = null,
+  externalReviewsHref = null,
 }: ExcursionEditorProps) {
   const router = useRouter();
   const [excursion, setExcursion] = useState(initialExcursion);
@@ -721,7 +726,17 @@ export function ExcursionEditor({
   const [contactFirstName, setContactFirstName] = useState(initialExcursion.contactFirstName ?? "");
   const [contactLastName, setContactLastName] = useState(initialExcursion.contactLastName ?? "");
   const [contactPhone, setContactPhone] = useState(initialExcursion.contactPhone ?? "");
+  const [contactPhoneName, setContactPhoneName] = useState(
+    initialExcursion.contactPhoneName ?? "",
+  );
   const [contactPhone2, setContactPhone2] = useState(initialExcursion.contactPhone2 ?? "");
+  const [contactPhone2Name, setContactPhone2Name] = useState(
+    initialExcursion.contactPhone2Name ?? "",
+  );
+  const [contactPhone3, setContactPhone3] = useState(initialExcursion.contactPhone3 ?? "");
+  const [contactPhone3Name, setContactPhone3Name] = useState(
+    initialExcursion.contactPhone3Name ?? "",
+  );
   const [contactEmail, setContactEmail] = useState(initialExcursion.contactEmail ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialExcursion.websiteUrl ?? "");
   const [whatsappUrl, setWhatsappUrl] = useState(initialExcursion.whatsappUrl ?? "");
@@ -730,6 +745,9 @@ export function ExcursionEditor({
   const [maxUrl, setMaxUrl] = useState(initialExcursion.maxUrl ?? "");
   const [okUrl, setOkUrl] = useState(initialExcursion.okUrl ?? "");
   const [showContactEmail, setShowContactEmail] = useState(Boolean(initialExcursion.contactEmail));
+  const [showContactPhone3, setShowContactPhone3] = useState(
+    Boolean(initialExcursion.contactPhone3),
+  );
   const [showWebsite, setShowWebsite] = useState(Boolean(initialExcursion.websiteUrl));
   const [showWhatsapp, setShowWhatsapp] = useState(Boolean(initialExcursion.whatsappUrl));
   const [showTelegram, setShowTelegram] = useState(Boolean(initialExcursion.telegramUrl));
@@ -1273,7 +1291,11 @@ export function ExcursionEditor({
       contactFirstName: normalizeNullableText(contactFirstName),
       contactLastName: normalizeNullableText(contactLastName),
       contactPhone: normalizeNullableText(contactPhone),
+      contactPhoneName: normalizeNullableText(contactPhoneName),
       contactPhone2: normalizeNullableText(contactPhone2),
+      contactPhone2Name: normalizeNullableText(contactPhone2Name),
+      contactPhone3: normalizeNullableText(contactPhone3),
+      contactPhone3Name: normalizeNullableText(contactPhone3Name),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
       whatsappUrl: normalizeWhatsappUrl(whatsappUrl),
@@ -1343,7 +1365,11 @@ export function ExcursionEditor({
     contactFirstName,
     contactLastName,
     contactPhone,
+    contactPhoneName,
     contactPhone2,
+    contactPhone2Name,
+    contactPhone3,
+    contactPhone3Name,
     contactEmail,
     websiteUrl,
     whatsappUrl,
@@ -1709,7 +1735,11 @@ export function ExcursionEditor({
     setContactFirstName(item.contactFirstName ?? "");
     setContactLastName(item.contactLastName ?? "");
     setContactPhone(item.contactPhone ?? "");
+    setContactPhoneName(item.contactPhoneName ?? "");
     setContactPhone2(item.contactPhone2 ?? "");
+    setContactPhone2Name(item.contactPhone2Name ?? "");
+    setContactPhone3(item.contactPhone3 ?? "");
+    setContactPhone3Name(item.contactPhone3Name ?? "");
     setContactEmail(item.contactEmail ?? "");
     setWebsiteUrl(item.websiteUrl ?? "");
     setWhatsappUrl(item.whatsappUrl ?? "");
@@ -1718,6 +1748,7 @@ export function ExcursionEditor({
     setMaxUrl(item.maxUrl ?? "");
     setOkUrl(item.okUrl ?? "");
     setShowContactEmail(Boolean(item.contactEmail));
+    setShowContactPhone3(Boolean(item.contactPhone3));
     setShowWebsite(Boolean(item.websiteUrl));
     setShowWhatsapp(Boolean(item.whatsappUrl));
     setShowTelegram(Boolean(item.telegramUrl));
@@ -2285,7 +2316,11 @@ export function ExcursionEditor({
       contactFirstName: normalizeNullableText(contactFirstName),
       contactLastName: normalizeNullableText(contactLastName),
       contactPhone: normalizeNullableText(contactPhone),
+      contactPhoneName: normalizeNullableText(contactPhoneName),
       contactPhone2: normalizeNullableText(contactPhone2),
+      contactPhone2Name: normalizeNullableText(contactPhone2Name),
+      contactPhone3: normalizeNullableText(contactPhone3),
+      contactPhone3Name: normalizeNullableText(contactPhone3Name),
       contactEmail: normalizeNullableText(contactEmail),
       websiteUrl: normalizeNullableText(websiteUrl),
       whatsappUrl: normalizeWhatsappUrl(whatsappUrl),
@@ -3128,6 +3163,26 @@ export function ExcursionEditor({
           </div>
         </section>
       ) : null}
+
+      <div className="flex flex-col gap-3 rounded-[24px] border border-olive/8 bg-white/95 p-4 shadow-[0_14px_30px_-24px_rgba(15,74,64,0.32)] sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-olive/42">
+            ID программы: {displayExcursionNumber}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-olive">
+            {title.trim() || "Программа без названия"}
+          </p>
+        </div>
+        {externalReviewsHref ? (
+          <Link
+            href={externalReviewsHref}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
+          >
+            <AppIcon icon={MessageSquareText} className="h-4 w-4" />
+            Отзывы с других сайтов
+          </Link>
+        ) : null}
+      </div>
 
       <WizardStepper
         steps={wizardSteps}
@@ -5323,33 +5378,112 @@ export function ExcursionEditor({
                   />
                 </div>
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="tel"
-                    value={contactPhone}
-                    onChange={(event) => setContactPhone(event.target.value)}
-                    placeholder="Телефон *"
-                    aria-label="Телефон"
-                    className="pl-10"
-                  />
+                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={Phone} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="tel"
+                      value={contactPhone}
+                      onChange={(event) => setContactPhone(event.target.value)}
+                      placeholder="Телефон *"
+                      aria-label="Телефон"
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={UserRound} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={contactPhoneName}
+                      onChange={(event) => setContactPhoneName(event.target.value)}
+                      placeholder="Имя у телефона"
+                      aria-label="Имя у телефона"
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
 
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="tel"
-                    value={contactPhone2}
-                    onChange={(event) => setContactPhone2(event.target.value)}
-                    placeholder="Телефон 2"
-                    aria-label="Телефон 2"
-                    className="pl-10"
-                  />
+                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={Phone} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      type="tel"
+                      value={contactPhone2}
+                      onChange={(event) => setContactPhone2(event.target.value)}
+                      placeholder="Телефон 2"
+                      aria-label="Телефон 2"
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                      <AppIcon icon={UserRound} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={contactPhone2Name}
+                      onChange={(event) => setContactPhone2Name(event.target.value)}
+                      placeholder="Имя у телефона 2"
+                      aria-label="Имя у телефона 2"
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
+
+                {showContactPhone3 ? (
+                  <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        type="tel"
+                        value={contactPhone3}
+                        onChange={(event) => setContactPhone3(event.target.value)}
+                        placeholder="Телефон 3"
+                        aria-label="Телефон 3"
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        value={contactPhone3Name}
+                        onChange={(event) => setContactPhone3Name(event.target.value)}
+                        placeholder="Имя у телефона 3"
+                        aria-label="Имя у телефона 3"
+                        className="pl-10 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContactPhone3("");
+                          setContactPhone3Name("");
+                          setShowContactPhone3(false);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                        aria-label="Убрать телефон 3"
+                      >
+                        <AppIcon icon={X} className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowContactPhone3(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                  >
+                    <AppIcon icon={Plus} className="h-4 w-4" />
+                    Добавить телефон
+                  </button>
+                )}
               </div>
             </div>
 

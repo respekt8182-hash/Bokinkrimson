@@ -331,7 +331,7 @@ export function AdminPropertyEditor({ property, users, locations }: Props) {
             >
               <option value="">Не указано</option>
               <option value="FORBIDDEN">Запрещено</option>
-              <option value="ON_REQUEST">По запросу</option>
+              <option value="ON_REQUEST">Разрешено в специальных местах</option>
               <option value="ALLOWED">Разрешено</option>
             </select>
           </Field>

@@ -1,4 +1,5 @@
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
+const EMAIL_PATTERN = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 function parseHttpUrl(value: string | null | undefined): URL | null {
   if (typeof value !== "string") {
@@ -102,4 +103,22 @@ export function normalizeMaxProfileUrl(value: string | null | undefined): string
 
 export function normalizeOkProfileUrl(value: string | null | undefined): string | null {
   return normalizeProfileUrl(value, ["ok.ru", "www.ok.ru", "m.ok.ru"]);
+}
+
+export function normalizeEmailAddress(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed || !EMAIL_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+export function normalizeEmailHref(value: string | null | undefined): string | null {
+  const address = normalizeEmailAddress(value);
+  return address ? `mailto:${address}` : null;
 }

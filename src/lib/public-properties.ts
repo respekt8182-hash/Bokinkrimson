@@ -26,6 +26,10 @@ import { getKnownCrimeaLocationCenter } from "@/lib/crimea-location-coordinates"
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { findCrimeaSettlementById, findCrimeaSettlementByName } from "@/lib/crimea-settlements";
 import { db } from "@/lib/db";
+import {
+  getExternalReviewSummaryWithFallback,
+  getMergedExternalReviewList,
+} from "@/lib/external-reviews";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { normalizeLocationName, searchLocationDirectory } from "@/lib/location-directory";
 import { normalizeLegacyFotoImageUrl, serializeMedia } from "@/lib/media";
@@ -43,13 +47,22 @@ import {
   shouldUsePublishedSnapshot,
   type PublishedPropertySnapshot,
 } from "@/lib/property-public-snapshot";
-import { serializeReview } from "@/lib/reviews";
+import { PUBLIC_REVIEWS_PAGE_SIZE, serializeReview } from "@/lib/reviews";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import { serializeRoom, roomInclude, type SerializedRoom } from "@/lib/rooms";
 import {
   buildPublishedPropertyVisibilityWhere,
   buildPublicCatalogPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
+import { getRankingStatsByEntity } from "@/lib/ranking-stats";
+import {
+  buildSearchFingerprint,
+  clamp,
+  compareRankedItems,
+  median,
+  rankItems,
+  scoreRankingCandidate,
+} from "@/lib/ranking-v2";
 import type { MapBounds } from "@/lib/search-contracts";
 import { filterExistingLocalPublicUploadUrls } from "@/lib/storage";
 import type { FaqItem } from "@/types/excursions";
@@ -1309,72 +1322,86 @@ function extractSeaDistanceLabel(customAmenities: Array<{ name: string }>): stri
   return null;
 }
 
-function getDailyRotationKey(): string {
-  const now = new Date();
-  const dayIso = now.toISOString().slice(0, 10);
-  // 6 rotation windows per day — top results reshuffle every ~4 hours
-  const hourBucket = Math.floor(now.getUTCHours() / 4);
-  return `${dayIso}:${hourBucket}`;
-}
+function getPropertyIntentScore(input: {
+  hasTextSearch: boolean;
+  searchScore: number;
+  hasLocationSearchScope: boolean;
+  exactLocationMatch: boolean;
+  nearbyLocationMatch: boolean;
+  distanceKm: number | null;
+}): number {
+  const textScore = input.hasTextSearch ? clamp((input.searchScore / 1.5) * 100, 20, 100) : 70;
+  const locationScore = !input.hasLocationSearchScope
+    ? 70
+    : input.exactLocationMatch
+      ? 100
+      : input.nearbyLocationMatch
+        ? clamp(82 - (input.distanceKm ?? NEARBY_CATALOG_RADIUS_KM) * 1.4, 45, 82)
+        : 25;
 
-function stableHash(input: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  if (input.hasTextSearch && input.hasLocationSearchScope) {
+    return clamp(textScore * 0.62 + locationScore * 0.38, 0, 100);
   }
 
-  return hash >>> 0;
+  return input.hasTextSearch ? textScore : locationScore;
 }
 
-function getCatalogRankScore(property: {
-  id: string;
-  avgRating: Prisma.Decimal;
-  reviewsCount: number;
-  searchImpressions: number;
-  profileViews: number;
-  favoritesCount: number;
-  media: Array<{ roomId: string | null }>;
+function getPropertyAvailabilityScore(input: {
+  stayMode: "selected" | "today";
+  stayPrice: ReturnType<typeof getBestStayPriceByRooms>;
+  minNightPrice: number | null;
+  activeRoomsCount: number;
+}): number {
+  if (input.stayMode === "selected") {
+    return input.stayPrice ? 100 : input.activeRoomsCount > 0 ? 35 : 15;
+  }
+
+  if (input.minNightPrice !== null) {
+    return input.activeRoomsCount > 0 ? 78 : 55;
+  }
+
+  return input.activeRoomsCount > 0 ? 45 : 20;
+}
+
+function getPropertyCompletenessScore(input: {
+  imageUrls: string[];
   description: string | null;
+  minNightPrice: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  activeRoomsCount: number;
+  hasContacts: boolean;
+  hasRules: boolean;
+  hasCapacity: boolean;
+}): number {
+  return clamp(
+    (input.imageUrls.length > 0 ? 18 : 0) +
+      Math.min(input.imageUrls.length, 8) * 3 +
+      (input.description && input.description.length >= 80 ? 12 : input.description ? 7 : 0) +
+      (input.minNightPrice !== null ? 12 : 0) +
+      (input.latitude !== null && input.longitude !== null ? 10 : 0) +
+      (input.hasContacts ? 10 : 0) +
+      (input.activeRoomsCount > 0 ? 8 : 0) +
+      (input.hasCapacity ? 6 : 0) +
+      (input.hasRules ? 6 : 0),
+    0,
+    100,
+  );
+}
+
+function getPropertyFreshnessScore(input: {
+  now: Date;
+  createdAt: Date;
+  moderatedAt: Date | null;
   updatedAt: Date;
 }): number {
-  const rating = Number(property.avgRating);
-  const { reviewsCount, searchImpressions, profileViews, favoritesCount } = property;
+  const publishedAt = input.moderatedAt ?? input.createdAt;
+  const ageDays = Math.max(0, (input.now.getTime() - publishedAt.getTime()) / 86_400_000);
+  const updateAgeDays = Math.max(0, (input.now.getTime() - input.updatedAt.getTime()) / 86_400_000);
+  const newness = ageDays <= 30 ? (1 - ageDays / 30) * 55 : 0;
+  const weakMeaningfulUpdate = updateAgeDays <= 45 ? (1 - updateAgeDays / 45) * 25 : 0;
 
-  // 1. Rating authority — credibility factor reduces weight for unreviewed objects.
-  //    0 reviews → 30 % weight; trust grows with sqrt(reviewsCount / 20), caps at 100 %.
-  const credibility = Math.min(1, 0.3 + 0.7 * Math.sqrt(reviewsCount / 20));
-  const ratingScore = rating > 0 ? rating * 100 * credibility : 0;
-
-  // 2. Review volume — logarithmic so 100 reviews isn't 100× better than 1.
-  const reviewScore = Math.log1p(reviewsCount) * 12;
-
-  // 3. Engagement signals — all logarithmic; values normalised so growth is gradual.
-  const impressionsScore = Math.log1p(searchImpressions / 100) * 8;
-  const viewsScore = Math.log1p(profileViews / 20) * 6;
-  const favoritesScore = Math.log1p(favoritesCount) * 8;
-
-  // 4. Content completeness bonus — objects with photos and description rank higher.
-  const hasMainPhoto = property.media.some((m) => m.roomId === null);
-  const completeness = (hasMainPhoto ? 8 : 0) + (property.description ? 4 : 0);
-
-  // 5. Freshness — small bonus for recently updated listings, decays over ~2 months.
-  const daysSinceUpdate = (Date.now() - property.updatedAt.getTime()) / 86_400_000;
-  const freshness = Math.max(0, 5 - Math.log1p(daysSinceUpdate / 7) * 2);
-
-  // 6. Daily rotation (0–0.4) — prevents static ordering for similarly-scored objects.
-  const rotation = (stableHash(`${getDailyRotationKey()}:${property.id}`) % 1000) / 1000;
-
-  return (
-    ratingScore +
-    reviewScore +
-    impressionsScore +
-    viewsScore +
-    favoritesScore +
-    completeness +
-    freshness +
-    rotation * 0.4
-  );
+  return clamp(20 + newness + weakMeaningfulUpdate, 0, 100);
 }
 
 function parseCatalogSort(
@@ -1461,6 +1488,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const familyFriendly = query.familyFriendly === true;
   const petsAllowed = query.petsAllowed === true;
   const bounds = query.bounds ?? null;
+  const rankingNow = new Date();
   const hasExplicitLocationFilter =
     Boolean(query.locationId?.trim()) || Boolean(query.location?.trim());
   const [resolvedLocation, queryLocationHint] = await Promise.all([
@@ -1551,6 +1579,28 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         orderBy: [{ updatedAt: "desc" }],
         include: catalogInclude,
         take: 5000,
+      });
+      const rankingStatsById = await getRankingStatsByEntity(
+        "property",
+        allProperties.map((property) => property.id),
+        rankingNow,
+      );
+      const impressionsMedian = Math.max(
+        1,
+        median(allProperties.map((property) => property.searchImpressions)),
+      );
+      const searchFingerprint = buildSearchFingerprint({
+        vertical: "property",
+        location: resolvedLocation?.id ?? query.location ?? null,
+        type,
+        query: searchQuery,
+        checkIn: stayRange.checkIn,
+        checkOut: stayRange.checkOut,
+        guests: guestsCount,
+        minPrice,
+        maxPrice,
+        sort,
+        bounds,
       });
       const catalogDisplayStateById = new Map(
         allProperties.map((property) => [property.id, resolvePublicCatalogDisplayState(property)]),
@@ -1706,7 +1756,92 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             return null;
           }
 
+          const stats = rankingStatsById.get(property.id)?.last30Days;
+          const hasContacts = Boolean(
+            property.phone ||
+              property.phone2 ||
+              property.phone3 ||
+              property.whatsappUrl ||
+              property.telegramUrl ||
+              property.contactEmail ||
+              property.receiveRequests,
+          );
+          const hasRules = Boolean(
+            displayState.checkInFrom ||
+              displayState.childrenAllowed !== null ||
+              displayState.petsPolicy !== null,
+          );
+          const hasCapacity = displayState.rooms.some(
+            (room) => room.beds + room.extraBeds > 0 || room.roomsCount > 0,
+          );
+          const intentScore = getPropertyIntentScore({
+            hasTextSearch: searchQuery.length >= 2,
+            searchScore: searchScoreMap.get(property.id) ?? 0,
+            hasLocationSearchScope,
+            exactLocationMatch,
+            nearbyLocationMatch,
+            distanceKm,
+          });
+          const availabilityScore = getPropertyAvailabilityScore({
+            stayMode: stayRange.mode,
+            stayPrice,
+            minNightPrice,
+            activeRoomsCount: displayState.rooms.length,
+          });
+          const completenessScore = getPropertyCompletenessScore({
+            imageUrls: displayState.imageUrls,
+            description: displayState.description,
+            minNightPrice,
+            latitude: displayState.latitude,
+            longitude: displayState.longitude,
+            activeRoomsCount: displayState.rooms.length,
+            hasContacts,
+            hasRules,
+            hasCapacity,
+          });
+          const freshnessScore = getPropertyFreshnessScore({
+            now: rankingNow,
+            createdAt: property.createdAt,
+            moderatedAt: property.moderatedAt,
+            updatedAt: property.updatedAt,
+          });
+          const ranking = scoreRankingCandidate(
+            {
+              id: property.id,
+              ownerId: property.ownerId,
+              vertical: "property",
+              avgRating: Number(property.avgRating),
+              reviewsCount: property.reviewsCount,
+              createdAt: property.createdAt,
+              publishedAt: property.moderatedAt ?? property.createdAt,
+              updatedAt: property.updatedAt,
+              componentScores: {
+                intentScore,
+                availabilityScore,
+                completenessScore,
+                freshnessScore,
+              },
+              behaviorMetrics: {
+                impressions: property.searchImpressions,
+                cardViews: stats?.cardViews ?? 0,
+                favorites: stats?.favorites ?? 0,
+                phoneClicks: stats?.phoneClicks ?? 0,
+                messengerClicks: stats?.messengerClicks ?? 0,
+                emailClicks: stats?.emailClicks ?? 0,
+                createBookingClicks: stats?.createBookingClicks ?? 0,
+              },
+            },
+            {
+              now: rankingNow,
+              searchFingerprint,
+              impressionsMedian,
+              targetTestImpressions: 120,
+            },
+          );
+
           return {
+            id: property.id,
+            ownerId: property.ownerId,
             property,
             displayState,
             minNightPrice,
@@ -1716,15 +1851,23 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             priceForFilter,
             distanceKm,
             searchMatchKind,
-            // Multi-factor catalog rank: rating, reviews, engagement signals, freshness, rotation.
-            catalogRank: getCatalogRankScore(property),
             searchScore: searchScoreMap.get(property.id) ?? 0,
+            ranking,
+            sortValues: {
+              price: priceForFilter,
+              distance: distanceKm,
+              createdAt: property.createdAt,
+              publishedAt: property.moderatedAt ?? property.createdAt,
+              updatedAt: property.updatedAt,
+            },
           };
         })
         .filter(
           (
             item,
           ): item is {
+            id: string;
+            ownerId: string;
             property: CatalogPropertyRow;
             displayState: ReturnType<typeof resolvePublicCatalogDisplayState>;
             minNightPrice: number | null;
@@ -1734,8 +1877,15 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             priceForFilter: number | null;
             distanceKm: number | null;
             searchMatchKind: CatalogSearchMatchKind;
-            catalogRank: number;
             searchScore: number;
+            ranking: ReturnType<typeof scoreRankingCandidate>;
+            sortValues: {
+              price: number | null;
+              distance: number | null;
+              createdAt: Date;
+              publishedAt: Date;
+              updatedAt: Date;
+            };
           } => Boolean(item),
         )
         .sort((left, right) => {
@@ -1746,52 +1896,36 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             );
           }
 
-          if (sort === "price_asc") {
-            if (left.priceForFilter === null && right.priceForFilter === null) return 0;
-            if (left.priceForFilter === null) return 1;
-            if (right.priceForFilter === null) return -1;
-            const byPrice = left.priceForFilter - right.priceForFilter;
-            if (Math.abs(byPrice) > 0.00001) return byPrice;
-          } else if (sort === "price_desc") {
-            if (left.priceForFilter === null && right.priceForFilter === null) return 0;
-            if (left.priceForFilter === null) return 1;
-            if (right.priceForFilter === null) return -1;
-            const byPrice = right.priceForFilter - left.priceForFilter;
-            if (Math.abs(byPrice) > 0.00001) return byPrice;
-          } else if (sort === "rating_desc") {
-            const byRating = Number(right.property.avgRating) - Number(left.property.avgRating);
-            if (Math.abs(byRating) > 0.00001) return byRating;
-          } else if (sort === "popular_desc") {
-            const byPopularity = right.property.reviewsCount - left.property.reviewsCount;
-            if (byPopularity !== 0) return byPopularity;
-            // Tiebreak by combined engagement signals when review count is equal.
-            const rightEngagement =
-              right.property.favoritesCount + right.property.profileViews * 0.1;
-            const leftEngagement = left.property.favoritesCount + left.property.profileViews * 0.1;
-            const byEngagement = rightEngagement - leftEngagement;
-            if (Math.abs(byEngagement) > 0.00001) return byEngagement;
-          } else {
-            const byRelevance =
-              searchQuery.length >= 2
-                ? right.searchScore - left.searchScore
-                : right.catalogRank - left.catalogRank;
-            if (Math.abs(byRelevance) > 0.00001) return byRelevance;
-          }
-
-          const byCatalogRank = right.catalogRank - left.catalogRank;
-          if (Math.abs(byCatalogRank) > 0.00001) return byCatalogRank;
-          return right.property.updatedAt.getTime() - left.property.updatedAt.getTime();
+          return compareRankedItems(left, right, sort);
         });
 
-      const total = filteredRows.length;
+      const rankedRows =
+        sort === "relevance"
+          ? hasLocationSearchScope
+            ? [
+                ...rankItems(
+                  filteredRows.filter((entry) => entry.searchMatchKind === "primary"),
+                  sort,
+                  { pageSize },
+                ),
+                ...rankItems(
+                  filteredRows.filter((entry) => entry.searchMatchKind !== "primary"),
+                  sort,
+                  { pageSize },
+                ),
+              ]
+            : rankItems(filteredRows, sort, { pageSize })
+          : filteredRows;
+
+      const total = rankedRows.length;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
       const safePage = Math.min(page, totalPages);
-      const pagedRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+      const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
       const pagedPropertyIds = pagedRows.map((entry) => entry.property.id);
       const shouldTrackSearchImpressions = query.trackSearchImpressions !== false;
 
-      // Fire-and-forget: track how many times each property has appeared in paginated results.
-      // Used by the ranking formula (searchImpressions signal). Don't await — keep response fast.
+      // Fire-and-forget: track paginated exposure for CTR/exposure balancing.
+      // Impressions are never added as a positive ranking factor.
       if (shouldTrackSearchImpressions && pagedPropertyIds.length > 0) {
         db.property
           .updateMany({
@@ -2109,7 +2243,6 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       status: ReviewStatus.ACTIVE,
     },
     orderBy: [{ createdAt: "desc" }],
-    take: 9,
     include: {
       user: {
         select: {
@@ -2418,6 +2551,34 @@ function buildPublicPropertyCardFromRecord(
   };
 }
 
+async function applyExternalImportedReviewsToPropertyCard(
+  item: PublicPropertyCard,
+  propertyId: string,
+  viewerUserId?: string | null,
+): Promise<PublicPropertyCard> {
+  const summary = await getExternalReviewSummaryWithFallback({
+    entityType: "property",
+    entityId: propertyId,
+    avgRating: item.avgRating,
+    reviewsCount: item.reviewsCount,
+  });
+  const merged = await getMergedExternalReviewList({
+    entityType: "property",
+    entityId: propertyId,
+    databaseItems: item.reviews,
+    databaseTotal: item.reviewsCount,
+    currentUserId: viewerUserId ?? null,
+    limit: PUBLIC_REVIEWS_PAGE_SIZE,
+  });
+
+  return {
+    ...item,
+    avgRating: summary.avgRating,
+    reviewsCount: summary.reviewsCount,
+    reviews: merged.items,
+  };
+}
+
 // Main query used by /crimea/[location]/[slug] and /api/public/properties/[identifier].
 export async function getPublicPropertyByIdentifier(
   identifier: string,
@@ -2443,9 +2604,13 @@ export async function getPublicPropertyByIdentifier(
   }
 
   const reviewReactionById = await getReviewReactionById(property, viewerUserId);
-  const item = buildPublicPropertyCardFromRecord(property, reviewReactionById, {
-    usePublishedSnapshot: true,
-  });
+  const item = await applyExternalImportedReviewsToPropertyCard(
+    buildPublicPropertyCardFromRecord(property, reviewReactionById, {
+      usePublishedSnapshot: true,
+    }),
+    property.id,
+    viewerUserId,
+  );
 
   if (expectedLocationId && item.locationId !== expectedLocationId) {
     return null;
@@ -2487,9 +2652,13 @@ export async function getOwnerPreviewPropertyByIdentifier(
   }
 
   const reviewReactionById = await getReviewReactionById(property, viewerUserId);
-  const item = buildPublicPropertyCardFromRecord(property, reviewReactionById, {
-    usePublishedSnapshot: false,
-  });
+  const item = await applyExternalImportedReviewsToPropertyCard(
+    buildPublicPropertyCardFromRecord(property, reviewReactionById, {
+      usePublishedSnapshot: false,
+    }),
+    property.id,
+    viewerUserId,
+  );
 
   return item;
 }

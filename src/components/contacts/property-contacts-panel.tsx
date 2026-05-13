@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, ChevronRight, ChevronUp, Globe, Phone } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Globe, Mail, Phone } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
+  normalizeEmailHref,
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
@@ -34,6 +35,7 @@ type PropertyContactsPanelProps = {
     name?: string | null;
   }>;
   websiteUrl: string | null;
+  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
@@ -58,6 +60,8 @@ export type PropertyContactsPanelText = {
   secondaryContactsEyebrow?: string;
   websiteLabel?: string;
   websiteCaptionFallback?: string;
+  emailLabel?: string;
+  emailCaption?: string;
   whatsappCaption?: string;
   telegramCaption?: string;
   vkCaption?: string;
@@ -89,6 +93,10 @@ function PhoneIcon() {
 
 function GlobeIcon() {
   return <AppIcon icon={Globe} className="h-[18px] w-[18px]" />;
+}
+
+function MailIcon() {
+  return <AppIcon icon={Mail} className="h-[18px] w-[18px]" />;
 }
 
 function normalizePhoneHref(phone: string): string | null {
@@ -130,6 +138,7 @@ function ContactChannelLink(props: {
   compact?: boolean;
   fullWidthCompact?: boolean;
   iconOnlyCompact?: boolean;
+  external?: boolean;
   onClick?: () => void;
 }) {
   const {
@@ -143,6 +152,7 @@ function ContactChannelLink(props: {
     compact = false,
     fullWidthCompact = false,
     iconOnlyCompact = false,
+    external = true,
     onClick,
   } = props;
   const effectiveLabel = compact ? (compactLabel ?? label) : label;
@@ -151,8 +161,8 @@ function ContactChannelLink(props: {
   return (
     <a
       href={href}
-      target="_blank"
-      rel="noreferrer noopener"
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer noopener" : undefined}
       title={label}
       aria-label={label}
       onClick={onClick}
@@ -225,6 +235,7 @@ export function PropertyContactsPanel({
   phoneName = null,
   extraPhones = [],
   websiteUrl,
+  email,
   whatsappUrl,
   telegramUrl,
   vkUrl,
@@ -250,6 +261,7 @@ export function PropertyContactsPanel({
     }))
     .filter((item) => item.phone.length > 0);
   const preparedWebsiteUrl = websiteUrl?.trim() ? websiteUrl.trim() : null;
+  const preparedEmailHref = normalizeEmailHref(email);
   const preparedWhatsappUrl = normalizeWhatsappUrl(whatsappUrl);
   const preparedTelegramUrl = normalizeTelegramProfileUrl(telegramUrl);
   const preparedVkUrl = normalizeVkProfileUrl(vkUrl);
@@ -264,6 +276,8 @@ export function PropertyContactsPanel({
     secondaryContactsEyebrow: text?.secondaryContactsEyebrow ?? "Другие способы связи",
     websiteLabel: text?.websiteLabel ?? "Сайт владельца",
     websiteCaptionFallback: text?.websiteCaptionFallback ?? "Открыть сайт владельца",
+    emailLabel: text?.emailLabel ?? "Написать на почту",
+    emailCaption: text?.emailCaption ?? "Открыть письмо в почтовом клиенте",
     whatsappCaption: text?.whatsappCaption ?? "Открыть чат с владельцем",
     telegramCaption: text?.telegramCaption ?? "Написать в Telegram",
     vkCaption: text?.vkCaption ?? "Открыть страницу VK",
@@ -352,7 +366,9 @@ export function PropertyContactsPanel({
   ];
 
   const visibleActions = actions.filter((item) => item.href.trim().length > 0);
-  const hasSecondaryContacts = Boolean(normalizedWebsiteHref || visibleActions.length > 0);
+  const hasSecondaryContacts = Boolean(
+    normalizedWebsiteHref || preparedEmailHref || visibleActions.length > 0,
+  );
   const hasAnyContact = Boolean(phoneItems.length > 0 || hasSecondaryContacts);
   const trackAction = (actionType: ListingActionType) => {
     if (tracking) {
@@ -384,7 +400,7 @@ export function PropertyContactsPanel({
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/72">
-                {copy.primaryPhoneEyebrow}
+                {primaryPhone.name || copy.primaryPhoneEyebrow}
               </p>
               {primaryPhone.href ? (
                 <a
@@ -408,7 +424,7 @@ export function PropertyContactsPanel({
                 </p>
               )}
               <p className={cn("mt-1 text-olive/58", isCompact ? "text-[13px]" : "text-sm")}>
-                {primaryPhone.name || copy.primaryPhoneFallbackName}
+                {copy.primaryPhoneFallbackName}
               </p>
             </div>
           </div>
@@ -524,6 +540,21 @@ export function PropertyContactsPanel({
                     <GlobeIcon />
                   )
                 }
+              />
+            ) : null}
+
+            {preparedEmailHref ? (
+              <ContactChannelLink
+                label={copy.emailLabel}
+                compactLabel="Email"
+                href={preparedEmailHref}
+                caption={copy.emailCaption}
+                onClick={() => trackAction("email")}
+                compact={isSecondaryContactsCompact}
+                iconOnlyCompact={isSecondaryContactsCompact}
+                external={false}
+                className="border-amber-500/18 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(245,158,11,0.12))] hover:border-amber-500/34 hover:shadow-[0_16px_30px_rgba(245,158,11,0.12)]"
+                icon={<MailIcon />}
               />
             ) : null}
 

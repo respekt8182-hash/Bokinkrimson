@@ -1,8 +1,24 @@
 // Next.js page for route /dashboard/objects.
 import { PaymentStatus, ReviewStatus } from "@prisma/client";
-import { CalendarDays, CircleCheckBig, MessageCircle, Star } from "lucide-react";
+import {
+  CalendarDays,
+  CircleCheckBig,
+  CreditCard,
+  Eye,
+  MessageCircle,
+  PenLine,
+  Star,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  DashboardListingActions,
+  dashboardActionIconClass,
+  dashboardDangerActionClass,
+  dashboardMainActionClass,
+  dashboardSecondaryActionClass,
+  dashboardStatsActionClass,
+} from "@/components/dashboard/listing-actions";
 import { CreatePropertyButton } from "@/components/objects/create-property-button";
 import { DeletePropertyButton } from "@/components/objects/delete-property-button";
 import { StatsButton } from "@/components/objects/stats-button";
@@ -225,7 +241,9 @@ export default async function DashboardObjectsPage() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1 py-1">
-                      <h2 className="truncate text-lg text-olive sm:text-xl">{item.name ?? "Новый объект"}</h2>
+                      <h2 className="truncate text-lg text-olive sm:text-xl">
+                        {item.name ?? "Новый объект"}
+                      </h2>
                       <p className="mt-1 text-xs leading-snug text-olive/60">
                         {item.locationName ?? "Локация не выбрана"} •{" "}
                         {item.typeLabel ?? "Тип не указан"}
@@ -390,47 +408,49 @@ export default async function DashboardObjectsPage() {
                   </p>
                 ) : null}
 
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-olive/60">
-                    Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
-                  </p>
-                  <div className="grid w-full grid-cols-2 gap-2 min-[520px]:flex min-[520px]:w-auto min-[520px]:flex-wrap">
-                    <Link
-                      href={`/dashboard/objects/${item.id}/about`}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white min-[520px]:w-auto"
-                    >
-                      Карточка
-                    </Link>
-                    <Link
-                      href={`/dashboard/objects/${item.id}/payment`}
-                      className="inline-flex w-full items-center justify-center rounded-xl border border-olive/25 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream min-[520px]:w-auto"
-                    >
-                      Оплата
-                    </Link>
-                    {item.status === "PUBLISHED" && (
+                <DashboardListingActions
+                  updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
+                  primaryActions={
+                    item.status === "PUBLISHED" ? (
                       <>
-                        <Link
-                          href={publicPath}
-                          className="inline-flex w-full items-center justify-center rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 min-[520px]:w-auto"
-                        >
+                        <Link href={publicPath} className={dashboardMainActionClass}>
+                          <AppIcon icon={Eye} className={dashboardActionIconClass} />
                           Публичная страница
                         </Link>
                         <StatsButton
                           propertyId={item.id}
                           propertyName={item.name ?? "Объект"}
-                          className="w-full justify-center min-[520px]:w-auto"
+                          className={dashboardStatsActionClass}
                         />
                       </>
-                    )}
-                    <DeletePropertyButton
-                      propertyId={item.id}
-                      propertyName={item.name ?? "Новый объект"}
-                      propertyStatus={item.status}
-                      className="col-span-2 min-[520px]:col-span-1"
-                      buttonClassName="w-full justify-center min-[520px]:w-auto"
-                    />
-                  </div>
-                </div>
+                    ) : null
+                  }
+                  secondaryActions={
+                    <>
+                      <Link
+                        href={`/dashboard/objects/${item.id}/about`}
+                        className={dashboardSecondaryActionClass}
+                      >
+                        <AppIcon icon={PenLine} className={dashboardActionIconClass} />
+                        Редактирование
+                      </Link>
+                      <Link
+                        href={`/dashboard/objects/${item.id}/payment`}
+                        className={dashboardSecondaryActionClass}
+                      >
+                        <AppIcon icon={CreditCard} className={dashboardActionIconClass} />
+                        Оплата
+                      </Link>
+                      <DeletePropertyButton
+                        propertyId={item.id}
+                        propertyName={item.name ?? "Новый объект"}
+                        propertyStatus={item.status}
+                        buttonClassName={dashboardDangerActionClass}
+                        label="Удалить"
+                      />
+                    </>
+                  }
+                />
               </article>
             );
           })}

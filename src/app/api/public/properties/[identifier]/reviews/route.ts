@@ -1,13 +1,21 @@
-// API route handler for /api/public/properties/[identifier]/reviews.
 import { Prisma, ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { reviewRateLimit } from "@/lib/constants";
 import { db } from "@/lib/db";
+import {
+  getExternalReviewSummaryWithFallback,
+  getMergedExternalReviewList,
+} from "@/lib/external-reviews";
 import { normalizePlainText } from "@/lib/plain-text";
 import { extractPropertyId } from "@/lib/public-properties";
 import { buildPublishedPropertyVisibilityWhere } from "@/lib/public-visibility";
-import { serializeReview } from "@/lib/reviews";
+import {
+  normalizeReviewGuestCity,
+  parseReviewDateInput,
+  PUBLIC_REVIEWS_PAGE_SIZE,
+  serializeReview,
+} from "@/lib/reviews";
 import { createReviewSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -17,11 +25,14 @@ type RouteContext = {
 function parsePagination(request: Request): { offset: number; limit: number } {
   const { searchParams } = new URL(request.url);
   const rawOffset = Number.parseInt(searchParams.get("offset") ?? "0", 10);
-  const rawLimit = Number.parseInt(searchParams.get("limit") ?? "9", 10);
+  const rawLimit = Number.parseInt(
+    searchParams.get("limit") ?? String(PUBLIC_REVIEWS_PAGE_SIZE),
+    10,
+  );
 
   return {
     offset: Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0,
-    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 12) : 9,
+    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 10) : PUBLIC_REVIEWS_PAGE_SIZE,
   };
 }
 
@@ -48,15 +59,13 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
   }
 
-  const items = await db.review.findMany({
+  const databaseItems = await db.review.findMany({
     where: {
       entityType: ReviewEntityType.PROPERTY,
       propertyId: property.id,
       status: ReviewStatus.ACTIVE,
     },
     orderBy: [{ createdAt: "desc" }],
-    skip: offset,
-    take: limit,
     include: {
       user: {
         select: { firstName: true, avatarUrl: true },
@@ -73,20 +82,32 @@ export async function GET(request: Request, context: RouteContext) {
     },
   });
 
-  const nextOffset = offset + items.length;
+  const summary = await getExternalReviewSummaryWithFallback({
+    entityType: "property",
+    entityId: property.id,
+    avgRating: Number(property.avgRating),
+    reviewsCount: property.reviewsCount,
+  });
+  const merged = await getMergedExternalReviewList({
+    entityType: "property",
+    entityId: property.id,
+    databaseItems: databaseItems.map(serializeReview),
+    databaseTotal: property.reviewsCount,
+    currentUserId: session?.id ?? null,
+    offset,
+    limit,
+  });
+  const nextOffset = offset + merged.items.length;
 
   return NextResponse.json({
-    summary: {
-      avgRating: Number(property.avgRating),
-      reviewsCount: property.reviewsCount,
-    },
-    items: items.map(serializeReview),
+    summary,
+    items: merged.items,
     pagination: {
       offset,
       limit,
       nextOffset,
-      hasMore: nextOffset < property.reviewsCount,
-      total: property.reviewsCount,
+      hasMore: nextOffset < merged.total,
+      total: merged.total,
     },
   });
 }
@@ -200,6 +221,8 @@ export async function POST(request: Request, context: RouteContext) {
         userId: session.id,
         rating: parsed.data.rating,
         text: normalizePlainText(parsed.data.text),
+        guestCity: normalizeReviewGuestCity(parsed.data.guestCity),
+        reviewedAt: parseReviewDateInput(parsed.data.reviewedAt),
         status: ReviewStatus.PENDING,
       },
       include: {
@@ -212,10 +235,12 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         item: serializeReview(created),
-        summary: {
+        summary: await getExternalReviewSummaryWithFallback({
+          entityType: "property",
+          entityId: property.id,
           avgRating: Number(property.avgRating),
           reviewsCount: property.reviewsCount,
-        },
+        }),
         moderationStatus: ReviewStatus.PENDING,
         message: "Review submitted for moderation",
       },

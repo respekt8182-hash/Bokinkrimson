@@ -5,6 +5,7 @@ import {
   Clock3,
   ImageIcon,
   Landmark,
+  Mail,
   MapPin,
   Phone,
   Route,
@@ -40,12 +41,13 @@ import {
   getPublicPersonInitial,
 } from "@/lib/public-display-name";
 import {
+  normalizeEmailHref,
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
-import { getContactActionTypeFromChannel } from "@/lib/listing-analytics";
+import { getContactActionTypeFromChannel, getPhoneListingActionType } from "@/lib/listing-analytics";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { normalizeWebsiteUrl } from "@/lib/website-favicon";
@@ -85,7 +87,7 @@ type MobileMessengerLink = {
   key: string;
   href: string;
   label: string;
-  brand: ContactBrand | "website";
+  brand: ContactBrand | "website" | "email";
 };
 
 type OwnerAvatarProps = {
@@ -369,6 +371,7 @@ function telHref(phone: string | null): string | null {
 
 function buildMobileMessengerLinks(params: {
   websiteUrl: string | null;
+  email: string | null;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
@@ -378,6 +381,7 @@ function buildMobileMessengerLinks(params: {
   const preparedWebsiteUrl = params.websiteUrl?.trim()
     ? normalizeWebsiteUrl(params.websiteUrl)
     : null;
+  const preparedEmailHref = normalizeEmailHref(params.email);
   const preparedWhatsappUrl = normalizeWhatsappUrl(params.whatsappUrl);
   const preparedTelegramUrl = normalizeTelegramProfileUrl(params.telegramUrl);
   const preparedVkUrl = normalizeVkProfileUrl(params.vkUrl);
@@ -391,6 +395,14 @@ function buildMobileMessengerLinks(params: {
           href: preparedWebsiteUrl,
           label: "Сайт",
           brand: "website" as const,
+        }
+      : null,
+    preparedEmailHref
+      ? {
+          key: "email",
+          href: preparedEmailHref,
+          label: "Email",
+          brand: "email" as const,
         }
       : null,
     preparedWhatsappUrl
@@ -436,9 +448,13 @@ function buildMobileMessengerLinks(params: {
   ].filter((item): item is MobileMessengerLink => item !== null);
 }
 
-function getMobileMessengerChipClasses(brand: ContactBrand | "website"): string {
+function getMobileMessengerChipClasses(brand: ContactBrand | "website" | "email"): string {
   if (brand === "website") {
     return "border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)]";
+  }
+
+  if (brand === "email") {
+    return "border-amber-500/22 bg-amber-500/10 text-amber-700 shadow-[0_8px_18px_rgba(245,158,11,0.14)]";
   }
 
   if (brand === "whatsapp") {
@@ -1583,16 +1599,36 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
   );
   const locationSummary = [item.locationName, item.districtName].filter(Boolean).join(" • ");
   const primaryPhoneLabel = formatPhoneLabel(item.contacts.phone);
-  const extraPhones = item.contacts.phone2?.trim()
-    ? [
-        {
-          phone: item.contacts.phone2.trim(),
-          label: formatPhoneLabel(item.contacts.phone2) ?? item.contacts.phone2.trim(),
-        },
-      ]
-    : [];
+  const extraPhones = [
+    { phone: item.contacts.phone2, name: item.contacts.phone2Name },
+    { phone: item.contacts.phone3, name: item.contacts.phone3Name },
+  ]
+    .map((entry) => {
+      const preparedPhone = entry.phone?.trim() ?? "";
+      return preparedPhone
+        ? {
+            phone: preparedPhone,
+            label: formatPhoneLabel(preparedPhone) ?? preparedPhone,
+            name: entry.name?.trim() || null,
+          }
+        : null;
+    })
+    .filter((entry): entry is { phone: string; label: string; name: string | null } => entry !== null);
+  const mobilePhoneLinks = extraPhones
+    .map((entry, index) => {
+      const href = telHref(entry.phone);
+      return href
+        ? {
+            href,
+            label: entry.name || `Телефон ${index + 2}`,
+            actionType: getPhoneListingActionType(index + 1),
+          }
+        : null;
+    })
+    .filter((entry): entry is { href: string; label: string; actionType: ReturnType<typeof getPhoneListingActionType> } => entry !== null);
   const mobileMessengerLinks = buildMobileMessengerLinks({
     websiteUrl: item.contacts.websiteUrl,
+    email: item.contacts.email,
     whatsappUrl: item.contacts.whatsappUrl,
     telegramUrl: item.contacts.telegramUrl,
     vkUrl: item.contacts.vkUrl,
@@ -2078,9 +2114,10 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
               <PropertyContactsPanel
                 phone={item.contacts.phone}
                 phoneLabel={primaryPhoneLabel}
-                phoneName={contactName}
+                phoneName={item.contacts.phoneName}
                 extraPhones={extraPhones}
                 websiteUrl={item.contacts.websiteUrl}
+                email={item.contacts.email}
                 whatsappUrl={item.contacts.whatsappUrl}
                 telegramUrl={item.contacts.telegramUrl}
                 vkUrl={item.contacts.vkUrl}
@@ -2111,8 +2148,21 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                 <p className="mt-0.5 truncate text-[11px] text-primary/85">Водитель на связи</p>
               </div>
             </div>
-            {mobileMessengerLinks.length > 0 ? (
+            {mobileMessengerLinks.length > 0 || mobilePhoneLinks.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {mobilePhoneLinks.map((channel) => (
+                  <TrackedContactLink
+                    key={channel.actionType}
+                    href={channel.href}
+                    title={channel.label}
+                    aria-label={channel.label}
+                    tracking={contactTracking}
+                    actionType={channel.actionType}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)] transition active:scale-[0.96]"
+                  >
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </TrackedContactLink>
+                ))}
                 {mobileMessengerLinks.map((channel) => {
                   const actionType = getContactActionTypeFromChannel(channel.key);
                   if (!actionType) {
@@ -2123,8 +2173,8 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                     <TrackedContactLink
                       key={channel.key}
                       href={channel.href}
-                      target="_blank"
-                      rel="noreferrer noopener"
+                      target={channel.brand === "email" ? undefined : "_blank"}
+                      rel={channel.brand === "email" ? undefined : "noreferrer noopener"}
                       title={channel.label}
                       aria-label={channel.label}
                       tracking={contactTracking}
@@ -2140,6 +2190,8 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
                           className="h-4 w-4"
                           iconClassName="text-primary"
                         />
+                      ) : channel.brand === "email" ? (
+                        <AppIcon icon={Mail} className="h-4 w-4" />
                       ) : (
                         <ContactBrandMark brand={channel.brand} bare className="h-4 w-4" />
                       )}

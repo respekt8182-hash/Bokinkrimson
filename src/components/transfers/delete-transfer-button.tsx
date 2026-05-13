@@ -1,14 +1,20 @@
 "use client";
 
 import { TransferStatus } from "@prisma/client";
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 type DeleteTransferButtonProps = {
   transferId: string;
   transferTitle: string;
   transferStatus: TransferStatus;
+  className?: string;
+  buttonClassName?: string;
+  label?: string;
 };
 
 type DeleteTransferResponse = {
@@ -36,6 +42,9 @@ export function DeleteTransferButton({
   transferId,
   transferTitle,
   transferStatus,
+  className,
+  buttonClassName,
+  label = "Удалить трансфер",
 }: DeleteTransferButtonProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,14 +95,18 @@ export function DeleteTransferButton({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <Button
         type="button"
         variant="ghost"
         onClick={openModal}
-        className="border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra"
+        className={cn(
+          "border border-terra/45 text-terra hover:bg-terra/10 hover:text-terra",
+          buttonClassName,
+        )}
       >
-        Удалить трансфер
+        <AppIcon icon={Trash2} className="h-3.5 w-3.5 shrink-0" />
+        {label}
       </Button>
 
       {success ? <p className="max-w-xl text-xs text-green-700">{success}</p> : null}

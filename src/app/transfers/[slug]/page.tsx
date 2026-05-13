@@ -9,13 +9,17 @@ import { TransferViewTracker } from "@/components/public/transfer-view-tracker";
 import { PropertyReviewsSection } from "@/components/reviews/property-reviews-section";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  getExternalReviewSummaryWithFallback,
+  getMergedExternalReviewList,
+} from "@/lib/external-reviews";
 import { getLocationDirectoryItems, normalizeLocationName } from "@/lib/location-directory";
 import { DEFAULT_NEARBY_RADIUS_KM } from "@/lib/nearby-public";
 import {
   getOwnerPreviewTransferByIdentifier,
   getPublicTransferByIdentifier,
 } from "@/lib/public-marketplace";
-import { serializeReview } from "@/lib/reviews";
+import { PUBLIC_REVIEWS_PAGE_SIZE, serializeReview } from "@/lib/reviews";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { buildWebPageMetadata } from "@/lib/seo/metadata";
 import { buildExcursionsLocationPath } from "@/lib/seo/routes";
@@ -93,7 +97,7 @@ export default async function TransferDetailPage({
   }
 
   const transferReviewSupport = await hasTransferReviewSupport();
-  const reviews = transferReviewSupport
+  const databaseReviews = transferReviewSupport
     ? await db.review.findMany({
         where: {
           entityType: ReviewEntityType.TRANSFER,
@@ -101,7 +105,6 @@ export default async function TransferDetailPage({
           status: ReviewStatus.ACTIVE,
         },
         orderBy: [{ createdAt: "desc" }],
-        take: 9,
         include: {
           user: {
             select: { firstName: true, avatarUrl: true },
@@ -118,6 +121,20 @@ export default async function TransferDetailPage({
         },
       })
     : [];
+  const reviews = await getMergedExternalReviewList({
+    entityType: "transfer",
+    entityId: item.id,
+    databaseItems: databaseReviews.map(serializeReview),
+    databaseTotal: item.reviewsCount,
+    currentUserId: session?.id ?? null,
+    limit: PUBLIC_REVIEWS_PAGE_SIZE,
+  });
+  const reviewSummary = await getExternalReviewSummaryWithFallback({
+    entityType: "transfer",
+    entityId: item.id,
+    avgRating: item.avgRating,
+    reviewsCount: item.reviewsCount,
+  });
   const nearbySearchParams = {
     location: item.locationName ?? "",
     radiusKm: String(DEFAULT_NEARBY_RADIUS_KM),
@@ -167,10 +184,10 @@ export default async function TransferDetailPage({
           loadMoreUrl={`/api/public/transfers/${encodeURIComponent(item.id)}/reviews`}
           entityPath={item.path}
           entityLabel="трансфера"
-          avgRating={item.avgRating}
-          reviewsCount={item.reviewsCount}
-          initialReviews={reviews.map(serializeReview)}
-          initialHasMore={transferReviewSupport && !isPreview && item.reviewsCount > reviews.length}
+          avgRating={reviewSummary.avgRating}
+          reviewsCount={reviewSummary.reviewsCount}
+          initialReviews={reviews.items}
+          initialHasMore={!isPreview && reviews.total > reviews.items.length}
           isAuthenticated={Boolean(session)}
           currentUserId={session?.id ?? null}
           ownerUserId={item.owner.id}

@@ -68,6 +68,11 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       description: "Категории номеров, цены, вместимость и медиа",
     },
     {
+      href: `/admin/objects/${property.id}/external-reviews`,
+      title: "Отзывы с других сайтов",
+      description: "Добавление внешних отзывов в публичную карточку объекта",
+    },
+    {
       href: `/admin/objects/${property.id}/amenities`,
       title: "Удобства",
       description: "Оснащение номеров и наполненность карточки",

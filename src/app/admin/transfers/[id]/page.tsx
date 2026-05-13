@@ -10,6 +10,7 @@ import { ListingStatsButton } from "@/components/statistics/listing-stats-button
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
 import { AppIcon } from "@/components/ui/app-icon";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { normalizeEmailAddress } from "@/lib/contact-links";
 import { db } from "@/lib/db";
 import {
   getPaymentStatusLabel,
@@ -247,8 +248,13 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
         fleet,
         contactName: formString(formData, "contactName"),
         phone: formString(formData, "phone"),
+        phoneName: formString(formData, "phoneName"),
         phone2: formString(formData, "phone2"),
+        phone2Name: formString(formData, "phone2Name"),
+        phone3: formString(formData, "phone3"),
+        phone3Name: formString(formData, "phone3Name"),
         websiteUrl: formString(formData, "websiteUrl"),
+        contactEmail: normalizeEmailAddress(formString(formData, "contactEmail")),
         whatsappUrl: formString(formData, "whatsappUrl"),
         telegramUrl: formString(formData, "telegramUrl"),
         vkUrl: formString(formData, "vkUrl"),
@@ -329,6 +335,12 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
             className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
           >
             К трансферам
+          </Link>
+          <Link
+            href={`/admin/transfers/${transfer.id}/external-reviews`}
+            className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
+          >
+            Отзывы с других сайтов
           </Link>
           {transfer.status === TransferStatus.PUBLISHED ? (
             <AdminListingVisibilityToggle
@@ -489,14 +501,51 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
                 <input name="phone" defaultValue={transfer.phone ?? ""} className={inputClass} />
               </label>
               <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Имя у телефона</span>
+                <input
+                  name="phoneName"
+                  defaultValue={transfer.phoneName ?? ""}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Второй телефон</span>
                 <input name="phone2" defaultValue={transfer.phone2 ?? ""} className={inputClass} />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Имя у телефона 2</span>
+                <input
+                  name="phone2Name"
+                  defaultValue={transfer.phone2Name ?? ""}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Телефон 3</span>
+                <input name="phone3" defaultValue={transfer.phone3 ?? ""} className={inputClass} />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Имя у телефона 3</span>
+                <input
+                  name="phone3Name"
+                  defaultValue={transfer.phone3Name ?? ""}
+                  className={inputClass}
+                />
               </label>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-olive">Сайт</span>
                 <input
                   name="websiteUrl"
                   defaultValue={transfer.websiteUrl ?? ""}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-olive">Email</span>
+                <input
+                  name="contactEmail"
+                  type="email"
+                  defaultValue={transfer.contactEmail ?? ""}
                   className={inputClass}
                 />
               </label>

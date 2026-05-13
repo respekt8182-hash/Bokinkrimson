@@ -1,9 +1,9 @@
-// API route handler for /api/admin/reviews/[id].
 import { ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
 import { db, type DbTransactionClient } from "@/lib/db";
+import { tryModerateFallbackExternalReview } from "@/lib/external-reviews";
 import { refreshEntityReviewStats, serializeReview } from "@/lib/reviews";
 
 type RouteContext = {
@@ -50,12 +50,20 @@ async function moderateReviewByAction(input: {
     where: { id: input.id },
     include: {
       user: {
-        select: { firstName: true },
+        select: { firstName: true, lastName: true, avatarUrl: true },
       },
     },
   });
 
   if (!existing) {
+    const fallbackResult = await tryModerateFallbackExternalReview(input);
+    if (fallbackResult) {
+      return {
+        ok: true as const,
+        response: NextResponse.json(fallbackResult),
+      };
+    }
+
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Отзыв не найден" }, { status: 404 }),
@@ -79,10 +87,16 @@ async function moderateReviewByAction(input: {
       data: {
         status: targetStatus,
         deletedAt: targetStatus === ReviewStatus.DELETED ? new Date() : null,
+        ...(existing.isImported
+          ? {
+              verifiedAt: targetStatus === ReviewStatus.ACTIVE ? new Date() : null,
+              verifiedByAdminId: targetStatus === ReviewStatus.ACTIVE ? input.adminId : null,
+            }
+          : {}),
       },
       include: {
         user: {
-          select: { firstName: true },
+          select: { firstName: true, lastName: true, avatarUrl: true },
         },
       },
     });
@@ -101,6 +115,8 @@ async function moderateReviewByAction(input: {
           transferId: existing.transferId,
           entityType: existing.entityType,
           userId: existing.userId,
+          isImported: existing.isImported,
+          externalSourceUrl: existing.externalSourceUrl,
           rating: Number(existing.rating),
           previousStatus: existing.status,
           nextStatus: targetStatus,

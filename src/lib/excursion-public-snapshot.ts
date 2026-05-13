@@ -77,7 +77,11 @@ export type PublishedExcursionSnapshot = {
     contactFirstName: string | null;
     contactLastName: string | null;
     contactPhone: string | null;
+    contactPhoneName: string | null;
     contactPhone2: string | null;
+    contactPhone2Name: string | null;
+    contactPhone3: string | null;
+    contactPhone3Name: string | null;
     contactEmail: string | null;
     websiteUrl: string | null;
     whatsappUrl: string | null;
@@ -271,7 +275,11 @@ export function buildPublishedExcursionSnapshot(
       contactFirstName: excursion.contactFirstName,
       contactLastName: excursion.contactLastName,
       contactPhone: excursion.contactPhone,
+      contactPhoneName: excursion.contactPhoneName,
       contactPhone2: excursion.contactPhone2,
+      contactPhone2Name: excursion.contactPhone2Name,
+      contactPhone3: excursion.contactPhone3,
+      contactPhone3Name: excursion.contactPhone3Name,
       contactEmail: excursion.contactEmail,
       websiteUrl: excursion.websiteUrl,
       whatsappUrl: excursion.whatsappUrl,

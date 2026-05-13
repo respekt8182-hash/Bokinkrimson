@@ -15,7 +15,10 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { resolveAdminRelationUserId } from "@/lib/admin-user-reference";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
-import { OBJECT_TARIFF_CODES, type ObjectPlacementTariffType } from "@/lib/object-placement-tariffs";
+import {
+  OBJECT_TARIFF_CODES,
+  type ObjectPlacementTariffType,
+} from "@/lib/object-placement-tariffs";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import {
   buildTransferPaymentPayload,
@@ -36,7 +39,10 @@ const manualListingPaymentSchema = z.object({
   entityId: z.string().trim().min(1),
   tariff: z.enum(["season", "offseason", "yearly", "year"]).default("year"),
   notes: z.string().trim().max(2000).optional().default(""),
+  action: z.enum(["confirm", "request"]).optional().default("confirm"),
 });
+
+type AdminListingPaymentAction = z.infer<typeof manualListingPaymentSchema>["action"];
 
 function toPrismaObjectTariffType(tariffType: ObjectPlacementTariffType): ObjectTariffType {
   switch (tariffType) {
@@ -64,6 +70,7 @@ async function createPropertyPayment(input: {
   notes: string;
   confirmedById: string | null;
   adminId: string;
+  action: AdminListingPaymentAction;
   now: Date;
 }) {
   const property = await db.property.findUnique({
@@ -94,6 +101,7 @@ async function createPropertyPayment(input: {
   });
 
   const payment = await db.$transaction(async (tx) => {
+    const isConfirm = input.action === "confirm";
     const created = await tx.payment.create({
       data: {
         propertyId: property.id,
@@ -102,17 +110,18 @@ async function createPropertyPayment(input: {
         tariffCode: OBJECT_TARIFF_CODES[quote.tariffType],
         tariffType: toPrismaObjectTariffType(quote.tariffType),
         roomCount: quote.roomCount,
-        status: PaymentStatus.SUCCEEDED,
+        status: isConfirm ? PaymentStatus.SUCCEEDED : PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey: crypto.randomUUID(),
         confirmationUrl: null,
-        paidAt: input.now,
+        paidAt: isConfirm ? input.now : null,
         paidFrom: new Date(quote.paidFrom),
         placementValidUntil: new Date(quote.paidUntil),
         managerNotes: input.notes || null,
-        confirmedById: input.confirmedById,
+        confirmedById: isConfirm ? input.confirmedById : null,
         providerPayload: {
           adminManualPayment: true,
+          adminPaymentAction: input.action,
           ...(quote.placementPricing ? buildPlacementPricingPayload(quote.placementPricing) : {}),
         },
       },
@@ -121,19 +130,21 @@ async function createPropertyPayment(input: {
       },
     });
 
-    await syncPropertyPlacementFromPayment(tx, created, input.now);
-    await autoSubmitPropertyAfterSuccessfulPayment(tx, property.id);
+    if (isConfirm) {
+      await syncPropertyPlacementFromPayment(tx, created, input.now);
+      await autoSubmitPropertyAfterSuccessfulPayment(tx, property.id);
 
-    if (property.status === PropertyStatus.PUBLISHED) {
-      await tx.property.update({
-        where: { id: property.id },
-        data: { isPublishedVisible: true },
-      });
+      if (property.status === PropertyStatus.PUBLISHED) {
+        await tx.property.update({
+          where: { id: property.id },
+          data: { isPublishedVisible: true },
+        });
+      }
     }
 
     await writeAdminAuditLog(tx, {
       adminUserId: input.adminId,
-      action: "listing_payment_confirm",
+      action: isConfirm ? "listing_payment_confirm" : "listing_payment_request",
       targetType: "property",
       targetId: property.id,
       details: {
@@ -141,13 +152,18 @@ async function createPropertyPayment(input: {
         tariff: input.tariff,
         amount: Number(created.amount),
         notes: input.notes || null,
+        paymentStatus: created.status,
       },
     });
 
     return created;
   });
 
-  return NextResponse.json({ ok: true, payment: serializePayment(payment) });
+  return NextResponse.json({
+    ok: true,
+    queued: payment.status === PaymentStatus.PENDING,
+    payment: serializePayment(payment),
+  });
 }
 
 async function createExcursionPayment(input: {
@@ -156,6 +172,7 @@ async function createExcursionPayment(input: {
   notes: string;
   confirmedById: string | null;
   adminId: string;
+  action: AdminListingPaymentAction;
   now: Date;
 }) {
   const excursion = await db.excursion.findUnique({
@@ -191,6 +208,7 @@ async function createExcursionPayment(input: {
         : "excursion_year";
 
   const payment = await db.$transaction(async (tx) => {
+    const isConfirm = input.action === "confirm";
     const created = await tx.payment.create({
       data: {
         excursionId: excursion.id,
@@ -198,17 +216,18 @@ async function createExcursionPayment(input: {
         amount: new Prisma.Decimal(promoPrice.finalAmountRub),
         tariffCode,
         roomCount: 0,
-        status: PaymentStatus.SUCCEEDED,
+        status: isConfirm ? PaymentStatus.SUCCEEDED : PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey: crypto.randomUUID(),
         confirmationUrl: null,
-        paidAt: input.now,
+        paidAt: isConfirm ? input.now : null,
         paidFrom: input.now,
         placementValidUntil: getProgramPlacementValidUntil(input.period, input.now),
         managerNotes: input.notes || null,
-        confirmedById: input.confirmedById,
+        confirmedById: isConfirm ? input.confirmedById : null,
         providerPayload: {
           adminManualPayment: true,
+          adminPaymentAction: input.action,
           ...buildPlacementPricingPayload(placementPricing),
         },
       },
@@ -217,18 +236,20 @@ async function createExcursionPayment(input: {
       },
     });
 
-    await autoSubmitExcursionAfterSuccessfulPayment(tx, excursion.id);
+    if (isConfirm) {
+      await autoSubmitExcursionAfterSuccessfulPayment(tx, excursion.id);
 
-    if (excursion.status === ExcursionStatus.PUBLISHED) {
-      await tx.excursion.update({
-        where: { id: excursion.id },
-        data: { isPublishedVisible: true },
-      });
+      if (excursion.status === ExcursionStatus.PUBLISHED) {
+        await tx.excursion.update({
+          where: { id: excursion.id },
+          data: { isPublishedVisible: true },
+        });
+      }
     }
 
     await writeAdminAuditLog(tx, {
       adminUserId: input.adminId,
-      action: "listing_payment_confirm",
+      action: isConfirm ? "listing_payment_confirm" : "listing_payment_request",
       targetType: "excursion",
       targetId: excursion.id,
       details: {
@@ -236,13 +257,18 @@ async function createExcursionPayment(input: {
         period: input.period,
         amount: Number(created.amount),
         notes: input.notes || null,
+        paymentStatus: created.status,
       },
     });
 
     return created;
   });
 
-  return NextResponse.json({ ok: true, payment: serializePayment(payment) });
+  return NextResponse.json({
+    ok: true,
+    queued: payment.status === PaymentStatus.PENDING,
+    payment: serializePayment(payment),
+  });
 }
 
 async function createTransferPayment(input: {
@@ -251,6 +277,7 @@ async function createTransferPayment(input: {
   notes: string;
   confirmedById: string | null;
   adminId: string;
+  action: AdminListingPaymentAction;
   now: Date;
 }) {
   const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
@@ -290,9 +317,12 @@ async function createTransferPayment(input: {
     coveredAmountRub: 0,
     requiredAmountRub: promoPrice.finalAmountRub,
   });
-  const tariffCode = transferPaymentsSupported ? "transfer_standard" : getTransferPaymentTariffCode(transfer.id);
+  const tariffCode = transferPaymentsSupported
+    ? "transfer_standard"
+    : getTransferPaymentTariffCode(transfer.id);
 
   const payment = await db.$transaction(async (tx) => {
+    const isConfirm = input.action === "confirm";
     const created = await tx.payment.create({
       data: {
         ...(transferPaymentsSupported ? { transferId: transfer.id } : {}),
@@ -300,17 +330,18 @@ async function createTransferPayment(input: {
         amount: new Prisma.Decimal(promoPrice.finalAmountRub),
         tariffCode,
         roomCount: vehicleCount,
-        status: PaymentStatus.SUCCEEDED,
+        status: isConfirm ? PaymentStatus.SUCCEEDED : PaymentStatus.PENDING,
         provider: PaymentProvider.MANAGER,
         idempotenceKey: crypto.randomUUID(),
         confirmationUrl: null,
-        paidAt: input.now,
+        paidAt: isConfirm ? input.now : null,
         paidFrom: input.now,
         placementValidUntil: getProgramPlacementValidUntil(input.period, input.now),
         managerNotes: input.notes || null,
-        confirmedById: input.confirmedById,
+        confirmedById: isConfirm ? input.confirmedById : null,
         providerPayload: {
           adminManualPayment: true,
+          adminPaymentAction: input.action,
           ...transferPaymentPayload,
           ...buildPlacementPricingPayload(placementPricing),
         },
@@ -320,18 +351,20 @@ async function createTransferPayment(input: {
       },
     });
 
-    await autoSubmitTransferAfterSuccessfulPayment(tx, transfer.id);
+    if (isConfirm) {
+      await autoSubmitTransferAfterSuccessfulPayment(tx, transfer.id);
 
-    if (transfer.status === TransferStatus.PUBLISHED) {
-      await tx.transfer.update({
-        where: { id: transfer.id },
-        data: { isPublishedVisible: true },
-      });
+      if (transfer.status === TransferStatus.PUBLISHED) {
+        await tx.transfer.update({
+          where: { id: transfer.id },
+          data: { isPublishedVisible: true },
+        });
+      }
     }
 
     await writeAdminAuditLog(tx, {
       adminUserId: input.adminId,
-      action: "listing_payment_confirm",
+      action: isConfirm ? "listing_payment_confirm" : "listing_payment_request",
       targetType: "transfer",
       targetId: transfer.id,
       details: {
@@ -339,13 +372,18 @@ async function createTransferPayment(input: {
         period: input.period,
         amount: Number(created.amount),
         notes: input.notes || null,
+        paymentStatus: created.status,
       },
     });
 
     return created;
   });
 
-  return NextResponse.json({ ok: true, payment: serializePayment(payment) });
+  return NextResponse.json({
+    ok: true,
+    queued: payment.status === PaymentStatus.PENDING,
+    payment: serializePayment(payment),
+  });
 }
 
 export async function POST(request: Request) {
@@ -383,6 +421,7 @@ export async function POST(request: Request) {
       notes,
       confirmedById,
       adminId: admin.id,
+      action: parsed.data.action,
       now,
     });
   }
@@ -396,6 +435,7 @@ export async function POST(request: Request) {
       notes,
       confirmedById,
       adminId: admin.id,
+      action: parsed.data.action,
       now,
     });
   }
@@ -406,6 +446,7 @@ export async function POST(request: Request) {
     notes,
     confirmedById,
     adminId: admin.id,
+    action: parsed.data.action,
     now,
   });
 }

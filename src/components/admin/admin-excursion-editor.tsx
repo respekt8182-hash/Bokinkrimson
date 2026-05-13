@@ -35,7 +35,11 @@ type ExcursionData = {
   contactFirstName: string | null;
   contactLastName: string | null;
   contactPhone: string | null;
+  contactPhoneName: string | null;
   contactPhone2: string | null;
+  contactPhone2Name: string | null;
+  contactPhone3: string | null;
+  contactPhone3Name: string | null;
   contactEmail: string | null;
   status: string;
   moderationNotes: string | null;
@@ -414,11 +418,43 @@ export function AdminExcursionEditor({
               className={input}
             />
           </Field>
+          <Field label="Имя у телефона">
+            <input
+              type="text"
+              name="contactPhoneName"
+              defaultValue={excursion.contactPhoneName ?? ""}
+              className={input}
+            />
+          </Field>
           <Field label="Телефон 2">
             <input
               type="text"
               name="contactPhone2"
               defaultValue={excursion.contactPhone2 ?? ""}
+              className={input}
+            />
+          </Field>
+          <Field label="Имя у телефона 2">
+            <input
+              type="text"
+              name="contactPhone2Name"
+              defaultValue={excursion.contactPhone2Name ?? ""}
+              className={input}
+            />
+          </Field>
+          <Field label="Телефон 3">
+            <input
+              type="text"
+              name="contactPhone3"
+              defaultValue={excursion.contactPhone3 ?? ""}
+              className={input}
+            />
+          </Field>
+          <Field label="Имя у телефона 3">
+            <input
+              type="text"
+              name="contactPhone3Name"
+              defaultValue={excursion.contactPhone3Name ?? ""}
               className={input}
             />
           </Field>

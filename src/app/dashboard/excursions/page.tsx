@@ -1,7 +1,15 @@
 import { ExcursionOfferType, ExcursionSessionStatus, ExcursionStatus } from "@prisma/client";
-import { CircleCheckBig, MessageCircle, Star } from "lucide-react";
+import { CircleCheckBig, Eye, MessageCircle, PenLine, Star } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  DashboardListingActions,
+  dashboardActionIconClass,
+  dashboardDangerActionClass,
+  dashboardMainActionClass,
+  dashboardSecondaryActionClass,
+  dashboardStatsActionClass,
+} from "@/components/dashboard/listing-actions";
 import { CreateExcursionButton } from "@/components/excursions/create-excursion-button";
 import { DeleteExcursionButton } from "@/components/excursions/delete-excursion-button";
 import { ExcursionStatsButton } from "@/components/excursions/excursion-stats-button";
@@ -402,38 +410,43 @@ export default async function DashboardExcursionsPage({
                   </p>
                 ) : null}
 
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-olive/60">
-                    Обновлено: {new Date(item.updatedAt).toLocaleString("ru-RU")}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/dashboard/excursions/${item.id}`}
-                      className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Карточка
-                    </Link>
-                    {item.status === ExcursionStatus.PUBLISHED && publicPath ? (
+                <DashboardListingActions
+                  updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
+                  secondaryLayout="two"
+                  primaryActions={
+                    item.status === ExcursionStatus.PUBLISHED && publicPath ? (
+                      <>
+                        <Link href={publicPath} className={dashboardMainActionClass}>
+                          <AppIcon icon={Eye} className={dashboardActionIconClass} />
+                          Публичная страница
+                        </Link>
+                        <ExcursionStatsButton
+                          excursionId={item.id}
+                          excursionTitle={getExcursionTitle(item)}
+                          className={dashboardStatsActionClass}
+                        />
+                      </>
+                    ) : null
+                  }
+                  secondaryActions={
+                    <>
                       <Link
-                        href={publicPath}
-                        className="rounded-xl border border-primary/35 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
+                        href={`/dashboard/excursions/${item.id}`}
+                        className={dashboardSecondaryActionClass}
                       >
-                        Публичная страница
+                        <AppIcon icon={PenLine} className={dashboardActionIconClass} />
+                        Редактирование
                       </Link>
-                    ) : null}
-                    {item.status === ExcursionStatus.PUBLISHED ? (
-                      <ExcursionStatsButton
+                      <DeleteExcursionButton
                         excursionId={item.id}
                         excursionTitle={getExcursionTitle(item)}
+                        excursionStatus={item.status}
+                        buttonClassName={dashboardDangerActionClass}
+                        label="Удалить"
                       />
-                    ) : null}
-                    <DeleteExcursionButton
-                      excursionId={item.id}
-                      excursionTitle={getExcursionTitle(item)}
-                      excursionStatus={item.status}
-                    />
-                  </div>
-                </div>
+                    </>
+                  }
+                />
 
                 {nextItem ? (
                   <div className="mt-2 border-t border-olive/10 pt-2 text-right">

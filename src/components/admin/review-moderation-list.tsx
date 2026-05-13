@@ -37,6 +37,10 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("ru-RU");
 }
 
+function getReviewDisplayDate(review: SerializedReview): string {
+  return review.reviewedAt ?? review.createdAt;
+}
+
 export function ReviewModerationList({
   initialReviews,
   initialAvgRating,
@@ -119,7 +123,10 @@ export function ReviewModerationList({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-olive">{review.userName}</p>
-                  <p className="text-xs text-olive/60">{formatDateTime(review.createdAt)}</p>
+                  <p className="text-xs text-olive/60">
+                    {formatDateTime(getReviewDisplayDate(review))}
+                    {review.guestCity ? ` · ${review.guestCity}` : ""}
+                  </p>
                 </div>
                 <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-terra">
                   <div className="inline-flex items-center gap-0.5">
@@ -134,6 +141,24 @@ export function ReviewModerationList({
                 </div>
               </div>
               <p className="mt-2 whitespace-pre-line text-sm text-olive/85">{review.text}</p>
+              {review.isImported ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-olive/70">
+                  <span className="rounded-full border border-primary/15 bg-primary/6 px-2 py-1 font-semibold text-primary">
+                    Внешний источник
+                  </span>
+                  {review.externalSourceName ? <span>{review.externalSourceName}</span> : null}
+                  {review.externalSourceUrl ? (
+                    <a
+                      href={review.externalSourceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="font-semibold text-primary hover:underline"
+                    >
+                      Проверить источник
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
               {review.ownerReply ? (
                 <div className="mt-2 rounded-lg border border-olive/12 bg-white px-3 py-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-olive/65">
