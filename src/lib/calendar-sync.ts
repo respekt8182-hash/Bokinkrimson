@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma, type CalendarSyncStatus, type RoomCalendarSync } from "@prisma/client";
 import { db, type DbClientLike } from "@/lib/db";
 import { addDays, parseIsoDate, toIsoDate } from "@/lib/pricing";
+import { resolveBaseUrl } from "@/lib/seo/site";
 
 const maxCalendarUrlLength = 1000;
 const maxCalendarTextLength = 2_000_000;
@@ -171,9 +172,8 @@ export function createCalendarExportToken(): string {
   return randomBytes(24).toString("hex");
 }
 
-export function buildCalendarExportUrl(requestUrl: string, exportToken: string): string {
-  const url = new URL(requestUrl);
-  return `${url.origin}/api/calendar/rooms/${exportToken}.ics`;
+export function buildCalendarExportUrl(_requestUrl: string, exportToken: string): string {
+  return new URL(`/api/calendar/rooms/${exportToken}.ics`, resolveBaseUrl()).toString();
 }
 
 export function stripCalendarTokenSuffix(rawToken: string): string {
