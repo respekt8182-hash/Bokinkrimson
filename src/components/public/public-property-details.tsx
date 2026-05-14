@@ -711,6 +711,22 @@ function getMaxRequiredMinGuests(
   return required;
 }
 
+function getMaxRequiredMinNights(
+  room: PublicPropertyCard["rooms"][number],
+  checkIn: string,
+  nights: number,
+): number {
+  const from = parseIsoDate(checkIn);
+  if (!from || nights <= 0) return 1;
+  let required = 1;
+  for (let index = 0; index < nights; index += 1) {
+    const dayIso = toIsoDate(addDays(from, index));
+    const period = room.prices.find((price) => price.dateFrom <= dayIso && price.dateTo >= dayIso);
+    if (period?.minNights && period.minNights > required) required = period.minNights;
+  }
+  return required;
+}
+
 function getRoomPriceSummary(
   room: PublicPropertyCard["rooms"][number],
   checkIn: string | null,
@@ -766,6 +782,7 @@ function getRoomPriceSummary(
       price: price.price,
       priceType: price.priceType,
       minGuests: price.minGuests,
+      minNights: price.minNights,
       currency: price.currency,
     })),
     checkIn,
@@ -774,7 +791,7 @@ function getRoomPriceSummary(
   });
   if (!calculation.ok) {
     return {
-      text: "Для части выбранного периода цена не задана",
+      text: calculation.message || "Для части выбранного периода цена не задана",
       tone: "warn",
       bigPrice: null,
       sideLabel: null,
@@ -1298,7 +1315,14 @@ export function PublicPropertyDetails({
           checkIn && selectedNights > 0
             ? getMaxRequiredMinGuests(room, checkIn, selectedNights)
             : 1;
-        const isSuitable = totalGuests <= capacity && totalGuests >= requiredMinGuests;
+        const requiredMinNights =
+          checkIn && selectedNights > 0
+            ? getMaxRequiredMinNights(room, checkIn, selectedNights)
+            : 1;
+        const isSuitable =
+          totalGuests <= capacity &&
+          totalGuests >= requiredMinGuests &&
+          (selectedNights <= 0 || selectedNights >= requiredMinNights);
 
         let hasStayPrice = false;
         let stayTotal: number | null = null;
@@ -1315,6 +1339,7 @@ export function PublicPropertyDetails({
               price: price.price,
               priceType: price.priceType,
               minGuests: price.minGuests,
+              minNights: price.minNights,
               currency: price.currency,
             })),
             checkIn,
@@ -1945,8 +1970,7 @@ export function PublicPropertyDetails({
                             label: "Санузел",
                             value: room.bathroomTypeLabel,
                             className: "border-emerald-500/16 bg-emerald-50/80",
-                            iconClassName:
-                              "bg-emerald-500/10 text-emerald-700 ring-emerald-500/14",
+                            iconClassName: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/14",
                           },
                         ]
                       : []),
@@ -2290,7 +2314,10 @@ export function PublicPropertyDetails({
                                                 <RoomFeatureIcon
                                                   name={amenity.name}
                                                   featureId={amenity.featureId}
-                                                  className={cn("h-4 w-4", visual.itemIconClassName)}
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    visual.itemIconClassName,
+                                                  )}
                                                 />
                                               </span>
                                               <span className="min-w-0 text-sm font-medium leading-snug text-olive/84">
@@ -2870,8 +2897,8 @@ export function PublicPropertyDetails({
                         propertyLead.loading || !propertyLead.leadNumber
                           ? "cursor-not-allowed bg-olive/20 text-olive/45 shadow-none"
                           : leadCopied
-                          ? "bg-emerald-600 text-white"
-                          : "bg-[#e8621a] text-white hover:bg-[#d45615]",
+                            ? "bg-emerald-600 text-white"
+                            : "bg-[#e8621a] text-white hover:bg-[#d45615]",
                       )}
                     >
                       {leadCopied ? (
@@ -2882,7 +2909,9 @@ export function PublicPropertyDetails({
                       ) : (
                         <>
                           <Copy className="h-4.5 w-4.5" />
-                          {propertyLead.loading ? "Готовим номер обращения..." : "Скопировать сообщение"}
+                          {propertyLead.loading
+                            ? "Готовим номер обращения..."
+                            : "Скопировать сообщение"}
                         </>
                       )}
                     </button>

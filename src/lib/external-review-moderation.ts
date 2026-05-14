@@ -11,6 +11,9 @@ import {
 
 const FALLBACK_EXTERNAL_REVIEW_TABLE = "ExternalReviewFallback";
 const EXTERNAL_REVIEW_NOT_FOUND = "EXTERNAL_REVIEW_NOT_FOUND";
+const OWNER_REVIEW_MODERATION_FORBIDDEN = "OWNER_REVIEW_MODERATION_FORBIDDEN";
+
+type ExternalReviewModerationAction = "approve" | "reject" | "duplicate" | "delete" | "edit";
 
 type FallbackExternalReviewRow = {
   id: string;
@@ -33,6 +36,36 @@ type FallbackExternalReviewRow = {
   updatedAt: Date;
   deletedAt: Date | null;
 };
+
+function assertOwnerCanUpdateExternalReview(input: {
+  actorRole: "owner" | "admin";
+  action: ExternalReviewModerationAction;
+  status: ReviewStatus;
+}) {
+  if (input.actorRole !== "owner") {
+    return;
+  }
+
+  if (input.action === "approve" || input.action === "reject" || input.action === "duplicate") {
+    throw new ExternalReviewModerationUserError(
+      "Отзывы публикует, отклоняет и помечает дублями только администратор.",
+      {
+        status: 403,
+        code: OWNER_REVIEW_MODERATION_FORBIDDEN,
+      },
+    );
+  }
+
+  if (input.status !== ReviewStatus.PENDING) {
+    throw new ExternalReviewModerationUserError(
+      "Проверенные отзывы может изменять только администратор.",
+      {
+        status: 403,
+        code: OWNER_REVIEW_MODERATION_FORBIDDEN,
+      },
+    );
+  }
+}
 
 export class ExternalReviewModerationUserError extends Error {
   status: number;
@@ -240,6 +273,12 @@ async function updateFallbackExternalReview(input: {
     });
   }
 
+  assertOwnerCanUpdateExternalReview({
+    actorRole: input.actorRole,
+    action: input.action,
+    status: existing.status,
+  });
+
   if (input.action === "delete") {
     await db.$transaction([
       db.$executeRaw(Prisma.sql`
@@ -344,7 +383,7 @@ export async function updateExternalReviewModeration(input: {
   id: string;
   actorId: string;
   actorRole: "owner" | "admin";
-  action: "approve" | "reject" | "duplicate" | "delete" | "edit";
+  action: ExternalReviewModerationAction;
   rating?: number | null;
   text?: string | null;
   authorName?: string | null;
@@ -368,6 +407,12 @@ export async function updateExternalReviewModeration(input: {
       code: EXTERNAL_REVIEW_NOT_FOUND,
     });
   }
+
+  assertOwnerCanUpdateExternalReview({
+    actorRole: input.actorRole,
+    action: input.action,
+    status: existing.status,
+  });
 
   if (input.action === "delete") {
     const result = await db.$transaction(async (tx) => {

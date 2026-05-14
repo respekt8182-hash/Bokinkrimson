@@ -1,9 +1,15 @@
 // Room reorder endpoint: validates a complete active-room order and persists display positions.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import { roomInclude, serializeRoom } from "@/lib/rooms";
+import {
+  buildRoomMetaWithFallbackSortOrder,
+  compareSerializedRoomsBySortOrder,
+  roomInclude,
+  serializeRoom,
+  serializeRoomForChessboard,
+} from "@/lib/rooms";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -66,7 +72,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       propertyId: property.id,
       isActive: true,
     },
-    select: { id: true },
+    select: { id: true, meta: true },
   });
 
   if (existing.length !== orderedIds.length) {
@@ -81,14 +87,48 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  await db.$transaction(
-    orderedIds.map((roomId, index) =>
-      db.room.update({
-        where: { id: roomId },
-        data: { sortOrder: index + 1 },
+  const canPersistRoomOrder = await areDatabaseColumnsAvailable("Room", ["sortOrder"]);
+  const existingById = new Map(existing.map((item) => [item.id, item]));
+
+  if (canPersistRoomOrder) {
+    await db.$transaction(
+      orderedIds.map((roomId, index) =>
+        db.room.update({
+          where: { id: roomId },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
+    );
+  } else {
+    await db.$transaction(
+      orderedIds.map((roomId, index) => {
+        const room = existingById.get(roomId);
+        return db.room.update({
+          where: { id: roomId },
+          data: {
+            meta: buildRoomMetaWithFallbackSortOrder(room?.meta ?? null, index + 1),
+          },
+        });
       }),
-    ),
-  );
+    );
+  }
+
+  const view = new URL(request.url).searchParams.get("view");
+
+  if (view !== "chessboard") {
+    const items = await db.room.findMany({
+      where: {
+        propertyId: property.id,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: roomInclude,
+    });
+
+    return NextResponse.json({
+      items: items.map(serializeRoom).sort(compareSerializedRoomsBySortOrder),
+    });
+  }
 
   const items = await db.room.findMany({
     where: {
@@ -96,8 +136,38 @@ export async function PATCH(request: Request, context: RouteContext) {
       isActive: true,
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    include: roomInclude,
+    select: {
+      id: true,
+      propertyId: true,
+      title: true,
+      beds: true,
+      extraBeds: true,
+      roomsCount: true,
+      areaSqm: true,
+      bathroomType: true,
+      meta: true,
+      sortOrder: true,
+      isActive: true,
+      prices: {
+        orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          roomId: true,
+          dateFrom: true,
+          dateTo: true,
+          price: true,
+          priceType: true,
+          minGuests: true,
+          minNights: true,
+          currency: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
   });
 
-  return NextResponse.json({ items: items.map(serializeRoom) });
+  return NextResponse.json({
+    items: items.map(serializeRoomForChessboard).sort(compareSerializedRoomsBySortOrder),
+  });
 }

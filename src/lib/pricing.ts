@@ -42,6 +42,7 @@ export type SerializedRoomPrice = {
   price: number;
   priceType: RoomPriceType;
   minGuests: number | null;
+  minNights: number | null;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -56,6 +57,7 @@ export type RoomPriceCalculation =
       currency: string;
       priceType: RoomPriceCalculationType;
       guests: number;
+      minNights: number | null;
       breakdown: Array<{
         date: string;
         price: number;
@@ -67,6 +69,7 @@ export type RoomPriceCalculation =
       ok: false;
       message: string;
       missingDates: string[];
+      minNights?: number;
     };
 
 // Strict parser avoids implicit timezone drift and invalid dates like 2026-02-31.
@@ -109,6 +112,7 @@ export function serializeRoomPrice(price: {
   price: Prisma.Decimal;
   priceType?: RoomPriceType | string | null;
   minGuests?: number | null;
+  minNights?: number | null;
   currency: string;
   createdAt: Date;
   updatedAt: Date;
@@ -121,16 +125,22 @@ export function serializeRoomPrice(price: {
     price: Number(price.price),
     priceType: normalizeRoomPriceType(price.priceType),
     minGuests: price.minGuests ?? null,
+    minNights: price.minNights ?? null,
     currency: price.currency,
     createdAt: price.createdAt.toISOString(),
     updatedAt: price.updatedAt.toISOString(),
   };
 }
 
-export function normalizeSerializedRoomPrice(price: SerializedRoomPrice): SerializedRoomPrice {
+export function normalizeSerializedRoomPrice(
+  price:
+    | SerializedRoomPrice
+    | (Omit<SerializedRoomPrice, "minNights"> & { minNights?: number | null }),
+): SerializedRoomPrice {
   return {
     ...price,
     priceType: normalizeRoomPriceType(price.priceType),
+    minNights: price.minNights ?? null,
   };
 }
 
@@ -141,6 +151,7 @@ export function calculateRoomStayPrice(input: {
     price: number;
     priceType?: RoomPriceType | string | null;
     minGuests?: number | null;
+    minNights?: number | null;
     currency: string;
   }>;
   checkIn: string;
@@ -181,6 +192,7 @@ export function calculateRoomStayPrice(input: {
   let total = 0;
   let unitTotal = 0;
   let currency = "RUB";
+  let requiredMinNights = 1;
 
   for (let i = 0; i < nights; i += 1) {
     // Pricing model is period-based, so each stay night must be covered by one period.
@@ -193,6 +205,9 @@ export function calculateRoomStayPrice(input: {
     }
 
     const priceType = normalizeRoomPriceType(matched.priceType);
+    if (matched.minNights && matched.minNights > requiredMinNights) {
+      requiredMinNights = matched.minNights;
+    }
     const totalPrice = priceType === "PER_PERSON" ? matched.price * guests : matched.price;
     unitTotal += matched.price;
     total += totalPrice;
@@ -209,6 +224,15 @@ export function calculateRoomStayPrice(input: {
     };
   }
 
+  if (nights < requiredMinNights) {
+    return {
+      ok: false,
+      message: `Минимальное бронирование на выбранные даты — от ${requiredMinNights} ${getNightsWord(requiredMinNights)}`,
+      missingDates: [],
+      minNights: requiredMinNights,
+    };
+  }
+
   return {
     ok: true,
     nights,
@@ -217,6 +241,24 @@ export function calculateRoomStayPrice(input: {
     currency,
     priceType: priceTypes.size === 1 ? Array.from(priceTypes)[0] : "MIXED",
     guests,
+    minNights: requiredMinNights > 1 ? requiredMinNights : null,
     breakdown,
   };
+}
+
+function getNightsWord(value: number): string {
+  const absolute = Math.abs(value);
+  const lastTwo = absolute % 100;
+  const last = absolute % 10;
+
+  if (lastTwo >= 11 && lastTwo <= 14) {
+    return "ночей";
+  }
+  if (last === 1) {
+    return "ночи";
+  }
+  if (last >= 2 && last <= 4) {
+    return "ночей";
+  }
+  return "ночей";
 }

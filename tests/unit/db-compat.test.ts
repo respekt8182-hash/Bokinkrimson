@@ -55,24 +55,17 @@ describe("db compatibility sanitizer", () => {
     expect("isPublishedVisible" in (sanitized.select as Record<string, unknown>)).toBe(false);
     expect(
       "deletedAt" in
-        (
-          (
-            sanitized.select as Record<string, { select: Record<string, unknown> }>
-          ).owner.select as Record<string, unknown>
-        ),
+        ((sanitized.select as Record<string, { select: Record<string, unknown> }>).owner
+          .select as Record<string, unknown>),
     ).toBe(false);
     expect(
       "isPublishedVisible" in
-        (
-          (
-            (
-              sanitized.select as Record<
-                string,
-                { select: Record<string, { select: Record<string, unknown> }> }
-              >
-            ).owner.select.properties.select as Record<string, unknown>
-          )
-        ),
+        ((
+          sanitized.select as Record<
+            string,
+            { select: Record<string, { select: Record<string, unknown> }> }
+          >
+        ).owner.select.properties.select as Record<string, unknown>),
     ).toBe(false);
   });
 
@@ -120,7 +113,7 @@ describe("db compatibility sanitizer", () => {
 
   it("sanitizes create payloads even when Prisma exposes a lower-case model name", () => {
     const missingColumnsByModel = new Map<string, Set<string>>([
-      ["RoomPrice", new Set(["priceType"])],
+      ["RoomPrice", new Set(["priceType", "minNights"])],
     ]);
 
     const args = {
@@ -130,6 +123,7 @@ describe("db compatibility sanitizer", () => {
         dateTo: new Date("2026-05-12T00:00:00.000Z"),
         price: 1500,
         priceType: "PER_PERSON",
+        minNights: 3,
         currency: "RUB",
       },
     };

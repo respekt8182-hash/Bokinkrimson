@@ -741,6 +741,13 @@ const roomPriceBaseSchema = z
       .max(40)
       .nullable()
       .optional(),
+    minNights: z
+      .number()
+      .int()
+      .min(1, "Минимум ночей должен быть не меньше 1")
+      .max(60, "Минимум ночей не может быть больше 60")
+      .nullable()
+      .optional(),
     currency: z
       .string()
       .trim()

@@ -1,0 +1,1 @@
+ALTER TABLE "RoomPrice" ADD COLUMN "minNights" INTEGER;

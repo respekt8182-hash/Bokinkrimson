@@ -179,6 +179,7 @@ export function ImportedReviewsManager({
     mode === "admin" ? "/api/admin/external-reviews" : "/api/dashboard/external-reviews";
   const endpointUrl = `${endpoint}?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`;
   const reviewEndpoint = mode === "admin" ? "/api/admin/reviews" : "/api/dashboard/reviews";
+  const canModerateReviews = mode === "admin";
 
   const orderedItems = useMemo(
     () =>
@@ -510,51 +511,55 @@ export function ImportedReviewsManager({
                     {renderEditableReview(review)}
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-olive">
-                        <AppIcon icon={Star} className="h-4 w-4 text-amber-500" />
-                        <select
-                          value={ratingById[review.id] ?? ""}
-                          onChange={(event) =>
-                            setRatingById((previous) => ({
-                              ...previous,
-                              [review.id]: event.target.value,
-                            }))
-                          }
-                          className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
-                        >
-                          {ratingOptions.map((value) => (
-                            <option key={value || "empty"} value={value}>
-                              {value ? `${Number(value).toFixed(1)} / 5` : "Рейтинг сайта"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <Button
-                        type="button"
-                        onClick={() => void moderateReview(review, "approve")}
-                        disabled={processing || !canApprove}
-                      >
-                        <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
-                        Опубликовать
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => void moderateReview(review, "reject")}
-                        disabled={processing}
-                      >
-                        <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
-                        Отклонить
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => void moderateReview(review, "duplicate")}
-                        disabled={processing}
-                      >
-                        <AppIcon icon={Copy} className="mr-1.5 h-4 w-4" />
-                        Дубль
-                      </Button>
+                      {canModerateReviews ? (
+                        <>
+                          <label className="inline-flex items-center gap-2 text-sm font-semibold text-olive">
+                            <AppIcon icon={Star} className="h-4 w-4 text-amber-500" />
+                            <select
+                              value={ratingById[review.id] ?? ""}
+                              onChange={(event) =>
+                                setRatingById((previous) => ({
+                                  ...previous,
+                                  [review.id]: event.target.value,
+                                }))
+                              }
+                              className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                            >
+                              {ratingOptions.map((value) => (
+                                <option key={value || "empty"} value={value}>
+                                  {value ? `${Number(value).toFixed(1)} / 5` : "Рейтинг сайта"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <Button
+                            type="button"
+                            onClick={() => void moderateReview(review, "approve")}
+                            disabled={processing || !canApprove}
+                          >
+                            <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
+                            Опубликовать
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => void moderateReview(review, "reject")}
+                            disabled={processing}
+                          >
+                            <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
+                            Отклонить
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => void moderateReview(review, "duplicate")}
+                            disabled={processing}
+                          >
+                            <AppIcon icon={Copy} className="mr-1.5 h-4 w-4" />
+                            Дубль
+                          </Button>
+                        </>
+                      ) : null}
                       {isEditing ? (
                         <Button
                           type="button"
@@ -779,7 +784,7 @@ export function ImportedReviewsManager({
                           {isExpanded ? "Свернуть" : "Развернуть"}
                         </Button>
                       ) : null}
-                      {review.status === "ACTIVE" ? (
+                      {canModerateReviews && review.status === "ACTIVE" ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -790,15 +795,17 @@ export function ImportedReviewsManager({
                           Отключить
                         </Button>
                       ) : null}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => void moderateReview(review, "delete")}
-                        disabled={processing}
-                      >
-                        <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
-                        Удалить
-                      </Button>
+                      {canModerateReviews ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => void moderateReview(review, "delete")}
+                          disabled={processing}
+                        >
+                          <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
+                          Удалить
+                        </Button>
+                      ) : null}
                       {review.externalSourceUrl ? (
                         <a
                           href={review.externalSourceUrl}

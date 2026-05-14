@@ -66,6 +66,7 @@ export async function GET(request: Request, context: RouteContext) {
         price: item.price,
         priceType: item.priceType,
         minGuests: item.minGuests,
+        minNights: item.minNights,
         currency: item.currency,
       })),
       checkIn,
@@ -109,7 +110,10 @@ export async function POST(request: Request, context: RouteContext) {
   const data = parsed.data;
   const dateFrom = parseIsoDate(data.dateFrom);
   const dateTo = parseIsoDate(data.dateTo);
-  const supportsRoomPriceType = await areDatabaseColumnsAvailable("RoomPrice", ["priceType"]);
+  const supportsRoomPriceWriteColumns = await areDatabaseColumnsAvailable("RoomPrice", [
+    "priceType",
+    "minNights",
+  ]);
 
   if (!dateFrom || !dateTo) {
     return NextResponse.json({ error: "Некорректный формат дат" }, { status: 400 });
@@ -131,7 +135,7 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const created = supportsRoomPriceType
+  const created = supportsRoomPriceWriteColumns
     ? await db.roomPrice.create({
         data: {
           roomId: room.id,
@@ -140,6 +144,7 @@ export async function POST(request: Request, context: RouteContext) {
           price: data.price,
           priceType: data.priceType,
           minGuests: data.minGuests ?? null,
+          minNights: data.minNights ?? null,
           currency: data.currency,
         },
       })
@@ -149,6 +154,7 @@ export async function POST(request: Request, context: RouteContext) {
         dateTo,
         price: data.price,
         minGuests: data.minGuests ?? null,
+        minNights: data.minNights ?? null,
         currency: data.currency,
       });
 

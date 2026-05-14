@@ -725,6 +725,7 @@ type CatalogRoomPricePoint = {
   price: number;
   priceType: RoomPriceType;
   minGuests: number | null;
+  minNights: number | null;
   currency: string;
 };
 
@@ -749,6 +750,7 @@ type CatalogLiveRoomForPriceOverlay = {
     price: Prisma.Decimal | number;
     priceType?: RoomPriceType | string | null;
     minGuests: number | null;
+    minNights: number | null;
     currency: string;
   }>;
 };
@@ -765,6 +767,7 @@ function getLiveCatalogRoomPricesByRoomId(
         price: Number(price.price),
         priceType: normalizeRoomPriceType(price.priceType),
         minGuests: price.minGuests ?? null,
+        minNights: price.minNights ?? null,
         currency: price.currency,
       })),
     ]),
@@ -824,6 +827,7 @@ export function resolvePublicCatalogDisplayState(property: {
       price: Prisma.Decimal | number;
       priceType?: RoomPriceType | string | null;
       minGuests: number | null;
+      minNights: number | null;
       currency: string;
     }>;
   }>;
@@ -851,6 +855,7 @@ export function resolvePublicCatalogDisplayState(property: {
             price: price.price,
             priceType: normalizeRoomPriceType(price.priceType),
             minGuests: price.minGuests ?? null,
+            minNights: price.minNights ?? null,
             currency: price.currency,
           })),
       }))
@@ -867,6 +872,7 @@ export function resolvePublicCatalogDisplayState(property: {
           price: Number(price.price),
           priceType: normalizeRoomPriceType(price.priceType),
           minGuests: price.minGuests ?? null,
+          minNights: price.minNights ?? null,
           currency: price.currency,
         })),
       }));
@@ -1562,6 +1568,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
                 price: true,
                 priceType: true,
                 minGuests: true,
+                minNights: true,
                 currency: true,
               },
             },
@@ -1759,17 +1766,17 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           const stats = rankingStatsById.get(property.id)?.last30Days;
           const hasContacts = Boolean(
             property.phone ||
-              property.phone2 ||
-              property.phone3 ||
-              property.whatsappUrl ||
-              property.telegramUrl ||
-              property.contactEmail ||
-              property.receiveRequests,
+            property.phone2 ||
+            property.phone3 ||
+            property.whatsappUrl ||
+            property.telegramUrl ||
+            property.contactEmail ||
+            property.receiveRequests,
           );
           const hasRules = Boolean(
             displayState.checkInFrom ||
-              displayState.childrenAllowed !== null ||
-              displayState.petsPolicy !== null,
+            displayState.childrenAllowed !== null ||
+            displayState.petsPolicy !== null,
           );
           const hasCapacity = displayState.rooms.some(
             (room) => room.beds + room.extraBeds > 0 || room.roomsCount > 0,

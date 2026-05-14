@@ -119,4 +119,44 @@ describe("pricing helpers", () => {
       expect(result.breakdown.map((item) => item.totalPrice)).toEqual([1000, 1000, 1000]);
     }
   });
+
+  it("rejects stays shorter than the period minimum nights", () => {
+    const tooShort = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+          price: 5000,
+          minNights: 3,
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-09-10",
+      checkOut: "2026-09-12",
+      guests: 2,
+    });
+
+    expect(tooShort.ok).toBe(false);
+    if (!tooShort.ok) {
+      expect(tooShort.minNights).toBe(3);
+      expect(tooShort.message).toContain("от 3");
+    }
+
+    const longEnough = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+          price: 5000,
+          minNights: 3,
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-09-10",
+      checkOut: "2026-09-13",
+      guests: 2,
+    });
+
+    expect(longEnough.ok).toBe(true);
+  });
 });

@@ -61,6 +61,77 @@ export type SerializedChessboardRoom = {
   prices: SerializedRoomPrice[];
 };
 
+const fallbackRoomSortOrderMetaKey = "__roomSortOrder";
+
+function getFallbackRoomSortOrder(meta: Prisma.JsonValue | null | undefined): number | null {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return null;
+  }
+
+  const value = (meta as Record<string, unknown>)[fallbackRoomSortOrderMetaKey];
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function isFallbackSortOrderOnlyMeta(meta: Prisma.JsonValue | null | undefined): boolean {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return false;
+  }
+
+  const keys = Object.keys(meta);
+  return keys.length === 1 && keys[0] === fallbackRoomSortOrderMetaKey;
+}
+
+function normalizeRoomMetaForSerialization(
+  meta: Prisma.JsonValue | null | undefined,
+): RoomMeta | null {
+  return normalizeRoomMeta(isFallbackSortOrderOnlyMeta(meta) ? null : (meta ?? null));
+}
+
+export function resolveSerializedRoomSortOrder(room: {
+  sortOrder?: number | null;
+  meta?: Prisma.JsonValue | null;
+}): number {
+  if (
+    typeof room.sortOrder === "number" &&
+    Number.isInteger(room.sortOrder) &&
+    room.sortOrder > 0
+  ) {
+    return room.sortOrder;
+  }
+
+  return getFallbackRoomSortOrder(room.meta) ?? 0;
+}
+
+export function buildRoomMetaWithFallbackSortOrder(
+  meta: Prisma.JsonValue | null | undefined,
+  sortOrder: number,
+): Prisma.InputJsonValue {
+  const base = meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {};
+  return {
+    ...(base as Record<string, unknown>),
+    [fallbackRoomSortOrderMetaKey]: Math.max(1, Math.floor(sortOrder)),
+  } as Prisma.InputJsonObject;
+}
+
+export function compareSerializedRoomsBySortOrder<
+  T extends { id: string; sortOrder: number; title: string },
+>(left: T, right: T): number {
+  if (left.sortOrder !== right.sortOrder) {
+    if (left.sortOrder <= 0) {
+      return 1;
+    }
+    if (right.sortOrder <= 0) {
+      return -1;
+    }
+    return left.sortOrder - right.sortOrder;
+  }
+
+  return left.title.localeCompare(right.title, "ru", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function isInRoomBathroomLocation(location: string): boolean {
   return location === "in_room" || location === "in_bathroom";
 }
@@ -79,16 +150,14 @@ export function getBathroomTypeLabel(type: BathroomType): string {
 }
 
 export function resolveBathroomTypeFromMeta(
-  meta:
-    | {
-        hasPrivateBathroom?: boolean;
-        privateBathroomLocations?: string[];
-        privateToiletLocations?: string[];
-        hasSharedBathroom?: boolean;
-        sharedBathroomLocations?: string[];
-        sharedToiletLocations?: string[];
-      }
-    | null,
+  meta: {
+    hasPrivateBathroom?: boolean;
+    privateBathroomLocations?: string[];
+    privateToiletLocations?: string[];
+    hasSharedBathroom?: boolean;
+    sharedBathroomLocations?: string[];
+    sharedToiletLocations?: string[];
+  } | null,
   fallback: BathroomType,
 ): BathroomType {
   if (!meta) {
@@ -103,7 +172,11 @@ export function resolveBathroomTypeFromMeta(
     : [];
   const allLocations = [...privateLocations, ...sharedLocations];
 
-  if (meta.hasPrivateBathroom && privateLocations.length > 0 && privateLocations.every(isInRoomBathroomLocation)) {
+  if (
+    meta.hasPrivateBathroom &&
+    privateLocations.length > 0 &&
+    privateLocations.every(isInRoomBathroomLocation)
+  ) {
     return "IN_ROOM";
   }
 
@@ -191,6 +264,7 @@ export function serializeRoom(room: {
     price: Prisma.Decimal;
     priceType?: string | null;
     minGuests?: number | null;
+    minNights?: number | null;
     currency: string;
     createdAt: Date;
     updatedAt: Date;
@@ -206,7 +280,7 @@ export function serializeRoom(room: {
     videoCount: media.filter((item) => item.type === MediaType.VIDEO).length,
   };
   const prices = room.prices?.map(serializeRoomPrice) ?? [];
-  const meta = normalizeRoomMeta(room.meta ?? null);
+  const meta = normalizeRoomMetaForSerialization(room.meta);
 
   return normalizeSerializedRoomBathroom({
     id: room.id,
@@ -219,7 +293,7 @@ export function serializeRoom(room: {
     bathroomType: room.bathroomType,
     bathroomTypeLabel: getBathroomTypeLabel(room.bathroomType),
     meta,
-    sortOrder: room.sortOrder,
+    sortOrder: resolveSerializedRoomSortOrder(room),
     isActive: room.isActive,
     featureIds,
     features,
@@ -252,12 +326,13 @@ export function serializeRoomForChessboard(room: {
     price: Prisma.Decimal;
     priceType?: string | null;
     minGuests?: number | null;
+    minNights?: number | null;
     currency: string;
     createdAt: Date;
     updatedAt: Date;
   }>;
 }): SerializedChessboardRoom {
-  const meta = normalizeRoomMeta(room.meta ?? null);
+  const meta = normalizeRoomMetaForSerialization(room.meta);
   const bathroomType = resolveBathroomTypeFromMeta(meta, room.bathroomType);
 
   return {
@@ -270,7 +345,7 @@ export function serializeRoomForChessboard(room: {
     areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
     bathroomType,
     bathroomTypeLabel: getBathroomTypeLabel(bathroomType),
-    sortOrder: room.sortOrder,
+    sortOrder: resolveSerializedRoomSortOrder(room),
     isActive: room.isActive,
     prices: room.prices?.map(serializeRoomPrice) ?? [],
   };

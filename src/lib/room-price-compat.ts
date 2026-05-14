@@ -9,6 +9,7 @@ type RoomPriceCompatWriteInput = {
   dateTo: Date;
   price: number;
   minGuests: number | null;
+  minNights?: number | null;
   currency: string;
 };
 
@@ -27,7 +28,7 @@ async function loadRoomPriceById(id: string) {
 export async function createRoomPriceCompat(input: RoomPriceCompatWriteInput) {
   logDatabaseFallbackOnce(
     "room-price-write-compat",
-    "RoomPrice writes are using a legacy insert compatibility path because the database schema is missing priceType. Apply the latest Prisma migration when DB owner access is available.",
+    "RoomPrice writes are using a legacy insert compatibility path because the database schema is missing priceType or minNights. Apply the latest Prisma migration when DB owner access is available.",
   );
 
   const id = `room_price_${randomUUID().replace(/-/g, "")}`;
@@ -61,10 +62,13 @@ export async function createRoomPriceCompat(input: RoomPriceCompatWriteInput) {
   return loadRoomPriceById(id);
 }
 
-export async function updateRoomPriceCompat(id: string, input: Omit<RoomPriceCompatWriteInput, "roomId">) {
+export async function updateRoomPriceCompat(
+  id: string,
+  input: Omit<RoomPriceCompatWriteInput, "roomId">,
+) {
   logDatabaseFallbackOnce(
     "room-price-write-compat",
-    "RoomPrice writes are using a legacy update compatibility path because the database schema is missing priceType. Apply the latest Prisma migration when DB owner access is available.",
+    "RoomPrice writes are using a legacy update compatibility path because the database schema is missing priceType or minNights. Apply the latest Prisma migration when DB owner access is available.",
   );
 
   const updatedAt = new Date();

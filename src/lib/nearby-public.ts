@@ -172,6 +172,7 @@ const nearbyPropertySelect = Prisma.validator<Prisma.PropertySelect>()({
           dateTo: true,
           price: true,
           minGuests: true,
+          minNights: true,
           currency: true,
         },
       },

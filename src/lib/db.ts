@@ -74,7 +74,7 @@ const PROPERTY_COMPAT_COLUMNS = [
   "paidAt",
 ] as const;
 const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
-const ROOM_PRICE_COMPAT_COLUMNS = ["priceType"] as const;
+const ROOM_PRICE_COMPAT_COLUMNS = ["priceType", "minNights"] as const;
 const ROOM_OCCUPANCY_COMPAT_COLUMNS = [
   "externalCalendarSyncId",
   "externalCalendarSourceId",
@@ -211,6 +211,7 @@ const SCHEMA_COMPAT_MODELS = {
     columns: ROOM_PRICE_COMPAT_COLUMNS,
     defaults: {
       priceType: "PER_ROOM",
+      minNights: null,
     },
     logContext: "room-price-schema-compat",
     label: "RoomPrice",

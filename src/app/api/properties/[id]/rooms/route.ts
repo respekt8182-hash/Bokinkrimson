@@ -8,6 +8,7 @@ import {
 } from "@/lib/properties";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import {
+  compareSerializedRoomsBySortOrder,
   resolveBathroomTypeFromMeta,
   roomInclude,
   serializeRoom,
@@ -99,6 +100,7 @@ export async function GET(request: Request, context: RouteContext) {
             price: true,
             priceType: true,
             minGuests: true,
+            minNights: true,
             currency: true,
             createdAt: true,
             updatedAt: true,
@@ -108,7 +110,7 @@ export async function GET(request: Request, context: RouteContext) {
     });
 
     return NextResponse.json({
-      items: items.map(serializeRoomForChessboard),
+      items: items.map(serializeRoomForChessboard).sort(compareSerializedRoomsBySortOrder),
       activeRoomCount: items.length,
     });
   }
@@ -123,7 +125,7 @@ export async function GET(request: Request, context: RouteContext) {
   });
 
   return NextResponse.json({
-    items: items.map(serializeRoom),
+    items: items.map(serializeRoom).sort(compareSerializedRoomsBySortOrder),
     activeRoomCount: items.length,
   });
 }

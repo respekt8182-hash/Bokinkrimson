@@ -9,9 +9,11 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Copy,
   ExternalLink,
+  MoreVertical,
   type LucideIcon,
   Plus,
   RefreshCw,
@@ -127,6 +129,7 @@ type PriceFormState = {
   priceType: RoomPriceType;
   currency: string;
   minGuestsInput: string;
+  minNightsInput: string;
   editingPriceId: string | null;
 };
 
@@ -695,6 +698,17 @@ function formatPriceLabel(price: SerializedRoomPrice): string {
   return `${amount} ${price.currency}${unitSuffix}`;
 }
 
+function formatPriceRestrictionLabel(price: SerializedRoomPrice): string {
+  const parts = [
+    price.minGuests === null ? null : `От ${price.minGuests} гостей`,
+    price.minNights === null
+      ? null
+      : `от ${price.minNights} ${price.minNights === 1 ? "ночи" : "ночей"}`,
+  ].filter((item): item is string => Boolean(item));
+
+  return parts.length > 0 ? parts.join(" · ") : "Любой состав и срок";
+}
+
 function truncateToLength(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
@@ -943,6 +957,7 @@ export function PropertyChessboardWorkspace({
   const [isDuplicatePricesModalOpen, setIsDuplicatePricesModalOpen] = useState(false);
   const [isCalendarSyncModalOpen, setIsCalendarSyncModalOpen] = useState(false);
   const [isOccupancyActionsOpen, setIsOccupancyActionsOpen] = useState(false);
+  const [isRoomOrderMode, setIsRoomOrderMode] = useState(false);
   const [rooms, setRooms] = useState<SerializedChessboardRoom[]>([]);
   const [occupanciesByRoom, setOccupanciesByRoom] = useState<
     Record<string, SerializedRoomOccupancy[]>
@@ -951,6 +966,9 @@ export function PropertyChessboardWorkspace({
   const [isLoadingOccupancies, setIsLoadingOccupancies] = useState(false);
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [isSavingPrice, setIsSavingPrice] = useState(false);
+  const [isReorderingRooms, setIsReorderingRooms] = useState(false);
+  const [draggingRoomId, setDraggingRoomId] = useState<string | null>(null);
+  const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
   const [messageError, setMessageError] = useState("");
   const [messageSuccess, setMessageSuccess] = useState("");
   const [bookingModalError, setBookingModalError] = useState("");
@@ -1196,6 +1214,10 @@ export function PropertyChessboardWorkspace({
           sourcePrice?.minGuests === null || sourcePrice?.minGuests === undefined
             ? ""
             : String(sourcePrice.minGuests),
+        minNightsInput:
+          sourcePrice?.minNights === null || sourcePrice?.minNights === undefined
+            ? ""
+            : String(sourcePrice.minNights),
         editingPriceId: sourcePrice?.id ?? null,
       });
       setPriceModalError("");
@@ -1424,11 +1446,19 @@ export function PropertyChessboardWorkspace({
   }, [dragSelection]);
 
   const groupedRooms = useMemo<GroupedRoomBucket[]>(() => {
-    return [...rooms].sort(compareRoomsForChessboard).map((room) => ({
-      key: `room:${room.id}`,
-      groupLabel: `Категория: ${room.bathroomTypeLabel}`,
-      items: [room],
-    }));
+    return [...rooms]
+      .sort((left, right) => {
+        if (left.sortOrder !== right.sortOrder) {
+          return left.sortOrder - right.sortOrder;
+        }
+
+        return compareRoomsForChessboard(left, right);
+      })
+      .map((room) => ({
+        key: `room:${room.id}`,
+        groupLabel: `Категория: ${room.bathroomTypeLabel}`,
+        items: [room],
+      }));
   }, [rooms]);
 
   const roomPagerEntries = useMemo<RoomPagerEntry[]>(
@@ -1440,6 +1470,10 @@ export function PropertyChessboardWorkspace({
         })),
       ),
     [groupedRooms],
+  );
+  const orderedRooms = useMemo(
+    () => roomPagerEntries.map((entry) => entry.room),
+    [roomPagerEntries],
   );
 
   const mobileRoomPageCount = useMemo(
@@ -1567,7 +1601,13 @@ export function PropertyChessboardWorkspace({
 
   useEffect(() => {
     setExpandedMobileRailKey(null);
-  }, [boardMode, periodEndIso, periodStartIso, selectedPropertyId]);
+  }, [boardMode, isRoomOrderMode, periodEndIso, periodStartIso, selectedPropertyId]);
+
+  useEffect(() => {
+    setIsRoomOrderMode(false);
+    setDraggingRoomId(null);
+    setDragOverRoomId(null);
+  }, [selectedPropertyId]);
 
   useEffect(() => {
     if (!isBookingModalOpen || !bookingForm?.roomId) {
@@ -1594,7 +1634,9 @@ export function PropertyChessboardWorkspace({
     setMessageError("");
 
     try {
-      const response = await fetch(`/api/properties/${selectedPropertyId}/rooms?view=chessboard`);
+      const response = await fetch(`/api/properties/${selectedPropertyId}/rooms?view=chessboard`, {
+        cache: "no-store",
+      });
       const body = (await response.json()) as {
         items?: SerializedChessboardRoom[];
         error?: string;
@@ -1621,6 +1663,117 @@ export function PropertyChessboardWorkspace({
   useEffect(() => {
     void refreshRooms();
   }, [refreshRooms]);
+
+  async function reorderRooms(nextRooms: SerializedChessboardRoom[]) {
+    if (!selectedPropertyId || isReorderingRooms) {
+      return;
+    }
+
+    const previousRooms = rooms;
+    const normalizedRooms = nextRooms.map((room, index) => ({
+      ...room,
+      sortOrder: index + 1,
+    }));
+
+    setMessageError("");
+    setMessageSuccess("");
+    setDragSelection(null);
+    setDraggingRoomId(null);
+    setDragOverRoomId(null);
+    setIsReorderingRooms(true);
+    setRooms(normalizedRooms);
+
+    try {
+      const response = await fetch(
+        `/api/properties/${selectedPropertyId}/rooms/reorder?view=chessboard`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderedIds: normalizedRooms.map((room) => room.id),
+          }),
+        },
+      );
+
+      const body = (await response.json()) as {
+        items?: SerializedChessboardRoom[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setRooms(previousRooms);
+        setMessageError(readResponseError(body, "Не удалось изменить порядок номеров"));
+        return;
+      }
+
+      setRooms(body.items ?? normalizedRooms);
+      setMessageSuccess("Порядок номеров в шахматке сохранен");
+    } catch {
+      setRooms(previousRooms);
+      setMessageError("Не удалось изменить порядок номеров");
+    } finally {
+      setIsReorderingRooms(false);
+    }
+  }
+
+  function moveRoom(roomId: string, direction: -1 | 1) {
+    const currentIndex = orderedRooms.findIndex((room) => room.id === roomId);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= orderedRooms.length) {
+      return;
+    }
+
+    const nextRooms = [...orderedRooms];
+    const [movedRoom] = nextRooms.splice(currentIndex, 1);
+    if (!movedRoom) {
+      return;
+    }
+    nextRooms.splice(nextIndex, 0, movedRoom);
+    void reorderRooms(nextRooms);
+  }
+
+  function moveRoomToPosition(roomId: string, position: number) {
+    const currentIndex = orderedRooms.findIndex((room) => room.id === roomId);
+    const nextIndex = Math.max(0, Math.min(orderedRooms.length - 1, position - 1));
+
+    if (currentIndex < 0 || currentIndex === nextIndex) {
+      return;
+    }
+
+    const nextRooms = [...orderedRooms];
+    const [movedRoom] = nextRooms.splice(currentIndex, 1);
+    if (!movedRoom) {
+      return;
+    }
+    nextRooms.splice(nextIndex, 0, movedRoom);
+    void reorderRooms(nextRooms);
+  }
+
+  function reorderRoomByDrop(roomId: string, targetRoomId: string) {
+    if (roomId === targetRoomId || isReorderingRooms) {
+      return;
+    }
+
+    const currentIndex = orderedRooms.findIndex((room) => room.id === roomId);
+    const nextIndex = orderedRooms.findIndex((room) => room.id === targetRoomId);
+
+    if (currentIndex < 0 || nextIndex < 0 || currentIndex === nextIndex) {
+      return;
+    }
+
+    const nextRooms = [...orderedRooms];
+    const [movedRoom] = nextRooms.splice(currentIndex, 1);
+    if (!movedRoom) {
+      return;
+    }
+
+    nextRooms.splice(nextIndex, 0, movedRoom);
+    void reorderRooms(nextRooms);
+  }
 
   // Occupancy API is property-scoped, so the visible window refreshes in a single request.
   const refreshOccupancies = useCallback(async () => {
@@ -1754,6 +1907,10 @@ export function PropertyChessboardWorkspace({
         sourcePrice?.minGuests === null || sourcePrice?.minGuests === undefined
           ? ""
           : String(sourcePrice.minGuests),
+      minNightsInput:
+        sourcePrice?.minNights === null || sourcePrice?.minNights === undefined
+          ? ""
+          : String(sourcePrice.minNights),
       editingPriceId: sourcePrice?.id ?? null,
     });
     setPriceModalError("");
@@ -2454,6 +2611,21 @@ export function PropertyChessboardWorkspace({
       minGuests = parsedMinGuests;
     }
 
+    const minNightsValue = priceForm.minNightsInput.trim();
+    let minNights: number | null = null;
+    if (minNightsValue.length > 0) {
+      const parsedMinNights = Number.parseInt(minNightsValue, 10);
+      if (!Number.isFinite(parsedMinNights) || parsedMinNights < 1) {
+        setPriceModalError("Минимум ночей должен быть целым числом от 1");
+        return;
+      }
+      if (parsedMinNights > 60) {
+        setPriceModalError("Минимум ночей не может быть больше 60");
+        return;
+      }
+      minNights = parsedMinNights;
+    }
+
     setIsSavingPrice(true);
     setPriceModalError("");
 
@@ -2471,6 +2643,7 @@ export function PropertyChessboardWorkspace({
           price: normalizedPrice,
           priceType: priceForm.priceType,
           minGuests,
+          minNights,
           currency: priceForm.currency.trim().toUpperCase() || "RUB",
         }),
       });
@@ -2578,6 +2751,7 @@ export function PropertyChessboardWorkspace({
         price: price.price,
         priceType: price.priceType,
         minGuests: price.minGuests,
+        minNights: price.minNights,
         currency: price.currency,
       }));
 
@@ -2883,6 +3057,21 @@ export function PropertyChessboardWorkspace({
               )}
               <button
                 type="button"
+                className={cn(
+                  compactToolbarButtonClass,
+                  "shrink-0",
+                  isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
+                )}
+                onClick={() => {
+                  setIsRoomOrderMode((prev) => !prev);
+                  setDragSelection(null);
+                }}
+                disabled={!canManageCalendar || rooms.length < 2}
+              >
+                {isRoomOrderMode ? "Готово" : "Порядок номеров"}
+              </button>
+              <button
+                type="button"
                 className={cn(compactToolbarButtonClass, "shrink-0")}
                 onClick={() => jumpToDate(getLocalTodayIso())}
               >
@@ -3005,6 +3194,140 @@ export function PropertyChessboardWorkspace({
                   onChange={changeMobileBoardRoomPage}
                   className="ml-auto max-w-full"
                 />
+              </div>
+            ) : null}
+
+            {rooms.length > 0 && isRoomOrderMode ? (
+              <div className="mb-2 overflow-hidden rounded-xl border border-primary/14 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(255,255,255,0.97))] shadow-[0_18px_34px_-30px_rgba(15,118,110,0.5)]">
+                <div className="flex flex-wrap items-start justify-between gap-2 border-b border-primary/10 px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Порядок номеров в шахматке</p>
+                    <p className="mt-0.5 text-xs text-olive/62">
+                      Меняйте строки местами: цены и занятость останутся привязаны к своим номерам.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0")}
+                    onClick={() => {
+                      setIsRoomOrderMode(false);
+                      setDraggingRoomId(null);
+                      setDragOverRoomId(null);
+                    }}
+                  >
+                    Готово
+                  </button>
+                </div>
+
+                <div className="grid gap-1.5 p-2 sm:p-3">
+                  {orderedRooms.map((room, index) => {
+                    const isFirstRoom = index === 0;
+                    const isLastRoom = index === orderedRooms.length - 1;
+                    const isDragging = draggingRoomId === room.id;
+                    const isDragTarget = dragOverRoomId === room.id && draggingRoomId !== room.id;
+
+                    return (
+                      <article
+                        key={room.id}
+                        draggable={!isCoarsePointer && !isReorderingRooms}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", room.id);
+                          setDraggingRoomId(room.id);
+                          setDragOverRoomId(room.id);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          if (dragOverRoomId !== room.id) {
+                            setDragOverRoomId(room.id);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const sourceRoomId =
+                            event.dataTransfer.getData("text/plain") || draggingRoomId;
+                          setDragOverRoomId(null);
+                          setDraggingRoomId(null);
+                          if (sourceRoomId) {
+                            reorderRoomByDrop(sourceRoomId, room.id);
+                          }
+                        }}
+                        onDragEnd={() => {
+                          setDraggingRoomId(null);
+                          setDragOverRoomId(null);
+                        }}
+                        className={cn(
+                          "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border bg-white/94 p-2.5 shadow-[0_12px_24px_-24px_rgba(58,43,35,0.45)] transition sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]",
+                          isReorderingRooms
+                            ? "cursor-wait opacity-70"
+                            : "cursor-grab active:cursor-grabbing",
+                          isDragging
+                            ? "scale-[0.99] border-primary/30 opacity-55"
+                            : "border-olive/10",
+                          isDragTarget
+                            ? "border-primary/45 bg-primary/6 shadow-[0_18px_34px_-24px_rgba(15,118,110,0.45)]"
+                            : "hover:border-primary/20 hover:bg-white",
+                        )}
+                      >
+                        <span className="hidden h-10 w-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-olive/18 bg-cream/65 text-olive/46 transition group-hover:border-primary/25 group-hover:text-primary sm:inline-flex">
+                          <AppIcon icon={MoreVertical} className="h-4 w-4" />
+                        </span>
+                        <span className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-primary/12 bg-primary/7 px-2 text-sm font-bold text-primary">
+                          {index + 1}
+                        </span>
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-olive">
+                              {room.title}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-olive/55">
+                              {formatRoomMeta(room)}
+                            </p>
+                          </div>
+                          <select
+                            value={index + 1}
+                            onChange={(event) =>
+                              moveRoomToPosition(room.id, Number.parseInt(event.target.value, 10))
+                            }
+                            disabled={isReorderingRooms}
+                            aria-label="Позиция номера в шахматке"
+                            className="hidden h-9 shrink-0 rounded-lg border border-olive/15 bg-white px-2 text-xs font-semibold text-olive outline-none transition hover:bg-cream focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-55 sm:block"
+                          >
+                            {orderedRooms.map((item, positionIndex) => (
+                              <option key={item.id} value={positionIndex + 1}>
+                                {positionIndex + 1}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg border border-olive/12 bg-cream/60 px-2 text-xs font-semibold text-olive transition hover:border-primary/20 hover:bg-primary/6 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            onClick={() => moveRoom(room.id, -1)}
+                            disabled={isFirstRoom || isReorderingRooms}
+                            aria-label="Поднять номер выше"
+                          >
+                            <AppIcon icon={ChevronUp} className="h-4 w-4" />
+                            Выше
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg border border-olive/12 bg-cream/60 px-2 text-xs font-semibold text-olive transition hover:border-primary/20 hover:bg-primary/6 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            onClick={() => moveRoom(room.id, 1)}
+                            disabled={isLastRoom || isReorderingRooms}
+                            aria-label="Опустить номер ниже"
+                          >
+                            <AppIcon icon={ChevronDown} className="h-4 w-4" />
+                            Ниже
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
@@ -3154,6 +3477,9 @@ export function PropertyChessboardWorkspace({
                           setExpandedMobileRailKey((prev) => (prev === key ? null : key))
                         }
                         onCellMouseDown={(roomId, dayIso, hasOccupancy, pointer) => {
+                          if (isRoomOrderMode) {
+                            return;
+                          }
                           if (boardMode === "occupancy" && hasOccupancy) {
                             return;
                           }
@@ -3169,6 +3495,9 @@ export function PropertyChessboardWorkspace({
                           extendDragSelection(roomId, dayIso);
                         }}
                         onCellTap={(roomId, dayIso, hasOccupancy, price) => {
+                          if (isRoomOrderMode) {
+                            return;
+                          }
                           if (boardMode === "occupancy") {
                             if (hasOccupancy) {
                               return;
@@ -3188,7 +3517,12 @@ export function PropertyChessboardWorkspace({
                             sourcePrice: price,
                           });
                         }}
-                        onOccupancyClick={(occupancy) => openOccupancyActions(occupancy)}
+                        onOccupancyClick={(occupancy) => {
+                          if (isRoomOrderMode) {
+                            return;
+                          }
+                          openOccupancyActions(occupancy);
+                        }}
                       />
                     ))}
                   </tbody>
@@ -4116,18 +4450,67 @@ export function PropertyChessboardWorkspace({
                     })}
                   </div>
                 </div>
-                <label className="mt-3 block space-y-1.5">
-                  <span className={modalMetaLabelClass}>Минимум гостей (необязательно)</span>
-                  <Input
-                    className={modalTextInputClass}
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={priceForm.minGuestsInput}
-                    onChange={(event) => updatePriceForm({ minGuestsInput: event.target.value })}
-                    placeholder="Если пусто — без ограничений"
-                  />
-                </label>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1.5">
+                    <span className={modalMetaLabelClass}>Минимум гостей</span>
+                    <Input
+                      className={modalTextInputClass}
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={priceForm.minGuestsInput}
+                      onChange={(event) => updatePriceForm({ minGuestsInput: event.target.value })}
+                      placeholder="Без ограничения"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {["", "1", "2", "3", "4", "5"].map((value) => (
+                        <button
+                          key={`min-guests-${value || "any"}`}
+                          type="button"
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+                            priceForm.minGuestsInput === value
+                              ? "border-primary/25 bg-primary/10 text-primary"
+                              : "border-olive/12 bg-white text-olive/65 hover:border-primary/20 hover:text-primary",
+                          )}
+                          onClick={() => updatePriceForm({ minGuestsInput: value })}
+                        >
+                          {value ? `от ${value}` : "любой"}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+
+                  <label className="block space-y-1.5">
+                    <span className={modalMetaLabelClass}>Минимум ночей</span>
+                    <Input
+                      className={modalTextInputClass}
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={priceForm.minNightsInput}
+                      onChange={(event) => updatePriceForm({ minNightsInput: event.target.value })}
+                      placeholder="Без ограничения"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {["", "1", "2", "3", "5", "7"].map((value) => (
+                        <button
+                          key={`min-nights-${value || "any"}`}
+                          type="button"
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+                            priceForm.minNightsInput === value
+                              ? "border-primary/25 bg-primary/10 text-primary"
+                              : "border-olive/12 bg-white text-olive/65 hover:border-primary/20 hover:text-primary",
+                          )}
+                          onClick={() => updatePriceForm({ minNightsInput: value })}
+                        >
+                          {value ? `от ${value}` : "любой"}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                </div>
               </section>
 
               {priceModalError ? (
@@ -4367,6 +4750,7 @@ export function PropertyChessboardWorkspace({
       {/* Floating action button for mobile quick add */}
       {showFloatingQuickAdd &&
       canManageCalendar &&
+      !isRoomOrderMode &&
       !isBookingModalOpen &&
       !isCalendarSyncModalOpen &&
       !isPriceModalOpen &&
@@ -4717,10 +5101,7 @@ function FragmentByGroup({
                         startOffsetPx,
                         widthPx,
                         priceLabel: formatPriceLabel(price),
-                        guestsLabel:
-                          price.minGuests === null
-                            ? "Любой состав гостей"
-                            : `От ${price.minGuests} гостей`,
+                        guestsLabel: formatPriceRestrictionLabel(price),
                       };
                     })()
                   : null;

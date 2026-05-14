@@ -84,7 +84,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   const data = parsed.data;
   const dateFrom = parseIsoDate(data.dateFrom);
   const dateTo = parseIsoDate(data.dateTo);
-  const supportsRoomPriceType = await areDatabaseColumnsAvailable("RoomPrice", ["priceType"]);
+  const supportsRoomPriceWriteColumns = await areDatabaseColumnsAvailable("RoomPrice", [
+    "priceType",
+    "minNights",
+  ]);
 
   if (!dateFrom || !dateTo) {
     return NextResponse.json({ error: "Некорректный формат дат" }, { status: 400 });
@@ -107,7 +110,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  const updated = supportsRoomPriceType
+  const updated = supportsRoomPriceWriteColumns
     ? await db.roomPrice.update({
         where: { id: existing.id },
         data: {
@@ -116,6 +119,7 @@ export async function PATCH(request: Request, context: RouteContext) {
           price: data.price,
           priceType: data.priceType,
           minGuests: data.minGuests ?? null,
+          minNights: data.minNights ?? null,
           currency: data.currency,
         },
       })
@@ -124,6 +128,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         dateTo,
         price: data.price,
         minGuests: data.minGuests ?? null,
+        minNights: data.minNights ?? null,
         currency: data.currency,
       });
 
