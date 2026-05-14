@@ -13,6 +13,7 @@ const statusTabs = [
   { id: ReviewStatus.PENDING, label: "На проверке" },
   { id: ReviewStatus.ACTIVE, label: "Проверены" },
   { id: ReviewStatus.DELETED, label: "Отклонены" },
+  { id: ReviewStatus.DUPLICATE, label: "Дубли" },
   { id: "ALL", label: "Все" },
 ] as const;
 
@@ -24,6 +25,8 @@ function parseStatus(value: string | undefined): ReviewStatus | "ALL" {
   if (
     value === ReviewStatus.ACTIVE ||
     value === ReviewStatus.DELETED ||
+    value === ReviewStatus.DUPLICATE ||
+    value === ReviewStatus.FAILED ||
     value === ReviewStatus.PENDING
   ) {
     return value;
@@ -65,13 +68,14 @@ export default async function AdminImportedReviewsPage({
     <div className="space-y-6">
       <AdminPageHeader
         title="Проверка отзывов"
-        description="Импортированные отзывы с других сайтов по объектам, экскурсиям, турам и трансферам. Проверьте текст и источник перед публикацией."
+        description="Отзывы с других сайтов, добавленные вручную по объектам, экскурсиям, турам и трансферам. Проверьте текст и источник перед публикацией."
       />
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-5">
         <AdminStatCard label="На проверке" value={countByStatus.get(ReviewStatus.PENDING) ?? 0} />
         <AdminStatCard label="Проверены" value={countByStatus.get(ReviewStatus.ACTIVE) ?? 0} />
         <AdminStatCard label="Отклонены" value={countByStatus.get(ReviewStatus.DELETED) ?? 0} />
+        <AdminStatCard label="Дубли" value={countByStatus.get(ReviewStatus.DUPLICATE) ?? 0} />
         <AdminStatCard label="Всего" value={totalCount} />
       </div>
 
@@ -80,7 +84,11 @@ export default async function AdminImportedReviewsPage({
           {statusTabs.map((tab) => (
             <Link
               key={tab.id}
-              href={tab.id === ReviewStatus.PENDING ? "/admin/reviews" : `/admin/reviews?status=${tab.id}`}
+              href={
+                tab.id === ReviewStatus.PENDING
+                  ? "/admin/reviews"
+                  : `/admin/reviews?status=${tab.id}`
+              }
               className={cn(
                 "rounded-2xl border px-4 py-2 text-sm font-semibold transition",
                 status === tab.id
@@ -94,7 +102,7 @@ export default async function AdminImportedReviewsPage({
         </div>
       </AdminPanel>
 
-      <ImportedReviewModerationList initialReviews={items} />
+      <ImportedReviewModerationList initialReviews={items} activeStatus={status} />
     </div>
   );
 }

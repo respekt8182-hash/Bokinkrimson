@@ -897,40 +897,47 @@ export const createReviewSchema = z.object({
   reviewedAt: optionalReviewDateSchema,
 });
 
-export const importExternalReviewSchema = createReviewSchema.extend({
-  authorName: z
-    .string()
-    .trim()
-    .min(2, "Укажите имя автора отзыва")
-    .max(80, "Имя автора слишком длинное"),
-  sourceUrl: z
-    .string()
-    .trim()
-    .max(500, "Ссылка слишком длинная")
-    .refine((value) => {
-      if (!value) {
-        return true;
-      }
+export const manualExternalReviewSchema = createReviewSchema
+  .extend({
+    authorName: z
+      .string()
+      .trim()
+      .min(2, "Укажите имя автора отзыва")
+      .max(80, "Имя автора слишком длинное"),
+    sourceUrl: z
+      .string()
+      .trim()
+      .max(500, "Ссылка слишком длинная")
+      .refine((value) => {
+        if (!value) {
+          return true;
+        }
 
-      try {
-        const url = new URL(value);
-        return url.protocol === "http:" || url.protocol === "https:";
-      } catch {
-        return false;
-      }
-    }, "Ссылка должна начинаться с http:// или https://")
-    .optional()
-    .or(z.literal("")),
-  sourceName: z.string().trim().max(80, "Название сайта слишком длинное").optional().or(z.literal("")),
-}).superRefine((data, ctx) => {
-  if (!data.sourceUrl && !data.sourceName) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Укажите название сайта или ссылку на источник",
-      path: ["sourceName"],
-    });
-  }
-});
+        try {
+          const url = new URL(value);
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }, "Ссылка должна начинаться с http:// или https://")
+      .optional()
+      .or(z.literal("")),
+    sourceName: z
+      .string()
+      .trim()
+      .max(80, "Название сайта слишком длинное")
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.sourceUrl && !data.sourceName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Укажите название сайта или ссылку на источник",
+        path: ["sourceName"],
+      });
+    }
+  });
 
 export const createAdminMessageSchema = z
   .object({

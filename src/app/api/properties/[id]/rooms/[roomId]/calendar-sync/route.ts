@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import {
   buildCalendarExportUrl,
   ensureRoomCalendarSync,
+  ensureRoomCalendarImportSources,
   ensureRoomCalendarSyncFallback,
   getAccessibleCalendarRoom,
+  replaceRoomCalendarImportSources,
   serializeFallbackRoomCalendarSync,
   serializeRoomCalendarSync,
   updateRoomCalendarSyncFallback,
-  validateCalendarImportUrl,
+  validateCalendarImportSourcesInput,
 } from "@/lib/calendar-sync";
 import { areDatabaseColumnsAvailable, db, isDatabaseTableAvailable } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
@@ -19,8 +21,10 @@ type RouteContext = {
 async function isCalendarSyncSchemaReady() {
   return (
     (await isDatabaseTableAvailable("RoomCalendarSync")) &&
+    (await isDatabaseTableAvailable("RoomCalendarImportSource")) &&
     (await areDatabaseColumnsAvailable("RoomOccupancy", [
       "externalCalendarSyncId",
+      "externalCalendarSourceId",
       "externalCalendarUid",
     ]))
   );
@@ -51,8 +55,13 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const sync = await ensureRoomCalendarSync(db, room.id);
+  const sources = await ensureRoomCalendarImportSources(db, sync);
   return NextResponse.json({
-    item: serializeRoomCalendarSync(sync, buildCalendarExportUrl(request.url, sync.exportToken)),
+    item: serializeRoomCalendarSync(
+      sync,
+      buildCalendarExportUrl(request.url, sync.exportToken),
+      sources,
+    ),
   });
 }
 
@@ -82,23 +91,21 @@ export async function PATCH(request: Request, context: RouteContext) {
     "importUrl" in input && typeof input.importUrl === "string" ? input.importUrl : "";
   const isImportEnabled =
     "isImportEnabled" in input ? Boolean(input.isImportEnabled) : rawImportUrl.trim().length > 0;
-  const validatedUrl = validateCalendarImportUrl(rawImportUrl);
+  const validatedSources = validateCalendarImportSourcesInput(
+    "importSources" in input ? input.importSources : undefined,
+    {
+      importUrl: rawImportUrl,
+      isImportEnabled,
+    },
+  );
 
-  if (!validatedUrl.ok) {
-    return NextResponse.json({ error: validatedUrl.error }, { status: 400 });
-  }
-
-  if (isImportEnabled && !validatedUrl.url) {
-    return NextResponse.json(
-      { error: "Укажите ссылку для импорта или выключите импорт" },
-      { status: 400 },
-    );
+  if (!validatedSources.ok) {
+    return NextResponse.json({ error: validatedSources.error }, { status: 400 });
   }
 
   if (!(await isCalendarSyncSchemaReady())) {
     const sync = await updateRoomCalendarSyncFallback(db, room.id, {
-      importUrl: validatedUrl.url || "",
-      isImportEnabled: Boolean(isImportEnabled && validatedUrl.url),
+      importSources: validatedSources.sources,
     });
 
     return NextResponse.json({
@@ -110,18 +117,16 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const existing = await ensureRoomCalendarSync(db, room.id);
-  const sync = await db.roomCalendarSync.update({
-    where: { id: existing.id },
-    data: {
-      importUrl: validatedUrl.url || null,
-      isImportEnabled: Boolean(isImportEnabled && validatedUrl.url),
-      lastSyncStatus: validatedUrl.url ? existing.lastSyncStatus : null,
-      lastSyncMessage: validatedUrl.url ? existing.lastSyncMessage : null,
-      lastSyncedAt: validatedUrl.url ? existing.lastSyncedAt : null,
-    },
+  await ensureRoomCalendarImportSources(db, existing);
+  const { sync, sources } = await db.$transaction(async (tx) => {
+    return replaceRoomCalendarImportSources(tx, existing.id, validatedSources.sources);
   });
 
   return NextResponse.json({
-    item: serializeRoomCalendarSync(sync, buildCalendarExportUrl(request.url, sync.exportToken)),
+    item: serializeRoomCalendarSync(
+      sync,
+      buildCalendarExportUrl(request.url, sync.exportToken),
+      sources,
+    ),
   });
 }

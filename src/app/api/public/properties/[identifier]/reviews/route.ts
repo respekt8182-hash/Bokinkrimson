@@ -64,6 +64,7 @@ export async function GET(request: Request, context: RouteContext) {
       entityType: ReviewEntityType.PROPERTY,
       propertyId: property.id,
       status: ReviewStatus.ACTIVE,
+      rating: { gte: 0.5 },
     },
     orderBy: [{ createdAt: "desc" }],
     include: {

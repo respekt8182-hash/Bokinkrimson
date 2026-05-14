@@ -77,7 +77,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     currentStatus === PropertyStatus.PENDING_MODERATION ||
     currentStatus === PropertyStatus.REJECTED ||
     (isPublishedEdit && currentStatus === PropertyStatus.DRAFT);
-  const canModerateToReject = currentStatus === PropertyStatus.PENDING_MODERATION;
+  const canModerateToReject =
+    currentStatus === PropertyStatus.PENDING_MODERATION ||
+    (isPublishedEdit && currentStatus === PropertyStatus.DRAFT);
 
   if (targetStatus === PropertyStatus.PUBLISHED && !canModerateToPublished) {
     return NextResponse.json(

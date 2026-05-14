@@ -133,7 +133,7 @@ async function ensureFallbackExternalReviewTable(): Promise<boolean> {
             "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "deletedAt" TIMESTAMP(3),
             CONSTRAINT "${FALLBACK_EXTERNAL_REVIEW_TABLE}_status_check"
-              CHECK ("status" IN ('PENDING', 'ACTIVE', 'DELETED')),
+              CHECK ("status" IN ('PENDING', 'ACTIVE', 'DELETED', 'DUPLICATE', 'FAILED')),
             CONSTRAINT "${FALLBACK_EXTERNAL_REVIEW_TABLE}_entityType_check"
               CHECK ("entityType" IN ('property', 'excursion', 'transfer'))
           )
@@ -153,6 +153,15 @@ async function ensureFallbackExternalReviewTable(): Promise<boolean> {
         await db.$executeRawUnsafe(`
           ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
           ADD COLUMN IF NOT EXISTS "dislikesCount" INTEGER NOT NULL DEFAULT 0
+        `);
+        await db.$executeRawUnsafe(`
+          ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+          DROP CONSTRAINT IF EXISTS "${FALLBACK_EXTERNAL_REVIEW_TABLE}_status_check"
+        `);
+        await db.$executeRawUnsafe(`
+          ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+          ADD CONSTRAINT "${FALLBACK_EXTERNAL_REVIEW_TABLE}_status_check"
+          CHECK ("status" IN ('PENDING', 'ACTIVE', 'DELETED', 'DUPLICATE', 'FAILED'))
         `);
         await db.$executeRawUnsafe(`
           ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
@@ -1026,6 +1035,8 @@ export async function listImportedReviewsForAdmin(options?: {
     [ReviewStatus.PENDING, 0],
     [ReviewStatus.ACTIVE, 0],
     [ReviewStatus.DELETED, 0],
+    [ReviewStatus.DUPLICATE, 0],
+    [ReviewStatus.FAILED, 0],
   ]);
 
   for (const review of allImportedReviews) {

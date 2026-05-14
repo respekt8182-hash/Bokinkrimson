@@ -2,10 +2,12 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput, type PhoneInputValue } from "@/components/ui/phone-input";
@@ -30,6 +32,7 @@ export function RegisterForm() {
   });
   const [phoneError, setPhoneError] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
   const {
     register,
@@ -138,14 +141,16 @@ export function RegisterForm() {
             autoCorrect="off"
             spellCheck={false}
             {...register("password")}
-            className="pr-28"
+            className="pr-12"
           />
           <button
             type="button"
             onClick={() => setIsPasswordVisible((prev) => !prev)}
-            className="absolute inset-y-0 right-2 my-auto inline-flex h-10 items-center rounded-md px-2.5 text-sm font-semibold text-olive/78 transition hover:bg-cream"
+            aria-label={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
+            title={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-olive/72 transition hover:bg-cream hover:text-olive"
           >
-            {isPasswordVisible ? "Скрыть" : "Показать"}
+            <AppIcon icon={isPasswordVisible ? EyeOff : Eye} className="h-4 w-4" />
           </button>
         </div>
         {errors.password ? (
@@ -157,15 +162,27 @@ export function RegisterForm() {
         <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-olive">
           Повторите пароль
         </label>
-        <Input
-          id="confirmPassword"
-          type="password"
-          autoComplete="new-password"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          {...register("confirmPassword")}
-        />
+        <div className="relative">
+          <Input
+            id="confirmPassword"
+            type={isConfirmPasswordVisible ? "text" : "password"}
+            autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            {...register("confirmPassword")}
+            className="pr-12"
+          />
+          <button
+            type="button"
+            onClick={() => setIsConfirmPasswordVisible((prev) => !prev)}
+            aria-label={isConfirmPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
+            title={isConfirmPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-olive/72 transition hover:bg-cream hover:text-olive"
+          >
+            <AppIcon icon={isConfirmPasswordVisible ? EyeOff : Eye} className="h-4 w-4" />
+          </button>
+        </div>
         {errors.confirmPassword ? (
           <p className="mt-1 text-xs text-red-600">{errors.confirmPassword.message}</p>
         ) : null}

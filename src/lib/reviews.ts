@@ -1,10 +1,5 @@
 // Domain/service module for reviews.
-import {
-  Prisma,
-  ReviewEntityType,
-  ReviewReactionValue,
-  ReviewStatus,
-} from "@prisma/client";
+import { Prisma, ReviewEntityType, ReviewReactionValue, ReviewStatus } from "@prisma/client";
 import type { DbTransactionClient } from "@/lib/db";
 import { formatPublicPersonName } from "@/lib/public-display-name";
 
@@ -67,8 +62,7 @@ export function serializeReview(review: {
   reactions?: Array<{ value: ReviewReactionValue }> | null;
   user?: { firstName: string; lastName?: string | null; avatarUrl?: string | null } | null;
 }): SerializedReview {
-  const currentUserReaction =
-    review.currentUserReaction ?? review.reactions?.[0]?.value ?? null;
+  const currentUserReaction = review.currentUserReaction ?? review.reactions?.[0]?.value ?? null;
   const importedAuthorName = review.importedAuthorName?.trim() || null;
   const isImported = Boolean(review.isImported);
   const userName =
@@ -136,18 +130,21 @@ export async function refreshEntityReviewStats(
           entityType: ReviewEntityType.PROPERTY,
           propertyId: input.propertyId,
           status: ReviewStatus.ACTIVE,
+          rating: { gte: 0.5 },
         }
       : input.entityType === ReviewEntityType.EXCURSION
         ? {
             entityType: ReviewEntityType.EXCURSION,
             excursionId: input.excursionId,
             status: ReviewStatus.ACTIVE,
+            rating: { gte: 0.5 },
           }
-      : {
-          entityType: ReviewEntityType.TRANSFER,
-          transferId: input.transferId,
-          status: ReviewStatus.ACTIVE,
-        };
+        : {
+            entityType: ReviewEntityType.TRANSFER,
+            transferId: input.transferId,
+            status: ReviewStatus.ACTIVE,
+            rating: { gte: 0.5 },
+          };
 
   const aggregate = await tx.review.aggregate({
     where,

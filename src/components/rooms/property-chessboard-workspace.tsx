@@ -148,6 +148,18 @@ type CalendarSyncConfig = {
   lastSyncStatus: CalendarSyncStatus | null;
   lastSyncMessage: string | null;
   updatedAt: string;
+  importSources: CalendarImportSourceConfig[];
+};
+
+type CalendarImportSourceConfig = {
+  id: string;
+  label: string;
+  importUrl: string;
+  isEnabled: boolean;
+  lastSyncedAt: string | null;
+  lastSyncStatus: CalendarSyncStatus | null;
+  lastSyncMessage: string | null;
+  updatedAt: string;
 };
 
 const dayLabels = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
@@ -533,6 +545,59 @@ function getBookingColorLabel(color: string | null | undefined): string {
   );
 }
 
+function getCalendarSyncStatusLabel(status: CalendarSyncStatus | null): string {
+  switch (status) {
+    case "SUCCESS":
+      return "Успешно";
+    case "PARTIAL":
+      return "Частично";
+    case "ERROR":
+      return "Ошибка";
+    default:
+      return "Ожидает первой проверки";
+  }
+}
+
+function getCalendarSyncStatusClass(status: CalendarSyncStatus | null): string {
+  switch (status) {
+    case "SUCCESS":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "PARTIAL":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "ERROR":
+      return "border-red-200 bg-red-50 text-red-700";
+    default:
+      return "border-olive/12 bg-white text-olive/60";
+  }
+}
+
+function formatCalendarSyncDate(value: string | null): string {
+  return value ? new Date(value).toLocaleString("ru-RU") : "Еще не запускалась";
+}
+
+function normalizeCalendarImportSources(config: CalendarSyncConfig): CalendarImportSourceConfig[] {
+  if (Array.isArray(config.importSources) && config.importSources.length > 0) {
+    return config.importSources;
+  }
+
+  if (!config.importUrl.trim()) {
+    return [];
+  }
+
+  return [
+    {
+      id: "legacy",
+      label: "Основной календарь",
+      importUrl: config.importUrl,
+      isEnabled: config.isImportEnabled,
+      lastSyncedAt: config.lastSyncedAt,
+      lastSyncStatus: config.lastSyncStatus,
+      lastSyncMessage: config.lastSyncMessage,
+      updatedAt: config.updatedAt,
+    },
+  ];
+}
+
 function buildInitialBookingForm(input: {
   defaultRoomId: string;
   dateFrom: string;
@@ -916,8 +981,9 @@ export function PropertyChessboardWorkspace({
   const [visibleDaysCount, setVisibleDaysCount] = useState(minVisibleDaysCount);
   const [calendarSyncRoomId, setCalendarSyncRoomId] = useState<string>("");
   const [calendarSyncConfig, setCalendarSyncConfig] = useState<CalendarSyncConfig | null>(null);
-  const [calendarSyncImportUrl, setCalendarSyncImportUrl] = useState("");
-  const [calendarSyncImportEnabled, setCalendarSyncImportEnabled] = useState(false);
+  const [calendarSyncSources, setCalendarSyncSources] = useState<CalendarImportSourceConfig[]>([]);
+  const [newCalendarSyncSourceName, setNewCalendarSyncSourceName] = useState("");
+  const [newCalendarSyncSourceUrl, setNewCalendarSyncSourceUrl] = useState("");
   const objectMenuRef = useRef<HTMLDivElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
   const dragSelectionRef = useRef<DragSelectionState | null>(null);
@@ -1777,8 +1843,9 @@ export function PropertyChessboardWorkspace({
     setExpandedMobileRailKey(null);
     setCalendarSyncRoomId(defaultRoomId);
     setCalendarSyncConfig(null);
-    setCalendarSyncImportUrl("");
-    setCalendarSyncImportEnabled(false);
+    setCalendarSyncSources([]);
+    setNewCalendarSyncSourceName("");
+    setNewCalendarSyncSourceUrl("");
     setCalendarSyncError("");
     setCalendarSyncSuccess("");
     setIsCalendarSyncModalOpen(true);
@@ -1793,8 +1860,7 @@ export function PropertyChessboardWorkspace({
   const loadCalendarSyncConfig = useCallback(async () => {
     if (!selectedPropertyId || !calendarSyncRoomId) {
       setCalendarSyncConfig(null);
-      setCalendarSyncImportUrl("");
-      setCalendarSyncImportEnabled(false);
+      setCalendarSyncSources([]);
       return;
     }
 
@@ -1818,11 +1884,11 @@ export function PropertyChessboardWorkspace({
       }
 
       setCalendarSyncConfig(body.item);
-      setCalendarSyncImportUrl(body.item.importUrl);
-      setCalendarSyncImportEnabled(body.item.isImportEnabled);
+      setCalendarSyncSources(normalizeCalendarImportSources(body.item));
     } catch {
       setCalendarSyncError("Не удалось загрузить календарь номера");
       setCalendarSyncConfig(null);
+      setCalendarSyncSources([]);
     } finally {
       setIsLoadingCalendarSync(false);
     }
@@ -1846,10 +1912,82 @@ export function PropertyChessboardWorkspace({
     }
   }, [calendarSyncRoomId, isCalendarSyncModalOpen, rooms]);
 
-  async function saveCalendarSyncConfig(): Promise<CalendarSyncConfig | null> {
+  function addCalendarSyncSource() {
+    const label = newCalendarSyncSourceName.trim();
+    const importUrl = newCalendarSyncSourceUrl.trim();
+
+    setCalendarSyncError("");
+    setCalendarSyncSuccess("");
+
+    if (!label) {
+      setCalendarSyncError("Укажите название сайта");
+      return;
+    }
+    if (!importUrl) {
+      setCalendarSyncError("Укажите ссылку календаря");
+      return;
+    }
+    if (calendarSyncSources.some((source) => source.importUrl.trim() === importUrl)) {
+      setCalendarSyncError("Эта ссылка уже добавлена");
+      return;
+    }
+
+    setCalendarSyncSources((prev) => [
+      ...prev,
+      {
+        id: `draft-${Date.now()}`,
+        label,
+        importUrl,
+        isEnabled: true,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+        lastSyncMessage: null,
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    setNewCalendarSyncSourceName("");
+    setNewCalendarSyncSourceUrl("");
+    setCalendarSyncSuccess("Источник добавлен. Сохраните настройки, чтобы включить синхронизацию.");
+  }
+
+  function updateCalendarSyncSource(
+    sourceId: string,
+    patch: Partial<Pick<CalendarImportSourceConfig, "label" | "importUrl" | "isEnabled">>,
+  ) {
+    setCalendarSyncSources((prev) =>
+      prev.map((source) => (source.id === sourceId ? { ...source, ...patch } : source)),
+    );
+  }
+
+  async function removeCalendarSyncSource(sourceId: string) {
+    const previousSources = calendarSyncSources;
+    const nextSources = calendarSyncSources.filter((source) => source.id !== sourceId);
+    setCalendarSyncSources(nextSources);
+    setCalendarSyncError("");
+    setCalendarSyncSuccess("");
+
+    if (sourceId.startsWith("draft-")) {
+      setCalendarSyncSuccess("Источник удален");
+      return;
+    }
+
+    const savedConfig = await saveCalendarSyncConfig(nextSources, "Синхронизация отключена");
+    if (!savedConfig) {
+      setCalendarSyncSources(previousSources);
+    } else {
+      setReloadKey((prev) => prev + 1);
+    }
+  }
+
+  async function saveCalendarSyncConfig(
+    sourcesOverride?: CalendarImportSourceConfig[],
+    successMessage = "Настройки календаря сохранены",
+  ): Promise<CalendarSyncConfig | null> {
     if (!selectedPropertyId || !calendarSyncRoomId) {
       return null;
     }
+
+    const sourcesToSave = sourcesOverride ?? calendarSyncSources;
 
     setIsSavingCalendarSync(true);
     setCalendarSyncError("");
@@ -1862,8 +2000,12 @@ export function PropertyChessboardWorkspace({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            importUrl: calendarSyncImportUrl,
-            isImportEnabled: calendarSyncImportEnabled,
+            importSources: sourcesToSave.map((source) => ({
+              id: source.id.startsWith("draft-") ? undefined : source.id,
+              label: source.label,
+              importUrl: source.importUrl,
+              isEnabled: source.isEnabled,
+            })),
           }),
         },
       );
@@ -1878,9 +2020,8 @@ export function PropertyChessboardWorkspace({
       }
 
       setCalendarSyncConfig(body.item);
-      setCalendarSyncImportUrl(body.item.importUrl);
-      setCalendarSyncImportEnabled(body.item.isImportEnabled);
-      setCalendarSyncSuccess("Настройки календаря сохранены");
+      setCalendarSyncSources(normalizeCalendarImportSources(body.item));
+      setCalendarSyncSuccess(successMessage);
       return body.item;
     } catch {
       setCalendarSyncError("Не удалось сохранить настройки календаря");
@@ -2590,14 +2731,12 @@ export function PropertyChessboardWorkspace({
   const calendarSyncLastSyncedLabel = calendarSyncConfig?.lastSyncedAt
     ? new Date(calendarSyncConfig.lastSyncedAt).toLocaleString("ru-RU")
     : "Еще не запускался";
-  const calendarSyncStatusLabel =
-    calendarSyncConfig?.lastSyncStatus === "SUCCESS"
-      ? "Успешно"
-      : calendarSyncConfig?.lastSyncStatus === "PARTIAL"
-        ? "Частично"
-        : calendarSyncConfig?.lastSyncStatus === "ERROR"
-          ? "Ошибка"
-          : "Нет данных";
+  const calendarSyncStatusLabel = getCalendarSyncStatusLabel(
+    calendarSyncConfig?.lastSyncStatus ?? null,
+  );
+  const enabledCalendarSyncSourcesCount = calendarSyncSources.filter(
+    (source) => source.isEnabled && source.importUrl.trim(),
+  ).length;
 
   return (
     <div className="chessboard-workspace space-y-2.5">
@@ -3195,8 +3334,9 @@ export function PropertyChessboardWorkspace({
                     onChange={(event) => {
                       setCalendarSyncRoomId(event.target.value);
                       setCalendarSyncConfig(null);
-                      setCalendarSyncImportUrl("");
-                      setCalendarSyncImportEnabled(false);
+                      setCalendarSyncSources([]);
+                      setNewCalendarSyncSourceName("");
+                      setNewCalendarSyncSourceUrl("");
                       setCalendarSyncError("");
                       setCalendarSyncSuccess("");
                     }}
@@ -3259,35 +3399,167 @@ export function PropertyChessboardWorkspace({
 
               <section className={modalSectionClass}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-olive">Импорт занятых дат</p>
-                  <label className="inline-flex items-center gap-2 rounded-full border border-olive/12 bg-white px-3 py-1.5 text-xs font-semibold text-olive/75">
-                    <input
-                      type="checkbox"
-                      checked={calendarSyncImportEnabled}
-                      onChange={(event) => setCalendarSyncImportEnabled(event.target.checked)}
-                      className="h-4 w-4 accent-primary"
-                      disabled={
-                        isLoadingCalendarSync || isSavingCalendarSync || isRunningCalendarSync
-                      }
-                    />
-                    Включен
-                  </label>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Импорт занятых дат</p>
+                    <p className="mt-1 text-xs text-olive/62">
+                      Синхронизация данных проводится автоматически примерно раз в час.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-olive/12 bg-white px-3 py-1.5 text-xs font-semibold text-olive/70">
+                    {enabledCalendarSyncSourcesCount} из {calendarSyncSources.length} активны
+                  </span>
                 </div>
-                <div className="mt-3">
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(120px,0.7fr)_minmax(0,1.3fr)_auto]">
+                  <Input
+                    className={modalTextInputClass}
+                    value={newCalendarSyncSourceName}
+                    onChange={(event) => setNewCalendarSyncSourceName(event.target.value)}
+                    placeholder="Booking.com"
+                    disabled={
+                      isLoadingCalendarSync || isSavingCalendarSync || isRunningCalendarSync
+                    }
+                  />
                   <Input
                     className={cn(modalTextInputClass, "font-mono text-xs")}
-                    value={calendarSyncImportUrl}
-                    onChange={(event) => {
-                      setCalendarSyncImportUrl(event.target.value);
-                      if (event.target.value.trim()) {
-                        setCalendarSyncImportEnabled(true);
-                      }
-                    }}
+                    value={newCalendarSyncSourceUrl}
+                    onChange={(event) => setNewCalendarSyncSourceUrl(event.target.value)}
                     placeholder="https://example.ru/calendar/ical/room.ics"
                     disabled={
                       isLoadingCalendarSync || isSavingCalendarSync || isRunningCalendarSync
                     }
                   />
+                  <Button
+                    variant="secondary"
+                    className="w-full gap-2 px-3 py-2 text-xs sm:w-auto sm:text-sm"
+                    onClick={addCalendarSyncSource}
+                    disabled={
+                      isLoadingCalendarSync ||
+                      isSavingCalendarSync ||
+                      isRunningCalendarSync ||
+                      !newCalendarSyncSourceName.trim() ||
+                      !newCalendarSyncSourceUrl.trim()
+                    }
+                  >
+                    <AppIcon icon={Plus} className="h-4 w-4" />
+                    Добавить
+                  </Button>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={modalMetaLabelClass}>Текущие синхронизации</p>
+                    {calendarSyncSources.length > 0 ? (
+                      <p className="text-xs text-olive/50">
+                        {calendarSyncSources.length} подключено
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {calendarSyncSources.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-olive/16 bg-white/55 px-3 py-3 text-sm text-olive/62">
+                      Подключенные календари появятся здесь после добавления.
+                    </div>
+                  ) : (
+                    calendarSyncSources.map((source) => (
+                      <div
+                        key={source.id}
+                        className="rounded-xl border border-olive/12 bg-white/82 p-3 shadow-[0_12px_22px_-24px_rgba(60,42,20,0.65)]"
+                      >
+                        <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start">
+                          <label className="inline-flex items-center gap-2 rounded-full border border-olive/10 bg-cream/55 px-2.5 py-2 text-xs font-semibold text-olive/70 sm:mt-0.5">
+                            <input
+                              type="checkbox"
+                              checked={source.isEnabled}
+                              onChange={(event) =>
+                                updateCalendarSyncSource(source.id, {
+                                  isEnabled: event.target.checked,
+                                })
+                              }
+                              className="h-4 w-4 accent-primary"
+                              disabled={
+                                isLoadingCalendarSync ||
+                                isSavingCalendarSync ||
+                                isRunningCalendarSync
+                              }
+                            />
+                            Активна
+                          </label>
+
+                          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(110px,0.7fr)_minmax(0,1.3fr)]">
+                            <Input
+                              className={cn(modalTextInputClass, "min-h-10")}
+                              value={source.label}
+                              onChange={(event) =>
+                                updateCalendarSyncSource(source.id, {
+                                  label: event.target.value,
+                                })
+                              }
+                              placeholder="Название сайта"
+                              disabled={
+                                isLoadingCalendarSync ||
+                                isSavingCalendarSync ||
+                                isRunningCalendarSync
+                              }
+                            />
+                            <Input
+                              className={cn(modalTextInputClass, "min-h-10 font-mono text-xs")}
+                              value={source.importUrl}
+                              onChange={(event) =>
+                                updateCalendarSyncSource(source.id, {
+                                  importUrl: event.target.value,
+                                })
+                              }
+                              placeholder="https://example.ru/calendar.ics"
+                              disabled={
+                                isLoadingCalendarSync ||
+                                isSavingCalendarSync ||
+                                isRunningCalendarSync
+                              }
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => void removeCalendarSyncSource(source.id)}
+                            aria-label={`Отключить синхронизацию ${source.label}`}
+                            disabled={
+                              isLoadingCalendarSync || isSavingCalendarSync || isRunningCalendarSync
+                            }
+                          >
+                            <AppIcon icon={X} className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                          <div>
+                            <p className={modalMetaLabelClass}>Статус</p>
+                            <span
+                              className={cn(
+                                "mt-1 inline-flex rounded-full border px-2.5 py-1 font-semibold",
+                                getCalendarSyncStatusClass(source.lastSyncStatus),
+                              )}
+                            >
+                              {getCalendarSyncStatusLabel(source.lastSyncStatus)}
+                            </span>
+                          </div>
+                          <div>
+                            <p className={modalMetaLabelClass}>Последний импорт</p>
+                            <p className="mt-1 font-semibold text-olive">
+                              {formatCalendarSyncDate(source.lastSyncedAt)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className={modalMetaLabelClass}>Результат</p>
+                            <p className="mt-1 line-clamp-2 text-olive/72">
+                              {source.lastSyncMessage ?? "—"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </section>
 
@@ -3350,8 +3622,7 @@ export function PropertyChessboardWorkspace({
                     isLoadingCalendarSync ||
                     isSavingCalendarSync ||
                     isRunningCalendarSync ||
-                    !calendarSyncImportEnabled ||
-                    !calendarSyncImportUrl.trim()
+                    enabledCalendarSyncSourcesCount === 0
                   }
                 >
                   <AppIcon icon={RefreshCw} className="h-4 w-4" />

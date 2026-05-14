@@ -188,8 +188,8 @@ export const reviewRateLimit = {
 
 export const authRateLimit = {
   login: {
-    windowMinutes: 2,
-    maxRequestsPerWindow: 5,
+    windowMinutes: 1,
+    maxRequestsPerWindow: 8,
   },
   register: {
     windowMinutes: 10,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildCalendarExportUrl } from "@/lib/calendar-sync";
+import { buildCalendarExportUrl, validateCalendarImportSourcesInput } from "@/lib/calendar-sync";
 
 const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -26,5 +26,57 @@ describe("buildCalendarExportUrl", () => {
     expect(buildCalendarExportUrl("http://localhost:3000/api/internal", "local-token")).toBe(
       "https://krymvokrug.ru/api/calendar/rooms/local-token.ics",
     );
+  });
+});
+
+describe("validateCalendarImportSourcesInput", () => {
+  it("accepts several named import sources", () => {
+    const result = validateCalendarImportSourcesInput([
+      {
+        label: "Booking",
+        importUrl: "https://booking.example/calendar.ics#private",
+        isEnabled: true,
+      },
+      {
+        label: "Ostrovok",
+        importUrl: "https://ostrovok.example/room.ics",
+        isEnabled: false,
+      },
+    ]);
+
+    expect(result).toEqual({
+      ok: true,
+      sources: [
+        {
+          label: "Booking",
+          importUrl: "https://booking.example/calendar.ics",
+          isEnabled: true,
+          id: undefined,
+        },
+        {
+          label: "Ostrovok",
+          importUrl: "https://ostrovok.example/room.ics",
+          isEnabled: false,
+          id: undefined,
+        },
+      ],
+    });
+  });
+
+  it("rejects duplicate import links", () => {
+    const result = validateCalendarImportSourcesInput([
+      {
+        label: "First",
+        importUrl: "https://calendar.example/room.ics",
+        isEnabled: true,
+      },
+      {
+        label: "Second",
+        importUrl: "https://calendar.example/room.ics",
+        isEnabled: true,
+      },
+    ]);
+
+    expect(result).toEqual({ ok: false, error: "Эта ссылка уже добавлена" });
   });
 });

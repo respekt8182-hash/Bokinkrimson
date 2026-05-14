@@ -5,6 +5,7 @@ import { PropertyStatus } from "@prisma/client";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminListingPaymentConfirmation } from "@/components/admin/admin-listing-payment-confirmation";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
+import { ReviewModerationList } from "@/components/admin/review-moderation-list";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { purgeExpiredDeletedProperties } from "@/lib/admin-entity-lifecycle";
 import { isPropertyPublicationControlAvailable } from "@/lib/admin-schema-compat";
@@ -15,7 +16,9 @@ import {
   getAdminPropertyPendingEditLabel,
 } from "@/lib/admin-status";
 import { AdminPropertyEditor } from "@/components/admin/admin-property-editor";
+import { getExternalReviewSummaryWithFallback, listExternalReviews } from "@/lib/external-reviews";
 import { getPropertyWorkflowStatus } from "@/lib/properties";
+import { serializeReview } from "@/lib/reviews";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -38,19 +41,48 @@ export default async function AdminPropertyEditPage({ params }: Props) {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: { id: true, title: true },
       },
+      reviews: {
+        orderBy: [{ createdAt: "desc" }],
+        take: 100,
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+      },
     },
   });
 
   if (!property) notFound();
 
-  const [users, locations] = await Promise.all([
+  const [users, locations, importedReviews] = await Promise.all([
     db.user.findMany({
       where: { role: "USER", deletedAt: null },
       orderBy: [{ firstName: "asc" }],
       select: { id: true, firstName: true, phone: true },
     }),
     getLocationDirectoryItems(),
+    listExternalReviews({ entityType: "property", entityId: property.id }),
   ]);
+  const reviewsById = new Map(
+    property.reviews.map((review) => {
+      const serialized = serializeReview(review);
+      return [serialized.id, serialized] as const;
+    }),
+  );
+  for (const review of importedReviews) {
+    reviewsById.set(review.id, review);
+  }
+  const mergedReviews = [...reviewsById.values()];
+  const reviewSummary = await getExternalReviewSummaryWithFallback({
+    entityType: "property",
+    entityId: property.id,
+    avgRating: Number(property.avgRating),
+    reviewsCount: property.reviewsCount,
+  });
   const editorSections = [
     {
       href: `/admin/objects/${property.id}/about`,
@@ -178,6 +210,12 @@ export default async function AdminPropertyEditPage({ params }: Props) {
           { value: "offseason", label: "Межсезонье" },
           { value: "yearly", label: "Годовой" },
         ]}
+      />
+
+      <ReviewModerationList
+        initialReviews={mergedReviews}
+        initialAvgRating={reviewSummary.avgRating}
+        initialReviewsCount={reviewSummary.reviewsCount}
       />
 
       <section className="rounded-2xl border border-olive/10 bg-white p-5">

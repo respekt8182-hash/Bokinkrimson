@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   ensureRoomCalendarSync,
+  ensureRoomCalendarImportSources,
   getAccessibleCalendarRoom,
   runRoomCalendarImport,
   runRoomCalendarImportFallback,
@@ -15,8 +16,10 @@ type RouteContext = {
 async function isCalendarSyncSchemaReady() {
   return (
     (await isDatabaseTableAvailable("RoomCalendarSync")) &&
+    (await isDatabaseTableAvailable("RoomCalendarImportSource")) &&
     (await areDatabaseColumnsAvailable("RoomOccupancy", [
       "externalCalendarSyncId",
+      "externalCalendarSourceId",
       "externalCalendarUid",
     ]))
   );
@@ -49,10 +52,11 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const sync = await ensureRoomCalendarSync(db, room.id);
+  const sources = await ensureRoomCalendarImportSources(db, sync);
 
-  if (!sync.isImportEnabled || !sync.importUrl) {
+  if (!sources.some((source) => source.isEnabled && source.importUrl)) {
     return NextResponse.json(
-      { error: "Сначала сохраните ссылку импорта и включите импорт" },
+      { error: "Сначала подключите хотя бы один календарь импорта" },
       { status: 400 },
     );
   }

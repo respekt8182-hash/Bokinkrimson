@@ -594,12 +594,13 @@ export function PropertyReviewsSection({
                           <span
                             title={externalSourceTitle}
                             aria-label={externalSourceTitle}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
                           >
                             <AppIcon
                               icon={review.externalSourceName ? ShieldCheck : Info}
                               className="h-3.5 w-3.5"
                             />
+                            Отзыв добавлен из: {review.externalSourceName ?? "внешний сайт"}
                           </span>
                         ) : null}
                       </div>

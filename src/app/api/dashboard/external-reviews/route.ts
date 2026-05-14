@@ -8,7 +8,7 @@ import {
   listExternalReviews,
   parseExternalReviewEntityType,
 } from "@/lib/external-reviews";
-import { importExternalReviewSchema } from "@/lib/schemas";
+import { manualExternalReviewSchema } from "@/lib/schemas";
 
 function parseEntity(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -27,7 +27,10 @@ export async function GET(request: Request) {
 
   const entity = parseEntity(request);
   if (!entity) {
-    return NextResponse.json({ error: "Укажите корректные entityType и entityId" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Укажите корректные entityType и entityId" },
+      { status: 400 },
+    );
   }
 
   const ownedEntity = await findExternalReviewEntity({
@@ -65,7 +68,10 @@ export async function POST(request: Request) {
 
   const entity = parseEntity(request);
   if (!entity) {
-    return NextResponse.json({ error: "Укажите корректные entityType и entityId" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Укажите корректные entityType и entityId" },
+      { status: 400 },
+    );
   }
 
   const ownedEntity = await findExternalReviewEntity({
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const parsed = importExternalReviewSchema.safeParse(payload);
+  const parsed = manualExternalReviewSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: "Проверьте данные отзыва" }, { status: 400 });
   }

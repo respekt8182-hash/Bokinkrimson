@@ -6,7 +6,7 @@ import {
   hasExternalReviewSupport,
   listExternalReviews,
 } from "@/lib/external-reviews";
-import { importExternalReviewSchema } from "@/lib/schemas";
+import { manualExternalReviewSchema } from "@/lib/schemas";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -76,7 +76,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const parsed = importExternalReviewSchema.safeParse(payload);
+  const parsed = manualExternalReviewSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: "Проверьте данные отзыва" }, { status: 400 });
   }

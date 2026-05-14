@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { ReviewStatus } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
   createExternalReview,
@@ -9,7 +9,7 @@ import {
   listExternalReviews,
   parseExternalReviewEntityType,
 } from "@/lib/external-reviews";
-import { importExternalReviewSchema } from "@/lib/schemas";
+import { manualExternalReviewSchema } from "@/lib/schemas";
 
 function parseEntity(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const parsed = importExternalReviewSchema.safeParse(payload);
+  const parsed = manualExternalReviewSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: "Проверьте данные отзыва" }, { status: 400 });
   }

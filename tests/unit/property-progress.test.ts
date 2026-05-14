@@ -1,11 +1,14 @@
 // Unit tests for owner property wizard progress and readiness calculations.
 import { MediaType, PetsPolicy, PropertyStatus, SmokingPolicy } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  buildPropertyWorkflowStatusWhere,
   getPropertyAutoModerationUpdate,
   getPropertyPaymentReadinessIssues,
   getPropertyProgress,
   getPropertyWorkflowStatusLabel,
+  isPropertyWorkflowPendingModeration,
+  markPropertyNeedsRemoderationAfterOwnerEdit,
 } from "../../src/lib/properties";
 
 function buildDraft(
@@ -86,7 +89,7 @@ describe("property workflow status label", () => {
   it("shows pending edit states for published properties", () => {
     expect(
       getPropertyWorkflowStatusLabel(PropertyStatus.PUBLISHED, null, PropertyStatus.DRAFT),
-    ).toBe("Черновик изменений");
+    ).toBe("Изменения на модерации");
     expect(
       getPropertyWorkflowStatusLabel(
         PropertyStatus.PUBLISHED,
@@ -94,6 +97,63 @@ describe("property workflow status label", () => {
         PropertyStatus.REJECTED,
       ),
     ).toBe("Изменения отклонены");
+  });
+});
+
+describe("property moderation queue status", () => {
+  it("treats saved edits of published properties as pending moderation", () => {
+    expect(
+      isPropertyWorkflowPendingModeration(PropertyStatus.PUBLISHED, PropertyStatus.DRAFT),
+    ).toBe(true);
+    expect(
+      isPropertyWorkflowPendingModeration(
+        PropertyStatus.PUBLISHED,
+        PropertyStatus.PENDING_MODERATION,
+      ),
+    ).toBe(true);
+    expect(isPropertyWorkflowPendingModeration(PropertyStatus.DRAFT, null)).toBe(false);
+  });
+
+  it("builds a queue filter that includes legacy published edit drafts", () => {
+    expect(buildPropertyWorkflowStatusWhere(PropertyStatus.PENDING_MODERATION)).toEqual({
+      OR: [
+        { status: PropertyStatus.PENDING_MODERATION },
+        {
+          status: PropertyStatus.PUBLISHED,
+          pendingEditStatus: {
+            in: [PropertyStatus.DRAFT, PropertyStatus.PENDING_MODERATION],
+          },
+        },
+      ],
+    });
+    expect(buildPropertyWorkflowStatusWhere(PropertyStatus.DRAFT)).toEqual({
+      status: PropertyStatus.DRAFT,
+    });
+  });
+
+  it("marks published owner edits as moderation-ready even after snapshot preparation", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const client = {
+      property: {
+        updateMany,
+      },
+    } as never;
+
+    await markPropertyNeedsRemoderationAfterOwnerEdit(client, "property-1");
+
+    expect(updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "property-1",
+          status: PropertyStatus.PUBLISHED,
+          OR: expect.arrayContaining([{ pendingEditStatus: PropertyStatus.DRAFT }]),
+        }),
+        data: expect.objectContaining({
+          pendingEditStatus: PropertyStatus.PENDING_MODERATION,
+        }),
+      }),
+    );
   });
 });
 

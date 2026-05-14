@@ -50,7 +50,7 @@ export function ReviewModerationList({
   const [reviews, setReviews] = useState(initialReviews);
   const [avgRating, setAvgRating] = useState(initialAvgRating);
   const [reviewsCount, setReviewsCount] = useState(initialReviewsCount);
-  const [processingById, setProcessingById] = useState<Record<string, "approve" | "reject" | null>>({});
+  const [processingById, setProcessingById] = useState<Record<string, "approve" | "reject" | "delete" | null>>({});
   const [error, setError] = useState("");
   const orderedReviews = useMemo(
     () =>
@@ -65,32 +65,63 @@ export function ReviewModerationList({
     [reviews],
   );
 
-  async function moderateReview(id: string, action: "approve" | "reject") {
+  async function moderateReview(id: string, action: "approve" | "reject" | "delete") {
     setError("");
     setProcessingById((previous) => ({ ...previous, [id]: action }));
     try {
       const response = await fetch(`/api/admin/reviews/${id}`, {
-        method: "PATCH",
+        method: action === "delete" ? "DELETE" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: action === "delete" ? undefined : JSON.stringify({ action }),
       });
 
       const body = (await response.json()) as {
         error?: string;
-        item?: SerializedReview;
+        item?: SerializedReview | null;
         summary?: { avgRating: number; reviewsCount: number };
       };
 
-      if (!response.ok || !body.item) {
+      if (!response.ok) {
         setError(body.error ?? "Не удалось изменить статус отзыва");
         return;
       }
 
-      setReviews((prev) => prev.map((review) => (review.id === id ? body.item! : review)));
+      if (body.item === null) {
+        const nextReviews = reviews.filter((review) => review.id !== id);
+        setReviews(nextReviews);
+
+        if (body.summary) {
+          setAvgRating(body.summary.avgRating);
+          setReviewsCount(body.summary.reviewsCount);
+        } else {
+          const activeReviews = nextReviews.filter(
+            (review) => review.status === "ACTIVE" && review.rating >= 0.5,
+          );
+          const ratingSum = activeReviews.reduce((sum, review) => sum + review.rating, 0);
+          setReviewsCount(activeReviews.length);
+          setAvgRating(activeReviews.length > 0 ? ratingSum / activeReviews.length : 0);
+        }
+        return;
+      }
+
+      if (!body.item) {
+        setError("Не удалось изменить статус отзыва");
+        return;
+      }
+
+      const nextReviews = reviews.map((review) => (review.id === id ? body.item! : review));
+      setReviews(nextReviews);
 
       if (body.summary) {
         setAvgRating(body.summary.avgRating);
         setReviewsCount(body.summary.reviewsCount);
+      } else {
+        const activeReviews = nextReviews.filter(
+          (review) => review.status === "ACTIVE" && review.rating >= 0.5,
+        );
+        const ratingSum = activeReviews.reduce((sum, review) => sum + review.rating, 0);
+        setReviewsCount(activeReviews.length);
+        setAvgRating(activeReviews.length > 0 ? ratingSum / activeReviews.length : 0);
       }
     } finally {
       setProcessingById((previous) => ({ ...previous, [id]: null }));
@@ -200,6 +231,15 @@ export function ReviewModerationList({
                     onClick={() => void moderateReview(review.id, "approve")}
                   >
                     {(processingById[review.id] ?? null) === "approve" ? "Восстановление..." : "Восстановить"}
+                  </Button>
+                ) : null}
+                {review.isImported ? (
+                  <Button
+                    variant="ghost"
+                    disabled={(processingById[review.id] ?? null) !== null}
+                    onClick={() => void moderateReview(review.id, "delete")}
+                  >
+                    {(processingById[review.id] ?? null) === "delete" ? "Удаление..." : "Удалить"}
                   </Button>
                 ) : null}
               </div>

@@ -771,7 +771,7 @@ export function getPendingEditStatusLabel(
   void moderationNotes;
 
   if (workflowStatus === PropertyStatus.DRAFT) {
-    return "Черновик изменений";
+    return "Изменения на модерации";
   }
 
   if (workflowStatus === PropertyStatus.PENDING_MODERATION) {
@@ -832,6 +832,26 @@ export function getPropertyWorkflowStatus(
   return normalizePropertyWorkflowStatus(status);
 }
 
+export function isPropertyPublishedEditAwaitingModeration(
+  pendingEditStatus: PropertyStatus | null,
+): boolean {
+  return (
+    pendingEditStatus === PropertyStatus.DRAFT ||
+    pendingEditStatus === PropertyStatus.PENDING_MODERATION
+  );
+}
+
+export function isPropertyWorkflowPendingModeration(
+  status: PropertyStatus,
+  pendingEditStatus: PropertyStatus | null,
+): boolean {
+  return (
+    status === PropertyStatus.PENDING_MODERATION ||
+    (status === PropertyStatus.PUBLISHED &&
+      isPropertyPublishedEditAwaitingModeration(pendingEditStatus))
+  );
+}
+
 export function getPropertyWorkflowStatusLabel(
   status: PropertyStatus,
   moderationNotes: string | null,
@@ -841,7 +861,7 @@ export function getPropertyWorkflowStatusLabel(
 
   if (status === PropertyStatus.PUBLISHED && pendingEditStatus) {
     if (workflowStatus === PropertyStatus.DRAFT) {
-      return "Черновик изменений";
+      return "Изменения на модерации";
     }
 
     if (workflowStatus === PropertyStatus.PENDING_MODERATION) {
@@ -876,6 +896,26 @@ export function buildPropertyWorkflowStatusWhere(
     return {
       status: PropertyStatus.PUBLISHED,
       pendingEditStatus: null,
+    };
+  }
+
+  if (normalizedStatus === PropertyStatus.DRAFT) {
+    return {
+      status: PropertyStatus.DRAFT,
+    };
+  }
+
+  if (normalizedStatus === PropertyStatus.PENDING_MODERATION) {
+    return {
+      OR: [
+        { status: PropertyStatus.PENDING_MODERATION },
+        {
+          status: PropertyStatus.PUBLISHED,
+          pendingEditStatus: {
+            in: [PropertyStatus.DRAFT, PropertyStatus.PENDING_MODERATION],
+          },
+        },
+      ],
     };
   }
 
@@ -1194,10 +1234,14 @@ export async function markPropertyNeedsRemoderationAfterOwnerEdit(
       where: {
         id: propertyId,
         status: PropertyStatus.PUBLISHED,
-        OR: [{ pendingEditStatus: null }, { pendingEditStatus: PropertyStatus.REJECTED }],
+        OR: [
+          { pendingEditStatus: null },
+          { pendingEditStatus: PropertyStatus.DRAFT },
+          { pendingEditStatus: PropertyStatus.REJECTED },
+        ],
       },
       data: {
-        pendingEditStatus: PropertyStatus.DRAFT,
+        pendingEditStatus: PropertyStatus.PENDING_MODERATION,
         moderationNotes: null,
         moderatedById: null,
         moderatedAt: null,

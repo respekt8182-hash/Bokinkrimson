@@ -12,7 +12,10 @@ import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
-import { getPropertyWorkflowStatusLabel } from "@/lib/properties";
+import {
+  getPropertyWorkflowStatusLabel,
+  isPropertyWorkflowPendingModeration,
+} from "@/lib/properties";
 
 type ModerationQueuePageProps = {
   searchParams: Promise<{
@@ -40,6 +43,14 @@ function matchesPropertyWorkflowStatus(
 ) {
   if (status === PropertyStatus.PUBLISHED) {
     return item.status === PropertyStatus.PUBLISHED && item.pendingEditStatus === null;
+  }
+
+  if (status === PropertyStatus.DRAFT) {
+    return item.status === PropertyStatus.DRAFT;
+  }
+
+  if (status === PropertyStatus.PENDING_MODERATION) {
+    return isPropertyWorkflowPendingModeration(item.status, item.pendingEditStatus);
   }
 
   return (

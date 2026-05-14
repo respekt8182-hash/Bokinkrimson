@@ -25,7 +25,10 @@ import { getEmptyDraftExpiresAt } from "@/lib/draft-cleanup";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
-import { isPropertyEmptyDraft } from "@/lib/properties";
+import {
+  isPropertyEmptyDraft,
+  isPropertyWorkflowPendingModeration,
+} from "@/lib/properties";
 
 type Props = {
   searchParams: Promise<{
@@ -73,6 +76,7 @@ const SORT_LABELS: Record<string, string> = {
 function matchesPropertyWorkflowStatus(
   item: {
     status: PropertyStatus;
+    pendingEditStatus: PropertyStatus | null;
     ownerDeletedAt: Date | null;
     isPublishedVisible: boolean;
   },
@@ -81,8 +85,25 @@ function matchesPropertyWorkflowStatus(
   if (status === PropertyStatus.PUBLISHED) {
     return (
       item.status === PropertyStatus.PUBLISHED &&
+      item.pendingEditStatus === null &&
       item.ownerDeletedAt === null &&
       item.isPublishedVisible
+    );
+  }
+
+  if (status === PropertyStatus.DRAFT) {
+    return item.status === PropertyStatus.DRAFT;
+  }
+
+  if (status === PropertyStatus.PENDING_MODERATION) {
+    return isPropertyWorkflowPendingModeration(item.status, item.pendingEditStatus);
+  }
+
+  if (status === PropertyStatus.REJECTED) {
+    return (
+      item.status === PropertyStatus.REJECTED ||
+      (item.status === PropertyStatus.PUBLISHED &&
+        item.pendingEditStatus === PropertyStatus.REJECTED)
     );
   }
 
@@ -436,8 +457,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
               ? getAdminPropertyPendingEditLabel(item.pendingEditStatus, item.moderationNotes)
               : null;
             const showModerationLink =
-              item.status === PropertyStatus.PENDING_MODERATION ||
-              item.pendingEditStatus === PropertyStatus.PENDING_MODERATION;
+              isPropertyWorkflowPendingModeration(item.status, item.pendingEditStatus);
             const primaryStatusLabel = getAdminPropertyBaseStatusLabel(item.status);
 
             return (

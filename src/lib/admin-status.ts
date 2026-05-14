@@ -24,7 +24,7 @@ export function getAdminPropertyPendingEditLabel(
   }
 
   if (pendingEditStatus === PropertyStatus.DRAFT) {
-    return null;
+    return "Изменения на модерации";
   }
 
   if (pendingEditStatus === PropertyStatus.PENDING_MODERATION) {

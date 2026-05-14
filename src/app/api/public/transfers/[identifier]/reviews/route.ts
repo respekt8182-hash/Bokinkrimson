@@ -67,6 +67,7 @@ export async function GET(request: Request, context: RouteContext) {
           entityType: ReviewEntityType.TRANSFER,
           transferId: transfer.id,
           status: ReviewStatus.ACTIVE,
+          rating: { gte: 0.5 },
         },
         orderBy: [{ createdAt: "desc" }],
         include: {

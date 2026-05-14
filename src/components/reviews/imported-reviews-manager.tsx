@@ -1,60 +1,151 @@
 "use client";
 
-import { CircleAlert, ExternalLink, ShieldCheck, Star } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleAlert,
+  Clock3,
+  Copy,
+  ExternalLink,
+  ListChecks,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { SerializedReview } from "@/lib/reviews";
 
+type EntityType = "property" | "excursion" | "transfer";
+type Mode = "owner" | "admin";
+type ActiveTab = "queue" | "manual" | "history";
+
 type ImportedReviewsManagerProps = {
-  entityType: "property" | "excursion" | "transfer";
+  entityType: EntityType;
   entityId: string;
   initialReviews: SerializedReview[];
-  mode?: "owner" | "admin";
+  mode?: Mode;
   schemaAvailable?: boolean;
   title?: string;
   description?: string;
 };
 
-const ratingOptions = [5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
-const sourceNameSuggestions = [
-  "Куда на море",
-  "Яндекс",
-  "Суточно",
-  "Твил",
-  "101 Отель",
-  "Азур",
-  "Куда на юга",
-];
+type ReviewActionResponse = {
+  error?: string;
+  item?: SerializedReview | null;
+};
 
-function formatStatus(review: SerializedReview): { label: string; className: string } {
-  if (review.status === "ACTIVE") {
-    return {
-      label: review.verifiedAt ? "Проверен" : "Опубликован",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    };
-  }
+type ManualReviewResponse = {
+  error?: string;
+  item?: SerializedReview;
+};
 
-  if (review.status === "DELETED") {
-    return {
-      label: "Отклонён",
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-    };
-  }
+type EditDraft = {
+  authorName: string;
+  text: string;
+  guestCity: string;
+  reviewedAt: string;
+};
 
+type ManualDraft = {
+  authorName: string;
+  guestCity: string;
+  rating: string;
+  reviewedAt: string;
+  sourceName: string;
+  sourceUrl: string;
+  text: string;
+};
+
+const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
+const reviewPreviewLength = 220;
+
+function createEmptyManualDraft(): ManualDraft {
   return {
-    label: "На проверке",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
+    authorName: "",
+    guestCity: "",
+    rating: "5",
+    reviewedAt: "",
+    sourceName: "Вручную",
+    sourceUrl: "",
+    text: "",
   };
 }
 
-function formatDate(value: string): string {
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "";
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
     month: "long",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function toDateInputValue(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function statusMeta(status: SerializedReview["status"]): {
+  label: string;
+  className: string;
+} {
+  if (status === "ACTIVE") {
+    return {
+      label: "Опубликован",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
+  if (status === "DELETED") {
+    return { label: "Отклонён", className: "border-rose-200 bg-rose-50 text-rose-700" };
+  }
+  if (status === "DUPLICATE") {
+    return { label: "Дубль", className: "border-slate-200 bg-slate-50 text-slate-700" };
+  }
+  if (status === "FAILED") {
+    return { label: "Ошибка", className: "border-rose-200 bg-rose-50 text-rose-700" };
+  }
+
+  return {
+    label: "На модерации",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  };
+}
+
+function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
+  const exists = items.some((item) => item.id === nextItem.id);
+  if (!exists) {
+    return [nextItem, ...items];
+  }
+  return items.map((item) => (item.id === nextItem.id ? nextItem : item));
+}
+
+function getReviewPreview(text: string): string {
+  const normalized = text.trim();
+  if (normalized.length <= reviewPreviewLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, reviewPreviewLength).trim()}...`;
+}
+
+function hasHiddenText(text: string): boolean {
+  return text.trim().length > reviewPreviewLength;
 }
 
 export function ImportedReviewsManager({
@@ -64,86 +155,258 @@ export function ImportedReviewsManager({
   mode = "owner",
   schemaAvailable = true,
   title = "Отзывы с других сайтов",
-  description = "Добавьте имя автора, оценку, текст, сайт-источник, город и дату, если они известны. После проверки отзыв появится в публичной карточке.",
+  description = "Создайте отзыв вручную: укажите автора, оценку, текст и источник. Добавленные отзывы проходят модерацию перед публикацией.",
 }: ImportedReviewsManagerProps) {
   const [items, setItems] = useState(initialReviews);
-  const [authorName, setAuthorName] = useState("");
-  const [rating, setRating] = useState("5");
-  const [text, setText] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [sourceName, setSourceName] = useState("");
-  const [guestCity, setGuestCity] = useState("");
-  const [reviewedAt, setReviewedAt] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("manual");
+  const [manualDraft, setManualDraft] = useState<ManualDraft>(() => createEmptyManualDraft());
+  const [isManualSubmitting, setIsManualSubmitting] = useState(false);
+  const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(() => new Set());
+  const [ratingById, setRatingById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      initialReviews.map((review) => [
+        review.id,
+        review.rating >= 0.5 ? String(review.rating) : "",
+      ]),
+    ),
+  );
+  const [editDraftById, setEditDraftById] = useState<Record<string, EditDraft>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const endpoint =
+    mode === "admin" ? "/api/admin/external-reviews" : "/api/dashboard/external-reviews";
+  const endpointUrl = `${endpoint}?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`;
+  const reviewEndpoint = mode === "admin" ? "/api/admin/reviews" : "/api/dashboard/reviews";
 
   const orderedItems = useMemo(
     () =>
       [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
     [items],
   );
-  const endpoint =
-    mode === "admin" ? "/api/admin/external-reviews" : "/api/dashboard/external-reviews";
-  const endpointUrl = `${endpoint}?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`;
+  const queuedItems = useMemo(
+    () => orderedItems.filter((review) => review.status === "PENDING"),
+    [orderedItems],
+  );
+  const historyItems = useMemo(
+    () => orderedItems.filter((review) => review.status !== "PENDING"),
+    [orderedItems],
+  );
 
-  async function submitReview() {
+  function applyReviewItem(review: SerializedReview) {
+    setItems((previous) => mergeById(previous, review));
+    setRatingById((previous) => ({
+      ...previous,
+      [review.id]: review.rating >= 0.5 ? String(review.rating) : (previous[review.id] ?? ""),
+    }));
+  }
+
+  async function submitManualReview() {
     setError("");
     setSuccess("");
 
-    if (!schemaAvailable) {
-      setError("База данных ещё не обновлена для отзывов с других сайтов.");
+    const ratingValue = Number(manualDraft.rating || 0);
+    if (!manualDraft.authorName.trim()) {
+      setError("Укажите имя автора отзыва.");
+      return;
+    }
+    if (!Number.isFinite(ratingValue) || ratingValue < 0.5) {
+      setError("Выберите рейтинг от 0.5 до 5.");
+      return;
+    }
+    if (manualDraft.text.trim().length < 10) {
+      setError("Текст отзыва должен содержать минимум 10 символов.");
       return;
     }
 
-    if (
-      authorName.trim().length < 2 ||
-      text.trim().length < 10 ||
-      (!sourceName.trim() && !sourceUrl.trim())
-    ) {
-      setError("Заполните имя, текст отзыва и название сайта или ссылку на источник.");
-      return;
-    }
+    setIsManualSubmitting(true);
 
-    setIsSubmitting(true);
     try {
       const response = await fetch(endpointUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          authorName: authorName.trim(),
-          rating: Number(rating),
-          text: text.trim(),
-          sourceUrl: sourceUrl.trim(),
-          sourceName: sourceName.trim(),
-          guestCity: guestCity.trim(),
-          reviewedAt,
+          authorName: manualDraft.authorName.trim(),
+          rating: ratingValue,
+          text: manualDraft.text.trim(),
+          guestCity: manualDraft.guestCity.trim(),
+          reviewedAt: manualDraft.reviewedAt,
+          sourceName: manualDraft.sourceName.trim() || "Вручную",
+          sourceUrl: manualDraft.sourceUrl.trim(),
         }),
       });
-
-      const body = (await response.json()) as { error?: string; item?: SerializedReview };
+      const body = (await response.json()) as ManualReviewResponse;
 
       if (!response.ok || !body.item) {
-        setError(body.error ?? "Не удалось добавить отзыв.");
+        setError(body.error ?? "Не удалось создать отзыв.");
         return;
       }
 
-      setItems((previous) => [body.item!, ...previous]);
-      setAuthorName("");
-      setRating("5");
-      setText("");
-      setSourceUrl("");
-      setSourceName("");
-      setGuestCity("");
-      setReviewedAt("");
+      applyReviewItem(body.item);
+      setManualDraft(createEmptyManualDraft());
+      setActiveTab("queue");
+      setSuccess("Отзыв добавлен на модерацию.");
+    } finally {
+      setIsManualSubmitting(false);
+    }
+  }
+
+  function getDraft(review: SerializedReview): EditDraft {
+    return (
+      editDraftById[review.id] ?? {
+        authorName: review.importedAuthorName ?? review.userName,
+        text: review.text,
+        guestCity: review.guestCity ?? "",
+        reviewedAt: toDateInputValue(review.reviewedAt),
+      }
+    );
+  }
+
+  async function moderateReview(
+    review: SerializedReview,
+    action: "approve" | "reject" | "duplicate" | "delete" | "edit",
+  ) {
+    setError("");
+    setSuccess("");
+    setProcessingReviewId(review.id);
+
+    try {
+      const ratingValue = Number(ratingById[review.id] || 0);
+      const draft = getDraft(review);
+      const response = await fetch(`${reviewEndpoint}/${review.id}`, {
+        method: action === "delete" ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:
+          action === "delete"
+            ? undefined
+            : JSON.stringify({
+                action,
+                rating: Number.isFinite(ratingValue) ? ratingValue : 0,
+                text: draft.text.trim(),
+                authorName: draft.authorName.trim(),
+                guestCity: draft.guestCity.trim(),
+                reviewedAt: draft.reviewedAt,
+              }),
+      });
+      const body = (await response.json()) as ReviewActionResponse;
+
+      if (!response.ok) {
+        setError(body.error ?? "Не удалось изменить отзыв.");
+        return;
+      }
+
+      if (action === "delete" || body.item === null) {
+        setItems((previous) => previous.filter((item) => item.id !== review.id));
+      } else if (body.item) {
+        setItems((previous) => previous.map((item) => (item.id === review.id ? body.item! : item)));
+        setRatingById((previous) => ({
+          ...previous,
+          [review.id]:
+            body.item!.rating >= 0.5 ? String(body.item!.rating) : (previous[review.id] ?? ""),
+        }));
+      }
+
+      if (action === "edit") {
+        setEditDraftById((previous) => {
+          const next = { ...previous };
+          delete next[review.id];
+          return next;
+        });
+      }
+
       setSuccess(
-        mode === "admin"
-          ? "Отзыв добавлен и отправлен на проверку."
-          : "Отзыв отправлен администратору на проверку.",
+        action === "approve"
+          ? "Отзыв опубликован."
+          : action === "reject"
+            ? "Отзыв отклонён."
+            : action === "duplicate"
+              ? "Отзыв отмечен как дубль."
+              : action === "delete"
+                ? "Отзыв удалён."
+                : "Отзыв сохранён.",
       );
     } finally {
-      setIsSubmitting(false);
+      setProcessingReviewId(null);
     }
+  }
+
+  function toggleHistoryItem(reviewId: string) {
+    setExpandedHistoryIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(reviewId)) {
+        next.delete(reviewId);
+      } else {
+        next.add(reviewId);
+      }
+      return next;
+    });
+  }
+
+  function renderEditableReview(review: SerializedReview) {
+    const draft = getDraft(review);
+    const isEditing = review.id in editDraftById;
+
+    if (!isEditing) {
+      return (
+        <>
+          <p className="mt-4 whitespace-pre-line text-sm leading-6 text-olive/82">{review.text}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/58">
+            {review.guestCity ? <span>Город: {review.guestCity}</span> : null}
+            {review.reviewedAt ? <span>Дата: {formatDate(review.reviewedAt)}</span> : null}
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Input
+          value={draft.authorName}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, authorName: event.target.value },
+            }))
+          }
+          placeholder="Автор"
+          maxLength={80}
+        />
+        <Input
+          value={draft.guestCity}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, guestCity: event.target.value },
+            }))
+          }
+          placeholder="Город автора"
+          maxLength={80}
+        />
+        <Input
+          value={draft.reviewedAt}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, reviewedAt: event.target.value },
+            }))
+          }
+          type="date"
+        />
+        <textarea
+          value={draft.text}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, text: event.target.value },
+            }))
+          }
+          rows={4}
+          maxLength={2000}
+          className="rounded-xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20 md:col-span-2"
+        />
+      </div>
+    );
   }
 
   return (
@@ -159,7 +422,7 @@ export function ImportedReviewsManager({
           <p className="mt-2 max-w-3xl text-sm leading-6 text-olive/68">{description}</p>
         </div>
         <span className="inline-flex self-start rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-xs font-semibold text-primary">
-          {orderedItems.length} в истории
+          {queuedItems.length} на модерации
         </span>
       </div>
 
@@ -168,147 +431,391 @@ export function ImportedReviewsManager({
           <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             База данных ещё не обновлена для отзывов с других сайтов. Примените последнюю
-            Prisma-миграцию, после этого форма станет доступна.
+            Prisma-миграцию, чтобы добавить и модерировать отзывы.
           </p>
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_140px]">
-        <Input
-          value={authorName}
-          onChange={(event) => setAuthorName(event.target.value)}
-          placeholder="Имя автора отзыва"
-          maxLength={80}
-          disabled={!schemaAvailable}
-        />
-        <label className="relative">
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-500">
-            <AppIcon icon={Star} className="h-4 w-4" />
-          </span>
-          <select
-            value={rating}
-            onChange={(event) => setRating(event.target.value)}
-            disabled={!schemaAvailable}
-            className="h-11 w-full rounded-xl border border-olive/12 bg-white px-10 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20 disabled:opacity-55"
-          >
-            {ratingOptions.map((value) => (
-              <option key={value} value={String(value)}>
-                {value.toFixed(1)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Input
-          value={guestCity}
-          onChange={(event) => setGuestCity(event.target.value)}
-          placeholder="Город автора (необязательно)"
-          maxLength={80}
-          disabled={!schemaAvailable}
-        />
-        <Input
-          value={reviewedAt}
-          onChange={(event) => setReviewedAt(event.target.value)}
-          type="date"
-          max={new Date().toISOString().slice(0, 10)}
-          disabled={!schemaAvailable}
-          aria-label="Дата отзыва"
-        />
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Текст отзыва"
-          rows={4}
-          maxLength={2000}
-          disabled={!schemaAvailable}
-          className="rounded-xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20 disabled:opacity-55 lg:col-span-2"
-        />
-        <Input
-          value={sourceName}
-          onChange={(event) => setSourceName(event.target.value)}
-          placeholder="Название сайта-источника"
-          maxLength={80}
-          disabled={!schemaAvailable}
-          className="lg:col-span-2"
-        />
-        <div className="flex flex-wrap gap-2 lg:col-span-2">
-          {sourceNameSuggestions.map((suggestion) => (
+      <div className="mt-5 flex flex-wrap gap-2 border-b border-olive/10 pb-3">
+        {[
+          { value: "manual" as const, label: "Создать отзыв", icon: Plus },
+          { value: "queue" as const, label: "На модерации", icon: ListChecks },
+          { value: "history" as const, label: "Добавленные отзывы", icon: Clock3 },
+        ].map((tab) => {
+          const active = activeTab === tab.value;
+          return (
             <button
-              key={suggestion}
+              key={tab.value}
               type="button"
-              onClick={() => setSourceName(suggestion)}
-              disabled={!schemaAvailable}
-              className="rounded-full border border-primary/14 bg-primary/6 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-50"
+              onClick={() => setActiveTab(tab.value)}
+              className={`inline-flex items-center rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                active
+                  ? "border-primary/20 bg-primary/8 text-primary"
+                  : "border-olive/12 bg-white text-olive/70 hover:border-primary/20 hover:text-primary"
+              }`}
             >
-              {suggestion}
+              <AppIcon icon={tab.icon} className="mr-1.5 h-4 w-4" />
+              {tab.label}
             </button>
-          ))}
+          );
+        })}
+      </div>
+
+      {error ? <p className="mt-4 text-sm font-medium text-rose-600">{error}</p> : null}
+      {success ? <p className="mt-4 text-sm font-medium text-emerald-700">{success}</p> : null}
+
+      {activeTab === "queue" ? (
+        <div className="mt-6">
+          <h3 className="text-base font-semibold text-olive">Отзывы на модерации</h3>
+          {queuedItems.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
+              Сейчас нет отзывов на модерации.
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {queuedItems.map((review) => {
+                const meta = statusMeta(review.status);
+                const isEditing = review.id in editDraftById;
+                const processing = processingReviewId === review.id;
+                const canApprove = Number(ratingById[review.id] || 0) >= 0.5;
+
+                return (
+                  <article
+                    key={review.id}
+                    className="rounded-2xl border border-olive/10 bg-white p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-olive">{review.userName}</p>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+                          >
+                            {meta.label}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-olive/58">
+                          Источник: {review.externalSourceName ?? "внешний сайт"} · добавлен{" "}
+                          {formatDateTime(review.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-sm text-olive/66 sm:text-right">
+                        <p>
+                          Рейтинг сайта:{" "}
+                          {review.rating >= 0.5 ? `${review.rating.toFixed(1)} / 5` : "не выбран"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {renderEditableReview(review)}
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-olive">
+                        <AppIcon icon={Star} className="h-4 w-4 text-amber-500" />
+                        <select
+                          value={ratingById[review.id] ?? ""}
+                          onChange={(event) =>
+                            setRatingById((previous) => ({
+                              ...previous,
+                              [review.id]: event.target.value,
+                            }))
+                          }
+                          className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                        >
+                          {ratingOptions.map((value) => (
+                            <option key={value || "empty"} value={value}>
+                              {value ? `${Number(value).toFixed(1)} / 5` : "Рейтинг сайта"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Button
+                        type="button"
+                        onClick={() => void moderateReview(review, "approve")}
+                        disabled={processing || !canApprove}
+                      >
+                        <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
+                        Опубликовать
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void moderateReview(review, "reject")}
+                        disabled={processing}
+                      >
+                        <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
+                        Отклонить
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void moderateReview(review, "duplicate")}
+                        disabled={processing}
+                      >
+                        <AppIcon icon={Copy} className="mr-1.5 h-4 w-4" />
+                        Дубль
+                      </Button>
+                      {isEditing ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => void moderateReview(review, "edit")}
+                          disabled={processing}
+                        >
+                          Сохранить
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setEditDraftById((previous) => ({
+                              ...previous,
+                              [review.id]: getDraft(review),
+                            }))
+                          }
+                          disabled={processing}
+                        >
+                          <AppIcon icon={Pencil} className="mr-1.5 h-4 w-4" />
+                          Редактировать
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void moderateReview(review, "delete")}
+                        disabled={processing}
+                      >
+                        <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
+                        Удалить
+                      </Button>
+                      {review.externalSourceUrl ? (
+                        <a
+                          href={review.externalSourceUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center rounded-xl border border-primary/18 bg-primary/6 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+                        >
+                          Источник
+                          <AppIcon icon={ExternalLink} className="ml-1.5 h-4 w-4" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <Input
-          value={sourceUrl}
-          onChange={(event) => setSourceUrl(event.target.value)}
-          placeholder="Ссылка на отзыв (необязательно, только для проверки)"
-          type="url"
-          maxLength={500}
-          disabled={!schemaAvailable}
-          className="lg:col-span-2"
-        />
-      </div>
+      ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          onClick={() => void submitReview()}
-          disabled={isSubmitting || !schemaAvailable}
-        >
-          {isSubmitting ? "Отправляем..." : "Добавить на проверку"}
-        </Button>
-        {error ? <span className="text-sm text-rose-600">{error}</span> : null}
-        {success ? <span className="text-sm text-emerald-700">{success}</span> : null}
-      </div>
-
-      {orderedItems.length > 0 ? (
-        <div className="mt-6 space-y-3">
-          {orderedItems.map((review) => {
-            const status = formatStatus(review);
-
-            return (
-              <article
-                key={review.id}
-                className="rounded-xl border border-olive/10 bg-cream/35 p-4"
+      {activeTab === "manual" ? (
+        <div className="mt-5 rounded-2xl border border-olive/10 bg-[#fcfbf7] p-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Имя автора
+              <Input
+                value={manualDraft.authorName}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, authorName: event.target.value }))
+                }
+                placeholder="Анна"
+                maxLength={80}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Город
+              <Input
+                value={manualDraft.guestCity}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, guestCity: event.target.value }))
+                }
+                placeholder="Москва"
+                maxLength={80}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Рейтинг
+              <select
+                value={manualDraft.rating}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, rating: event.target.value }))
+                }
+                className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-olive">{review.userName}</p>
-                    <p className="mt-1 text-sm text-olive/60">
-                      {review.rating.toFixed(1)} из 5
-                      {review.externalSourceName ? ` · ${review.externalSourceName}` : ""}
-                      {review.guestCity ? ` · ${review.guestCity}` : ""}
-                      {review.reviewedAt ? ` · ${formatDate(review.reviewedAt)}` : ""}
+                {ratingOptions.filter(Boolean).map((value) => (
+                  <option key={value} value={value}>
+                    {Number(value).toFixed(1)} / 5
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Дата отзыва
+              <Input
+                type="date"
+                value={manualDraft.reviewedAt}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, reviewedAt: event.target.value }))
+                }
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Источник
+              <Input
+                value={manualDraft.sourceName}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, sourceName: event.target.value }))
+                }
+                placeholder="Вручную"
+                maxLength={80}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Ссылка на источник
+              <Input
+                value={manualDraft.sourceUrl}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, sourceUrl: event.target.value }))
+                }
+                placeholder="https://..."
+                maxLength={500}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive md:col-span-2">
+              Текст отзыва
+              <textarea
+                value={manualDraft.text}
+                onChange={(event) =>
+                  setManualDraft((previous) => ({ ...previous, text: event.target.value }))
+                }
+                rows={5}
+                maxLength={2000}
+                className="rounded-xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20"
+                placeholder="Текст отзыва"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => void submitManualReview()}
+              disabled={isManualSubmitting || !schemaAvailable}
+            >
+              <AppIcon icon={Plus} className="mr-1.5 h-4 w-4" />
+              {isManualSubmitting ? "Добавляем..." : "Добавить отзыв"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "history" ? (
+        <div className="mt-6">
+          <h3 className="text-base font-semibold text-olive">История добавленных отзывов</h3>
+          {historyItems.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
+              Опубликованные, отклонённые и удалённые отзывы появятся здесь.
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {historyItems.map((review) => {
+                const meta = statusMeta(review.status);
+                const processing = processingReviewId === review.id;
+                const isExpanded = expandedHistoryIds.has(review.id);
+                const canExpand = hasHiddenText(review.text);
+
+                return (
+                  <article
+                    key={review.id}
+                    className="rounded-2xl border border-olive/10 bg-white p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-olive">{review.userName}</p>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+                          >
+                            {meta.label}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-olive/58">
+                          Источник: {review.externalSourceName ?? "внешний сайт"} · добавлен{" "}
+                          {formatDateTime(review.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-sm text-olive/66 sm:text-right">
+                        <p>
+                          Рейтинг сайта:{" "}
+                          {review.rating >= 0.5 ? `${review.rating.toFixed(1)} / 5` : "не выбран"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-4 whitespace-pre-line text-sm leading-6 text-olive/82">
+                      {isExpanded ? review.text : getReviewPreview(review.text)}
                     </p>
-                  </div>
-                  <span
-                    className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}
-                  >
-                    {status.label}
-                  </span>
-                </div>
-                <p className="mt-3 whitespace-pre-line text-sm leading-6 text-olive/80">
-                  {review.text}
-                </p>
-                {review.externalSourceUrl ? (
-                  <a
-                    href={review.externalSourceUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
-                  >
-                    Источник
-                    <AppIcon icon={ExternalLink} className="h-3.5 w-3.5" />
-                  </a>
-                ) : null}
-              </article>
-            );
-          })}
+
+                    {isExpanded ? (
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/58">
+                        {review.guestCity ? <span>Город: {review.guestCity}</span> : null}
+                        {review.reviewedAt ? (
+                          <span>Дата: {formatDate(review.reviewedAt)}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {canExpand ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => toggleHistoryItem(review.id)}
+                        >
+                          <AppIcon
+                            icon={isExpanded ? ChevronUp : ChevronDown}
+                            className="mr-1.5 h-4 w-4"
+                          />
+                          {isExpanded ? "Свернуть" : "Развернуть"}
+                        </Button>
+                      ) : null}
+                      {review.status === "ACTIVE" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => void moderateReview(review, "reject")}
+                          disabled={processing}
+                        >
+                          <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
+                          Отключить
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void moderateReview(review, "delete")}
+                        disabled={processing}
+                      >
+                        <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
+                        Удалить
+                      </Button>
+                      {review.externalSourceUrl ? (
+                        <a
+                          href={review.externalSourceUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center rounded-xl border border-primary/18 bg-primary/6 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+                        >
+                          Источник
+                          <AppIcon icon={ExternalLink} className="ml-1.5 h-4 w-4" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : null}
     </section>

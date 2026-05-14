@@ -16,39 +16,34 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
   const isLoginTab = tab === "login";
 
   return (
-    <div className="space-y-4">
-      <div className="inline-flex rounded-xl border border-olive/14 bg-cream/80 p-1">
-        <button
-          type="button"
-          onClick={() => setTab("login")}
-          className={cn(
-            "inline-flex min-h-10 items-center rounded-lg px-3.5 py-1.5 text-sm font-semibold transition",
-            isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
-          )}
-        >
-          Вход
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("register")}
-          className={cn(
-            "inline-flex min-h-10 items-center rounded-lg px-3.5 py-1.5 text-sm font-semibold transition",
-            !isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
-          )}
-        >
-          Регистрация
-        </button>
+    <div className="space-y-5">
+      <div className="flex justify-center">
+        <div className="inline-flex rounded-xl border border-olive/14 bg-cream/80 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("login")}
+            className={cn(
+              "inline-flex min-h-10 items-center rounded-lg px-4 py-1.5 text-sm font-semibold transition",
+              isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
+            )}
+          >
+            Вход
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("register")}
+            className={cn(
+              "inline-flex min-h-10 items-center rounded-lg px-4 py-1.5 text-sm font-semibold transition",
+              !isLoginTab ? "bg-white text-olive shadow-sm" : "text-olive/70 hover:text-olive",
+            )}
+          >
+            Регистрация
+          </button>
+        </div>
       </div>
 
       {isLoginTab ? (
         <section className="space-y-4">
-          <div>
-            <h1 className="text-3xl text-olive">Войти</h1>
-            <p className="mt-2 text-sm text-olive/70">
-              Введите номер телефона и пароль для входа в аккаунт.
-            </p>
-          </div>
-
           <LoginForm nextPath={nextPath} />
 
           <div className="rounded-xl border border-olive/14 bg-cream/70 p-3 text-sm text-olive/75">
@@ -65,10 +60,6 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
         </section>
       ) : (
         <section className="space-y-4">
-          <div>
-            <h1 className="text-3xl text-olive">Регистрация</h1>
-          </div>
-
           <RegisterForm />
 
           <div className="rounded-xl border border-dashed border-olive/20 bg-white/65 p-3 text-sm text-olive/70">

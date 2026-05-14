@@ -77,6 +77,7 @@ const ROOM_COMPAT_COLUMNS = ["sortOrder"] as const;
 const ROOM_PRICE_COMPAT_COLUMNS = ["priceType"] as const;
 const ROOM_OCCUPANCY_COMPAT_COLUMNS = [
   "externalCalendarSyncId",
+  "externalCalendarSourceId",
   "externalCalendarUid",
 ] as const;
 const REVIEW_COMPAT_COLUMNS = [
@@ -85,6 +86,17 @@ const REVIEW_COMPAT_COLUMNS = [
   "importedAuthorName",
   "externalSourceUrl",
   "externalSourceName",
+  "externalPlatform",
+  "externalReviewSourceId",
+  "externalReviewId",
+  "externalReviewFingerprint",
+  "externalStayPeriod",
+  "externalRating",
+  "externalRatingScale",
+  "externalImportedAt",
+  "externalLastSeenAt",
+  "externalChangedAt",
+  "externalPendingData",
   "importedByOwnerId",
   "verifiedAt",
   "verifiedByAdminId",
@@ -207,6 +219,7 @@ const SCHEMA_COMPAT_MODELS = {
     columns: ROOM_OCCUPANCY_COMPAT_COLUMNS,
     defaults: {
       externalCalendarSyncId: null,
+      externalCalendarSourceId: null,
       externalCalendarUid: null,
     },
     logContext: "room-occupancy-schema-compat",
@@ -220,6 +233,17 @@ const SCHEMA_COMPAT_MODELS = {
       importedAuthorName: null,
       externalSourceUrl: null,
       externalSourceName: null,
+      externalPlatform: null,
+      externalReviewSourceId: null,
+      externalReviewId: null,
+      externalReviewFingerprint: null,
+      externalStayPeriod: null,
+      externalRating: null,
+      externalRatingScale: null,
+      externalImportedAt: null,
+      externalLastSeenAt: null,
+      externalChangedAt: null,
+      externalPendingData: null,
       importedByOwnerId: null,
       verifiedAt: null,
       verifiedByAdminId: null,
@@ -290,7 +314,9 @@ const EMPTY_STRING_SET = new Set<string>();
 const EMPTY_STRING_ARRAY: readonly string[] = [];
 const EMPTY_RELATION_MAP = new Map<string, string>();
 const NORMALIZED_COMPAT_MODEL_NAMES = new Map(
-  Object.keys(SCHEMA_COMPAT_MODELS).map((modelName) => [modelName.toLowerCase(), modelName] as const),
+  Object.keys(SCHEMA_COMPAT_MODELS).map(
+    (modelName) => [modelName.toLowerCase(), modelName] as const,
+  ),
 );
 const RECORD_RETURNING_OPERATIONS = new Set([
   "create",
@@ -700,19 +726,24 @@ export async function isDatabaseTableAvailable(
   }
 
   let availabilityPromise = queryClient
-    .$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
+    .$queryRaw<Array<{ table_name: string }>>(
+      Prisma.sql`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name = ${normalizedTableName}
       LIMIT 1
-    `)
+    `,
+    )
     .then((rows) => rows.length > 0)
     .catch(() => false);
 
   if (queryClient === db) {
     availabilityPromise = availabilityPromise.then((available) => {
-      if (!available && tableAvailabilityPromises.get(normalizedTableName) === availabilityPromise) {
+      if (
+        !available &&
+        tableAvailabilityPromises.get(normalizedTableName) === availabilityPromise
+      ) {
         tableAvailabilityPromises.delete(normalizedTableName);
       }
 

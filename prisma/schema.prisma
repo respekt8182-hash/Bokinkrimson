@@ -170,9 +170,11 @@ enum CalendarSyncStatus {
 }
 
 enum ReviewStatus {
-  PENDING @map("pending")
-  ACTIVE  @map("active")
-  DELETED @map("deleted")
+  PENDING   @map("pending")
+  ACTIVE    @map("active")
+  DELETED   @map("deleted")
+  DUPLICATE @map("duplicate")
+  FAILED    @map("failed")
 }
 
 enum ReviewReactionValue {
@@ -1072,50 +1074,73 @@ model RoomPrice {
 }
 
 model RoomOccupancy {
-  id                     String            @id @default(cuid())
-  roomId                 String
-  dateFrom               DateTime          @db.Date
-  dateTo                 DateTime          @db.Date
-  timeFrom               String?
-  timeTo                 String?
-  status                 OccupancyStatus   @default(CONFIRMED)
-  tag                    String?           @db.VarChar(80)
-  source                 String?           @db.VarChar(80)
-  color                  String?           @db.VarChar(16)
-  adultsCount            Int               @default(1)
-  childrenCount          Int               @default(0)
-  guestName              String?
-  guestPhone             String?
-  guestContacts          String?
-  description            String?           @db.VarChar(250)
-  externalCalendarSyncId String?
-  externalCalendarUid    String?           @db.VarChar(255)
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
-  room                   Room              @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  externalCalendarSync   RoomCalendarSync? @relation(fields: [externalCalendarSyncId], references: [id], onDelete: SetNull)
+  id                       String                    @id @default(cuid())
+  roomId                   String
+  dateFrom                 DateTime                  @db.Date
+  dateTo                   DateTime                  @db.Date
+  timeFrom                 String?
+  timeTo                   String?
+  status                   OccupancyStatus           @default(CONFIRMED)
+  tag                      String?                   @db.VarChar(80)
+  source                   String?                   @db.VarChar(80)
+  color                    String?                   @db.VarChar(16)
+  adultsCount              Int                       @default(1)
+  childrenCount            Int                       @default(0)
+  guestName                String?
+  guestPhone               String?
+  guestContacts            String?
+  description              String?                   @db.VarChar(250)
+  externalCalendarSyncId   String?
+  externalCalendarSourceId String?
+  externalCalendarUid      String?                   @db.VarChar(255)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  room                     Room                      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  externalCalendarSync     RoomCalendarSync?         @relation(fields: [externalCalendarSyncId], references: [id], onDelete: SetNull)
+  externalCalendarSource   RoomCalendarImportSource? @relation(fields: [externalCalendarSourceId], references: [id], onDelete: SetNull)
 
-  @@unique([externalCalendarSyncId, externalCalendarUid])
+  @@unique([externalCalendarSourceId, externalCalendarUid])
   @@index([roomId, dateFrom, dateTo])
   @@index([roomId, createdAt])
   @@index([externalCalendarSyncId])
+  @@index([externalCalendarSourceId])
 }
 
 model RoomCalendarSync {
-  id                  String              @id @default(cuid())
-  roomId              String              @unique
-  exportToken         String              @unique @db.VarChar(64)
+  id                  String                     @id @default(cuid())
+  roomId              String                     @unique
+  exportToken         String                     @unique @db.VarChar(64)
   importUrl           String?
-  isImportEnabled     Boolean             @default(false)
+  isImportEnabled     Boolean                    @default(false)
+  lastSyncedAt        DateTime?
+  lastSyncStatus      CalendarSyncStatus?
+  lastSyncMessage     String?                    @db.VarChar(255)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  room                Room                       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  importedOccupancies RoomOccupancy[]
+  importSources       RoomCalendarImportSource[]
+
+  @@index([roomId])
+}
+
+model RoomCalendarImportSource {
+  id                  String              @id @default(cuid())
+  syncId              String
+  label               String              @db.VarChar(80)
+  importUrl           String
+  isEnabled           Boolean             @default(true)
   lastSyncedAt        DateTime?
   lastSyncStatus      CalendarSyncStatus?
   lastSyncMessage     String?             @db.VarChar(255)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
-  room                Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sync                RoomCalendarSync    @relation(fields: [syncId], references: [id], onDelete: Cascade)
   importedOccupancies RoomOccupancy[]
 
-  @@index([roomId])
+  @@unique([syncId, importUrl])
+  @@index([syncId, isEnabled])
+  @@index([syncId, createdAt])
 }
 
 model RoomFeature {
