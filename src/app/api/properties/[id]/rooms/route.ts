@@ -89,6 +89,7 @@ export async function GET(request: Request, context: RouteContext) {
         roomsCount: true,
         areaSqm: true,
         bathroomType: true,
+        meta: true,
         sortOrder: true,
         isActive: true,
         prices: {
