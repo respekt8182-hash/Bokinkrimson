@@ -92,12 +92,16 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (canPersistRoomOrder) {
     await db.$transaction(
-      orderedIds.map((roomId, index) =>
-        db.room.update({
+      orderedIds.map((roomId, index) => {
+        const room = existingById.get(roomId);
+        return db.room.update({
           where: { id: roomId },
-          data: { sortOrder: index + 1 },
-        }),
-      ),
+          data: {
+            sortOrder: index + 1,
+            meta: buildRoomMetaWithFallbackSortOrder(room?.meta ?? null, index + 1),
+          },
+        });
+      }),
     );
   } else {
     await db.$transaction(

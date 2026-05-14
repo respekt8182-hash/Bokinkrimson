@@ -7,7 +7,13 @@ import {
   preparePropertyForPublishedOwnerEdit,
 } from "@/lib/properties";
 import { normalizeRoomTitle } from "@/lib/room-title";
-import { resolveBathroomTypeFromMeta, roomInclude, serializeRoom } from "@/lib/rooms";
+import {
+  buildRoomMetaWithFallbackSortOrder,
+  resolveBathroomTypeFromMeta,
+  resolveSerializedRoomSortOrder,
+  roomInclude,
+  serializeRoom,
+} from "@/lib/rooms";
 import { updateRoomSchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -83,6 +89,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   const data = parsed.data;
   const normalizedTitle = normalizeRoomTitle(data.title) || data.title.trim();
   const normalizedBathroomType = resolveBathroomTypeFromMeta(data.meta, data.bathroomType);
+  const existingSortOrder = resolveSerializedRoomSortOrder(existing);
+  const nextMeta =
+    existingSortOrder > 0
+      ? buildRoomMetaWithFallbackSortOrder(data.meta, existingSortOrder)
+      : data.meta;
   // Amenity fields are accepted for compatibility with existing payload contracts.
   // Primary amenity editing path is /api/properties/[id]/room-amenities.
   const featureIds = Array.from(new Set(data.featureIds.map((item) => item.trim())));
@@ -124,7 +135,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         roomsCount: data.roomsCount,
         areaSqm: data.areaSqm,
         bathroomType: normalizedBathroomType,
-        meta: data.meta,
+        meta: nextMeta,
       },
     });
 

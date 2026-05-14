@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parsePublishedPropertySnapshot } from "../../src/lib/property-public-snapshot";
-import { serializeRoom } from "../../src/lib/rooms";
+import { compareSerializedRoomsBySortOrder, serializeRoom } from "../../src/lib/rooms";
 
 function makeRoomMeta(overrides: Record<string, unknown> = {}) {
   return {
@@ -23,8 +23,8 @@ function makeRoomMeta(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeRoom() {
-  return serializeRoom({
+function makeRawRoom() {
+  return {
     id: "room-1",
     propertyId: "property-1",
     title: "Стандарт",
@@ -43,7 +43,11 @@ function makeRoom() {
     isActive: true,
     createdAt: new Date("2026-05-08T00:00:00.000Z"),
     updatedAt: new Date("2026-05-08T00:00:00.000Z"),
-  });
+  };
+}
+
+function makeRoom() {
+  return serializeRoom(makeRawRoom());
 }
 
 describe("room bathroom type normalization", () => {
@@ -72,5 +76,26 @@ describe("room bathroom type normalization", () => {
 
     expect(parsed?.rooms[0]?.bathroomType).toBe("ON_FLOOR");
     expect(parsed?.rooms[0]?.bathroomTypeLabel).toBe("На этаже");
+  });
+  it("uses fallback room order from meta before database sortOrder", () => {
+    const first = serializeRoom({
+      ...makeRawRoom(),
+      id: "room-1",
+      title: "Room 1",
+      meta: makeRoomMeta({ __roomSortOrder: 2 }),
+      sortOrder: 1,
+    });
+    const second = serializeRoom({
+      ...makeRawRoom(),
+      id: "room-2",
+      title: "Room 2",
+      meta: makeRoomMeta({ __roomSortOrder: 1 }),
+      sortOrder: 2,
+    });
+
+    expect([first, second].sort(compareSerializedRoomsBySortOrder).map((room) => room.id)).toEqual([
+      "room-2",
+      "room-1",
+    ]);
   });
 });

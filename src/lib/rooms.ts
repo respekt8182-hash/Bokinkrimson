@@ -91,6 +91,11 @@ export function resolveSerializedRoomSortOrder(room: {
   sortOrder?: number | null;
   meta?: Prisma.JsonValue | null;
 }): number {
+  const fallbackSortOrder = getFallbackRoomSortOrder(room.meta);
+  if (fallbackSortOrder !== null) {
+    return fallbackSortOrder;
+  }
+
   if (
     typeof room.sortOrder === "number" &&
     Number.isInteger(room.sortOrder) &&
@@ -99,7 +104,7 @@ export function resolveSerializedRoomSortOrder(room: {
     return room.sortOrder;
   }
 
-  return getFallbackRoomSortOrder(room.meta) ?? 0;
+  return 0;
 }
 
 export function buildRoomMetaWithFallbackSortOrder(

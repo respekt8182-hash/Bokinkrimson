@@ -8,6 +8,7 @@ import {
 } from "@/lib/properties";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import {
+  buildRoomMetaWithFallbackSortOrder,
   compareSerializedRoomsBySortOrder,
   resolveBathroomTypeFromMeta,
   roomInclude,
@@ -203,6 +204,7 @@ export async function POST(request: Request, context: RouteContext) {
         })
       )._max.sortOrder ?? 0;
 
+    const nextSortOrder = maxSortOrder + 1;
     const room = await tx.room.create({
       data: {
         propertyId: property.id,
@@ -212,8 +214,8 @@ export async function POST(request: Request, context: RouteContext) {
         roomsCount: data.roomsCount,
         areaSqm: data.areaSqm,
         bathroomType: normalizedBathroomType,
-        meta: data.meta,
-        sortOrder: maxSortOrder + 1,
+        meta: buildRoomMetaWithFallbackSortOrder(data.meta, nextSortOrder),
+        sortOrder: nextSortOrder,
       },
     });
 
