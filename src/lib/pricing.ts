@@ -219,7 +219,7 @@ export function calculateRoomStayPrice(input: {
   if (missingDates.length > 0) {
     return {
       ok: false,
-      message: "Не на все даты проживания задана цена",
+      message: "Даты уже забронированы",
       missingDates,
     };
   }

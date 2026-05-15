@@ -756,8 +756,7 @@ function getRoomPriceSummary(
     if (base.value !== null && base.currency) {
       const price = formatMoney(base.value, base.currency);
       const nightlyLabel = formatNightlyPriceLabel(base.value, base.currency, base.priceType);
-      const unitLabel =
-        base.priceType === "PER_PERSON" ? "за человека в сутки" : "за номер в сутки";
+      const unitLabel = base.priceType === "PER_PERSON" ? "за человека в сутки" : "в сутки";
       return {
         text: `от ${nightlyLabel}`,
         tone: "ok",
@@ -817,7 +816,7 @@ function getRoomPriceSummary(
       ? `${formatMoney(unitNightly, calculation.currency)} за человека`
       : calculation.priceType === "MIXED"
         ? `${formatMoney(totalNightly, calculation.currency)} за ночь`
-        : `${formatMoney(totalNightly, calculation.currency)} за номер в сутки`;
+        : `${formatMoney(totalNightly, calculation.currency)} в сутки`;
   const nightsLabel = formatNightsLabel(calculation.nights);
   const sideLabel =
     calculation.priceType === "PER_PERSON"
@@ -2150,7 +2149,7 @@ export function PublicPropertyDetails({
                                     {summary.bigPrice}
                                   </p>
                                   <p className="mt-1 text-[12px] text-olive/55">
-                                    {summary.smallLabel || "за номер в сутки"}
+                                    {summary.smallLabel || "в сутки"}
                                   </p>
                                 </div>
                                 <button

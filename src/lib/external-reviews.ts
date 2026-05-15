@@ -712,6 +712,8 @@ export async function createExternalReview(input: {
   const now = new Date();
   const status =
     input.status ?? (input.actorRole === "admin" ? ReviewStatus.ACTIVE : ReviewStatus.PENDING);
+  const deletedAt =
+    status === ReviewStatus.DELETED || status === ReviewStatus.DUPLICATE ? now : null;
   const mode = await resolveExternalReviewStorageMode(input.entityType);
   const sourceUrl = input.sourceUrl?.trim() || null;
   const sourceName = readExternalReviewSourceName(sourceUrl, input.sourceName);
@@ -739,6 +741,7 @@ export async function createExternalReview(input: {
           importedByOwnerId: input.actorRole === "owner" ? input.actorId : null,
           verifiedAt: status === ReviewStatus.ACTIVE ? now : null,
           verifiedByAdminId: status === ReviewStatus.ACTIVE ? input.actorId : null,
+          deletedAt,
         },
         include: {
           user: {
@@ -808,7 +811,7 @@ export async function createExternalReview(input: {
         ${status === ReviewStatus.ACTIVE ? input.actorId : null},
         ${now},
         ${now},
-        ${null}
+        ${deletedAt}
       )
       RETURNING
         "id",

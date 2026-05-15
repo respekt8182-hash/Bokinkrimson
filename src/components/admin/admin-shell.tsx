@@ -46,7 +46,7 @@ const menu: MenuItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
   { href: "/admin/moderation", label: "Проверка жилья", icon: ShieldCheck },
   { href: "/admin/moderation/excursions", label: "Модерация экскурсий", icon: Compass },
-  { href: "/admin/reviews", label: "Проверка отзывов", icon: MessageSquareText },
+  { href: "/admin/reviews", label: "Подгруженные отзывы", icon: MessageSquareText },
   { href: "/admin/objects", label: "Жильё и размещение", icon: House },
   { href: "/admin/attractions", label: "Достопримечательности", icon: Landmark },
   { href: "/admin/excursions", label: "Каталог экскурсий", icon: Compass },
@@ -134,7 +134,7 @@ function getPageTitle(pathname: string): string {
   }
 
   if (pathname.startsWith("/admin/reviews")) {
-    return "Проверка отзывов";
+    return "Подгруженные отзывы";
   }
 
   if (pathname.startsWith("/admin/payments")) {

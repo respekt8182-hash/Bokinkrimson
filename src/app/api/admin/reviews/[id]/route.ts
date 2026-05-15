@@ -18,7 +18,7 @@ type RouteContext = {
 const moderateReviewSchema = z.object({
   action: z.enum(["approve", "reject", "duplicate", "delete", "edit"]),
   rating: z.number().min(0).max(5).optional(),
-  text: z.string().trim().min(10).max(2000).optional(),
+  text: z.string().trim().min(10).max(5000).optional(),
   authorName: z.string().trim().max(80).optional(),
   sourceUrl: z
     .string()

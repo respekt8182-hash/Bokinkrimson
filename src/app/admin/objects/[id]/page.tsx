@@ -101,7 +101,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
     },
     {
       href: `/admin/objects/${property.id}/external-reviews`,
-      title: "Отзывы с других сайтов",
+      title: "Подгруженные отзывы",
       description: "Добавление внешних отзывов в публичную карточку объекта",
     },
     {

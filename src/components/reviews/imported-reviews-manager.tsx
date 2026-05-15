@@ -6,8 +6,10 @@ import {
   ChevronUp,
   CircleAlert,
   Clock3,
+  CloudUpload,
   Copy,
   ExternalLink,
+  FileText,
   ListChecks,
   Pencil,
   Plus,
@@ -16,15 +18,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  parseExternalReviewImportPayload,
+  type ParsedExternalReviewImportItem,
+} from "@/lib/external-review-import";
 import type { SerializedReview } from "@/lib/reviews";
 
 type EntityType = "property" | "excursion" | "transfer";
 type Mode = "owner" | "admin";
-type ActiveTab = "queue" | "manual" | "history";
+type ActiveTab = "queue" | "manual" | "json" | "history";
 
 type ImportedReviewsManagerProps = {
   entityType: EntityType;
@@ -32,6 +38,8 @@ type ImportedReviewsManagerProps = {
   initialReviews: SerializedReview[];
   mode?: Mode;
   schemaAvailable?: boolean;
+  canCreate?: boolean;
+  createDisabledReason?: string | null;
   title?: string;
   description?: string;
 };
@@ -44,6 +52,17 @@ type ReviewActionResponse = {
 type ManualReviewResponse = {
   error?: string;
   item?: SerializedReview;
+};
+
+type JsonImportResponse = {
+  error?: string;
+  importedCount?: number;
+  skippedCount?: number;
+  failedCount?: number;
+  items?: SerializedReview[];
+  skipped?: Array<{ index: number; reason: string }>;
+  failed?: Array<{ index: number; reason: string }>;
+  warnings?: string[];
 };
 
 type EditDraft = {
@@ -65,8 +84,23 @@ type ManualDraft = {
   text: string;
 };
 
+type JsonReviewDraft = {
+  id: string;
+  authorName: string;
+  guestCity: string;
+  rating: string;
+  reviewedAt: string;
+  sourceName: string;
+  sourceUrl: string;
+  text: string;
+};
+
 const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
 const reviewPreviewLength = 220;
+const jsonImportStatusOptions = [
+  { value: "ACTIVE", label: "\u0412\u0438\u0434\u0438\u043c\u044b\u0435" },
+  { value: "DELETED", label: "\u0421\u043a\u0440\u044b\u0442\u044b\u0435" },
+] as const;
 const reviewSourceSuggestions = [
   "Куда на море",
   "Яндекс",
@@ -89,6 +123,22 @@ function createEmptyManualDraft(): ManualDraft {
     sourceName: "",
     sourceUrl: "",
     text: "",
+  };
+}
+
+function createJsonReviewDraft(
+  item: ParsedExternalReviewImportItem,
+  index: number,
+): JsonReviewDraft {
+  return {
+    id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+    authorName: item.authorName,
+    guestCity: item.guestCity ?? "",
+    rating: item.rating >= 0.5 ? String(item.rating) : "",
+    reviewedAt: item.reviewedAt ?? "",
+    sourceName: item.sourceName,
+    sourceUrl: item.sourceUrl ?? "",
+    text: item.text,
   };
 }
 
@@ -132,12 +182,12 @@ function statusMeta(status: SerializedReview["status"]): {
 } {
   if (status === "ACTIVE") {
     return {
-      label: "Опубликован",
+      label: "Видимый",
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
   }
   if (status === "DELETED") {
-    return { label: "Отклонён", className: "border-rose-200 bg-rose-50 text-rose-700" };
+    return { label: "Скрыт", className: "border-rose-200 bg-rose-50 text-rose-700" };
   }
   if (status === "DUPLICATE") {
     return { label: "Дубль", className: "border-slate-200 bg-slate-50 text-slate-700" };
@@ -178,12 +228,21 @@ export function ImportedReviewsManager({
   initialReviews,
   mode = "owner",
   schemaAvailable = true,
+  canCreate = true,
+  createDisabledReason = null,
   title = "Отзывы с других сайтов",
   description = "Создайте отзыв вручную: укажите автора, оценку, текст и источник. Добавленные отзывы проходят модерацию перед публикацией.",
 }: ImportedReviewsManagerProps) {
   const [items, setItems] = useState(initialReviews);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("manual");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    mode === "admin" ? "json" : "manual",
+  );
   const [manualDraft, setManualDraft] = useState<ManualDraft>(() => createEmptyManualDraft());
+  const [jsonDrafts, setJsonDrafts] = useState<JsonReviewDraft[]>([]);
+  const [jsonImportStatus, setJsonImportStatus] = useState<"ACTIVE" | "DELETED">("ACTIVE");
+  const [jsonImportSummary, setJsonImportSummary] = useState("");
+  const [jsonImportWarnings, setJsonImportWarnings] = useState<string[]>([]);
+  const [isJsonImporting, setIsJsonImporting] = useState(false);
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
   const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(() => new Set());
@@ -198,13 +257,16 @@ export function ImportedReviewsManager({
   const [editDraftById, setEditDraftById] = useState<Record<string, EditDraft>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const jsonFileInputRef = useRef<HTMLInputElement | null>(null);
   const sourceSuggestionsId = useId();
 
   const endpoint =
     mode === "admin" ? "/api/admin/external-reviews" : "/api/dashboard/external-reviews";
   const endpointUrl = `${endpoint}?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`;
+  const importEndpointUrl = `${endpoint}/import?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`;
   const reviewEndpoint = mode === "admin" ? "/api/admin/reviews" : "/api/dashboard/reviews";
   const canModerateReviews = mode === "admin";
+  const createDisabled = !schemaAvailable || !canCreate;
 
   const orderedItems = useMemo(
     () =>
@@ -228,9 +290,155 @@ export function ImportedReviewsManager({
     }));
   }
 
+  async function handleJsonFile(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setJsonImportSummary("");
+    setJsonImportWarnings([]);
+
+    try {
+      const parsedImport = parseExternalReviewImportPayload({ jsonText: await file.text() });
+      const warnings = [
+        ...(parsedImport.warnings ?? []),
+        ...parsedImport.skipped.map((item) => `#${item.index + 1}: ${item.reason}`),
+      ];
+
+      setJsonDrafts(parsedImport.items.map((item, index) => createJsonReviewDraft(item, index)));
+      setJsonImportWarnings(warnings);
+
+      if (parsedImport.items.length === 0) {
+        setError("В JSON не найдено отзывов для импорта.");
+        return;
+      }
+
+      setJsonImportSummary(
+        `Подготовлено к добавлению: ${parsedImport.items.length}. Пропущено: ${parsedImport.skipped.length}.`,
+      );
+      setSuccess("Отзывы из JSON загружены в черновик. Проверьте их перед добавлением.");
+    } catch {
+      setJsonDrafts([]);
+      setError("Не удалось разобрать JSON-файл.");
+    } finally {
+      if (jsonFileInputRef.current) {
+        jsonFileInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function submitJsonImport() {
+    setError("");
+    setSuccess("");
+    setJsonImportSummary("");
+    setJsonImportWarnings([]);
+
+    if (createDisabled) {
+      setError(
+        createDisabledReason ??
+          "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043e\u0442\u0437\u044b\u0432\u043e\u0432 \u0441\u0435\u0439\u0447\u0430\u0441 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e.",
+      );
+      return;
+    }
+
+    if (jsonDrafts.length === 0) {
+      setError("Выберите JSON-файл с отзывами.");
+      return;
+    }
+
+    const invalidDraftIndex = jsonDrafts.findIndex((draft) => {
+      const ratingValue = Number(draft.rating || 0);
+      return (
+        !Number.isFinite(ratingValue) ||
+        ratingValue < 0.5 ||
+        ratingValue > 5 ||
+        draft.text.trim().length < 10
+      );
+    });
+
+    if (invalidDraftIndex >= 0) {
+      setError(`Проверьте отзыв #${invalidDraftIndex + 1}: нужен рейтинг от 0.5 до 5 и текст от 10 символов.`);
+      return;
+    }
+
+    setIsJsonImporting(true);
+
+    try {
+      const response = await fetch(importEndpointUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payload: {
+            reviews: jsonDrafts.map((draft) => ({
+              authorName: draft.authorName.trim() || "Гость",
+              guestCity: draft.guestCity.trim(),
+              rating: Number(draft.rating || 0),
+              reviewedAt: draft.reviewedAt.trim(),
+              sourceName: draft.sourceName.trim(),
+              sourceUrl: draft.sourceUrl.trim(),
+              text: draft.text.trim(),
+            })),
+          },
+          status: jsonImportStatus,
+        }),
+      });
+      const body = (await response.json()) as JsonImportResponse;
+
+      if (!response.ok) {
+        setError(
+          body.error ??
+            "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0438\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c JSON.",
+        );
+        setJsonImportWarnings([
+          ...(body.warnings ?? []),
+          ...(body.skipped ?? []).map((item) => `#${item.index + 1}: ${item.reason}`),
+          ...(body.failed ?? []).map((item) => `#${item.index + 1}: ${item.reason}`),
+        ]);
+        return;
+      }
+
+      for (const review of body.items ?? []) {
+        applyReviewItem(review);
+      }
+
+      setJsonImportSummary(
+        `\u0418\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043e: ${body.importedCount ?? 0}. \u041f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u043e: ${body.skippedCount ?? 0}. \u041e\u0448\u0438\u0431\u043e\u043a: ${body.failedCount ?? 0}.`,
+      );
+      setJsonImportWarnings([
+        ...(body.warnings ?? []),
+        ...(body.skipped ?? []).map((item) => `#${item.index + 1}: ${item.reason}`),
+        ...(body.failed ?? []).map((item) => `#${item.index + 1}: ${item.reason}`),
+      ]);
+      setJsonDrafts([]);
+      setSuccess("Отзывы добавлены к выбранному объекту.");
+    } finally {
+      setIsJsonImporting(false);
+    }
+  }
+
+  function updateJsonDraft(id: string, patch: Partial<JsonReviewDraft>) {
+    setJsonDrafts((previous) =>
+      previous.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)),
+    );
+  }
+
+  function removeJsonDraft(id: string) {
+    setJsonDrafts((previous) => previous.filter((draft) => draft.id !== id));
+  }
+
   async function submitManualReview() {
     setError("");
     setSuccess("");
+
+    if (createDisabled) {
+      setError(
+        createDisabledReason ??
+          "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043e\u0442\u0437\u044b\u0432\u043e\u0432 \u0441\u0435\u0439\u0447\u0430\u0441 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e.",
+      );
+      return;
+    }
 
     const ratingValue = Number(manualDraft.rating || 0);
     if (!manualDraft.authorName.trim()) {
@@ -350,9 +558,9 @@ export function ImportedReviewsManager({
 
       setSuccess(
         action === "approve"
-          ? "Отзыв опубликован."
+          ? "Отзыв показан."
           : action === "reject"
-            ? "Отзыв отклонён."
+            ? "Отзыв скрыт."
             : action === "duplicate"
               ? "Отзыв отмечен как дубль."
               : action === "delete"
@@ -457,7 +665,7 @@ export function ImportedReviewsManager({
             }))
           }
           rows={4}
-          maxLength={2000}
+          maxLength={5000}
           className="rounded-xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20 md:col-span-2"
         />
       </div>
@@ -493,6 +701,15 @@ export function ImportedReviewsManager({
 
       <div className="mt-5 flex flex-wrap gap-2 border-b border-olive/10 pb-3">
         {[
+          ...(mode === "admin"
+            ? [
+                {
+                  value: "json" as const,
+                  label: "\u0418\u043c\u043f\u043e\u0440\u0442 JSON",
+                  icon: FileText,
+                },
+              ]
+            : []),
           { value: "manual" as const, label: "Создать отзыв", icon: Plus },
           { value: "queue" as const, label: "На модерации", icon: ListChecks },
           { value: "history" as const, label: "Добавленные отзывы", icon: Clock3 },
@@ -518,6 +735,211 @@ export function ImportedReviewsManager({
 
       {error ? <p className="mt-4 text-sm font-medium text-rose-600">{error}</p> : null}
       {success ? <p className="mt-4 text-sm font-medium text-emerald-700">{success}</p> : null}
+
+      {activeTab === "json" && mode === "admin" ? (
+        <div className="mt-5 rounded-2xl border border-olive/10 bg-[#fcfbf7] p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <input
+                ref={jsonFileInputRef}
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => void handleJsonFile(event.target.files?.[0] ?? null)}
+                disabled={createDisabled || isJsonImporting}
+                className="sr-only"
+              />
+              <Button
+                type="button"
+                onClick={() => jsonFileInputRef.current?.click()}
+                disabled={createDisabled || isJsonImporting}
+              >
+                <AppIcon icon={CloudUpload} className="mr-1.5 h-4 w-4" />
+                Импорт JSON
+              </Button>
+            </div>
+            <label className="grid gap-1.5 text-sm font-semibold text-olive">
+              Статус после добавления
+              <select
+                value={jsonImportStatus}
+                onChange={(event) =>
+                  setJsonImportStatus(event.target.value === "DELETED" ? "DELETED" : "ACTIVE")
+                }
+                disabled={createDisabled || isJsonImporting}
+                className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+              >
+                {jsonImportStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {createDisabled && createDisabledReason ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {createDisabledReason}
+            </div>
+          ) : null}
+          {jsonImportSummary ? (
+            <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              {jsonImportSummary}
+            </p>
+          ) : null}
+          {jsonImportWarnings.length > 0 ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">
+                {"\u0414\u0435\u0442\u0430\u043b\u0438 \u0438\u043c\u043f\u043e\u0440\u0442\u0430"}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {jsonImportWarnings.slice(0, 12).map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {jsonDrafts.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-olive/16 bg-white px-5 py-6 text-sm text-olive/62">
+              Выберите JSON-файл, и найденные отзывы появятся здесь для проверки.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {jsonDrafts.map((draft, index) => (
+                <article
+                  key={draft.id}
+                  className="rounded-2xl border border-olive/10 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Отзыв #{index + 1}</p>
+                      <p className="mt-1 text-xs text-olive/58">
+                        {draft.sourceName || "Источник не указан"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => removeJsonDraft(draft.id)}
+                      disabled={isJsonImporting}
+                    >
+                      <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
+                      Убрать
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Автор
+                      <Input
+                        value={draft.authorName}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { authorName: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                        maxLength={80}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Город
+                      <Input
+                        value={draft.guestCity}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { guestCity: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                        maxLength={80}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Рейтинг
+                      <select
+                        value={draft.rating}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { rating: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                        className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                      >
+                        {ratingOptions.filter(Boolean).map((value) => (
+                          <option key={value} value={value}>
+                            {Number(value).toFixed(1)} / 5
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Дата отзыва
+                      <Input
+                        type="date"
+                        value={draft.reviewedAt}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { reviewedAt: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Источник
+                      <Input
+                        value={draft.sourceName}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { sourceName: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                        maxLength={80}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive">
+                      Ссылка на источник
+                      <Input
+                        value={draft.sourceUrl}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { sourceUrl: event.target.value })
+                        }
+                        disabled={isJsonImporting}
+                        maxLength={500}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-semibold text-olive md:col-span-2">
+                      Текст отзыва
+                      <textarea
+                        value={draft.text}
+                        onChange={(event) =>
+                          updateJsonDraft(draft.id, { text: event.target.value })
+                        }
+                        rows={4}
+                        maxLength={5000}
+                        disabled={isJsonImporting}
+                        className="rounded-xl border border-olive/12 bg-white px-3.5 py-3 text-sm leading-6 text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20"
+                      />
+                    </label>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => void submitJsonImport()}
+              disabled={isJsonImporting || createDisabled || jsonDrafts.length === 0}
+            >
+              <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
+              {isJsonImporting
+                ? "Добавляем..."
+                : "Применить и добавить к объекту"}
+            </Button>
+            {jsonDrafts.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setJsonDrafts([])}
+                disabled={isJsonImporting}
+              >
+                Очистить
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {activeTab === "queue" ? (
         <div className="mt-6">
@@ -592,7 +1014,7 @@ export function ImportedReviewsManager({
                             disabled={processing || !canApprove}
                           >
                             <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
-                            Опубликовать
+                            Показать
                           </Button>
                           <Button
                             type="button"
@@ -601,7 +1023,7 @@ export function ImportedReviewsManager({
                             disabled={processing}
                           >
                             <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
-                            Отклонить
+                            Скрыть
                           </Button>
                           <Button
                             type="button"
@@ -772,7 +1194,7 @@ export function ImportedReviewsManager({
             <Button
               type="button"
               onClick={() => void submitManualReview()}
-              disabled={isManualSubmitting || !schemaAvailable}
+              disabled={isManualSubmitting || createDisabled}
             >
               <AppIcon icon={Plus} className="mr-1.5 h-4 w-4" />
               {isManualSubmitting ? "Добавляем..." : "Добавить отзыв"}
@@ -786,7 +1208,7 @@ export function ImportedReviewsManager({
           <h3 className="text-base font-semibold text-olive">История добавленных отзывов</h3>
           {historyItems.length === 0 ? (
             <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
-              Опубликованные, отклонённые и удалённые отзывы появятся здесь.
+              Видимые, скрытые и удалённые отзывы появятся здесь.
             </div>
           ) : (
             <div className="mt-3 space-y-3">
@@ -857,6 +1279,29 @@ export function ImportedReviewsManager({
                         </Button>
                       ) : null}
                       {canModerateReviews ? (
+                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-olive">
+                          <AppIcon icon={Star} className="h-4 w-4 text-amber-500" />
+                          <select
+                            value={ratingById[review.id] ?? ""}
+                            onChange={(event) =>
+                              setRatingById((previous) => ({
+                                ...previous,
+                                [review.id]: event.target.value,
+                              }))
+                            }
+                            className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                          >
+                            {ratingOptions.map((value) => (
+                              <option key={value || "empty"} value={value}>
+                                {value
+                                  ? `${Number(value).toFixed(1)} / 5`
+                                  : "\u0420\u0435\u0439\u0442\u0438\u043d\u0433 \u0441\u0430\u0439\u0442\u0430"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {canModerateReviews ? (
                         isEditing ? (
                           <Button
                             type="button"
@@ -883,6 +1328,16 @@ export function ImportedReviewsManager({
                           </Button>
                         )
                       ) : null}
+                      {canModerateReviews && review.status !== "ACTIVE" ? (
+                        <Button
+                          type="button"
+                          onClick={() => void moderateReview(review, "approve")}
+                          disabled={processing || Number(ratingById[review.id] || 0) < 0.5}
+                        >
+                          <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
+                          {"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c"}
+                        </Button>
+                      ) : null}
                       {canModerateReviews && review.status === "ACTIVE" ? (
                         <Button
                           type="button"
@@ -891,7 +1346,7 @@ export function ImportedReviewsManager({
                           disabled={processing}
                         >
                           <AppIcon icon={X} className="mr-1.5 h-4 w-4" />
-                          Отключить
+                          Скрыть
                         </Button>
                       ) : null}
                       {canModerateReviews ? (

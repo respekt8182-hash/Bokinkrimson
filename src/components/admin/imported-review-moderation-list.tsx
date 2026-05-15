@@ -37,8 +37,8 @@ function getReviewDisplayDate(review: SerializedReview): string {
 }
 
 function statusLabel(status: SerializedReview["status"]): string {
-  if (status === "ACTIVE") return "Проверен";
-  if (status === "DELETED") return "Отклонен";
+  if (status === "ACTIVE") return "Видимый";
+  if (status === "DELETED") return "Скрыт";
   if (status === "DUPLICATE") return "Дубль";
   if (status === "FAILED") return "Ошибка";
   return "На проверке";
@@ -277,7 +277,7 @@ export function ImportedReviewModerationList({
                     }))
                   }
                   rows={5}
-                  maxLength={2000}
+                  maxLength={5000}
                   className="rounded-xl border border-olive/12 bg-white px-3 py-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20 md:col-span-2"
                 />
               </div>
@@ -333,7 +333,7 @@ export function ImportedReviewModerationList({
                   disabled={processing || Number(ratingById[review.id] || 0) < 0.5}
                   onClick={() => void moderateReview(review, "approve")}
                 >
-                  {(processingById[review.id] ?? null) === "approve" ? "Проверяем..." : "Одобрить"}
+                  {(processingById[review.id] ?? null) === "approve" ? "Показываем..." : "Показать"}
                 </Button>
               ) : null}
               {review.status !== "DELETED" ? (
@@ -342,7 +342,7 @@ export function ImportedReviewModerationList({
                   disabled={processing}
                   onClick={() => void moderateReview(review, "reject")}
                 >
-                  {(processingById[review.id] ?? null) === "reject" ? "Отклоняем..." : "Отклонить"}
+                  {(processingById[review.id] ?? null) === "reject" ? "Скрываем..." : "Скрыть"}
                 </Button>
               ) : null}
               {review.status !== "DUPLICATE" ? (

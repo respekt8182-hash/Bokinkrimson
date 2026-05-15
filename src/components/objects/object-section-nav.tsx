@@ -55,7 +55,8 @@ const sections: SectionItem[] = [
   },
   {
     slug: "external-reviews",
-    label: "\u041e\u0442\u0437\u044b\u0432\u044b \u0441 \u0441\u0430\u0439\u0442\u043e\u0432",
+    label:
+      "\u041f\u043e\u0434\u0433\u0440\u0443\u0436\u0435\u043d\u043d\u044b\u0435 \u043e\u0442\u0437\u044b\u0432\u044b",
     iconName: "reviews",
     tone: "sky",
   },

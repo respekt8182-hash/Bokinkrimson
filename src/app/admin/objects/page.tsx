@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ObjectTariffType, PropertyStatus } from "@prisma/client";
-import { Plus } from "lucide-react";
+import { MessageSquareText, Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
@@ -612,6 +612,15 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                     >
                       Редактировать
                     </Link>
+                    {isPublished && !isPendingDeletion ? (
+                      <Link
+                        href={`/admin/objects/${item.id}/external-reviews`}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-primary/18 bg-primary/8 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/12"
+                      >
+                        <MessageSquareText className="h-4 w-4" />
+                        Подгруженные отзывы
+                      </Link>
+                    ) : null}
                     {showModerationLink ? (
                       <Link
                         href={`/admin/moderation/${item.id}`}
