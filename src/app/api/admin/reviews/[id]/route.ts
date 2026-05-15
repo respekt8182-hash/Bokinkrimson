@@ -20,6 +20,25 @@ const moderateReviewSchema = z.object({
   rating: z.number().min(0).max(5).optional(),
   text: z.string().trim().min(10).max(2000).optional(),
   authorName: z.string().trim().max(80).optional(),
+  sourceUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(""))
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "Ссылка должна начинаться с http:// или https://"),
+  sourceName: z.string().trim().max(80).optional().or(z.literal("")),
   guestCity: z.string().trim().max(80).optional().or(z.literal("")),
   reviewedAt: z
     .string()
@@ -64,7 +83,7 @@ async function refreshSummaryForReview(
             entityType: ReviewEntityType.TRANSFER,
             transferId: review.transferId,
           })
-      : { avgRating: 0, reviewsCount: 0 };
+        : { avgRating: 0, reviewsCount: 0 };
 }
 
 async function moderateReviewByAction(input: {
@@ -74,6 +93,8 @@ async function moderateReviewByAction(input: {
   rating?: number | null;
   text?: string | null;
   authorName?: string | null;
+  sourceUrl?: string | null;
+  sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
 }) {
@@ -96,6 +117,8 @@ async function moderateReviewByAction(input: {
         rating: input.rating,
         text: input.text,
         authorName: input.authorName,
+        sourceUrl: input.sourceUrl,
+        sourceName: input.sourceName,
         guestCity: input.guestCity,
         reviewedAt: input.reviewedAt,
       });
@@ -105,7 +128,10 @@ async function moderateReviewByAction(input: {
         response: NextResponse.json(importedResult),
       };
     } catch (error) {
-      if (error instanceof ExternalReviewModerationUserError && !isExternalReviewNotFoundError(error)) {
+      if (
+        error instanceof ExternalReviewModerationUserError &&
+        !isExternalReviewNotFoundError(error)
+      ) {
         return {
           ok: false as const,
           response: NextResponse.json(
@@ -140,6 +166,8 @@ async function moderateReviewByAction(input: {
         rating: input.rating,
         text: input.text,
         authorName: input.authorName,
+        sourceUrl: input.sourceUrl,
+        sourceName: input.sourceName,
         guestCity: input.guestCity,
         reviewedAt: input.reviewedAt,
       });
@@ -249,7 +277,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  if (parsed.data.action === "duplicate" || parsed.data.action === "delete" || parsed.data.action === "edit") {
+  if (
+    parsed.data.action === "duplicate" ||
+    parsed.data.action === "delete" ||
+    parsed.data.action === "edit"
+  ) {
     try {
       const result = await updateExternalReviewModeration({
         id,
@@ -259,6 +291,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         rating: parsed.data.rating,
         text: parsed.data.text,
         authorName: parsed.data.authorName,
+        sourceUrl: parsed.data.sourceUrl,
+        sourceName: parsed.data.sourceName,
         guestCity: parsed.data.guestCity,
         reviewedAt: parseReviewDate(parsed.data.reviewedAt),
       });
@@ -283,6 +317,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     rating: parsed.data.rating,
     text: parsed.data.text,
     authorName: parsed.data.authorName,
+    sourceUrl: parsed.data.sourceUrl,
+    sourceName: parsed.data.sourceName,
     guestCity: parsed.data.guestCity,
     reviewedAt: parseReviewDate(parsed.data.reviewedAt),
   });
@@ -308,7 +344,10 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json(importedResult);
   } catch (error) {
-    if (error instanceof ExternalReviewModerationUserError && !isExternalReviewNotFoundError(error)) {
+    if (
+      error instanceof ExternalReviewModerationUserError &&
+      !isExternalReviewNotFoundError(error)
+    ) {
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: error.status },

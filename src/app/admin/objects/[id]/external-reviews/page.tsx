@@ -108,7 +108,7 @@ export default async function AdminObjectExternalReviewsPage({
         initialReviews={importedReviews}
         mode="admin"
         schemaAvailable={schemaAvailable}
-        description="Администратор может добавить внешний отзыв по объекту и отправить его в проверку отзывов. После одобрения отзыв появится в публичной карточке."
+        description="Администратор может добавить внешний отзыв по объекту. Отзыв сразу публикуется и остаётся доступным для правки в проверке отзывов."
       />
     </div>
   );

@@ -15,6 +15,25 @@ const importedReviewActionSchema = z.object({
   rating: z.number().min(0).max(5).optional(),
   text: z.string().trim().min(10).max(2000).optional(),
   authorName: z.string().trim().max(80).optional(),
+  sourceUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(""))
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "Ссылка должна начинаться с http:// или https://"),
+  sourceName: z.string().trim().max(80).optional().or(z.literal("")),
   guestCity: z.string().trim().max(80).optional().or(z.literal("")),
   reviewedAt: z
     .string()
@@ -65,6 +84,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       rating: parsed.data.rating,
       text: parsed.data.text,
       authorName: parsed.data.authorName,
+      sourceUrl: parsed.data.sourceUrl,
+      sourceName: parsed.data.sourceName,
       guestCity: parsed.data.guestCity,
       reviewedAt: parseReviewDate(parsed.data.reviewedAt),
     });

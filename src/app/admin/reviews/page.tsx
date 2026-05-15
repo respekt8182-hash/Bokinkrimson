@@ -68,7 +68,7 @@ export default async function AdminImportedReviewsPage({
     <div className="space-y-6">
       <AdminPageHeader
         title="Проверка отзывов"
-        description="Отзывы с других сайтов, добавленные вручную по объектам, экскурсиям, турам и трансферам. Проверьте текст и источник перед публикацией."
+        description="Отзывы с других сайтов, добавленные вручную по объектам, экскурсиям, турам и трансферам. Проверяйте и правьте текст, автора, дату и источник."
       />
 
       <div className="grid gap-4 sm:grid-cols-5">

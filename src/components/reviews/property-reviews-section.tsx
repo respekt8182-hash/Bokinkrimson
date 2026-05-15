@@ -1,7 +1,7 @@
 // UI component for property/excursion reviews section.
 "use client";
 
-import { Info, MessageSquareText, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
+import { MessageSquareText, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -72,6 +72,36 @@ function formatReviewMonth(value: string): string {
 
 function getReviewDisplayDate(review: SerializedReview): string {
   return review.reviewedAt ?? review.createdAt;
+}
+
+function isYearOnlyReviewDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return Boolean(match && match[2] === "01" && match[3] === "01");
+}
+
+function formatReviewDateLabel(review: SerializedReview): string {
+  if (review.isImported && review.reviewedAt && isYearOnlyReviewDate(review.reviewedAt)) {
+    return review.reviewedAt.slice(0, 4);
+  }
+
+  return formatReviewMonth(getReviewDisplayDate(review));
+}
+
+function getExternalSourceDisplayName(review: SerializedReview): string | null {
+  const sourceName = review.externalSourceName?.trim();
+  if (sourceName && sourceName.toLocaleLowerCase("ru-RU") !== "вручную") {
+    return sourceName;
+  }
+
+  if (!review.externalSourceUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(review.externalSourceUrl).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
 }
 
 function formatReviewsCountLabel(count: number): string {
@@ -551,10 +581,10 @@ export function PropertyReviewsSection({
             const reactionsTotal = review.likesCount + review.dislikesCount;
             const helpfulPercent =
               reactionsTotal > 0 ? Math.round((review.likesCount / reactionsTotal) * 100) : null;
-            const externalSourceTitle = review.externalSourceName
-              ? `Источник: ${review.externalSourceName}`
-              : "Источник: внешний сайт";
-            const displayDate = getReviewDisplayDate(review);
+            const externalSourceName = getExternalSourceDisplayName(review);
+            const externalSourceTitle = externalSourceName
+              ? `Источник: ${externalSourceName}`
+              : "Внешний отзыв";
 
             return (
               <article
@@ -583,24 +613,20 @@ export function PropertyReviewsSection({
                           {review.userName}
                         </p>
                         <span className="text-sm text-olive/55">
-                          {formatReviewMonth(displayDate)}
+                          {formatReviewDateLabel(review)}
                         </span>
                         {review.guestCity ? (
                           <span className="rounded-full bg-olive/[0.04] px-2 py-0.5 text-xs font-medium text-olive/58">
-                            из {review.guestCity}
+                            {review.guestCity}
                           </span>
                         ) : null}
                         {review.isImported ? (
                           <span
                             title={externalSourceTitle}
                             aria-label={externalSourceTitle}
-                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
                           >
-                            <AppIcon
-                              icon={review.externalSourceName ? ShieldCheck : Info}
-                              className="h-3.5 w-3.5"
-                            />
-                            Отзыв добавлен из: {review.externalSourceName ?? "внешний сайт"}
+                            <AppIcon icon={ShieldCheck} className="h-3.5 w-3.5" />
                           </span>
                         ) : null}
                       </div>

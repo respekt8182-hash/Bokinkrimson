@@ -1,6 +1,10 @@
 import { Prisma, ReviewEntityType, ReviewStatus } from "@prisma/client";
 import { db, isDatabaseTableAvailable, type DbTransactionClient } from "@/lib/db";
-import { type ExternalReviewEntityType, getReviewEntityType } from "@/lib/external-reviews";
+import {
+  type ExternalReviewEntityType,
+  getReviewEntityType,
+  readExternalReviewSourceName,
+} from "@/lib/external-reviews";
 import { normalizePlainText } from "@/lib/plain-text";
 import {
   normalizeReviewGuestCity,
@@ -252,6 +256,8 @@ async function updateFallbackExternalReview(input: {
   rating?: number | null;
   text?: string | null;
   authorName?: string | null;
+  sourceUrl?: string | null;
+  sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
 }): Promise<{ item: SerializedReview | null; summary: null } | null> {
@@ -323,6 +329,14 @@ async function updateFallbackExternalReview(input: {
     input.authorName === undefined
       ? existing.authorName
       : normalizePlainText(input.authorName ?? "") || existing.authorName;
+  const sourceUrl =
+    input.sourceUrl === undefined
+      ? existing.sourceUrl
+      : normalizePlainText(input.sourceUrl ?? "") || null;
+  const sourceName =
+    input.sourceName === undefined && input.sourceUrl === undefined
+      ? existing.sourceName
+      : readExternalReviewSourceName(sourceUrl, input.sourceName);
   const guestCity =
     input.guestCity === undefined ? existing.guestCity : normalizeReviewGuestCity(input.guestCity);
   const reviewedAt = input.reviewedAt === undefined ? existing.reviewedAt : input.reviewedAt;
@@ -338,6 +352,8 @@ async function updateFallbackExternalReview(input: {
       },
       "text" = ${text},
       "authorName" = ${authorName},
+      "sourceUrl" = ${sourceUrl},
+      "sourceName" = ${sourceName},
       "guestCity" = ${guestCity},
       "reviewedAt" = ${reviewedAt},
       "deletedAt" = ${
@@ -387,6 +403,8 @@ export async function updateExternalReviewModeration(input: {
   rating?: number | null;
   text?: string | null;
   authorName?: string | null;
+  sourceUrl?: string | null;
+  sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
 }) {
@@ -459,6 +477,15 @@ export async function updateExternalReviewModeration(input: {
     );
   }
 
+  const sourceUrl =
+    input.sourceUrl === undefined
+      ? existing.externalSourceUrl
+      : normalizePlainText(input.sourceUrl ?? "") || null;
+  const sourceName =
+    input.sourceName === undefined && input.sourceUrl === undefined
+      ? existing.externalSourceName
+      : readExternalReviewSourceName(sourceUrl, input.sourceName);
+
   return db.$transaction(async (tx) => {
     const updated = await tx.review.update({
       where: { id: existing.id },
@@ -470,6 +497,8 @@ export async function updateExternalReviewModeration(input: {
           input.authorName === undefined
             ? existing.importedAuthorName
             : normalizePlainText(input.authorName ?? "") || existing.importedAuthorName,
+        externalSourceUrl: sourceUrl,
+        externalSourceName: sourceName,
         guestCity:
           input.guestCity === undefined
             ? existing.guestCity

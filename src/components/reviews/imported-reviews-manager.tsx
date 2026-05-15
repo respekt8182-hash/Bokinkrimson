@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,8 @@ type ManualReviewResponse = {
 type EditDraft = {
   authorName: string;
   text: string;
+  sourceName: string;
+  sourceUrl: string;
   guestCity: string;
   reviewedAt: string;
 };
@@ -65,6 +67,18 @@ type ManualDraft = {
 
 const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
 const reviewPreviewLength = 220;
+const reviewSourceSuggestions = [
+  "Куда на море",
+  "Яндекс",
+  "Авито",
+  "Суточно",
+  "Твил",
+  "Куда на юга",
+];
+const currentReviewYear = new Date().getFullYear();
+const reviewYearOptions = Array.from({ length: currentReviewYear - 2000 + 1 }, (_, index) =>
+  String(currentReviewYear - index),
+);
 
 function createEmptyManualDraft(): ManualDraft {
   return {
@@ -72,7 +86,7 @@ function createEmptyManualDraft(): ManualDraft {
     guestCity: "",
     rating: "5",
     reviewedAt: "",
-    sourceName: "Вручную",
+    sourceName: "",
     sourceUrl: "",
     text: "",
   };
@@ -91,6 +105,7 @@ function formatDateTime(value: string | null): string {
 
 function formatDate(value: string | null): string {
   if (!value) return "";
+  if (isYearOnlyReviewDate(value)) return value.slice(0, 4);
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
     month: "long",
@@ -100,6 +115,15 @@ function formatDate(value: string | null): string {
 
 function toDateInputValue(value: string | null): string {
   return value ? value.slice(0, 10) : "";
+}
+
+function isYearOnlyReviewDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return Boolean(match && match[2] === "01" && match[3] === "01");
+}
+
+function reviewYearToDateValue(year: string): string {
+  return year ? `${year}-01-01` : "";
 }
 
 function statusMeta(status: SerializedReview["status"]): {
@@ -174,6 +198,7 @@ export function ImportedReviewsManager({
   const [editDraftById, setEditDraftById] = useState<Record<string, EditDraft>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const sourceSuggestionsId = useId();
 
   const endpoint =
     mode === "admin" ? "/api/admin/external-reviews" : "/api/dashboard/external-reviews";
@@ -232,8 +257,8 @@ export function ImportedReviewsManager({
           rating: ratingValue,
           text: manualDraft.text.trim(),
           guestCity: manualDraft.guestCity.trim(),
-          reviewedAt: manualDraft.reviewedAt,
-          sourceName: manualDraft.sourceName.trim() || "Вручную",
+          reviewedAt: reviewYearToDateValue(manualDraft.reviewedAt),
+          sourceName: manualDraft.sourceName.trim(),
           sourceUrl: manualDraft.sourceUrl.trim(),
         }),
       });
@@ -245,9 +270,12 @@ export function ImportedReviewsManager({
       }
 
       applyReviewItem(body.item);
-      setManualDraft(createEmptyManualDraft());
-      setActiveTab("queue");
-      setSuccess("Отзыв добавлен на модерацию.");
+      setManualDraft({
+        ...createEmptyManualDraft(),
+        sourceName: manualDraft.sourceName.trim(),
+        sourceUrl: manualDraft.sourceUrl.trim(),
+      });
+      setSuccess(mode === "admin" ? "Отзыв опубликован." : "Отзыв добавлен на модерацию.");
     } finally {
       setIsManualSubmitting(false);
     }
@@ -258,6 +286,8 @@ export function ImportedReviewsManager({
       editDraftById[review.id] ?? {
         authorName: review.importedAuthorName ?? review.userName,
         text: review.text,
+        sourceName: review.externalSourceName ?? "",
+        sourceUrl: review.externalSourceUrl ?? "",
         guestCity: review.guestCity ?? "",
         reviewedAt: toDateInputValue(review.reviewedAt),
       }
@@ -286,6 +316,8 @@ export function ImportedReviewsManager({
                 rating: Number.isFinite(ratingValue) ? ratingValue : 0,
                 text: draft.text.trim(),
                 authorName: draft.authorName.trim(),
+                sourceName: draft.sourceName.trim(),
+                sourceUrl: draft.sourceUrl.trim(),
                 guestCity: draft.guestCity.trim(),
                 reviewedAt: draft.reviewedAt,
               }),
@@ -393,6 +425,28 @@ export function ImportedReviewsManager({
             }))
           }
           type="date"
+        />
+        <Input
+          value={draft.sourceName}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, sourceName: event.target.value },
+            }))
+          }
+          placeholder="Источник"
+          maxLength={80}
+        />
+        <Input
+          value={draft.sourceUrl}
+          onChange={(event) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, sourceUrl: event.target.value },
+            }))
+          }
+          placeholder="Ссылка на источник"
+          maxLength={500}
         />
         <textarea
           value={draft.text}
@@ -656,25 +710,38 @@ export function ImportedReviewsManager({
               </select>
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-olive">
-              Дата отзыва
-              <Input
-                type="date"
+              Год отзыва
+              <select
                 value={manualDraft.reviewedAt}
                 onChange={(event) =>
                   setManualDraft((previous) => ({ ...previous, reviewedAt: event.target.value }))
                 }
-              />
+                className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+              >
+                <option value="">Выберите год</option>
+                {reviewYearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-olive">
               Источник
               <Input
                 value={manualDraft.sourceName}
+                list={sourceSuggestionsId}
                 onChange={(event) =>
                   setManualDraft((previous) => ({ ...previous, sourceName: event.target.value }))
                 }
-                placeholder="Вручную"
+                placeholder="Яндекс, Авито, Суточно..."
                 maxLength={80}
               />
+              <datalist id={sourceSuggestionsId}>
+                {reviewSourceSuggestions.map((source) => (
+                  <option key={source} value={source} />
+                ))}
+              </datalist>
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-olive">
               Ссылка на источник
@@ -726,6 +793,7 @@ export function ImportedReviewsManager({
               {historyItems.map((review) => {
                 const meta = statusMeta(review.status);
                 const processing = processingReviewId === review.id;
+                const isEditing = review.id in editDraftById;
                 const isExpanded = expandedHistoryIds.has(review.id);
                 const canExpand = hasHiddenText(review.text);
 
@@ -757,11 +825,15 @@ export function ImportedReviewsManager({
                       </div>
                     </div>
 
-                    <p className="mt-4 whitespace-pre-line text-sm leading-6 text-olive/82">
-                      {isExpanded ? review.text : getReviewPreview(review.text)}
-                    </p>
+                    {isEditing ? (
+                      renderEditableReview(review)
+                    ) : (
+                      <p className="mt-4 whitespace-pre-line text-sm leading-6 text-olive/82">
+                        {isExpanded ? review.text : getReviewPreview(review.text)}
+                      </p>
+                    )}
 
-                    {isExpanded ? (
+                    {isExpanded && !isEditing ? (
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/58">
                         {review.guestCity ? <span>Город: {review.guestCity}</span> : null}
                         {review.reviewedAt ? (
@@ -771,7 +843,7 @@ export function ImportedReviewsManager({
                     ) : null}
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {canExpand ? (
+                      {canExpand && !isEditing ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -783,6 +855,33 @@ export function ImportedReviewsManager({
                           />
                           {isExpanded ? "Свернуть" : "Развернуть"}
                         </Button>
+                      ) : null}
+                      {canModerateReviews ? (
+                        isEditing ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => void moderateReview(review, "edit")}
+                            disabled={processing}
+                          >
+                            {processing ? "Сохраняем..." : "Сохранить"}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() =>
+                              setEditDraftById((previous) => ({
+                                ...previous,
+                                [review.id]: getDraft(review),
+                              }))
+                            }
+                            disabled={processing}
+                          >
+                            <AppIcon icon={Pencil} className="mr-1.5 h-4 w-4" />
+                            Редактировать
+                          </Button>
+                        )
                       ) : null}
                       {canModerateReviews && review.status === "ACTIVE" ? (
                         <Button

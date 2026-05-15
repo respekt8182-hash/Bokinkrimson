@@ -1,5 +1,5 @@
 import { PropertyStatus } from "@prisma/client";
-import { BedDouble, Plus } from "lucide-react";
+import { BedDouble, MessageSquareText, Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
@@ -11,9 +11,7 @@ import {
   getAdminPropertyPendingEditLabel,
 } from "@/lib/admin-status";
 import { db } from "@/lib/db";
-import {
-  getPropertyDisplayNumberFromOrderedIds,
-} from "@/lib/properties";
+import { getPropertyDisplayNumberFromOrderedIds } from "@/lib/properties";
 import { roomInclude, serializeRoom } from "@/lib/rooms";
 
 type AdminObjectRoomCategoriesPageProps = {
@@ -122,7 +120,7 @@ export default async function AdminObjectRoomCategoriesPage({
                 </div>
               </div>
 
-              <div className="flex w-full shrink-0 items-center justify-between gap-3 sm:w-auto sm:flex-col sm:items-end">
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
                 <span
                   className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${getStatusBadgeClass(
                     property.status,
@@ -135,6 +133,13 @@ export default async function AdminObjectRoomCategoriesPage({
                     {pendingEditLabel}
                   </span>
                 ) : null}
+                <Link
+                  href={`/admin/objects/${property.id}/external-reviews`}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/15 active:scale-95"
+                >
+                  <AppIcon icon={MessageSquareText} className="h-4 w-4" />
+                  Добавить отзывы
+                </Link>
                 {!isCreateRequested ? (
                   <Link
                     href={`/admin/objects/${property.id}/room-categories?create=1#room-category-form`}

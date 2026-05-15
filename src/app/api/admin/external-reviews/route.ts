@@ -1,4 +1,3 @@
-import { ReviewStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
@@ -106,7 +105,6 @@ export async function POST(request: Request) {
     ...entity,
     actorId: admin.id,
     actorRole: "admin",
-    status: ReviewStatus.PENDING,
     authorName: parsed.data.authorName,
     rating: parsed.data.rating,
     text: parsed.data.text,
