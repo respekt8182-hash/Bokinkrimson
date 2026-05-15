@@ -113,6 +113,21 @@ function formatReviewsCountLabel(count: number): string {
   return `${count} отзывов`;
 }
 
+function formatVisibleReviewsLabel(visibleCount: number, totalCount: number): string {
+  const safeTotal = Math.max(0, totalCount);
+  const safeVisible = Math.min(Math.max(0, visibleCount), safeTotal);
+
+  if (safeTotal <= 0) {
+    return "Пока нет отзывов";
+  }
+
+  if (safeVisible >= safeTotal) {
+    return `Показаны все ${formatReviewsCountLabel(safeTotal)}`;
+  }
+
+  return `Показано ${safeVisible} из ${safeTotal}`;
+}
+
 function getInitials(name: string): string {
   const parts = name
     .split(/\s+/)
@@ -182,6 +197,8 @@ export function PropertyReviewsSection({
   const effectiveRating = rating;
   const hasPublishedReviews = summary.reviewsCount > 0;
   const canWriteReview = isAuthenticated && !isOwnerViewer;
+  const totalReviewsLabel = formatReviewsCountLabel(summary.reviewsCount);
+  const visibleReviewsLabel = formatVisibleReviewsLabel(items.length, summary.reviewsCount);
 
   useEffect(() => {
     setReplyDraftById((previous) => {
@@ -413,9 +430,7 @@ export function PropertyReviewsSection({
               <span className="inline-flex min-w-10 items-center justify-center rounded-full bg-emerald-600 px-3 py-1.5 font-semibold text-white">
                 {summary.avgRating.toFixed(1)}
               </span>
-              <span className="font-medium text-olive">
-                {formatReviewsCountLabel(summary.reviewsCount)}
-              </span>
+              <span className="font-medium text-olive">Всего {totalReviewsLabel}</span>
             </div>
           ) : (
             <p className="mt-2 text-sm text-olive/66">
@@ -574,6 +589,13 @@ export function PropertyReviewsSection({
         </div>
       ) : (
         <div className="mt-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f7faf8] px-4 py-3 ring-1 ring-olive/8">
+            <span className="text-sm font-semibold text-olive">{visibleReviewsLabel}</span>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-olive/60 ring-1 ring-olive/8">
+              {totalReviewsLabel}
+            </span>
+          </div>
+
           {items.map((review) => {
             const likeActive = review.currentUserReaction === "LIKE";
             const dislikeActive = review.currentUserReaction === "DISLIKE";

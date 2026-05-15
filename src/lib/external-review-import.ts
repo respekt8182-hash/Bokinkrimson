@@ -165,7 +165,10 @@ function normalizeWhitespace(value: string): string {
 }
 
 function mojibakeScore(value: string): number {
-  const markerMatches = value.match(/[ÐÑ]|[\u0420\u0421][\u0400-\u045f]|в[Ђ€ћЃ‚„…]/g)?.length ?? 0;
+  const markerMatches =
+    value.match(
+      /[\u00d0\u00d1]|[\u0420\u0421][\u0400-\u045f]|\u0432[\u0402\u20ac\u045b\u0403\u201a\u201e\u2026]/g,
+    )?.length ?? 0;
   const replacementMatches = value.match(/\uFFFD/g)?.length ?? 0;
   return markerMatches + replacementMatches * 4;
 }

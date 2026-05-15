@@ -42,6 +42,7 @@ const EXTERNAL_REVIEW_COLUMNS = [
 
 const FALLBACK_EXTERNAL_REVIEW_TABLE = "ExternalReviewFallback";
 const MAX_IMPORTED_REVIEW_SCAN = 1000;
+const PUBLIC_REVIEW_ROTATION_TIMEZONE_OFFSET_MINUTES = 180;
 
 type ExternalReviewStorageMode = "database" | "fallback" | "unavailable";
 
@@ -500,7 +501,22 @@ function hashReviewOrderKey(value: string): number {
   return hash >>> 0;
 }
 
-function orderReviewsForPublicDisplay(
+export function getPublicReviewOrderSeedDate(now = new Date()): string {
+  const shiftedDate = new Date(
+    now.getTime() + PUBLIC_REVIEW_ROTATION_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+  );
+
+  return shiftedDate.toISOString().slice(0, 10);
+}
+
+export function buildPublicReviewOrderSeed(
+  input: { entityType: ExternalReviewEntityType; entityId: string },
+  now = new Date(),
+): string {
+  return `${input.entityType}:${input.entityId}:${getPublicReviewOrderSeedDate(now)}`;
+}
+
+export function orderReviewsForPublicDisplay(
   reviews: SerializedReview[],
   seed: string,
 ): SerializedReview[] {
@@ -597,12 +613,13 @@ export async function getMergedExternalReviewList(input: {
   const offset = Math.max(0, input.offset ?? 0);
   const limit = Math.max(1, input.limit ?? Math.max(1, input.databaseItems.length));
   const databaseTotal = Math.max(input.databaseTotal ?? 0, input.databaseItems.length);
+  const orderSeed = buildPublicReviewOrderSeed({
+    entityType: input.entityType,
+    entityId: input.entityId,
+  });
 
   if ((await resolveExternalReviewStorageMode(input.entityType)) !== "fallback") {
-    const orderedItems = orderReviewsForPublicDisplay(
-      input.databaseItems,
-      `${input.entityType}:${input.entityId}`,
-    );
+    const orderedItems = orderReviewsForPublicDisplay(input.databaseItems, orderSeed);
 
     return {
       items: orderedItems.slice(offset, offset + limit),
@@ -621,7 +638,7 @@ export async function getMergedExternalReviewList(input: {
 
   const merged = orderReviewsForPublicDisplay(
     [...input.databaseItems, ...importedItems],
-    `${input.entityType}:${input.entityId}`,
+    orderSeed,
   );
 
   return {
