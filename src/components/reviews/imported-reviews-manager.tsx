@@ -18,6 +18,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,11 @@ import {
   parseExternalReviewImportPayload,
   type ParsedExternalReviewImportItem,
 } from "@/lib/external-review-import";
+import {
+  getReviewCategoryLabel,
+  reviewCategoryOptions,
+  type ReviewCategoryMatch,
+} from "@/lib/review-categories";
 import type { SerializedReview } from "@/lib/reviews";
 
 type EntityType = "property" | "excursion" | "transfer";
@@ -59,6 +65,7 @@ type JsonImportResponse = {
   importedCount?: number;
   skippedCount?: number;
   failedCount?: number;
+  deletedCount?: number;
   items?: SerializedReview[];
   skipped?: Array<{ index: number; reason: string }>;
   failed?: Array<{ index: number; reason: string }>;
@@ -72,6 +79,8 @@ type EditDraft = {
   sourceUrl: string;
   guestCity: string;
   reviewedAt: string;
+  reviewCategory: string;
+  reviewHighlight: string;
 };
 
 type ManualDraft = {
@@ -82,6 +91,8 @@ type ManualDraft = {
   sourceName: string;
   sourceUrl: string;
   text: string;
+  reviewCategory: string;
+  reviewHighlight: string;
 };
 
 type JsonReviewDraft = {
@@ -93,6 +104,9 @@ type JsonReviewDraft = {
   sourceName: string;
   sourceUrl: string;
   text: string;
+  reviewCategory: string;
+  reviewHighlight: string;
+  reviewCategoryMatches: ReviewCategoryMatch[];
 };
 
 const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
@@ -123,6 +137,8 @@ function createEmptyManualDraft(): ManualDraft {
     sourceName: "",
     sourceUrl: "",
     text: "",
+    reviewCategory: "",
+    reviewHighlight: "",
   };
 }
 
@@ -139,6 +155,9 @@ function createJsonReviewDraft(
     sourceName: item.sourceName,
     sourceUrl: item.sourceUrl ?? "",
     text: item.text,
+    reviewCategory: item.reviewCategory ?? "",
+    reviewHighlight: item.reviewHighlight ?? "",
+    reviewCategoryMatches: item.reviewCategoryMatches,
   };
 }
 
@@ -233,6 +252,7 @@ export function ImportedReviewsManager({
   title = "Отзывы с других сайтов",
   description = "Создайте отзыв вручную: укажите автора, оценку, текст и источник. Добавленные отзывы проходят модерацию перед публикацией.",
 }: ImportedReviewsManagerProps) {
+  const router = useRouter();
   const [items, setItems] = useState(initialReviews);
   const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
     mode === "admin" ? "json" : "manual",
@@ -243,6 +263,7 @@ export function ImportedReviewsManager({
   const [jsonImportSummary, setJsonImportSummary] = useState("");
   const [jsonImportWarnings, setJsonImportWarnings] = useState<string[]>([]);
   const [isJsonImporting, setIsJsonImporting] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
   const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(() => new Set());
@@ -379,6 +400,9 @@ export function ImportedReviewsManager({
               sourceName: draft.sourceName.trim(),
               sourceUrl: draft.sourceUrl.trim(),
               text: draft.text.trim(),
+              reviewCategory: draft.reviewCategory,
+              reviewHighlight: draft.reviewHighlight.trim(),
+              reviewCategoryMatches: draft.reviewCategoryMatches,
             })),
           },
           status: jsonImportStatus,
@@ -422,6 +446,43 @@ export function ImportedReviewsManager({
     setJsonDrafts((previous) =>
       previous.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)),
     );
+  }
+
+  async function deleteAllImportedReviews() {
+    if (mode !== "admin" || items.length === 0 || isBulkDeleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Удалить все добавленные отзывы у этого объекта? Действие нельзя отменить.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsBulkDeleting(true);
+
+    try {
+      const response = await fetch(endpointUrl, { method: "DELETE" });
+      const body = (await response.json()) as JsonImportResponse;
+
+      if (!response.ok) {
+        setError(body.error ?? "Не удалось удалить отзывы.");
+        return;
+      }
+
+      setItems([]);
+      setJsonDrafts([]);
+      setEditDraftById({});
+      setExpandedHistoryIds(new Set());
+      setRatingById({});
+      setSuccess(`Удалено отзывов: ${body.deletedCount ?? items.length}.`);
+      router.refresh();
+    } finally {
+      setIsBulkDeleting(false);
+    }
   }
 
   function removeJsonDraft(id: string) {
@@ -468,6 +529,8 @@ export function ImportedReviewsManager({
           reviewedAt: reviewYearToDateValue(manualDraft.reviewedAt),
           sourceName: manualDraft.sourceName.trim(),
           sourceUrl: manualDraft.sourceUrl.trim(),
+          reviewCategory: manualDraft.reviewCategory,
+          reviewHighlight: manualDraft.reviewHighlight.trim(),
         }),
       });
       const body = (await response.json()) as ManualReviewResponse;
@@ -498,6 +561,8 @@ export function ImportedReviewsManager({
         sourceUrl: review.externalSourceUrl ?? "",
         guestCity: review.guestCity ?? "",
         reviewedAt: toDateInputValue(review.reviewedAt),
+        reviewCategory: review.reviewCategory ?? "",
+        reviewHighlight: review.reviewHighlight ?? "",
       }
     );
   }
@@ -528,6 +593,8 @@ export function ImportedReviewsManager({
                 sourceUrl: draft.sourceUrl.trim(),
                 guestCity: draft.guestCity.trim(),
                 reviewedAt: draft.reviewedAt,
+                reviewCategory: draft.reviewCategory,
+                reviewHighlight: draft.reviewHighlight.trim(),
               }),
       });
       const body = (await response.json()) as ReviewActionResponse;
@@ -584,11 +651,51 @@ export function ImportedReviewsManager({
     });
   }
 
+  function renderReviewCategoryFields(input: {
+    category: string;
+    highlight: string;
+    onCategoryChange: (value: string) => void;
+    onHighlightChange: (value: string) => void;
+    disabled?: boolean;
+  }) {
+    return (
+      <>
+        <label className="grid gap-1.5 text-sm font-semibold text-olive">
+          Категория отзыва
+          <select
+            value={input.category}
+            onChange={(event) => input.onCategoryChange(event.target.value)}
+            disabled={input.disabled}
+            className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+          >
+            <option value="">Без категории</option>
+            {reviewCategoryOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-sm font-semibold text-olive">
+          Слово для подсветки
+          <Input
+            value={input.highlight}
+            onChange={(event) => input.onHighlightChange(event.target.value)}
+            disabled={input.disabled}
+            placeholder="например: чисто"
+            maxLength={160}
+          />
+        </label>
+      </>
+    );
+  }
+
   function renderEditableReview(review: SerializedReview) {
     const draft = getDraft(review);
     const isEditing = review.id in editDraftById;
 
     if (!isEditing) {
+      const categoryLabel = getReviewCategoryLabel(review.reviewCategory);
       return (
         <>
           <p className="mt-4 whitespace-pre-line text-sm leading-6 text-olive/82">{review.text}</p>
@@ -596,6 +703,12 @@ export function ImportedReviewsManager({
             {review.guestCity ? <span>Город: {review.guestCity}</span> : null}
             {review.reviewedAt ? <span>Дата: {formatDate(review.reviewedAt)}</span> : null}
           </div>
+          {categoryLabel || review.reviewHighlight ? (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-olive/58">
+              {categoryLabel ? <span>Категория: {categoryLabel}</span> : null}
+              {review.reviewHighlight ? <span>Подсветка: {review.reviewHighlight}</span> : null}
+            </div>
+          ) : null}
         </>
       );
     }
@@ -656,6 +769,20 @@ export function ImportedReviewsManager({
           placeholder="Ссылка на источник"
           maxLength={500}
         />
+        {renderReviewCategoryFields({
+          category: draft.reviewCategory,
+          highlight: draft.reviewHighlight,
+          onCategoryChange: (value) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, reviewCategory: value },
+            })),
+          onHighlightChange: (value) =>
+            setEditDraftById((previous) => ({
+              ...previous,
+              [review.id]: { ...draft, reviewHighlight: value },
+            })),
+        })}
         <textarea
           value={draft.text}
           onChange={(event) =>
@@ -688,6 +815,21 @@ export function ImportedReviewsManager({
           {queuedItems.length} на модерации
         </span>
       </div>
+
+      {mode === "admin" && items.length > 0 ? (
+        <div className="mt-4 flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void deleteAllImportedReviews()}
+            disabled={isBulkDeleting}
+            className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+          >
+            <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
+            {isBulkDeleting ? "Удаляем..." : "Удалить все отзывы объекта"}
+          </Button>
+        </div>
+      ) : null}
 
       {!schemaAvailable ? (
         <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -898,6 +1040,15 @@ export function ImportedReviewsManager({
                         maxLength={500}
                       />
                     </label>
+                    {renderReviewCategoryFields({
+                      category: draft.reviewCategory,
+                      highlight: draft.reviewHighlight,
+                      disabled: isJsonImporting,
+                      onCategoryChange: (value) =>
+                        updateJsonDraft(draft.id, { reviewCategory: value }),
+                      onHighlightChange: (value) =>
+                        updateJsonDraft(draft.id, { reviewHighlight: value }),
+                    })}
                     <label className="grid gap-1.5 text-sm font-semibold text-olive md:col-span-2">
                       Текст отзыва
                       <textarea
@@ -1176,6 +1327,14 @@ export function ImportedReviewsManager({
                 maxLength={500}
               />
             </label>
+            {renderReviewCategoryFields({
+              category: manualDraft.reviewCategory,
+              highlight: manualDraft.reviewHighlight,
+              onCategoryChange: (value) =>
+                setManualDraft((previous) => ({ ...previous, reviewCategory: value })),
+              onHighlightChange: (value) =>
+                setManualDraft((previous) => ({ ...previous, reviewHighlight: value })),
+            })}
             <label className="grid gap-1.5 text-sm font-semibold text-olive md:col-span-2">
               Текст отзыва
               <textarea

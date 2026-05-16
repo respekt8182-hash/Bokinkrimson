@@ -120,6 +120,8 @@ export async function POST(request: Request) {
     sourceName: parsed.data.sourceName,
     guestCity: parsed.data.guestCity,
     reviewedAt: parsed.data.reviewedAt,
+    reviewCategory: parsed.data.reviewCategory,
+    reviewHighlight: parsed.data.reviewHighlight,
   });
 
   return NextResponse.json(result, { status: 201 });

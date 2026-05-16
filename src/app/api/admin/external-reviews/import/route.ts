@@ -175,6 +175,9 @@ export async function POST(request: Request) {
         sourceName: review.sourceName,
         guestCity: review.guestCity,
         reviewedAt: review.reviewedAt,
+        reviewCategory: review.reviewCategory,
+        reviewHighlight: review.reviewHighlight,
+        reviewCategoryMatches: review.reviewCategoryMatches,
       });
 
       existingFingerprints.add(fingerprint);

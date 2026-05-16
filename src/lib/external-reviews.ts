@@ -9,6 +9,12 @@ import {
 import { normalizePlainText } from "@/lib/plain-text";
 import { logDatabaseFallbackOnce } from "@/lib/prisma-errors";
 import {
+  getReviewCategoryMatches,
+  normalizeReviewCategory,
+  normalizeReviewHighlight,
+  type ReviewCategoryMatch,
+} from "@/lib/review-categories";
+import {
   normalizeReviewGuestCity,
   parseReviewDateInput,
   refreshEntityReviewStats,
@@ -38,6 +44,9 @@ const EXTERNAL_REVIEW_COLUMNS = [
   "importedByOwnerId",
   "verifiedAt",
   "verifiedByAdminId",
+  "reviewCategory",
+  "reviewHighlight",
+  "reviewCategoryMatches",
 ] as const;
 
 const FALLBACK_EXTERNAL_REVIEW_TABLE = "ExternalReviewFallback";
@@ -58,6 +67,9 @@ type ExternalReviewFallbackRow = {
   sourceName: string | null;
   guestCity: string | null;
   reviewedAt: Date | null;
+  reviewCategory: string | null;
+  reviewHighlight: string | null;
+  reviewCategoryMatches: Prisma.JsonValue | null;
   likesCount: number;
   dislikesCount: number;
   currentUserReaction?: ReviewReactionValue | null;
@@ -125,6 +137,9 @@ async function ensureFallbackExternalReviewTable(): Promise<boolean> {
             "sourceName" TEXT,
             "guestCity" TEXT,
             "reviewedAt" DATE,
+            "reviewCategory" VARCHAR(40),
+            "reviewHighlight" VARCHAR(160),
+            "reviewCategoryMatches" JSONB,
             "likesCount" INTEGER NOT NULL DEFAULT 0,
             "dislikesCount" INTEGER NOT NULL DEFAULT 0,
             "importedByOwnerId" TEXT,
@@ -146,6 +161,18 @@ async function ensureFallbackExternalReviewTable(): Promise<boolean> {
         await db.$executeRawUnsafe(`
           ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
           ADD COLUMN IF NOT EXISTS "reviewedAt" DATE
+        `);
+        await db.$executeRawUnsafe(`
+          ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+          ADD COLUMN IF NOT EXISTS "reviewCategory" VARCHAR(40)
+        `);
+        await db.$executeRawUnsafe(`
+          ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+          ADD COLUMN IF NOT EXISTS "reviewHighlight" VARCHAR(160)
+        `);
+        await db.$executeRawUnsafe(`
+          ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+          ADD COLUMN IF NOT EXISTS "reviewCategoryMatches" JSONB
         `);
         await db.$executeRawUnsafe(`
           ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
@@ -354,6 +381,9 @@ function serializeFallbackExternalReview(row: ExternalReviewFallbackRow): Serial
     externalSourceName: row.sourceName,
     guestCity: row.guestCity,
     reviewedAt: row.reviewedAt,
+    reviewCategory: row.reviewCategory,
+    reviewHighlight: row.reviewHighlight,
+    reviewCategoryMatches: row.reviewCategoryMatches,
     likesCount: row.likesCount,
     dislikesCount: row.dislikesCount,
     currentUserReaction: row.currentUserReaction ?? null,
@@ -409,6 +439,9 @@ async function listFallbackExternalReviewRows(input: {
       "sourceName",
       "guestCity",
       "reviewedAt",
+      "reviewCategory",
+      "reviewHighlight",
+      "reviewCategoryMatches",
       "likesCount",
       "dislikesCount",
       ${
@@ -682,6 +715,102 @@ export async function listExternalReviews(input: {
   return [];
 }
 
+export async function deleteExternalReviewsForEntity(input: {
+  entityType: ExternalReviewEntityType;
+  entityId: string;
+  adminId: string;
+}): Promise<{ deletedCount: number }> {
+  const mode = await resolveExternalReviewStorageMode(input.entityType);
+
+  if (mode === "database") {
+    return db.$transaction(async (tx) => {
+      const where = buildExternalReviewWhere(input);
+      const activeCount = await tx.review.count({
+        where: {
+          ...where,
+          status: ReviewStatus.ACTIVE,
+        },
+      });
+      const result = await tx.review.deleteMany({ where });
+
+      if (activeCount > 0) {
+        await refreshReviewSummaryForEntity(tx, {
+          entityType: input.entityType,
+          entityId: input.entityId,
+        });
+      }
+
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: input.adminId,
+          action: "delete_review",
+          targetType: input.entityType,
+          targetId: input.entityId,
+          details: {
+            isImported: true,
+            bulkDelete: true,
+            deletedCount: result.count,
+          },
+        },
+      });
+
+      return { deletedCount: result.count };
+    });
+  }
+
+  if (mode === "fallback") {
+    if (!(await ensureFallbackExternalReviewTable())) {
+      return { deletedCount: 0 };
+    }
+
+    const deletedCount = await db.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+        SELECT COUNT(*) AS "count"
+        FROM "ExternalReviewFallback"
+        WHERE "entityType" = ${input.entityType}
+          AND "entityId" = ${input.entityId}
+      `);
+      const count = Number(rows[0]?.count ?? 0);
+
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM "ExternalReviewFallbackReaction"
+        WHERE "reviewId" IN (
+          SELECT "id"
+          FROM "ExternalReviewFallback"
+          WHERE "entityType" = ${input.entityType}
+            AND "entityId" = ${input.entityId}
+        )
+      `);
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM "ExternalReviewFallback"
+        WHERE "entityType" = ${input.entityType}
+          AND "entityId" = ${input.entityId}
+      `);
+
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: input.adminId,
+          action: "delete_review",
+          targetType: input.entityType,
+          targetId: input.entityId,
+          details: {
+            isImported: true,
+            bulkDelete: true,
+            deletedCount: count,
+            fallbackStorage: true,
+          },
+        },
+      });
+
+      return count;
+    });
+
+    return { deletedCount };
+  }
+
+  return { deletedCount: 0 };
+}
+
 async function refreshReviewSummaryForEntity(
   tx: DbTransactionClient,
   input: {
@@ -722,6 +851,9 @@ export async function createExternalReview(input: {
   sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: string | null;
+  reviewCategory?: string | null;
+  reviewHighlight?: string | null;
+  reviewCategoryMatches?: ReviewCategoryMatch[] | null;
 }): Promise<{
   item: SerializedReview;
   summary: { avgRating: number; reviewsCount: number } | null;
@@ -736,6 +868,18 @@ export async function createExternalReview(input: {
   const sourceName = readExternalReviewSourceName(sourceUrl, input.sourceName);
   const guestCity = normalizeReviewGuestCity(input.guestCity);
   const reviewedAt = parseReviewDateInput(input.reviewedAt);
+  const reviewCategoryMatches = getReviewCategoryMatches({
+    reviewCategory: input.reviewCategory,
+    reviewHighlight: input.reviewHighlight,
+    reviewCategoryMatches: input.reviewCategoryMatches,
+  });
+  const primaryCategoryMatch = reviewCategoryMatches[0] ?? null;
+  const reviewCategory =
+    primaryCategoryMatch?.category ?? normalizeReviewCategory(input.reviewCategory);
+  const reviewHighlight =
+    primaryCategoryMatch?.highlights[0] ?? normalizeReviewHighlight(input.reviewHighlight);
+  const serializedReviewCategoryMatches =
+    reviewCategoryMatches.length > 0 ? JSON.stringify(reviewCategoryMatches) : null;
 
   if (mode === "database") {
     return db.$transaction(async (tx) => {
@@ -755,6 +899,14 @@ export async function createExternalReview(input: {
           externalSourceName: sourceName,
           guestCity,
           reviewedAt,
+          reviewCategory,
+          reviewHighlight,
+          ...(reviewCategoryMatches.length > 0
+            ? {
+                reviewCategoryMatches:
+                  reviewCategoryMatches as unknown as Prisma.InputJsonValue,
+              }
+            : {}),
           importedByOwnerId: input.actorRole === "owner" ? input.actorId : null,
           verifiedAt: status === ReviewStatus.ACTIVE ? now : null,
           verifiedByAdminId: status === ReviewStatus.ACTIVE ? input.actorId : null,
@@ -800,6 +952,9 @@ export async function createExternalReview(input: {
         "sourceName",
         "guestCity",
         "reviewedAt",
+        "reviewCategory",
+        "reviewHighlight",
+        "reviewCategoryMatches",
         "likesCount",
         "dislikesCount",
         "importedByOwnerId",
@@ -821,6 +976,9 @@ export async function createExternalReview(input: {
         ${sourceName},
         ${guestCity},
         ${reviewedAt},
+        ${reviewCategory},
+        ${reviewHighlight},
+        CAST(${serializedReviewCategoryMatches} AS JSONB),
         ${0},
         ${0},
         ${input.actorRole === "owner" ? input.actorId : null},
@@ -842,6 +1000,9 @@ export async function createExternalReview(input: {
         "sourceName",
         "guestCity",
         "reviewedAt",
+        "reviewCategory",
+        "reviewHighlight",
+        "reviewCategoryMatches",
         "likesCount",
         "dislikesCount",
         NULL AS "currentUserReaction",
@@ -1097,6 +1258,9 @@ async function findFallbackExternalReviewById(
       "sourceName",
       "guestCity",
       "reviewedAt",
+      "reviewCategory",
+      "reviewHighlight",
+      "reviewCategoryMatches",
       "likesCount",
       "dislikesCount",
       NULL AS "currentUserReaction",
@@ -1249,6 +1413,9 @@ export async function tryUpdateFallbackExternalReviewReaction(input: {
         "sourceName",
         "guestCity",
         "reviewedAt",
+        "reviewCategory",
+        "reviewHighlight",
+        "reviewCategoryMatches",
         "likesCount",
         "dislikesCount",
         (
@@ -1338,6 +1505,9 @@ export async function tryModerateFallbackExternalReview(input: {
         "sourceName",
         "guestCity",
         "reviewedAt",
+        "reviewCategory",
+        "reviewHighlight",
+        "reviewCategoryMatches",
         "likesCount",
         "dislikesCount",
         NULL AS "currentUserReaction",

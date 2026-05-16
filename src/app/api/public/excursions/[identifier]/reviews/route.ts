@@ -8,6 +8,13 @@ import {
   getMergedExternalReviewList,
 } from "@/lib/external-reviews";
 import { normalizePlainText } from "@/lib/plain-text";
+import {
+  buildPublicReviewMeta,
+  filterAndSortPublicReviews,
+  parsePublicReviewSort,
+  PUBLIC_REVIEW_SCAN_LIMIT,
+  slicePublicReviews,
+} from "@/lib/public-review-list";
 import { extractPropertyId } from "@/lib/public-properties";
 import { buildPublishedExcursionVisibilityWhere } from "@/lib/public-visibility";
 import {
@@ -36,10 +43,22 @@ function parsePagination(request: Request): { offset: number; limit: number } {
   };
 }
 
+function parseReviewView(request: Request): {
+  category: string | null;
+  sort: ReturnType<typeof parsePublicReviewSort>;
+} {
+  const { searchParams } = new URL(request.url);
+  return {
+    category: searchParams.get("category"),
+    sort: parsePublicReviewSort(searchParams.get("sort")),
+  };
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const session = await getSession();
   const { identifier } = await context.params;
   const { offset, limit } = parsePagination(request);
+  const view = parseReviewView(request);
   const excursionId = extractPropertyId(identifier);
 
   const excursion = await db.excursion.findFirst({
@@ -95,21 +114,20 @@ export async function GET(request: Request, context: RouteContext) {
     databaseItems: databaseItems.map(serializeReview),
     databaseTotal: excursion.reviewsCount,
     currentUserId: session?.id ?? null,
-    offset,
-    limit,
+    offset: 0,
+    limit: PUBLIC_REVIEW_SCAN_LIMIT,
   });
-  const nextOffset = offset + merged.items.length;
+  const filtered = filterAndSortPublicReviews({
+    reviews: merged.items,
+    category: view.category,
+    sort: view.sort,
+  });
+  const page = slicePublicReviews({ reviews: filtered, offset, limit });
 
   return NextResponse.json({
-    summary,
-    items: merged.items,
-    pagination: {
-      offset,
-      limit,
-      nextOffset,
-      hasMore: nextOffset < merged.total,
-      total: merged.total,
-    },
+    summary: { ...summary, ...buildPublicReviewMeta(merged.items) },
+    items: page.items,
+    pagination: page.pagination,
   });
 }
 

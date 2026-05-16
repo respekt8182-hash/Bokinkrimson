@@ -41,6 +41,8 @@ const importedReviewActionSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .or(z.literal("")),
+  reviewCategory: z.string().trim().max(40).optional().or(z.literal("")),
+  reviewHighlight: z.string().trim().max(160).optional().or(z.literal("")),
 });
 
 function parseReviewDate(value?: string | null): Date | null | undefined {
@@ -88,6 +90,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       sourceName: parsed.data.sourceName,
       guestCity: parsed.data.guestCity,
       reviewedAt: parseReviewDate(parsed.data.reviewedAt),
+      reviewCategory: parsed.data.reviewCategory,
+      reviewHighlight: parsed.data.reviewHighlight,
     });
 
     return NextResponse.json(result);

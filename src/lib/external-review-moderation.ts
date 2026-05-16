@@ -6,6 +6,7 @@ import {
   readExternalReviewSourceName,
 } from "@/lib/external-reviews";
 import { normalizePlainText } from "@/lib/plain-text";
+import { normalizeReviewCategory, normalizeReviewHighlight } from "@/lib/review-categories";
 import {
   normalizeReviewGuestCity,
   refreshEntityReviewStats,
@@ -31,6 +32,9 @@ type FallbackExternalReviewRow = {
   sourceName: string | null;
   guestCity: string | null;
   reviewedAt: Date | null;
+  reviewCategory: string | null;
+  reviewHighlight: string | null;
+  reviewCategoryMatches: Prisma.JsonValue | null;
   likesCount: number;
   dislikesCount: number;
   importedByOwnerId: string | null;
@@ -40,6 +44,25 @@ type FallbackExternalReviewRow = {
   updatedAt: Date;
   deletedAt: Date | null;
 };
+
+async function ensureFallbackReviewCategoryColumns(): Promise<void> {
+  if (!(await isDatabaseTableAvailable(FALLBACK_EXTERNAL_REVIEW_TABLE))) {
+    return;
+  }
+
+  await db.$executeRawUnsafe(`
+    ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+    ADD COLUMN IF NOT EXISTS "reviewCategory" VARCHAR(40)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+    ADD COLUMN IF NOT EXISTS "reviewHighlight" VARCHAR(160)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE "${FALLBACK_EXTERNAL_REVIEW_TABLE}"
+    ADD COLUMN IF NOT EXISTS "reviewCategoryMatches" JSONB
+  `);
+}
 
 function assertOwnerCanUpdateExternalReview(input: {
   actorRole: "owner" | "admin";
@@ -147,6 +170,7 @@ async function findFallbackExternalReviewById(
   if (!(await isDatabaseTableAvailable(FALLBACK_EXTERNAL_REVIEW_TABLE))) {
     return null;
   }
+  await ensureFallbackReviewCategoryColumns();
 
   const rows = await db.$queryRaw<FallbackExternalReviewRow[]>(Prisma.sql`
     SELECT
@@ -161,6 +185,9 @@ async function findFallbackExternalReviewById(
       "sourceName",
       "guestCity",
       "reviewedAt",
+      "reviewCategory",
+      "reviewHighlight",
+      "reviewCategoryMatches",
       "likesCount",
       "dislikesCount",
       "importedByOwnerId",
@@ -193,6 +220,9 @@ function serializeFallbackExternalReview(row: FallbackExternalReviewRow): Serial
     externalSourceName: row.sourceName,
     guestCity: row.guestCity,
     reviewedAt: row.reviewedAt,
+    reviewCategory: row.reviewCategory,
+    reviewHighlight: row.reviewHighlight,
+    reviewCategoryMatches: row.reviewCategoryMatches,
     likesCount: row.likesCount,
     dislikesCount: row.dislikesCount,
     currentUserReaction: null,
@@ -260,6 +290,8 @@ async function updateFallbackExternalReview(input: {
   sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
+  reviewCategory?: string | null;
+  reviewHighlight?: string | null;
 }): Promise<{ item: SerializedReview | null; summary: null } | null> {
   const existing = await findFallbackExternalReviewById(input.id);
   if (!existing) {
@@ -340,6 +372,14 @@ async function updateFallbackExternalReview(input: {
   const guestCity =
     input.guestCity === undefined ? existing.guestCity : normalizeReviewGuestCity(input.guestCity);
   const reviewedAt = input.reviewedAt === undefined ? existing.reviewedAt : input.reviewedAt;
+  const reviewCategory =
+    input.reviewCategory === undefined
+      ? existing.reviewCategory
+      : normalizeReviewCategory(input.reviewCategory);
+  const reviewHighlight =
+    input.reviewHighlight === undefined
+      ? existing.reviewHighlight
+      : normalizeReviewHighlight(input.reviewHighlight);
 
   const rows = await db.$queryRaw<FallbackExternalReviewRow[]>(Prisma.sql`
     UPDATE "ExternalReviewFallback"
@@ -356,6 +396,8 @@ async function updateFallbackExternalReview(input: {
       "sourceName" = ${sourceName},
       "guestCity" = ${guestCity},
       "reviewedAt" = ${reviewedAt},
+      "reviewCategory" = ${reviewCategory},
+      "reviewHighlight" = ${reviewHighlight},
       "deletedAt" = ${
         status === ReviewStatus.DELETED || status === ReviewStatus.DUPLICATE ? now : null
       },
@@ -379,6 +421,9 @@ async function updateFallbackExternalReview(input: {
       "sourceName",
       "guestCity",
       "reviewedAt",
+      "reviewCategory",
+      "reviewHighlight",
+      "reviewCategoryMatches",
       "likesCount",
       "dislikesCount",
       "importedByOwnerId",
@@ -407,6 +452,8 @@ export async function updateExternalReviewModeration(input: {
   sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
+  reviewCategory?: string | null;
+  reviewHighlight?: string | null;
 }) {
   const existing = await findExternalReviewForActor({
     id: input.id,
@@ -485,6 +532,14 @@ export async function updateExternalReviewModeration(input: {
     input.sourceName === undefined && input.sourceUrl === undefined
       ? existing.externalSourceName
       : readExternalReviewSourceName(sourceUrl, input.sourceName);
+  const reviewCategory =
+    input.reviewCategory === undefined
+      ? existing.reviewCategory
+      : normalizeReviewCategory(input.reviewCategory);
+  const reviewHighlight =
+    input.reviewHighlight === undefined
+      ? existing.reviewHighlight
+      : normalizeReviewHighlight(input.reviewHighlight);
 
   return db.$transaction(async (tx) => {
     const updated = await tx.review.update({
@@ -504,6 +559,8 @@ export async function updateExternalReviewModeration(input: {
             ? existing.guestCity
             : normalizeReviewGuestCity(input.guestCity),
         reviewedAt: input.reviewedAt === undefined ? existing.reviewedAt : input.reviewedAt,
+        reviewCategory,
+        reviewHighlight,
         deletedAt:
           status === ReviewStatus.DELETED || status === ReviewStatus.DUPLICATE
             ? new Date()

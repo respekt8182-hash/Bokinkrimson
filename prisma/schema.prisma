@@ -840,6 +840,9 @@ model Review {
   verifiedByAdminId  String?
   guestCity          String?
   reviewedAt         DateTime?        @db.Date
+  reviewCategory     String?          @db.VarChar(40)
+  reviewHighlight    String?          @db.VarChar(160)
+  reviewCategoryMatches Json?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   deletedAt          DateTime?
@@ -860,6 +863,7 @@ model Review {
   @@index([userId, entityType, createdAt])
   @@index([isImported, status, createdAt])
   @@index([importedByOwnerId, createdAt])
+  @@index([entityType, reviewCategory, status, createdAt])
 }
 
 model ReviewReaction {

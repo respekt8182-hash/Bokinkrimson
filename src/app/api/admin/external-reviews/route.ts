@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import {
   createExternalReview,
+  deleteExternalReviewsForEntity,
   findExternalReviewEntity,
   hasExternalReviewSupport,
   listExternalReviews,
@@ -157,7 +158,44 @@ export async function POST(request: Request) {
     sourceName: parsed.data.sourceName,
     guestCity: parsed.data.guestCity,
     reviewedAt: parsed.data.reviewedAt,
+    reviewCategory: parsed.data.reviewCategory,
+    reviewHighlight: parsed.data.reviewHighlight,
   });
 
   return NextResponse.json(result, { status: 201 });
+}
+
+export async function DELETE(request: Request) {
+  const admin = await getAdminSession();
+
+  if (!admin) {
+    return NextResponse.json({ error: TEXT.unauthorized }, { status: 403 });
+  }
+
+  const entity = parseEntity(request);
+  if (!entity) {
+    return NextResponse.json({ error: TEXT.badEntity }, { status: 400 });
+  }
+
+  const target = await findExternalReviewEntity(entity);
+  if (!target) {
+    return NextResponse.json({ error: TEXT.cardNotFound }, { status: 404 });
+  }
+
+  if (!(await hasExternalReviewSupport(entity.entityType))) {
+    return NextResponse.json(
+      {
+        error: TEXT.schemaMissing,
+        code: "EXTERNAL_REVIEW_SCHEMA_MISSING",
+      },
+      { status: 503 },
+    );
+  }
+
+  return NextResponse.json(
+    await deleteExternalReviewsForEntity({
+      ...entity,
+      adminId: admin.id,
+    }),
+  );
 }

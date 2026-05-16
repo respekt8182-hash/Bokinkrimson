@@ -32,6 +32,30 @@ describe("external review import", () => {
               rating: 5,
               date: mojibake("\u0430\u0432\u0433\u0443\u0441\u0442 2025"),
               review_id: "https://www.kudanamore.ru/evpatoriya/hotels/31850/#review-1",
+              review_categories: [
+                {
+                  category: "cleanliness",
+                  label: "\u0427\u0438\u0441\u0442\u043e\u0442\u0430",
+                  score: 0.91,
+                  matched_fragments: [
+                    {
+                      text: "\u0447\u0438\u0441\u0442\u043e",
+                      matched_keywords: ["\u0447\u0438\u0441\u0442\u043e"],
+                    },
+                  ],
+                },
+                {
+                  category: "comfort",
+                  label: "\u041a\u043e\u043c\u0444\u043e\u0440\u0442",
+                  score: 0.82,
+                  matched_fragments: [
+                    {
+                      text: "\u0443\u044e\u0442\u043d\u043e",
+                      matched_keywords: ["\u0443\u044e\u0442\u043d\u043e"],
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },
@@ -47,7 +71,27 @@ describe("external review import", () => {
       reviewedAt: "2025-08-01",
       sourceName: "\u041a\u0443\u0434\u0430 \u043d\u0430 \u043c\u043e\u0440\u0435",
       sourceUrl: "https://www.kudanamore.ru/evpatoriya/hotels/31850/#review-1",
+      reviewCategory: "cleanliness",
+      reviewHighlight: "\u0447\u0438\u0441\u0442\u043e",
     });
+    expect(result.items[0].reviewCategoryMatches).toEqual([
+      {
+        category: "cleanliness",
+        label: "\u0427\u0438\u0441\u0442\u043e\u0442\u0430",
+        badge: null,
+        sentiment: null,
+        score: 0.91,
+        highlights: ["\u0447\u0438\u0441\u0442\u043e"],
+      },
+      {
+        category: "comfort",
+        label: "\u041a\u043e\u043c\u0444\u043e\u0440\u0442",
+        badge: null,
+        sentiment: null,
+        score: 0.82,
+        highlights: ["\u0443\u044e\u0442\u043d\u043e"],
+      },
+    ]);
   });
 
   it("normalizes known source names from hostnames", () => {

@@ -9,6 +9,7 @@ import {
   updateExternalReviewModeration,
 } from "@/lib/external-review-moderation";
 import { tryModerateFallbackExternalReview } from "@/lib/external-reviews";
+import { normalizeReviewCategory, normalizeReviewHighlight } from "@/lib/review-categories";
 import { refreshEntityReviewStats, serializeReview } from "@/lib/reviews";
 
 type RouteContext = {
@@ -46,6 +47,8 @@ const moderateReviewSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .or(z.literal("")),
+  reviewCategory: z.string().trim().max(40).optional().or(z.literal("")),
+  reviewHighlight: z.string().trim().max(160).optional().or(z.literal("")),
 });
 
 function parseReviewDate(value?: string | null): Date | null | undefined {
@@ -97,6 +100,8 @@ async function moderateReviewByAction(input: {
   sourceName?: string | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
+  reviewCategory?: string | null;
+  reviewHighlight?: string | null;
 }) {
   const existing = await db.review.findUnique({
     where: { id: input.id },
@@ -121,6 +126,8 @@ async function moderateReviewByAction(input: {
         sourceName: input.sourceName,
         guestCity: input.guestCity,
         reviewedAt: input.reviewedAt,
+        reviewCategory: input.reviewCategory,
+        reviewHighlight: input.reviewHighlight,
       });
 
       return {
@@ -170,6 +177,8 @@ async function moderateReviewByAction(input: {
         sourceName: input.sourceName,
         guestCity: input.guestCity,
         reviewedAt: input.reviewedAt,
+        reviewCategory: input.reviewCategory,
+        reviewHighlight: input.reviewHighlight,
       });
 
       return {
@@ -192,15 +201,14 @@ async function moderateReviewByAction(input: {
   }
 
   const targetStatus = input.action === "approve" ? ReviewStatus.ACTIVE : ReviewStatus.DELETED;
-  if (existing.status === targetStatus) {
-    return {
-      ok: true as const,
-      response: NextResponse.json({
-        item: serializeReview(existing),
-        alreadyInTargetStatus: true,
-      }),
-    };
-  }
+  const reviewCategory =
+    input.reviewCategory === undefined
+      ? existing.reviewCategory
+      : normalizeReviewCategory(input.reviewCategory);
+  const reviewHighlight =
+    input.reviewHighlight === undefined
+      ? existing.reviewHighlight
+      : normalizeReviewHighlight(input.reviewHighlight);
 
   const result = await db.$transaction(async (tx) => {
     const updated = await tx.review.update({
@@ -208,6 +216,8 @@ async function moderateReviewByAction(input: {
       data: {
         status: targetStatus,
         deletedAt: targetStatus === ReviewStatus.DELETED ? new Date() : null,
+        reviewCategory,
+        reviewHighlight,
         ...(existing.isImported
           ? {
               verifiedAt: targetStatus === ReviewStatus.ACTIVE ? new Date() : null,
@@ -295,6 +305,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         sourceName: parsed.data.sourceName,
         guestCity: parsed.data.guestCity,
         reviewedAt: parseReviewDate(parsed.data.reviewedAt),
+        reviewCategory: parsed.data.reviewCategory,
+        reviewHighlight: parsed.data.reviewHighlight,
       });
 
       return NextResponse.json(result);
@@ -321,6 +333,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     sourceName: parsed.data.sourceName,
     guestCity: parsed.data.guestCity,
     reviewedAt: parseReviewDate(parsed.data.reviewedAt),
+    reviewCategory: parsed.data.reviewCategory,
+    reviewHighlight: parsed.data.reviewHighlight,
   });
 
   return result.response;

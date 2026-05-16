@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { reviewCategoryOptions } from "@/lib/review-categories";
 import type { SerializedReview } from "@/lib/reviews";
 
 type ReviewModerationListProps = {
@@ -51,6 +52,12 @@ export function ReviewModerationList({
   const [avgRating, setAvgRating] = useState(initialAvgRating);
   const [reviewsCount, setReviewsCount] = useState(initialReviewsCount);
   const [processingById, setProcessingById] = useState<Record<string, "approve" | "reject" | "delete" | null>>({});
+  const [categoryById, setCategoryById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialReviews.map((review) => [review.id, review.reviewCategory ?? ""])),
+  );
+  const [highlightById, setHighlightById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialReviews.map((review) => [review.id, review.reviewHighlight ?? ""])),
+  );
   const [error, setError] = useState("");
   const orderedReviews = useMemo(
     () =>
@@ -72,7 +79,14 @@ export function ReviewModerationList({
       const response = await fetch(`/api/admin/reviews/${id}`, {
         method: action === "delete" ? "DELETE" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: action === "delete" ? undefined : JSON.stringify({ action }),
+        body:
+          action === "delete"
+            ? undefined
+            : JSON.stringify({
+                action,
+                reviewCategory: categoryById[id] ?? "",
+                reviewHighlight: highlightById[id] ?? "",
+              }),
       });
 
       const body = (await response.json()) as {
@@ -111,6 +125,8 @@ export function ReviewModerationList({
 
       const nextReviews = reviews.map((review) => (review.id === id ? body.item! : review));
       setReviews(nextReviews);
+      setCategoryById((previous) => ({ ...previous, [id]: body.item!.reviewCategory ?? "" }));
+      setHighlightById((previous) => ({ ...previous, [id]: body.item!.reviewHighlight ?? "" }));
 
       if (body.summary) {
         setAvgRating(body.summary.avgRating);
@@ -198,6 +214,43 @@ export function ReviewModerationList({
                   <p className="mt-1 whitespace-pre-line text-sm text-olive/85">{review.ownerReply}</p>
                 </div>
               ) : null}
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <label className="grid gap-1 text-xs font-semibold text-olive/70">
+                  Категория отзыва
+                  <select
+                    value={categoryById[review.id] ?? ""}
+                    onChange={(event) =>
+                      setCategoryById((previous) => ({
+                        ...previous,
+                        [review.id]: event.target.value,
+                      }))
+                    }
+                    className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                  >
+                    <option value="">Без категории</option>
+                    {reviewCategoryOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-olive/70">
+                  Слово для подсветки
+                  <input
+                    value={highlightById[review.id] ?? ""}
+                    onChange={(event) =>
+                      setHighlightById((previous) => ({
+                        ...previous,
+                        [review.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="например: чисто"
+                    maxLength={160}
+                    className="h-10 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20"
+                  />
+                </label>
+              </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="rounded-full bg-white px-2 py-1 text-xs text-olive/70">
                   Статус:{" "}
@@ -213,6 +266,17 @@ export function ReviewModerationList({
                     onClick={() => void moderateReview(review.id, "approve")}
                   >
                     {(processingById[review.id] ?? null) === "approve" ? "Одобрение..." : "Одобрить"}
+                  </Button>
+                ) : null}
+                {review.status === "ACTIVE" ? (
+                  <Button
+                    variant="ghost"
+                    disabled={(processingById[review.id] ?? null) !== null}
+                    onClick={() => void moderateReview(review.id, "approve")}
+                  >
+                    {(processingById[review.id] ?? null) === "approve"
+                      ? "Сохраняем..."
+                      : "Сохранить тип"}
                   </Button>
                 ) : null}
                 {review.status !== "DELETED" ? (

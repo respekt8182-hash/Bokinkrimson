@@ -2,8 +2,14 @@
 import { Prisma, ReviewEntityType, ReviewReactionValue, ReviewStatus } from "@prisma/client";
 import type { DbTransactionClient } from "@/lib/db";
 import { formatPublicPersonName } from "@/lib/public-display-name";
+import {
+  getReviewCategoryMatches,
+  normalizeReviewCategory,
+  normalizeReviewHighlight,
+  type ReviewCategoryMatch,
+} from "@/lib/review-categories";
 
-export const PUBLIC_REVIEWS_PAGE_SIZE = 5;
+export const PUBLIC_REVIEWS_PAGE_SIZE = 10;
 
 export type SerializedReview = {
   id: string;
@@ -23,6 +29,9 @@ export type SerializedReview = {
   verifiedAt: string | null;
   guestCity: string | null;
   reviewedAt: string | null;
+  reviewCategory: string | null;
+  reviewHighlight: string | null;
+  reviewCategoryMatches: ReviewCategoryMatch[];
   likesCount: number;
   dislikesCount: number;
   currentUserReaction: ReviewReactionValue | null;
@@ -50,6 +59,9 @@ export function serializeReview(review: {
   verifiedAt?: Date | null;
   guestCity?: string | null;
   reviewedAt?: Date | null;
+  reviewCategory?: string | null;
+  reviewHighlight?: string | null;
+  reviewCategoryMatches?: Prisma.JsonValue | null;
   likesCount?: number | null;
   dislikesCount?: number | null;
   ownerReply: string | null;
@@ -65,6 +77,12 @@ export function serializeReview(review: {
   const currentUserReaction = review.currentUserReaction ?? review.reactions?.[0]?.value ?? null;
   const importedAuthorName = review.importedAuthorName?.trim() || null;
   const isImported = Boolean(review.isImported);
+  const reviewCategoryMatches = getReviewCategoryMatches({
+    reviewCategory: review.reviewCategory,
+    reviewHighlight: review.reviewHighlight,
+    reviewCategoryMatches: review.reviewCategoryMatches,
+  });
+  const primaryCategoryMatch = reviewCategoryMatches[0] ?? null;
   const userName =
     isImported && importedAuthorName
       ? importedAuthorName
@@ -90,6 +108,13 @@ export function serializeReview(review: {
     verifiedAt: review.verifiedAt ? review.verifiedAt.toISOString() : null,
     guestCity: normalizeReviewGuestCity(review.guestCity),
     reviewedAt: review.reviewedAt ? review.reviewedAt.toISOString() : null,
+    reviewCategory:
+      normalizeReviewCategory(review.reviewCategory) ?? primaryCategoryMatch?.category ?? null,
+    reviewHighlight:
+      normalizeReviewHighlight(review.reviewHighlight) ??
+      primaryCategoryMatch?.highlights[0] ??
+      null,
+    reviewCategoryMatches,
     likesCount: Math.max(0, Number(review.likesCount ?? 0)),
     dislikesCount: Math.max(0, Number(review.dislikesCount ?? 0)),
     currentUserReaction,

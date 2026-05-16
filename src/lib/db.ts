@@ -102,6 +102,9 @@ const REVIEW_COMPAT_COLUMNS = [
   "verifiedByAdminId",
   "guestCity",
   "reviewedAt",
+  "reviewCategory",
+  "reviewHighlight",
+  "reviewCategoryMatches",
 ] as const;
 const PAYMENT_COMPAT_COLUMNS = ["transferId", "tariffType", "paidFrom"] as const;
 
@@ -250,6 +253,9 @@ const SCHEMA_COMPAT_MODELS = {
       verifiedByAdminId: null,
       guestCity: null,
       reviewedAt: null,
+      reviewCategory: null,
+      reviewHighlight: null,
+      reviewCategoryMatches: null,
     },
     logContext: "review-schema-compat",
     label: "Review",

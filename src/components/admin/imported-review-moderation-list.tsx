@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { getReviewCategoryLabel, reviewCategoryOptions } from "@/lib/review-categories";
 import type { SerializedReview } from "@/lib/reviews";
 
 export type AdminImportedReviewItem = SerializedReview & {
@@ -26,6 +27,8 @@ type EditDraft = {
   sourceUrl: string;
   guestCity: string;
   reviewedAt: string;
+  reviewCategory: string;
+  reviewHighlight: string;
 };
 
 function formatDateTime(value: string): string {
@@ -82,6 +85,8 @@ export function ImportedReviewModerationList({
         sourceUrl: review.externalSourceUrl ?? "",
         guestCity: review.guestCity ?? "",
         reviewedAt: toDateInputValue(review.reviewedAt),
+        reviewCategory: review.reviewCategory ?? "",
+        reviewHighlight: review.reviewHighlight ?? "",
       }
     );
   }
@@ -109,6 +114,8 @@ export function ImportedReviewModerationList({
                 sourceUrl: draft.sourceUrl.trim(),
                 guestCity: draft.guestCity.trim(),
                 reviewedAt: draft.reviewedAt,
+                reviewCategory: draft.reviewCategory,
+                reviewHighlight: draft.reviewHighlight.trim(),
               }),
       });
       const body = (await response.json()) as { error?: string; item?: SerializedReview | null };
@@ -174,6 +181,7 @@ export function ImportedReviewModerationList({
         const draft = getEditDraft(review);
         const isEditing = review.id in editDraftById;
         const processing = (processingById[review.id] ?? null) !== null;
+        const categoryLabel = getReviewCategoryLabel(review.reviewCategory);
 
         return (
           <article
@@ -268,6 +276,35 @@ export function ImportedReviewModerationList({
                   maxLength={500}
                   className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20 md:col-span-2"
                 />
+                <select
+                  value={draft.reviewCategory}
+                  onChange={(event) =>
+                    setEditDraftById((previous) => ({
+                      ...previous,
+                      [review.id]: { ...draft, reviewCategory: event.target.value },
+                    }))
+                  }
+                  className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+                >
+                  <option value="">Без категории</option>
+                  {reviewCategoryOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={draft.reviewHighlight}
+                  onChange={(event) =>
+                    setEditDraftById((previous) => ({
+                      ...previous,
+                      [review.id]: { ...draft, reviewHighlight: event.target.value },
+                    }))
+                  }
+                  placeholder="Слово для подсветки"
+                  maxLength={160}
+                  className="h-11 rounded-xl border border-olive/12 bg-white px-3 text-sm text-olive outline-none transition placeholder:text-olive/42 focus:border-terra focus:ring-2 focus:ring-terra/20"
+                />
                 <textarea
                   value={draft.text}
                   onChange={(event) =>
@@ -291,6 +328,16 @@ export function ImportedReviewModerationList({
               {review.externalSourceName ? (
                 <span className="inline-flex rounded-xl border border-olive/12 bg-cream/60 px-3 py-2 font-semibold text-olive/72">
                   Источник: {review.externalSourceName}
+                </span>
+              ) : null}
+              {categoryLabel ? (
+                <span className="inline-flex rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700">
+                  Категория: {categoryLabel}
+                </span>
+              ) : null}
+              {review.reviewHighlight ? (
+                <span className="inline-flex rounded-xl border border-sky-200 bg-white px-3 py-2 font-semibold text-sky-700">
+                  Подсветка: {review.reviewHighlight}
                 </span>
               ) : null}
               {review.externalSourceUrl ? (

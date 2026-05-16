@@ -1,10 +1,21 @@
 import type { SerializedReview } from "@/lib/reviews";
+import {
+  buildSingleReviewCategoryMatches,
+  normalizeReviewCategory,
+  normalizeReviewHighlight,
+  normalizeReviewCategoryMatches,
+  type ReviewCategoryMatch,
+  type ReviewCategoryId,
+} from "@/lib/review-categories";
 
 export type ParsedExternalReviewImportItem = {
   authorName: string;
   guestCity: string | null;
   rating: number;
   reviewedAt: string | null;
+  reviewCategory: ReviewCategoryId | null;
+  reviewHighlight: string | null;
+  reviewCategoryMatches: ReviewCategoryMatch[];
   sourceName: string;
   sourceUrl: string | null;
   text: string;
@@ -238,6 +249,25 @@ function readNumber(source: Record<string, unknown>, keys: string[]): number | n
   return null;
 }
 
+function readStringArray(source: Record<string, unknown>, keys: string[]): string[] {
+  const values: string[] = [];
+
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string") {
+      values.push(repairMojibake(value));
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") {
+          values.push(repairMojibake(item));
+        }
+      }
+    }
+  }
+
+  return values.filter(Boolean);
+}
+
 function normalizeSourceUrl(value: string | null): string | null {
   if (!value) {
     return null;
@@ -361,6 +391,141 @@ function normalizeRating(value: number | null): number | null {
   return Math.round(fivePointRating * 2) / 2;
 }
 
+function readCategoryHighlights(category: Record<string, unknown>): string[] {
+  const directHighlights = readStringArray(category, [
+    "highlight",
+    "highlights",
+    "highlightText",
+    "matchedText",
+  ]);
+  const highlights: string[] = [];
+  const seen = new Set<string>();
+
+  const pushHighlight = (value: string | null) => {
+    const normalized = normalizeReviewHighlight(value);
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLocaleLowerCase("ru-RU");
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    highlights.push(normalized);
+  };
+
+  for (const highlight of directHighlights) {
+    pushHighlight(highlight);
+  }
+
+  const fragments = category.matched_fragments;
+  if (Array.isArray(fragments)) {
+    for (const fragment of fragments) {
+      if (!isRecord(fragment)) {
+        continue;
+      }
+
+      const keywords = readStringArray(fragment, [
+        "matched_keywords",
+        "matchedKeywords",
+        "keywords",
+      ]);
+      if (keywords.length > 0) {
+        for (const keyword of keywords) {
+          pushHighlight(keyword);
+        }
+        continue;
+      }
+
+      const text = readString(fragment, ["text", "fragment"]);
+      if (text) {
+        pushHighlight(text);
+      }
+    }
+  }
+
+  return highlights;
+}
+
+function readReviewCategory(item: Record<string, unknown>): {
+  reviewCategory: ReviewCategoryId | null;
+  reviewHighlight: string | null;
+  reviewCategoryMatches: ReviewCategoryMatch[];
+} {
+  const directMatches = normalizeReviewCategoryMatches(
+    Array.isArray(item.reviewCategoryMatches)
+      ? item.reviewCategoryMatches
+      : Array.isArray(item.review_category_matches)
+        ? item.review_category_matches
+        : [],
+  ).sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+  const directCategory = normalizeReviewCategory(
+    readString(item, ["reviewCategory", "review_category", "category", "type"]),
+  );
+  const directHighlight = normalizeReviewHighlight(
+    readString(item, ["reviewHighlight", "review_highlight", "highlight"]),
+  );
+  if (directMatches.length > 0) {
+    return {
+      reviewCategory: directMatches[0]?.category ?? directCategory ?? null,
+      reviewHighlight: directHighlight ?? directMatches[0]?.highlights[0] ?? null,
+      reviewCategoryMatches: directMatches,
+    };
+  }
+
+  if (directCategory) {
+    const reviewCategoryMatches = buildSingleReviewCategoryMatches({
+      reviewCategory: directCategory,
+      reviewHighlight: directHighlight,
+    });
+    return {
+      reviewCategory: directCategory,
+      reviewHighlight: directHighlight,
+      reviewCategoryMatches,
+    };
+  }
+
+  const categories = item.review_categories;
+  if (!Array.isArray(categories)) {
+    return {
+      reviewCategory: null,
+      reviewHighlight: directHighlight,
+      reviewCategoryMatches: [],
+    };
+  }
+
+  const parsedCategories: ReviewCategoryMatch[] = categories
+    .filter(isRecord)
+    .map((category) => {
+      const categoryId = normalizeReviewCategory(
+        readString(category, ["category", "label", "badge"]),
+      );
+      if (!categoryId) {
+        return null;
+      }
+
+      return {
+        category: categoryId,
+        label: readString(category, ["label"]),
+        badge: readString(category, ["badge"]),
+        sentiment: readString(category, ["sentiment"]),
+        score: readNumber(category, ["score"]),
+        highlights: readCategoryHighlights(category),
+      };
+    })
+    .filter((category): category is ReviewCategoryMatch => category !== null)
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+
+  const best = parsedCategories[0];
+  return {
+    reviewCategory: best?.category ?? null,
+    reviewHighlight: best?.highlights[0] ?? directHighlight,
+    reviewCategoryMatches: parsedCategories,
+  };
+}
+
 function extractReviewBlocks(root: unknown): ReviewBlock[] {
   if (Array.isArray(root)) {
     if (root.every((item) => isRecord(item) && Array.isArray(item.reviews))) {
@@ -447,6 +612,7 @@ function parseReviewItem(
     text.length > MAX_IMPORTED_REVIEW_TEXT_LENGTH
       ? text.slice(0, MAX_IMPORTED_REVIEW_TEXT_LENGTH).trim()
       : text;
+  const categoryMeta = readReviewCategory(item);
 
   if (truncatedText.length !== text.length) {
     warnings.push(
@@ -460,6 +626,9 @@ function parseReviewItem(
       guestCity: readString(item, ["city", "guestCity", "location"]),
       rating,
       reviewedAt,
+      reviewCategory: categoryMeta.reviewCategory,
+      reviewHighlight: categoryMeta.reviewHighlight,
+      reviewCategoryMatches: categoryMeta.reviewCategoryMatches,
       sourceName,
       sourceUrl: sourceUrl ?? block.sourceUrl,
       text: truncatedText,

@@ -902,6 +902,8 @@ export const createReviewSchema = z.object({
     .max(2000, "Текст отзыва слишком длинный"),
   guestCity: z.string().trim().max(80, "Город слишком длинный").optional().or(z.literal("")),
   reviewedAt: optionalReviewDateSchema,
+  reviewCategory: z.string().trim().max(40).optional().or(z.literal("")),
+  reviewHighlight: z.string().trim().max(160).optional().or(z.literal("")),
 });
 
 export const manualExternalReviewSchema = createReviewSchema
