@@ -128,6 +128,30 @@ const reviewYearOptions = Array.from({ length: currentReviewYear - 2000 + 1 }, (
   String(currentReviewYear - index),
 );
 
+function getEntityCopy(entityType: EntityType): {
+  genitive: string;
+  dative: string;
+} {
+  if (entityType === "excursion") {
+    return {
+      genitive: "программы",
+      dative: "программе",
+    };
+  }
+
+  if (entityType === "transfer") {
+    return {
+      genitive: "трансфера",
+      dative: "трансферу",
+    };
+  }
+
+  return {
+    genitive: "объекта",
+    dative: "объекту",
+  };
+}
+
 function createEmptyManualDraft(): ManualDraft {
   return {
     authorName: "",
@@ -288,6 +312,7 @@ export function ImportedReviewsManager({
   const reviewEndpoint = mode === "admin" ? "/api/admin/reviews" : "/api/dashboard/reviews";
   const canModerateReviews = mode === "admin";
   const createDisabled = !schemaAvailable || !canCreate;
+  const entityCopy = getEntityCopy(entityType);
 
   const orderedItems = useMemo(
     () =>
@@ -380,7 +405,9 @@ export function ImportedReviewsManager({
     });
 
     if (invalidDraftIndex >= 0) {
-      setError(`Проверьте отзыв #${invalidDraftIndex + 1}: нужен рейтинг от 0.5 до 5 и текст от 10 символов.`);
+      setError(
+        `Проверьте отзыв #${invalidDraftIndex + 1}: нужен рейтинг от 0.5 до 5 и текст от 10 символов.`,
+      );
       return;
     }
 
@@ -436,7 +463,7 @@ export function ImportedReviewsManager({
         ...(body.failed ?? []).map((item) => `#${item.index + 1}: ${item.reason}`),
       ]);
       setJsonDrafts([]);
-      setSuccess("Отзывы добавлены к выбранному объекту.");
+      setSuccess(`Отзывы добавлены к выбранному ${entityCopy.dative}.`);
     } finally {
       setIsJsonImporting(false);
     }
@@ -454,7 +481,7 @@ export function ImportedReviewsManager({
     }
 
     const confirmed = window.confirm(
-      "Удалить все добавленные отзывы у этого объекта? Действие нельзя отменить.",
+      `Удалить все добавленные отзывы у этого ${entityCopy.genitive}? Действие нельзя отменить.`,
     );
     if (!confirmed) {
       return;
@@ -826,7 +853,7 @@ export function ImportedReviewsManager({
             className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
           >
             <AppIcon icon={Trash2} className="mr-1.5 h-4 w-4" />
-            {isBulkDeleting ? "Удаляем..." : "Удалить все отзывы объекта"}
+            {isBulkDeleting ? "Удаляем..." : `Удалить все отзывы ${entityCopy.genitive}`}
           </Button>
         </div>
       ) : null}
@@ -1074,9 +1101,7 @@ export function ImportedReviewsManager({
               disabled={isJsonImporting || createDisabled || jsonDrafts.length === 0}
             >
               <AppIcon icon={Check} className="mr-1.5 h-4 w-4" />
-              {isJsonImporting
-                ? "Добавляем..."
-                : "Применить и добавить к объекту"}
+              {isJsonImporting ? "Добавляем..." : `Применить и добавить к ${entityCopy.dative}`}
             </Button>
             {jsonDrafts.length > 0 ? (
               <Button

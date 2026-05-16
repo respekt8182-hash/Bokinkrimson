@@ -2297,23 +2297,26 @@ export default async function PublicExcursionPage({
           </div>
         </div>
 
-        {hasPublishedReviews ? (
-          <div className="mt-6" id="reviews">
-            <PropertyReviewsSection
-              submitUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
-              loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
-              entityPath={item.path}
-              entityLabel="экскурсии"
-              avgRating={item.avgRating}
-              reviewsCount={item.reviewsCount}
-              initialReviews={item.reviews}
-              initialHasMore={item.reviewsCount > item.reviews.length}
-              isAuthenticated={Boolean(session)}
-              currentUserId={session?.id ?? null}
-              ownerUserId={item.owner.id}
-            />
-          </div>
-        ) : null}
+        <div className="mt-6">
+          <PropertyReviewsSection
+            submitUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
+            loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
+            entityPath={item.path}
+            entityLabel="экскурсии"
+            avgRating={item.avgRating}
+            reviewsCount={item.reviewsCount}
+            initialReviews={item.reviews}
+            initialHasMore={item.reviewsCount > item.reviews.length}
+            isAuthenticated={Boolean(session)}
+            currentUserId={session?.id ?? null}
+            ownerUserId={item.owner.id}
+            title="Отзывы об экскурсии"
+            promptTitle="Были на этой экскурсии? Поделитесь впечатлениями."
+            promptText="Короткий честный отзыв помогает другим путешественникам быстрее выбрать маршрут и организатора."
+            emptyTitle="Пока нет отзывов об экскурсии"
+            emptyDescription="После первых опубликованных отзывов здесь появятся рейтинг экскурсии и комментарии гостей."
+          />
+        </div>
 
         {item.faqItems.length > 0 ? (
           <section className="mt-6 excursion-card p-6" id="faq-section">
@@ -3526,7 +3529,7 @@ export default async function PublicExcursionPage({
           submitUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
           loadMoreUrl={`/api/public/excursions/${encodeURIComponent(item.id)}/reviews`}
           entityPath={item.path}
-          entityLabel="экскурсии"
+          entityLabel="тура"
           avgRating={item.avgRating}
           reviewsCount={item.reviewsCount}
           initialReviews={item.reviews}
@@ -3534,6 +3537,11 @@ export default async function PublicExcursionPage({
           isAuthenticated={Boolean(session)}
           currentUserId={session?.id ?? null}
           ownerUserId={item.owner.id}
+          title="Отзывы о туре"
+          promptTitle="Были в этом туре? Поделитесь впечатлениями."
+          promptText="Короткий честный отзыв помогает другим путешественникам быстрее выбрать программу и организатора."
+          emptyTitle="Пока нет отзывов о туре"
+          emptyDescription="После первых опубликованных отзывов здесь появятся рейтинг тура и комментарии участников."
         />
       </div>
 

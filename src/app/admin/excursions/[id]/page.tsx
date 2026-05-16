@@ -4,6 +4,7 @@ import { ExcursionOfferType, ExcursionStatus } from "@prisma/client";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingPaymentConfirmation } from "@/components/admin/admin-listing-payment-confirmation";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
+import { ReviewModerationList } from "@/components/admin/review-moderation-list";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { AdminPageHeader, AdminUnavailableState } from "@/components/admin/admin-ui";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
@@ -21,82 +22,90 @@ import {
   getExcursionWorkflowStatus,
   serializeExcursion,
 } from "@/lib/excursions";
+import { getExternalReviewSummaryWithFallback, listExternalReviews } from "@/lib/external-reviews";
+import { serializeReview } from "@/lib/reviews";
 
 type AdminExcursionEditPageProps = {
   params: Promise<{ id: string }>;
 };
 
-export default async function AdminExcursionEditPage({
-  params,
-}: AdminExcursionEditPageProps) {
+export default async function AdminExcursionEditPage({ params }: AdminExcursionEditPageProps) {
   const { id } = await params;
   await purgeExpiredDeletedExcursions(db, new Date());
   const [isExcursionVisibilityAvailable, isExcursionSoftDeleteControlsAvailable] =
-    await Promise.all([
-      isExcursionVisibilityControlAvailable(),
-      isExcursionSoftDeleteAvailable(),
-    ]);
+    await Promise.all([isExcursionVisibilityControlAvailable(), isExcursionSoftDeleteAvailable()]);
   const excursionVisibilityUnavailableReason = isExcursionVisibilityAvailable
     ? null
     : "Переключение видимости недоступно, пока база данных не обновлена до миграции публикации.";
   const excursionSoftDeleteUnavailableReason = isExcursionSoftDeleteControlsAvailable
     ? null
     : "Скрытие и восстановление программы недоступны, пока база данных не обновлена до последней миграции.";
-  const { excursion, ownerExcursionIds, isDatabaseFallback } =
-    await loadDataWithDatabaseFallback(
-      {
-        contextId: "admin-excursions-detail",
-        unavailableMessage:
-          "Admin excursion detail: database is unavailable. Rendering unavailable state.",
-        fallbackEligibleMessage:
-          "Admin excursion detail: database is unavailable or credentials are invalid. Rendering unavailable state.",
-      },
-      async () => {
-        const excursion = await db.excursion.findUnique({
-          where: { id },
-          include: {
-            owner: {
-              select: {
-                firstName: true,
-                phone: true,
-                email: true,
-              },
-            },
-            mainLocation: { select: { name: true } },
-            anchorLocation: { select: { name: true } },
-            district: { select: { name: true } },
-            category: { select: { name: true } },
-            meetingLocation: { select: { name: true } },
-            pickupLocations: { select: { locationId: true } },
-            routeLocations: {
-              select: { locationId: true, sortOrder: true },
-              orderBy: { sortOrder: "asc" },
+  const { excursion, ownerExcursionIds, isDatabaseFallback } = await loadDataWithDatabaseFallback(
+    {
+      contextId: "admin-excursions-detail",
+      unavailableMessage:
+        "Admin excursion detail: database is unavailable. Rendering unavailable state.",
+      fallbackEligibleMessage:
+        "Admin excursion detail: database is unavailable or credentials are invalid. Rendering unavailable state.",
+    },
+    async () => {
+      const excursion = await db.excursion.findUnique({
+        where: { id },
+        include: {
+          owner: {
+            select: {
+              firstName: true,
+              phone: true,
+              email: true,
             },
           },
-        });
+          mainLocation: { select: { name: true } },
+          anchorLocation: { select: { name: true } },
+          district: { select: { name: true } },
+          category: { select: { name: true } },
+          meetingLocation: { select: { name: true } },
+          pickupLocations: { select: { locationId: true } },
+          routeLocations: {
+            select: { locationId: true, sortOrder: true },
+            orderBy: { sortOrder: "asc" },
+          },
+          reviews: {
+            orderBy: [{ createdAt: "desc" }],
+            take: 100,
+            include: {
+              user: {
+                select: {
+                  firstName: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      });
 
-        if (!excursion) {
-          return {
-            excursion: null,
-            ownerExcursionIds: [],
-            isDatabaseFallback: false,
-          };
-        }
-
-        const ownerExcursionIds = await db.excursion.findMany({
-          where: { ownerId: excursion.ownerId },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: { id: true },
-        });
-
+      if (!excursion) {
         return {
-          excursion,
-          ownerExcursionIds,
+          excursion: null,
+          ownerExcursionIds: [],
           isDatabaseFallback: false,
         };
-      },
-      { excursion: null, ownerExcursionIds: [], isDatabaseFallback: true },
-    );
+      }
+
+      const ownerExcursionIds = await db.excursion.findMany({
+        where: { ownerId: excursion.ownerId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+
+      return {
+        excursion,
+        ownerExcursionIds,
+        isDatabaseFallback: false,
+      };
+    },
+    { excursion: null, ownerExcursionIds: [], isDatabaseFallback: true },
+  );
 
   if (isDatabaseFallback) {
     return (
@@ -136,6 +145,25 @@ export default async function AdminExcursionEditPage({
   if (isPendingDeletion) {
     statusBits.push("ожидает удаления");
   }
+  const [importedReviews, reviewSummary] = await Promise.all([
+    listExternalReviews({ entityType: "excursion", entityId: excursion.id }),
+    getExternalReviewSummaryWithFallback({
+      entityType: "excursion",
+      entityId: excursion.id,
+      avgRating: Number(excursion.avgRating),
+      reviewsCount: excursion.reviewsCount,
+    }),
+  ]);
+  const reviewsById = new Map(
+    excursion.reviews.map((review) => {
+      const serialized = serializeReview(review);
+      return [serialized.id, serialized] as const;
+    }),
+  );
+  for (const review of importedReviews) {
+    reviewsById.set(review.id, review);
+  }
+  const mergedReviews = [...reviewsById.values()];
 
   return (
     <div className="space-y-5">
@@ -212,6 +240,13 @@ export default async function AdminExcursionEditPage({
           { value: "season", label: "Сезон" },
           { value: "year", label: "Год" },
         ]}
+      />
+
+      <ReviewModerationList
+        title={excursion.offerType === ExcursionOfferType.TOUR ? "Отзывы тура" : "Отзывы экскурсии"}
+        initialReviews={mergedReviews}
+        initialAvgRating={reviewSummary.avgRating}
+        initialReviewsCount={reviewSummary.reviewsCount}
       />
 
       <ExcursionEditor

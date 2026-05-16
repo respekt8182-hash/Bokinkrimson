@@ -210,8 +210,9 @@ function findHighlightRanges(
   text: string,
   highlights: string[],
 ): Array<{ start: number; end: number }> {
-  const normalizedHighlights = [...new Set(highlights.map((highlight) => highlight.trim()).filter(Boolean))]
-    .sort((left, right) => right.length - left.length);
+  const normalizedHighlights = [
+    ...new Set(highlights.map((highlight) => highlight.trim()).filter(Boolean)),
+  ].sort((left, right) => right.length - left.length);
   const candidates: Array<{ start: number; end: number; length: number }> = [];
 
   for (const highlight of normalizedHighlights) {
@@ -490,8 +491,7 @@ export function PropertyReviewsSection({
       scrollLeft: scroller.scrollLeft,
       hasMoved: false,
       clickCategoryId:
-        (event.target as HTMLElement)
-          .closest<HTMLButtonElement>("[data-review-category-id]")
+        (event.target as HTMLElement).closest<HTMLButtonElement>("[data-review-category-id]")
           ?.dataset.reviewCategoryId ?? null,
     };
     setIsCategoryDragging(true);
@@ -836,7 +836,7 @@ export function PropertyReviewsSection({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full text-olive transition hover:bg-olive/6"
+                className="sticky top-0 right-0 z-20 float-right -mr-8 -mt-9 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-olive shadow-[0_8px_22px_rgba(58,43,35,0.12)] ring-1 ring-olive/10 backdrop-blur transition hover:bg-olive/6 md:-mr-14 md:-mt-12"
                 aria-label="Закрыть отзывы"
               >
                 <AppIcon icon={X} className="h-6 w-6" />
