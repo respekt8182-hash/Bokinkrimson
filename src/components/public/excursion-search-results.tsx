@@ -20,6 +20,7 @@ import {
   ArrowRight,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   Fragment,
   type KeyboardEvent,
@@ -66,11 +67,10 @@ import {
 } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
 import { excursionsHubPath, toursHubPath } from "@/lib/seo/routes";
-import {
-  YandexMapMultiViewer,
-  type YandexMapPoint,
-  type YandexMapRadiusCircle,
-  type YandexMapViewport,
+import type {
+  YandexMapPoint,
+  YandexMapRadiusCircle,
+  YandexMapViewport,
 } from "@/components/maps/yandex-map-multi-viewer";
 import { MapExcursionPopupCard } from "@/components/public/map-excursion-popup-card";
 import type {
@@ -131,6 +131,17 @@ type MobileSheetDragState = {
 };
 
 type MobileSheetSnaps = Record<MobileSheetSnap, number>;
+
+const YandexMapMultiViewer = dynamic(
+  () =>
+    import("@/components/maps/yandex-map-multi-viewer").then(
+      (module) => module.YandexMapMultiViewer,
+    ),
+  {
+    ssr: false,
+    loading: () => <div aria-hidden="true" className="h-full w-full bg-[#e7eef3]" />,
+  },
+);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

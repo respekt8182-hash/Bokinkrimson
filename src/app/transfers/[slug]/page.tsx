@@ -7,6 +7,7 @@ import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excurs
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
 import { TransferViewTracker } from "@/components/public/transfer-view-tracker";
 import { PropertyReviewsSection } from "@/components/reviews/property-reviews-section";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -18,11 +19,16 @@ import { DEFAULT_NEARBY_RADIUS_KM } from "@/lib/nearby-public";
 import {
   getOwnerPreviewTransferByIdentifier,
   getPublicTransferByIdentifier,
+  type PublicTransferCatalogItem,
 } from "@/lib/public-marketplace";
 import { PUBLIC_REVIEWS_PAGE_SIZE, serializeReview } from "@/lib/reviews";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
-import { buildWebPageMetadata } from "@/lib/seo/metadata";
+import { buildSeoDescription, buildWebPageMetadata } from "@/lib/seo/metadata";
 import { buildExcursionsLocationPath } from "@/lib/seo/routes";
+import {
+  buildBreadcrumbListStructuredData,
+  buildTransferStructuredData,
+} from "@/lib/seo/structured-data";
 import { hasTransferReviewSupport } from "@/lib/transfer-review-support";
 
 type TransferDetailPageProps = {
@@ -32,6 +38,52 @@ type TransferDetailPageProps = {
 
 function pick(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
+
+const rubleFormatter = new Intl.NumberFormat("ru-RU", {
+  maximumFractionDigits: 0,
+});
+
+function buildTransferFleetSummary(item: PublicTransferCatalogItem): string | null {
+  const labels = item.fleet
+    .map((fleetItem) =>
+      [
+        fleetItem.title,
+        fleetItem.transportKind,
+        fleetItem.vehicleClass,
+        fleetItem.vehicleModel,
+      ]
+        .map((value) => value?.trim())
+        .filter(Boolean)
+        .join(" "),
+    )
+    .filter(Boolean);
+
+  if (labels.length > 0) {
+    return labels.slice(0, 3).join(", ");
+  }
+
+  return [item.vehicleClass, item.vehicleModel].filter(Boolean).join(" ") || null;
+}
+
+function buildTransferSeoDescription(item: PublicTransferCatalogItem): string {
+  const locationPhrase = item.locationName ? `в ${item.locationName}` : "по Крыму";
+  const fleetSummary = buildTransferFleetSummary(item);
+
+  return buildSeoDescription({
+    preferred: [item.description, item.shortDescription],
+    fallbackParts: [
+      `${item.transferType ?? "Трансфер"} ${locationPhrase}`,
+      fleetSummary ? `Автопарк: ${fleetSummary}` : null,
+      item.priceFrom !== null
+        ? `Стоимость от ${rubleFormatter.format(item.priceFrom)} ₽${item.priceUnitLabel ? ` ${item.priceUnitLabel}` : ""}`
+        : "Стоимость уточняется при обращении",
+      item.serviceArea ? `Зона работы: ${item.serviceArea}` : null,
+      item.routeExamples ? `Популярные маршруты: ${item.routeExamples}` : null,
+      item.reviewsCount > 0 ? `${item.reviewsCount} отзывов пассажиров` : null,
+      "Прямые контакты водителя и заявка без комиссии",
+    ],
+  });
 }
 
 export async function generateMetadata({
@@ -56,8 +108,7 @@ export async function generateMetadata({
   }
 
   const title = `${item.title} — трансферы по Крыму`;
-  const description =
-    item.description?.slice(0, 160) ?? `Трансферная услуга ${item.title} в каталоге Крым Вокруг.`;
+  const description = buildTransferSeoDescription(item);
 
   return buildWebPageMetadata({
     title,
@@ -159,9 +210,21 @@ export default async function TransferDetailPage({
         Object.entries(nearbySearchParams).filter(([, value]) => value),
         ["location", "radiusKm"],
       );
+  const transferLocationHref = item.locationName
+    ? buildCanonicalPath("/transfers", [["location", item.locationName]], ["location"])
+    : buildCanonicalPath("/transfers");
+  const breadcrumbItems = [
+    { name: "Главная", path: "/" },
+    { name: "Трансферы", path: "/transfers" },
+    ...(item.locationName ? [{ name: item.locationName, path: transferLocationHref }] : []),
+    { name: item.title, path: item.path },
+  ];
 
   return (
     <>
+      {!isPreview ? <JsonLd data={buildBreadcrumbListStructuredData(breadcrumbItems)} /> : null}
+      {!isPreview ? <JsonLd data={buildTransferStructuredData(item)} /> : null}
+
       {!isPreview ? <TransferViewTracker transferId={item.id} /> : null}
 
       {isPreview ? (

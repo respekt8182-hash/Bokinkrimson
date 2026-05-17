@@ -9,7 +9,7 @@ type TransfersPageProps = {
 };
 
 export const metadata: Metadata = {
-  title: "Трансферы по Крыму — Крым Вокруг",
+  title: "Трансферы по Крыму",
   description: "Каталог трансферов по Крыму: водители, автомобили, маршруты, цены и контакты.",
   alternates: {
     canonical: buildCanonicalPath("/transfers"),

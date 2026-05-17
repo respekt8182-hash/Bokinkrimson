@@ -30,6 +30,7 @@ function buildCspValue(): string {
     "wss://mc.yandex.ru",
     "wss://mc.yandex.com",
     "https://api-maps.yandex.ru",
+    "https://log.api-maps.yandex.ru",
     "https://geocode-maps.yandex.ru",
     ...publicAssetOrigins,
   ];
@@ -86,6 +87,15 @@ function buildSecurityHeaders() {
   return headers;
 }
 
+function buildNoIndexHeaders() {
+  return [
+    {
+      key: "X-Robots-Tag",
+      value: "noindex, nofollow, noarchive",
+    },
+  ];
+}
+
 const nextConfig: NextConfig = {
   devIndicators: false,
   images: {
@@ -98,6 +108,18 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: buildSecurityHeaders(),
+      },
+      {
+        source: "/admin/:path*",
+        headers: buildNoIndexHeaders(),
+      },
+      {
+        source: "/dashboard/:path*",
+        headers: buildNoIndexHeaders(),
+      },
+      {
+        source: "/auth/:path*",
+        headers: buildNoIndexHeaders(),
       },
       {
         source: "/uploads/:path*",

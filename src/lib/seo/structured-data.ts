@@ -1,6 +1,7 @@
 import { companyConfig } from "@/config/company";
 import { getOfferTypeLabel } from "@/lib/excursion-offers";
 import type { PublicExcursionCard } from "@/lib/public-excursions";
+import type { PublicTransferCatalogItem } from "@/lib/public-marketplace";
 import type { PublicPropertyCard } from "@/lib/public-properties";
 import {
   normalizeMaxProfileUrl,
@@ -11,6 +12,7 @@ import {
 import { normalizePropertyTypeId } from "@/lib/constants";
 import { absoluteUrl } from "@/lib/seo/site";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
+import { normalizeWebsiteUrl } from "@/lib/website-favicon";
 
 type JsonLdNode = Record<string, unknown>;
 
@@ -98,6 +100,29 @@ function buildAggregateRating(avgRating: number, reviewsCount: number): JsonLdNo
     bestRating: 5,
     worstRating: 1,
   };
+}
+
+function formatSchemaMoney(value: number, currency: string | null | undefined): string {
+  return `${value} ${currency ?? ""}`.trim();
+}
+
+function buildTransferDescription(item: PublicTransferCatalogItem): string {
+  const title = item.title || item.transferType || "Трансфер по Крыму";
+  const preparedDescription =
+    item.shortDescription?.trim() || item.description?.trim() || "";
+
+  if (preparedDescription.length >= 70) {
+    return preparedDescription;
+  }
+
+  return uniqueStrings([
+    item.transferType ?? "Трансфер",
+    item.locationName ? `в ${item.locationName}` : "по Крыму",
+    item.serviceArea ? `зона работы: ${item.serviceArea}` : null,
+    item.routeExamples ? `маршруты: ${item.routeExamples}` : null,
+    item.priceFrom !== null ? `стоимость от ${formatSchemaMoney(item.priceFrom, item.currency)}` : null,
+    title,
+  ]).join(". ");
 }
 
 function buildAmenityFeatures(values: string[]): JsonLdNode[] | undefined {
@@ -400,5 +425,81 @@ export function buildExcursionStructuredData(item: PublicExcursionCard): JsonLdN
   return {
     "@context": "https://schema.org",
     "@graph": graph,
+  };
+}
+
+export function buildTransferStructuredData(item: PublicTransferCatalogItem): JsonLdNode {
+  const url = absoluteUrl(item.path);
+  const title = item.title || item.transferType || "Трансфер по Крыму";
+  const description = buildTransferDescription(item);
+  const images = uniqueStrings([item.coverImageUrl, ...item.photoUrls])
+    .map((photoUrl) => absoluteUrl(photoUrl))
+    .slice(0, 12);
+  const providerName =
+    item.contacts.contactName?.trim() ||
+    [item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ").trim() ||
+    title;
+  const address = buildPostalAddress({
+    locality: item.locationName,
+    addressLine: item.serviceArea,
+  });
+  const contactLinks = uniqueStrings([
+    item.contacts.websiteUrl ? normalizeWebsiteUrl(item.contacts.websiteUrl) : null,
+    normalizeWhatsappUrl(item.contacts.whatsappUrl),
+    normalizeTelegramProfileUrl(item.contacts.telegramUrl),
+    normalizeVkProfileUrl(item.contacts.vkUrl),
+    normalizeMaxProfileUrl(item.contacts.maxUrl),
+    normalizeOkProfileUrl(item.contacts.okUrl),
+  ]);
+  const serviceArea = uniqueStrings([item.serviceArea, item.locationName, "Крым"]).map((name) => ({
+    "@type": "Place",
+    name,
+  }));
+  const offerId = `${url}#offer`;
+  const serviceId = `${url}#service`;
+  const providerId = `${url}#provider`;
+  const offerNode = compactNode({
+    "@type": "Offer",
+    "@id": offerId,
+    url,
+    price: item.priceFrom ?? undefined,
+    priceCurrency: item.priceFrom !== null ? item.currency : undefined,
+    description:
+      item.priceFrom !== null
+        ? `Стоимость трансфера от ${formatSchemaMoney(item.priceFrom, item.currency)}${item.priceUnitLabel ? ` ${item.priceUnitLabel}` : ""}`
+        : "Стоимость трансфера уточняется при обращении.",
+    availability: "https://schema.org/InStock",
+  });
+  const providerNode = compactNode({
+    "@type": "LocalBusiness",
+    "@id": providerId,
+    name: providerName,
+    url,
+    image: images.length > 0 ? images[0] : undefined,
+    telephone: item.contacts.phone?.trim() || undefined,
+    email: item.contacts.email?.trim() || undefined,
+    address,
+    geo: buildGeo(item.latitude, item.longitude),
+    areaServed: serviceArea,
+    sameAs: contactLinks.length > 0 ? contactLinks : undefined,
+    aggregateRating: buildAggregateRating(item.avgRating, item.reviewsCount),
+  });
+  const serviceNode = compactNode({
+    "@type": "Service",
+    "@id": serviceId,
+    name: title,
+    description,
+    url,
+    image: images.length > 0 ? images : undefined,
+    serviceType: item.transferType ?? "Трансфер",
+    areaServed: serviceArea,
+    provider: { "@id": providerId },
+    offers: { "@id": offerId },
+    aggregateRating: buildAggregateRating(item.avgRating, item.reviewsCount),
+  });
+
+  return {
+    "@context": "https://schema.org",
+    "@graph": [serviceNode, offerNode, providerNode],
   };
 }

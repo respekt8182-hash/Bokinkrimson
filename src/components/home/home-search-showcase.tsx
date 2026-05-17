@@ -2010,11 +2010,11 @@ export function HomeSearchShowcase({
       return;
     }
 
+    setIsSuggestionsLoading(true);
+
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(
       async () => {
-        setIsSuggestionsLoading(true);
-
         try {
           const isEmptyQuery = query.length === 0;
           const params = new URLSearchParams({

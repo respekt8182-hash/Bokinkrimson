@@ -1,4 +1,5 @@
 // Owner dashboard layout: guards access (USER-only) and injects profile data into shell.
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { DashboardAppShell } from "@/components/layout/dashboard-app-shell";
 import { getSession } from "@/lib/auth";
@@ -37,6 +38,13 @@ async function purgeDashboardDraftsSafely(ownerId: string): Promise<void> {
     );
   }
 }
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();

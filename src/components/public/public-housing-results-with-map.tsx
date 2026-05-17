@@ -2,6 +2,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   type CSSProperties,
   Fragment,
@@ -16,10 +17,9 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/cn";
-import {
-  YandexMapMultiViewer,
-  type YandexMapPoint,
-  type YandexMapViewport,
+import type {
+  YandexMapPoint,
+  YandexMapViewport,
 } from "@/components/maps/yandex-map-multi-viewer";
 import { AppIcon } from "@/components/ui/app-icon";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
@@ -93,6 +93,17 @@ type MobileSheetDragState = {
 };
 
 type MobileSheetSnaps = Record<MobileSheetSnap, number>;
+
+const YandexMapMultiViewer = dynamic(
+  () =>
+    import("@/components/maps/yandex-map-multi-viewer").then(
+      (module) => module.YandexMapMultiViewer,
+    ),
+  {
+    ssr: false,
+    loading: () => <div aria-hidden="true" className="h-full w-full bg-[#e7eef3]" />,
+  },
+);
 
 const MOBILE_SHEET_HANDLE_HEIGHT = 76;
 const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;

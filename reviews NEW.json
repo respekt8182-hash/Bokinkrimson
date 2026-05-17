@@ -1,0 +1,1849 @@
+{
+  "generated_at": "2026-05-15T19:06:36.255196+00:00",
+  "object": {
+    "name": "",
+    "address": ""
+  },
+  "results": [
+    {
+      "source": "Яндекс Путешествия",
+      "url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+      "object_title": "Апартаменты Жасмин",
+      "reviews_count": 8,
+      "reviews": [
+        {
+          "author": "Марьяна Хобракова",
+          "text": "Апартаменты очень понравились, внутри чисто и уютно! есть все необходимое для проживания. А администратор очень вежливо все рассказала и показала нам!)",
+          "rating": 5.0,
+          "date": "Октябрь 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-1",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "внутри чисто и уютно",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чисто"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Уютно",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "внутри чисто и уютно",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уютно"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Есть всё необходимое",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "есть все необходимое для проживания",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "есть все необходимое",
+                    "необходимое",
+                    "все необходимое"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Отзывчивый персонал",
+              "sentiment": "neutral",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "А администратор очень вежливо все рассказала и показала нам",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "администратор"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Сергей Курач",
+          "text": "За эти деньги нормально",
+          "rating": 5.0,
+          "date": "Июнь 2024",
+          "year": 2024,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-2",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "value_for_money",
+              "label": "Цена–качество",
+              "badge": "За свои деньги отлично",
+              "sentiment": "positive",
+              "score": 0.9,
+              "matched_fragments": [
+                {
+                  "text": "За эти деньги нормально",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "за эти деньги нормально"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Юрий С",
+          "text": "Неплохо, но на пятерку не тянет. Сами номера неплохие, соответствуют фотографиям, но сантехника уже требует замены. Также не впечатлила территория. Она большая, но это просто бетонная площадка. Само бетонное покрытие уже довольно разрушено. Есть одинокий мангал, но вряд ли появится желание что-то готовить под палящим солнцем. Короче - для тех кому переночевать, а днем где-то шарахаться, отель вполне подойдет. Пляж близко, пляж хороший. Трамвайное кольцо рядом. Персонал доброжелательный.",
+          "rating": 4.0,
+          "date": "Июнь 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-4",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Есть мангал",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "Также не впечатлила территория",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "территория"
+                  ]
+                },
+                {
+                  "text": "Есть одинокий мангал",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "мангал"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Хороший пляж рядом",
+              "sentiment": "positive",
+              "score": 0.97,
+              "matched_fragments": [
+                {
+                  "text": "Пляж близко",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "пляж близко",
+                    "пляж",
+                    "близко"
+                  ]
+                },
+                {
+                  "text": "пляж хороший",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "пляж"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Удобное расположение",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "Трамвайное кольцо рядом",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "трамвайное кольцо",
+                    "трамвайное",
+                    "кольцо"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Отзывчивый персонал",
+              "sentiment": "positive",
+              "score": 0.9,
+              "matched_fragments": [
+                {
+                  "text": "Персонал доброжелательный",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "персонал доброжелательный",
+                    "доброжелательный"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Алексеева Г.",
+          "text": "Отдыхали в отеле в конце июня , всё понравилось. Номер взяли на первом этаже , вечером можно прекрасно посидеть за столиком. Пляж , кафе всё в шаговой достуности. Ждём открытия аэропорта чтобы легче было добираться.",
+          "rating": 5.0,
+          "date": "Июнь 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-5",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Хороший пляж рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Пляж",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "пляж"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Денис Г.",
+          "text": "Отличное жильё за свои деньги (в начале мая ночь обошлась в 1700 на двоих). В номере есть всё необходимое, большая кровать, кухонная утварь, телевизор, кондиционер с подогревом, удобный душ.\nИз разряда пожеланий - в 7 номере довольно ощутимо поскрипывают ламели в кровати, пожалуйста проверьте и замените, очень не хочется занижать оценку за это.",
+          "rating": 5.0,
+          "date": "Май 2024",
+          "year": 2024,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-6",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Кухня в номере",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "В номере есть всё необходимое",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "есть все необходимое",
+                    "необходимое",
+                    "все необходимое"
+                  ]
+                },
+                {
+                  "text": "кухонная утварь",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кухонная"
+                  ]
+                },
+                {
+                  "text": "телевизор",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "телевизор"
+                  ]
+                },
+                {
+                  "text": "кондиционер с подогревом",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кондиционер"
+                  ]
+                },
+                {
+                  "text": "удобный душ",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "душ"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Надежда",
+          "text": "Заселялись сюда всего на две ночи, но отель нам очень понравился. Достался номер на 1 этаже. Жанна встретила нас, показала территорию, во дворе сушилка с прищепками и столик под навесом у номера. \nНомер просторный, с большими окнами, светлый, оснащен всем необходимым - кондиционер, холодильник, фен, эл.чайник, телевизор, ванная комната, вся необходимая посуда, шкафчик с сейфом, большая удобная кровать и также кресло. Вайфай работает хорошо. Есть отдельно стоящая общая кухня, где находится стиральная машина (что удивило - стирка бесплатная! Только нужно иметь свой порошок), а также в коридорчике у номера есть индукционная плитка. Рядом с общей кухней есть мангальная зона, качели под навесом, где можно провести время. \nСамое главное - до моря всего 3-5 минут пешком! Рядом также есть кафе, немного подальше - бюджетная столовая. Остановка общественного транспорта недалеко. \nДаже рядом проходящая железная дорога никак не нарушила наш комфорт. \nЭтот отель заслуживает 5 баллов, спасибо за отдых!",
+          "rating": 5.0,
+          "date": "Сентябрь 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-7",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "check_in",
+              "label": "Заселение",
+              "badge": "Быстрое заселение",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Заселялись сюда всего на две ночи",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "заселялись"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Есть мангал",
+              "sentiment": "positive",
+              "score": 0.79,
+              "matched_fragments": [
+                {
+                  "text": "показала территорию",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "территорию"
+                  ]
+                },
+                {
+                  "text": "во дворе сушилка с прищепками и столик под навесом у номера",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "дворе"
+                  ]
+                },
+                {
+                  "text": "Рядом с общей кухней есть мангальная зона",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "мангальная"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "rooms",
+              "label": "Номера",
+              "badge": "Просторные номера",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "Номер просторный",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "номер просторный",
+                    "просторный"
+                  ]
+                },
+                {
+                  "text": "светлый",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "светлый"
+                  ]
+                },
+                {
+                  "text": "большая удобная кровать и также кресло",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "удобная кровать",
+                    "удобная",
+                    "кровать"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Кухня в номере",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "оснащен всем необходимым - кондиционер",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кондиционер"
+                  ]
+                },
+                {
+                  "text": "холодильник",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "холодильник"
+                  ]
+                },
+                {
+                  "text": "фен",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "фен"
+                  ]
+                },
+                {
+                  "text": "чайник",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чайник"
+                  ]
+                },
+                {
+                  "text": "телевизор",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "телевизор"
+                  ]
+                },
+                {
+                  "text": "вся необходимая посуда",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "посуда"
+                  ]
+                },
+                {
+                  "text": "Есть отдельно стоящая общая кухня",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кухня",
+                    "общая кухня",
+                    "общая"
+                  ]
+                },
+                {
+                  "text": "где находится стиральная машина (что удивило - стирка бесплатная",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "стиральная машина",
+                    "стиральная",
+                    "машина"
+                  ]
+                },
+                {
+                  "text": "Рядом с общей кухней есть мангальная зона",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кухней"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Комфорт",
+              "sentiment": "mixed",
+              "score": 0.77,
+              "matched_fragments": [
+                {
+                  "text": "холодильник",
+                  "sentiment": "negative",
+                  "matched_keywords": [
+                    "холодильник"
+                  ]
+                },
+                {
+                  "text": "Даже рядом проходящая железная дорога никак не нарушила наш комфорт",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "комфорт"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Самое главное - до моря всего 3-5 минут пешком",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "моря"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "value_for_money",
+              "label": "Цена–качество",
+              "badge": "Цена–качество",
+              "sentiment": "mixed",
+              "score": 0.77,
+              "matched_fragments": [
+                {
+                  "text": "немного подальше - бюджетная столовая",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "бюджетная"
+                  ]
+                },
+                {
+                  "text": "Даже рядом проходящая железная дорога никак не нарушила наш комфорт",
+                  "sentiment": "negative",
+                  "matched_keywords": [
+                    "дорога"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Рядом транспорт",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Остановка общественного транспорта недалеко",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "остановка",
+                    "транспорта"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Яна Пониматкина",
+          "text": "Чистый номер,соответствует фотографии на сайте,большая территория,есть парковка. \nНомер не большой,но уютный (самый раз для пары) \nВ номере есть посуда,электрический чайник,микроволновая печь.Рабочий кондиционер,чистое белье.\nМоре в шаговой доступности,рядом есть магазин и возле трамвайного кольца небольшой рыночек.Во дворе есть столики и сушилки для белья,место для курения с пепельницами,мангал.Остались очень довольны",
+          "rating": 5.0,
+          "date": "Июль 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-8",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чистое бельё",
+              "sentiment": "positive",
+              "score": 0.97,
+              "matched_fragments": [
+                {
+                  "text": "Чистый номер",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистый",
+                    "чистый номер",
+                    "номер"
+                  ]
+                },
+                {
+                  "text": "чистое белье",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистое",
+                    "чистое белье",
+                    "белье"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Есть парковка",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "большая территория",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "территория"
+                  ]
+                },
+                {
+                  "text": "есть парковка",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "парковка",
+                    "есть парковка"
+                  ]
+                },
+                {
+                  "text": "Во дворе есть столики и сушилки для белья",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "столики",
+                    "дворе"
+                  ]
+                },
+                {
+                  "text": "мангал",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "мангал"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Уютно",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "но уютный (самый раз для пары)",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уютный"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Кондиционер",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "В номере есть посуда",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "посуда"
+                  ]
+                },
+                {
+                  "text": "электрический чайник",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чайник"
+                  ]
+                },
+                {
+                  "text": "микроволновая печь",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "микроволновая печь",
+                    "микроволновая",
+                    "печь"
+                  ]
+                },
+                {
+                  "text": "Рабочий кондиционер",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кондиционер"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Море в шаговой доступности",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "море"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Рядом кафе и магазины",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "рядом есть магазин и возле трамвайного кольца небольшой рыночек",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "магазин"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Мария Перелыгина",
+          "text": "Хорошо место рекомендую, Евпатория отличный курорт 💯",
+          "rating": 5.0,
+          "date": "Сентябрь 2024",
+          "year": 2024,
+          "year_is_estimated": false,
+          "source": "Яндекс Путешествия",
+          "source_url": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/",
+          "review_id": "https://travel.yandex.ru/hotels/evpatoria/apartamenty-zhasmin/#review-9",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "general",
+              "label": "Общие отзывы",
+              "badge": "Общие отзывы",
+              "sentiment": "neutral",
+              "score": 1.0,
+              "matched_fragments": [
+                {
+                  "text": "Хорошо место рекомендую, Евпатория отличный курорт 💯",
+                  "sentiment": "neutral",
+                  "matched_keywords": []
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        }
+      ],
+      "warnings": [
+        "Открыто видимое окно браузера для ручной проверки на робота.",
+        "Ожидание ручной проверки прервано: Page.content: Unable to retrieve content because the page is navigating and changing the content.",
+        "Браузерный режим не смог полностью открыть страницу: Mouse.wheel: Target page, context or browser has been closed"
+      ]
+    },
+    {
+      "source": "Куда на море",
+      "url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+      "object_title": "Частный сектор «Летящая по волнам»",
+      "reviews_count": 9,
+      "reviews": [
+        {
+          "author": "Галина",
+          "city": "Омск",
+          "text": "Проживание состоялось. Отдыхали у Натальи и Геннадия в гостевом доме «Летящая по волнам» с 3 мая по 30 мая 2025 г. Хозяева супер, всё чистенько, очень уютно, место отличное, до моря 10 мин. не спеша, всё в шаговой доступности. Рекомендую на все 100 %. Отлично отдохнули. Спасибо хозяевам за гостеприимство, чистоту и домашний уют. Фото соответствует действительности. Отдохнули от души с благодарностью из Омска. Хозяева заботятся о своих отдыхающих. Что касается моря, оно очень тёплое, песочек. Мы довольны, отдых состоялся, уезжать не хотелось. Приехав, освоившись, поняли, что выбор наш был отличным. Место очень хорошее для отдыха. Вернёмся снова.",
+          "rating": 5.0,
+          "date": "май 2025",
+          "year": 2025,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-1",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Приветливые хозяева",
+              "sentiment": "positive",
+              "score": 0.99,
+              "matched_fragments": [
+                {
+                  "text": "Хозяева супер",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяева"
+                  ]
+                },
+                {
+                  "text": "Спасибо хозяевам за гостеприимство",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "спасибо хозяевам",
+                    "спасибо",
+                    "хозяевам",
+                    "гостеприимство"
+                  ]
+                },
+                {
+                  "text": "Хозяева заботятся о своих отдыхающих",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяева"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "всё чистенько",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистенько"
+                  ]
+                },
+                {
+                  "text": "чистоту и домашний уют",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистоту"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Уютно",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "очень уютно",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уютно"
+                  ]
+                },
+                {
+                  "text": "чистоту и домашний уют",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уют"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.92,
+              "matched_fragments": [
+                {
+                  "text": "до моря 10 мин",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "до моря 10 мин",
+                    "моря"
+                  ]
+                },
+                {
+                  "text": "Что касается моря",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "моря"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Удобное расположение",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "всё в шаговой доступности",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "все в шаговой доступности",
+                    "шаговой",
+                    "доступности"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Любовь",
+          "city": "Калуга",
+          "text": "Отдыхала с двумя дочками и двумя внучками в августе 2024 в этом гостевом доме. Всё очень понравилось. Расположение замечательное: с одной стороны, всё близко — около 7 минут до пляжа, магазин «Магнит» и парк аттракционов в шаговой доступности, с другой — тишина и спокойствие, так как дом расположен в тихом переулке. Пляж хороший — песчаный, чистый. Условия в доме замечательные, особо надо отметить очень хорошие матрацы, прекрасно оборудованная кухня, постоянное наличие горячей воды, большой навес, под которым было прохладно даже в очень жаркие дни. Есть теннисный и бильярдный столы, детская площадка, Wi-Fi, места для парковки машин, камеры наблюдения. Хозяйка Наталья и женщины, помогающие ей по хозяйству, — отзывчивые и заботливые, но не навязчивые. Вся наша семья осталась очень довольна отдыхом в доме «Летящая по волнам».",
+          "rating": 5.0,
+          "date": "август 2024",
+          "year": 2024,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-2",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Рядом кафе и магазины",
+              "sentiment": "positive",
+              "score": 0.79,
+              "matched_fragments": [
+                {
+                  "text": "Расположение замечательное: с одной стороны",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "расположение"
+                  ]
+                },
+                {
+                  "text": "магазин «Магнит» и парк аттракционов в шаговой доступности",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "магазин"
+                  ]
+                },
+                {
+                  "text": "так как дом расположен в тихом переулке",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "расположен"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Хороший пляж рядом",
+              "sentiment": "positive",
+              "score": 0.92,
+              "matched_fragments": [
+                {
+                  "text": "всё близко — около 7 минут до пляжа",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "7 минут до пляжа",
+                    "пляжа"
+                  ]
+                },
+                {
+                  "text": "Пляж хороший — песчаный",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "пляж",
+                    "песчаный"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Комфорт",
+              "sentiment": "mixed",
+              "score": 0.79,
+              "matched_fragments": [
+                {
+                  "text": "с другой — тишина и спокойствие",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "спокойствие"
+                  ]
+                },
+                {
+                  "text": "так как дом расположен в тихом переулке",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "тихом"
+                  ]
+                },
+                {
+                  "text": "под которым было прохладно даже в очень жаркие дни",
+                  "sentiment": "negative",
+                  "matched_keywords": [
+                    "жаркие"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "чистый",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистый"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Кухня в номере",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "прекрасно оборудованная кухня",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кухня"
+                  ]
+                },
+                {
+                  "text": "Wi-Fi",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "wi-fi"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "family",
+              "label": "Семейный отдых",
+              "badge": "Удобно с детьми",
+              "sentiment": "positive",
+              "score": 0.77,
+              "matched_fragments": [
+                {
+                  "text": "детская площадка",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "детская"
+                  ]
+                },
+                {
+                  "text": "Вся наша семья осталась очень довольна отдыхом в доме «Летящая по волнам»",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "семья"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Есть парковка",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "места для парковки машин",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "парковки"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Приветливые хозяева",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "Хозяйка Наталья и женщины",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяйка"
+                  ]
+                },
+                {
+                  "text": "— отзывчивые и заботливые",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "отзывчивые"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Марина",
+          "city": "Краснодар",
+          "text": "Реальность превысила ожидания: чистота, уют, близость к морю. Прекрасное место.",
+          "rating": 5.0,
+          "date": "август 2024",
+          "year": 2024,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-3",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Реальность превысила ожидания: чистота",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистота"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Уютно",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "уют",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уют"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "близость к морю",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "морю"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Альбина",
+          "city": "Тюмень",
+          "text": "Добрый день. Хочу поделиться отдыхом в гостевом доме. Замечательное место отдыха от городской суеты. Тишина. До моря минут 10 идти. Во дворе детская площадка, что для детей очень хорошо. Наталья — хозяйка дома и Ирина - администратор вежливые, доброжелательные. Отдохнули отлично. Спасибо большое.",
+          "rating": 5.0,
+          "date": "июль 2023",
+          "year": 2023,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-4",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "До моря минут 10 идти",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "моря"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Закрытый двор",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Во дворе детская площадка",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "дворе"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "family",
+              "label": "Семейный отдых",
+              "badge": "Удобно с детьми",
+              "sentiment": "positive",
+              "score": 0.77,
+              "matched_fragments": [
+                {
+                  "text": "Во дворе детская площадка",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "детская"
+                  ]
+                },
+                {
+                  "text": "что для детей очень хорошо",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "детей"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Отзывчивый персонал",
+              "sentiment": "positive",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "Наталья — хозяйка дома и Ирина - администратор вежливые",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяйка",
+                    "администратор"
+                  ]
+                },
+                {
+                  "text": "доброжелательные",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "доброжелательные"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Павел",
+          "city": "Санкт-Петербург",
+          "text": "Очень уютное и тихое место, лично мне подарившее умиротворяющий отдых. У террасы расположен потрясающий сад, на который приятно смотреть в знойное лето, сразу заметно с какой любовью подошли к делу владельцы. Очень удобное расположение, достаточно далеко от автодорог и общего места пребывания основной массы отдыхающих, но при этом достаточно близко до чистого пляжа, на котором всегда можно найти достаточно места.\nРекомендую всем, кто как и я желает полноценного отдыха от суеты и каменных джунглей.",
+          "rating": 5.0,
+          "date": "июнь 2022",
+          "year": 2022,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-5",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Тихо и спокойно",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "Очень уютное и тихое место",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "уютное",
+                    "тихое место",
+                    "тихое",
+                    "место"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Удобное расположение",
+              "sentiment": "positive",
+              "score": 0.97,
+              "matched_fragments": [
+                {
+                  "text": "У террасы расположен потрясающий сад",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "расположен"
+                  ]
+                },
+                {
+                  "text": "Очень удобное расположение",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "удобное расположение",
+                    "удобное",
+                    "расположение"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Уютная территория",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "У террасы расположен потрясающий сад",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "террасы"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "при этом достаточно близко до чистого пляжа",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистого"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Хороший пляж рядом",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "при этом достаточно близко до чистого пляжа",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "пляжа"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Юлия",
+          "city": "Пермь",
+          "text": "Отдыхала в июле с двумя детьми. Отличный дом, со своей территорией, детской площадкой. Рядом магазины, рынок и до моря 7 мин. Хозяева хорошие люди. Однажды отключили горячую воду, неполадка была устранена в течении 10 мин, а так перебоев с водой нет. В общем нам все понравилось!",
+          "rating": 5.0,
+          "date": "июль 2021",
+          "year": 2021,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-6",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "family",
+              "label": "Семейный отдых",
+              "badge": "Удобно с детьми",
+              "sentiment": "positive",
+              "score": 0.77,
+              "matched_fragments": [
+                {
+                  "text": "Отдыхала в июле с двумя детьми",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "детьми"
+                  ]
+                },
+                {
+                  "text": "детской площадкой",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "детской"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Уютная территория",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "со своей территорией",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "территорией"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "location",
+              "label": "Расположение",
+              "badge": "Рядом кафе и магазины",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "Рядом магазины",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "рядом магазины",
+                    "рядом",
+                    "магазины"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.9,
+              "matched_fragments": [
+                {
+                  "text": "рынок и до моря 7 мин",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "до моря 7 мин",
+                    "моря"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Приветливые хозяева",
+              "sentiment": "neutral",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "Хозяева хорошие люди",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяева"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Виолетта",
+          "city": "Екатеринбург",
+          "text": "Всем доброго дня! Я отдыхала с племянницей. Нам очень понравилось, море рядом, 7 — 10 мин. Персонал очень вежливый, в гостинице чисто. Номера достаточно просторные) Просторный двор, деткам есть где поиграть- качели, теннисный стол) Наталья (хозяйка) очень отзывчивая, деликатная, вежливая! Буду рекомендовать знакомым. И по возможности, если решим ехать в Голубицкую, то остановимся в гостинице Летящая по волнам! Спасибо большое!",
+          "rating": 5.0,
+          "date": "июль 2021",
+          "year": 2021,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-7",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "sea_beach",
+              "label": "Море и пляж",
+              "badge": "Море рядом",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "море рядом",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "море рядом",
+                    "море",
+                    "рядом"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "hosts_staff",
+              "label": "Хозяева и персонал",
+              "badge": "Отзывчивый персонал",
+              "sentiment": "neutral",
+              "score": 0.87,
+              "matched_fragments": [
+                {
+                  "text": "Персонал очень вежливый",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "персонал"
+                  ]
+                },
+                {
+                  "text": "теннисный стол) Наталья (хозяйка) очень отзывчивая",
+                  "sentiment": "neutral",
+                  "matched_keywords": [
+                    "хозяйка"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "в гостинице чисто",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чисто"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "rooms",
+              "label": "Номера",
+              "badge": "Просторные номера",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "Номера достаточно просторные) Просторный двор",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "просторные",
+                    "просторный"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "territory",
+              "label": "Территория",
+              "badge": "Закрытый двор",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "Номера достаточно просторные) Просторный двор",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "двор"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "family",
+              "label": "Семейный отдых",
+              "badge": "Удобно с детьми",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "деткам есть где поиграть- качели",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "деткам"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Михаил",
+          "city": "Краснодар",
+          "text": "Прекрасное, тихое место. Отдыхали в конце августа в двухкомнатном домике с двумя собаками. И мы и нам ни кто не мешал. Есть все необходимое. Спасибо, в следующем году опять к вам обязательно приедем!",
+          "rating": 5.0,
+          "date": "август 2020",
+          "year": 2020,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-8",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "comfort",
+              "label": "Комфорт",
+              "badge": "Тихо и спокойно",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "тихое место",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "тихое место",
+                    "тихое",
+                    "место"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Есть всё необходимое",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "Есть все необходимое",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "есть все необходимое",
+                    "необходимое",
+                    "все необходимое"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        },
+        {
+          "author": "Анна",
+          "city": "Краснодар",
+          "text": "Отдыхали с семьей в августе — всё отлично! Вода в душе всегда горячая, номер чистый, на кухне всегда всем хватало посуды, обстановка домашняя, бесплатный вайфай. Вообщем недостатков не обнаружено)",
+          "rating": 5.0,
+          "date": "август 2019",
+          "year": 2019,
+          "year_is_estimated": false,
+          "source": "Куда на море",
+          "source_url": "https://www.kudanamore.ru/golubickaja/hotels/9090/",
+          "review_id": "https://www.kudanamore.ru/golubickaja/hotels/9090/#review-9",
+          "categories_version": "2.0",
+          "review_categories": [
+            {
+              "category": "family",
+              "label": "Семейный отдых",
+              "badge": "Семейный отдых",
+              "sentiment": "positive",
+              "score": 0.95,
+              "matched_fragments": [
+                {
+                  "text": "Отдыхали с семьей в августе — всё отлично",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "с семьей",
+                    "семьей"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "cleanliness",
+              "label": "Чистота",
+              "badge": "Чисто",
+              "sentiment": "positive",
+              "score": 0.85,
+              "matched_fragments": [
+                {
+                  "text": "номер чистый",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "чистый"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            },
+            {
+              "category": "equipment",
+              "label": "Оснащение",
+              "badge": "Кухня в номере",
+              "sentiment": "positive",
+              "score": 0.75,
+              "matched_fragments": [
+                {
+                  "text": "на кухне всегда всем хватало посуды",
+                  "sentiment": "positive",
+                  "matched_keywords": [
+                    "кухне"
+                  ]
+                }
+              ],
+              "source": "auto",
+              "is_manual": false
+            }
+          ]
+        }
+      ],
+      "warnings": [
+        "На странице есть догрузка отзывов. Открываю страницу в браузере и нажимаю кнопки показа отзывов."
+      ]
+    }
+  ]
+}

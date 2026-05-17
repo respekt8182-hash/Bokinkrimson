@@ -1114,7 +1114,6 @@ export function AttractionCatalog({
       title="Досуг в Крыму"
       description="Ищите места для прогулок, самостоятельных остановок и отдыха по названию, городу или радиусу рядом с выбранной локацией."
       total={result.total}
-      hideHeader
     >
       <MarketplaceFilterBar
         key={[
@@ -1206,7 +1205,6 @@ export function TransferCatalog({
       title="Трансферы по Крыму"
       description="Выбирайте водителя по городу, маршруту, типу трансфера, автомобилю и цене."
       total={result.total}
-      hideHeader
     >
       <MarketplaceFilterBar
         key={[
@@ -1398,9 +1396,9 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
             {distance ? <SummaryPill icon={Route}>{distance}</SummaryPill> : null}
           </div>
 
-          <h1 className="mt-4 text-3xl font-semibold leading-tight text-olive md:hidden">
+          <p className="mt-4 text-3xl font-semibold leading-tight text-olive md:hidden">
             {item.h1}
-          </h1>
+          </p>
 
           {item.shortDescription ? (
             <p className="mt-3 text-lg leading-7 text-olive/68 md:hidden">
@@ -1776,7 +1774,7 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
             </span>
           ))}
         </div>
-        <h1 className="text-2xl font-bold leading-tight text-olive sm:text-3xl">{item.title}</h1>
+        <p className="text-2xl font-bold leading-tight text-olive sm:text-3xl">{item.title}</p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-olive/68">
           {locationSummary ? (
             <span className="inline-flex items-center gap-1.5">

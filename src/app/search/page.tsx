@@ -33,6 +33,32 @@ function pick(value: string | string[] | undefined): string {
   return value ?? "";
 }
 
+function CatalogSeoHeader({
+  heading,
+  description,
+  total,
+}: {
+  heading: string;
+  description: string;
+  total: number;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold leading-tight text-olive md:text-3xl">
+            {heading}
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-olive/60">{description}</p>
+        </div>
+        <p className="shrink-0 text-sm font-semibold text-olive/70 md:border-l md:border-olive/10 md:pl-4">
+          Найдено: {total}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function toLocationSuggestions(
   items: Array<{
     type: string;
@@ -194,6 +220,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </>
         ) : null}
 
+        <CatalogSeoHeader
+          heading={seoState.heading}
+          description={seoState.description}
+          total={result.total}
+        />
+
         <ExcursionSearchResults
           items={result.items}
           filters={result.filters}
@@ -276,6 +308,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           />
         </>
       ) : null}
+
+      <CatalogSeoHeader
+        heading={seoState.heading}
+        description={seoState.description}
+        total={initialHousingResult.total}
+      />
 
       <HousingCatalogClient
         initialResponse={{

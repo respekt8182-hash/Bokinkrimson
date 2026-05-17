@@ -8,6 +8,7 @@ import { getPublicAttractionByIdentifier } from "@/lib/public-marketplace";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { buildWebPageMetadata } from "@/lib/seo/metadata";
 import { absoluteUrl } from "@/lib/seo/site";
+import { buildBreadcrumbListStructuredData } from "@/lib/seo/structured-data";
 
 type AttractionDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -55,7 +56,17 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
     Object.entries(nearbySearchParams).filter(([, value]) => value),
     ["location", "radiusKm"],
   );
+  const attractionLocationHref = item.locationName
+    ? buildCanonicalPath("/attractions", [["location", item.locationName]], ["location"])
+    : buildCanonicalPath("/attractions");
+  const breadcrumbItems = [
+    { name: "Главная", path: "/" },
+    { name: "Досуг", path: "/attractions" },
+    ...(item.locationName ? [{ name: item.locationName, path: attractionLocationHref }] : []),
+    { name: item.title, path: item.path },
+  ];
   const jsonLdItems: Array<Record<string, unknown>> = [
+    buildBreadcrumbListStructuredData(breadcrumbItems),
     {
       "@context": "https://schema.org",
       "@type": "TouristAttraction",
