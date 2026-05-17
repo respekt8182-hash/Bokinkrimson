@@ -133,8 +133,11 @@ function isUploadPath(pathname: string): boolean {
   );
 }
 
-function isRoomMediaUploadPath(pathname: string): boolean {
-  return /^\/api\/properties\/[^/]+\/rooms\/[^/]+\/media$/.test(pathname);
+function isAccommodationMediaUploadPath(pathname: string): boolean {
+  return (
+    /^\/api\/properties\/[^/]+\/media$/.test(pathname) ||
+    /^\/api\/properties\/[^/]+\/rooms\/[^/]+\/media$/.test(pathname)
+  );
 }
 
 async function enforceProxyRateLimit(
@@ -183,7 +186,7 @@ async function enforceProxyRateLimit(
       }
     }
 
-    if (isUploadPath(pathname) && !isRoomMediaUploadPath(pathname)) {
+    if (isUploadPath(pathname) && !isAccommodationMediaUploadPath(pathname)) {
       const limit = await uploadLimiter.limit(key);
       if (!limit.allowed) {
         return applySecurityHeaders(
