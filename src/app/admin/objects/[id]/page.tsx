@@ -117,10 +117,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
   ];
   const isPublished = property.status === PropertyStatus.PUBLISHED;
   const isPendingDeletion = Boolean(property.ownerDeletedAt);
-  const workflowStatus = getPropertyWorkflowStatus(
-    property.status,
-    property.pendingEditStatus,
-  );
+  const workflowStatus = getPropertyWorkflowStatus(property.status, property.pendingEditStatus);
   const pendingEditLabel = isPublished
     ? getAdminPropertyPendingEditLabel(property.pendingEditStatus, property.moderationNotes)
     : null;
@@ -145,9 +142,7 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold text-olive">
-          {property.name || "Объект без названия"}
-        </h1>
+        <h1 className="text-2xl font-bold text-olive">{property.name || "Объект без названия"}</h1>
         <span className="rounded-full bg-cream px-3 py-1 text-xs font-semibold text-olive/70">
           {getAdminPropertyBaseStatusLabel(property.status)}
         </span>
@@ -196,9 +191,10 @@ export default async function AdminPropertyEditPage({ params }: Props) {
       ) : null}
 
       <div className="text-xs text-olive/50">
-        ID объекта: {property.publicId ?? "—"} | Технический ID: {property.id} | Номеров: {property.rooms.length} |
-        Рейтинг: {Number(property.avgRating).toFixed(1)} ({property.reviewsCount} отз.) |
-        Создано: {new Date(property.createdAt).toLocaleString("ru-RU")}
+        ID объекта: {property.publicId ?? "—"} | Технический ID: {property.id} | Номеров:{" "}
+        {property.rooms.length} | Рейтинг: {Number(property.avgRating).toFixed(1)} (
+        {property.reviewsCount} отз.) | Создано:{" "}
+        {new Date(property.createdAt).toLocaleString("ru-RU")}
       </div>
 
       <AdminListingPaymentConfirmation
@@ -206,9 +202,8 @@ export default async function AdminPropertyEditPage({ params }: Props) {
         entityId={property.id}
         entityLabel="Объект"
         tariffOptions={[
-          { value: "season", label: "Сезон" },
-          { value: "offseason", label: "Межсезонье" },
-          { value: "yearly", label: "Годовой" },
+          { value: "season", label: "Сезонное размещение — до 31 октября" },
+          { value: "yearly", label: "Годовое размещение — 12 месяцев" },
         ]}
       />
 
@@ -223,8 +218,8 @@ export default async function AdminPropertyEditPage({ params }: Props) {
           <div>
             <h2 className="text-lg font-semibold text-olive">Полный редактор карточки</h2>
             <p className="mt-1 text-sm text-olive/60">
-              Админ может пройти те же шаги, что и владелец: заполнить карточку, доработать
-              номера и перейти к шахматке перед публикацией.
+              Админ может пройти те же шаги, что и владелец: заполнить карточку, доработать номера и
+              перейти к шахматке перед публикацией.
             </p>
           </div>
           <Link

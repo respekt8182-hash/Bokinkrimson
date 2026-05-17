@@ -159,7 +159,8 @@ export function PropertyPaymentPanel({
     ? getPlacementPromoPrice(selectedFinalBeforePromo)
     : null;
   const hasSelectedFreePeriod =
-    Boolean(selectedPlacementPricing?.freePeriodActive) || Boolean(selectedTariffPrice?.isDiscounted);
+    Boolean(selectedPlacementPricing?.freePeriodActive) ||
+    Boolean(selectedTariffPrice?.isDiscounted);
   const amountDue = selectedTariff
     ? hasActivePlacement
       ? 0
@@ -435,7 +436,10 @@ export function PropertyPaymentPanel({
               <li>
                 Убедитесь, что все предыдущие разделы заполнены (объект, правила, номера, удобства)
               </li>
-              <li>Если действует бесплатный период, тариф показывается справочно</li>
+              <li>
+                Выберите сезонное размещение до 31 октября или годовое размещение на 12 месяцев
+              </li>
+              <li>Если действует бесплатный период, цена после него показывается справочно</li>
               <li>Отправьте карточку на модерацию или заявку менеджеру</li>
               <li>После прохождения модерации объект появится в каталоге</li>
             </ol>
@@ -522,7 +526,7 @@ export function PropertyPaymentPanel({
           ) : null}
 
           {tariffOptions.length > 0 ? (
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2">
               {tariffOptions.map((option) => {
                 const isSelected = selectedTariff?.type === option.type;
                 const optionBaseAmount = option.baseAmountRub ?? option.amountRub;
@@ -561,6 +565,7 @@ export function PropertyPaymentPanel({
                       </p>
                     ) : null}
                     <p className="mt-2 text-xs leading-5 text-olive/65">{option.periodLabel}</p>
+                    <p className="mt-2 text-xs leading-5 text-olive/65">{option.description}</p>
                     <p className="mt-1 text-xs font-semibold text-olive/70">
                       {option.monthlyLabel}
                     </p>
@@ -589,9 +594,7 @@ export function PropertyPaymentPanel({
               <div className="space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">Тариф</span>
-                  <span className="text-right font-medium text-olive">
-                    {selectedTariff.title}
-                  </span>
+                  <span className="text-right font-medium text-olive">{selectedTariff.title}</span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">Период</span>

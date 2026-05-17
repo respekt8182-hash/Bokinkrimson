@@ -50,15 +50,16 @@ export function ServicesAndTariffsSection({
         </h2>
       )}
       <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
-        Сейчас размещение на сайте бесплатно до 20 июня 2026 включительно. После бесплатного
-        периода персональная цена отображается в личном кабинете после входа или регистрации.
+        Для владельцев жилья доступны два основных варианта: сезонное размещение до 31 октября и
+        годовое размещение на 12 месяцев с даты оплаты. Сезон можно подключить заранее, чтобы
+        карточка участвовала в раннем бронировании на лето.
       </p>
       <PlacementPromoNotice className="mt-5" />
       <div className="mt-5 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm font-semibold leading-6 text-olive">
         {annualTariffBenefitText}
       </div>
 
-      <div className="mt-6 grid gap-3 lg:grid-cols-3">
+      <div className="mt-6 grid gap-3 lg:grid-cols-2">
         {publicObjectTariffCards.map((card) => (
           <article
             key={card.id}
@@ -72,8 +73,13 @@ export function ServicesAndTariffsSection({
                 {card.badgeLabel}
               </span>
             ) : null}
-            <h3 className="pr-28 text-xl font-semibold text-olive">{card.title}</h3>
+            <h3 className={cn("text-xl font-semibold text-olive", card.badgeLabel ? "pr-28" : "")}>
+              {card.title}
+            </h3>
             <p className="mt-3 text-3xl font-bold tabular-nums text-olive">{card.priceLabel}</p>
+            {card.priceNote ? (
+              <p className="mt-1 text-sm font-semibold text-olive/70">{card.priceNote}</p>
+            ) : null}
             <p className="mt-2 min-h-12 text-sm leading-6 text-olive/68">{card.description}</p>
             <p className="mt-3 rounded-xl bg-cream px-3 py-2 text-sm font-medium text-olive/75">
               {card.periodLabel}
@@ -200,8 +206,8 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-4 rounded-2xl border border-olive/10 bg-white/80 px-4 py-3 text-sm leading-6 text-olive/70">
         <p>
-          Стартовая цена доступна при первом годовом размещении в выбранной категории.
-          Персональная цена отображается в личном кабинете после входа или регистрации.
+          Стартовая цена доступна при первом годовом размещении в выбранной категории. Персональная
+          цена отображается в личном кабинете после входа или регистрации.
         </p>
         <p className="mt-1">
           Скидка действует отдельно для каждой категории: объект, экскурсия, тур и трансфер.

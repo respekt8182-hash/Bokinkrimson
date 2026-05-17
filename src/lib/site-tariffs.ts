@@ -1,12 +1,6 @@
 import { companyConfig } from "@/config/company";
 import { getPlacementPromoPrice } from "@/lib/placement-promo";
-import {
-  OBJECT_OFFSEASON_PRICE_RUB,
-  OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB,
-  OBJECT_TARIFF_PRICE_TABLE,
-  OBJECT_YEARLY_PRICE_RUB,
-  OBJECT_YEARLY_SAVINGS_RUB,
-} from "@/lib/object-placement-tariffs";
+import { OBJECT_TARIFF_PRICE_TABLE, OBJECT_YEARLY_PRICE_RUB } from "@/lib/object-placement-tariffs";
 import { calculateDiscountedPlacementPrice, placementTariffs } from "@/lib/placement-tariffs";
 
 export const EXCURSION_PUBLICATION_FEE_RUB = placementTariffs.excursion.yearPrice;
@@ -29,9 +23,10 @@ export type PublicServiceTariffRow = {
 };
 
 export type PublicObjectTariffCard = {
-  id: "season" | "offseason" | "yearly";
+  id: "season" | "yearly";
   title: string;
   priceLabel: string;
+  priceNote?: string;
   description: string;
   periodLabel: string;
   monthlyLabel: string;
@@ -97,53 +92,42 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
     ),
     conditionsLabel: "Дополнительные автомобили считаются без скидки.",
     durationLabel: "Сезон до 31 октября или 365 дней",
-    extraLabel: `Дополнительный автомобиль: +${formatTariffPrice(
-      TRANSFER_EXTRA_VEHICLE_FEE_RUB,
-    )}`,
+    extraLabel: `Дополнительный автомобиль: +${formatTariffPrice(TRANSFER_EXTRA_VEHICLE_FEE_RUB)}`,
   },
 ];
 
 export const publicObjectTariffCards: PublicObjectTariffCard[] = [
   {
     id: "season",
-    title: "Сезон",
-    priceLabel: "от 990 ₽ до 3 000 ₽",
+    title: "Сезонное размещение",
+    priceLabel: "от 990 ₽ до 3 900 ₽",
+    priceNote: "Цена зависит от месяца подключения",
     description:
-      "Размещение до 31 октября. Цена зависит от месяца подключения, дополнительные скидки не применяются.",
-    periodLabel: "с даты оплаты до 31 октября",
-    monthlyLabel: "в мае-июне примерно 500-600 ₽ в месяц",
+      "Размещение объекта с момента оплаты до 31 октября. Сезонное размещение можно подключить заранее — с января, чтобы карточка уже показывалась туристам в период раннего бронирования на лето.",
+    periodLabel: "Размещение до 31 октября",
+    monthlyLabel:
+      "Можно подключиться заранее — с января, чтобы получать заявки на лето в период раннего бронирования",
     buttonLabel: "Выбрать сезон",
     priceRows: [...OBJECT_TARIFF_PRICE_TABLE],
-  },
-  {
-    id: "offseason",
-    title: "Межсезонье",
-    priceLabel: formatTariffPrice(OBJECT_OFFSEASON_PRICE_RUB),
-    description:
-      "Размещение с ноября по апрель. Это краткосрочный тариф без дополнительных скидок.",
-    periodLabel: "с 1 ноября до 30 апреля",
-    monthlyLabel: "около 467 ₽ в месяц",
-    buttonLabel: "Выбрать межсезонье",
   },
   {
     id: "yearly",
     title: "Годовое размещение",
     priceLabel: formatTariffPrice(OBJECT_YEARLY_PRICE_RUB),
+    priceNote: "375 ₽ в месяц",
     description:
-      "Самый выгодный тариф: участникам тестового периода доступна скидка 20% на первое годовое продление.",
+      "Размещение объекта на 12 месяцев с даты оплаты. Подходит для тех, кто хочет быть на сайте круглый год: в сезон, в период раннего бронирования, осенью, зимой и весной.",
     periodLabel: "12 месяцев с даты оплаты",
-    monthlyLabel: "375 ₽ в месяц до персональной скидки",
+    monthlyLabel: "Для круглогодичного присутствия на сайте",
     buttonLabel: "Выбрать годовой тариф",
     badgeLabel: "Скидка 20% после теста",
-    savingsLabel: `Первое годовое размещение: ${formatTariffPrice(
+    savingsLabel: `Для участников бесплатного периода первое годовое размещение — ${formatTariffPrice(
       calculateDiscountedPlacementPrice(
         OBJECT_YEARLY_PRICE_RUB,
         placementTariffs.object.firstYearDiscountPercent,
       ),
-    )}`,
-    comparisonLabel: `Сезон + межсезонье отдельно — ${formatTariffPrice(
-      OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB,
-    )}. Годовой тариф — ${formatTariffPrice(OBJECT_YEARLY_PRICE_RUB)} до персональной скидки.`,
+    )}.`,
+    comparisonLabel: "Скидка 20% на первое годовое размещение после бесплатного периода.",
     recommended: true,
   },
 ];
@@ -176,8 +160,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
   {
     id: "photo_out_of_city",
     serviceName: "Фотосъёмка объекта",
-    serviceNote:
-      "Профессиональная фотосъёмка номеров вашего объекта — выезд за пределы города",
+    serviceNote: "Профессиональная фотосъёмка номеров вашего объекта — выезд за пределы города",
     priceLabel: "300 ₽ / номер + 300 ₽ за выезд",
     conditionsLabel: "Минимум 3 номера при выезде за город",
   },
@@ -189,11 +172,11 @@ export const publicTariffHighlights = [
   "Участники тестового периода получают скидку 20% на первое годовое продление в каждой категории.",
   "Новые карточки после 20 июня получают пробный месяц без дополнительных скидок на дальнейшие тарифы.",
   "Дополнительные опции, например дополнительные автомобили в трансфере, добавляются после скидки.",
-  `Годовой тариф объекта выгоднее на ${formatTariffPrice(OBJECT_YEARLY_SAVINGS_RUB)} до персональной скидки.`,
+  "Годовое размещение включает сезон, период раннего бронирования и межсезонье.",
 ];
 
 export const annualTariffBenefitText =
-  "Скидка 20% применяется только к первому годовому продлению после тестового периода. Месячные и сезонные тарифы уже снижены, поэтому дополнительные скидки на них не применяются.";
+  "Для участников бесплатного периода первое годовое размещение — 3 600 ₽. Скидка 20% применяется только к первому годовому продлению после бесплатного периода.";
 
 export function formatTariffPrice(priceRub: number): string {
   return `${new Intl.NumberFormat("ru-RU").format(priceRub)} ₽`;

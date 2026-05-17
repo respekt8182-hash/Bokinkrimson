@@ -173,7 +173,7 @@ export async function GET(request: Request, context: RouteContext) {
 
 const createPaymentSchema = z.object({
   provider: z.literal("MANAGER").optional().default("MANAGER"),
-  tariffType: z.enum(["season", "offseason", "yearly"]).optional(),
+  tariffType: z.enum(["season", "yearly"]).optional(),
 });
 
 export async function POST(request: Request, context: RouteContext) {
@@ -188,7 +188,10 @@ export async function POST(request: Request, context: RouteContext) {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Онлайн-оплата отключена. Используйте заявку менеджеру." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Онлайн-оплата отключена. Используйте заявку менеджеру." },
+        { status: 400 },
+      );
     }
     body = parsed.data;
   } catch {
@@ -219,6 +222,17 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error: "Объект пока не готов к оплате",
+        readiness,
+      },
+      { status: 400 },
+    );
+  }
+
+  if (body.tariffType === "season" && readiness.quote.tariffType !== "season") {
+    return NextResponse.json(
+      {
+        error:
+          "Сезонное размещение будет доступно с января. Сейчас можно выбрать годовое размещение.",
         readiness,
       },
       { status: 400 },

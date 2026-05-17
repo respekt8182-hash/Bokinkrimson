@@ -1,6 +1,6 @@
 import { OBJECT_YEARLY_PRICE_RUB } from "@/lib/object-placement-tariffs";
 
-export const PLACEMENT_PRICE_VERSION = "placement-pricing-2026-05-07";
+export const PLACEMENT_PRICE_VERSION = "placement-pricing-2026-05-17";
 
 export const PLACEMENT_CATEGORIES = ["object", "excursion", "tour", "transfer"] as const;
 export type PlacementCategory = (typeof PLACEMENT_CATEGORIES)[number];

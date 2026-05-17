@@ -1,4 +1,4 @@
-export const OBJECT_SEASON_FULL_PRICE_RUB = 3000;
+export const OBJECT_SEASON_FULL_PRICE_RUB = 3900;
 export const OBJECT_OFFSEASON_PRICE_RUB = 2800;
 export const OBJECT_YEARLY_PRICE_RUB = 4500;
 export const OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB =
@@ -50,6 +50,10 @@ export const OBJECT_TARIFF_CODES: Record<ObjectPlacementTariffType, string> = {
 };
 
 export const OBJECT_TARIFF_PRICE_TABLE = [
+  { label: "Январь", amountRub: 3900 },
+  { label: "Февраль", amountRub: 3700 },
+  { label: "Март", amountRub: 3500 },
+  { label: "Апрель", amountRub: 3300 },
   { label: "Май-июнь", amountRub: 3000 },
   { label: "Июль", amountRub: 2800 },
   { label: "Август", amountRub: 2500 },
@@ -97,6 +101,10 @@ function getInclusiveMonthCount(from: Date, until: Date): number {
 }
 
 function getSeasonPriceByMonth(monthIndex: number): number | null {
+  if (monthIndex === 0) return 3900;
+  if (monthIndex === 1) return 3700;
+  if (monthIndex === 2) return 3500;
+  if (monthIndex === 3) return 3300;
   if (monthIndex === 4 || monthIndex === 5) return 3000;
   if (monthIndex === 6) return 2800;
   if (monthIndex === 7) return 2500;
@@ -146,11 +154,9 @@ export function getCurrentSeasonTariffPriceRub(now = new Date()): number | null 
   return getSeasonPriceByMonth(now.getMonth());
 }
 
-export function getDefaultObjectPlacementTariffType(
-  now = new Date(),
-): ObjectPlacementTariffType {
+export function getDefaultObjectPlacementTariffType(now = new Date()): ObjectPlacementTariffType {
   const month = now.getMonth();
-  return month >= 4 && month <= 9 ? "season" : "offseason";
+  return month >= 0 && month <= 9 ? "season" : "yearly";
 }
 
 export function getSeasonPlacementPeriod(now = new Date()): {
@@ -218,15 +224,16 @@ function buildSeasonOption(now: Date): ObjectPlacementTariffOption | null {
   return {
     type: "season",
     code: OBJECT_TARIFF_CODES.season,
-    title: "Сезонное размещение до 31 октября",
-    shortTitle: "Сезон",
+    title: "Сезонное размещение",
+    shortTitle: "Сезонное размещение",
     amountRub,
     priceLabel: `${formatMoney(amountRub)}`,
     periodLabel: `С даты оплаты до ${formatDate(period.paidUntil)}`,
     paidFrom: period.paidFrom,
     paidUntil: period.paidUntil,
     monthlyLabel: `примерно ${formatMoney(monthly)} в месяц`,
-    description: "Цена зависит от месяца подключения.",
+    description:
+      "Размещение объекта с момента оплаты до 31 октября. Сезонное размещение можно подключить заранее — с января, чтобы карточка уже показывалась туристам в период раннего бронирования на лето.",
     buttonLabel: "Выбрать сезон",
     recommended: false,
     savingsRub: null,
@@ -270,21 +277,26 @@ function buildYearlyOption(now: Date): ObjectPlacementTariffOption {
     paidFrom: period.paidFrom,
     paidUntil: period.paidUntil,
     monthlyLabel: "375 ₽ в месяц",
-    description: "Самый выгодный вариант.",
+    description:
+      "Размещение объекта на 12 месяцев с даты оплаты. Подходит для тех, кто хочет быть на сайте круглый год: в сезон, в период раннего бронирования, осенью, зимой и весной.",
     buttonLabel: "Выбрать годовой тариф",
     recommended: true,
-    savingsRub: OBJECT_YEARLY_SAVINGS_RUB,
+    savingsRub: null,
     unavailableReason: null,
   };
 }
 
-export function getObjectPlacementTariffOptions(
-  now = new Date(),
-): ObjectPlacementTariffOption[] {
+export function getObjectPlacementTariffOptions(now = new Date()): ObjectPlacementTariffOption[] {
   const season = buildSeasonOption(now);
-  return [season, buildOffseasonOption(now), buildYearlyOption(now)].filter(
+  return [season, buildYearlyOption(now)].filter(
     (item): item is ObjectPlacementTariffOption => item !== null,
   );
+}
+
+export function getLegacyOffseasonPlacementTariffOption(
+  now = new Date(),
+): ObjectPlacementTariffOption {
+  return buildOffseasonOption(now);
 }
 
 export function getObjectPlacementTariffOption(

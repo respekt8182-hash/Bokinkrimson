@@ -120,6 +120,11 @@ describe("payments domain", () => {
   });
 
   it("selects object placement tariff by period, not room count", () => {
+    const januaryQuote = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      now: new Date("2026-01-10T09:00:00.000Z"),
+    });
     const seasonQuote = getTariffQuote({
       roomCount: 30,
       propertyType: "hotel",
@@ -132,11 +137,31 @@ describe("payments domain", () => {
       now: new Date("2026-07-10T09:00:00.000Z"),
     });
 
+    expect(januaryQuote.tariff.code).toBe("object_season");
+    expect(januaryQuote.originalAmount).toBe(3900);
     expect(seasonQuote.tariff.code).toBe("object_season");
     expect(seasonQuote.originalAmount).toBe(2800);
     expect(yearlyQuote.tariff.code).toBe("object_yearly");
     expect(yearlyQuote.originalAmount).toBe(4500);
     expect(yearlyQuote.monthlyLabel).toBe("375 ₽ в месяц");
+  });
+
+  it("uses yearly object placement as the default after the season ends", () => {
+    const quote = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      now: new Date("2026-11-10T09:00:00.000Z"),
+    });
+    const requestedSeasonAfterSeasonEnd = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      tariffType: "season",
+      now: new Date("2026-12-10T09:00:00.000Z"),
+    });
+
+    expect(quote.tariff.code).toBe("object_yearly");
+    expect(quote.originalAmount).toBe(4500);
+    expect(requestedSeasonAfterSeasonEnd.tariff.code).toBe("object_yearly");
   });
 
   it("applies free placement before June 21 2026", () => {

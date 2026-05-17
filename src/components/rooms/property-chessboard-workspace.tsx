@@ -140,6 +140,12 @@ type DuplicatePricesFormState = {
   dateTo: string;
 };
 
+type CopyYearPricesFormState = {
+  sourceYearInput: string;
+  targetYearInput: string;
+  replaceExisting: boolean;
+};
+
 type CalendarSyncStatus = "SUCCESS" | "PARTIAL" | "ERROR";
 
 type CalendarSyncConfig = {
@@ -289,6 +295,24 @@ function maxIsoDate(left: string, right: string): string {
 
 function minIsoDate(left: string, right: string): string {
   return compareIsoDates(left, right) <= 0 ? left : right;
+}
+
+function getYearStartIso(year: number): string {
+  return `${year}-01-01`;
+}
+
+function getYearEndIso(year: number): string {
+  return `${year}-12-31`;
+}
+
+function parseYearInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d{4}$/.test(trimmed)) {
+    return null;
+  }
+
+  const year = Number.parseInt(trimmed, 10);
+  return year >= 2000 && year <= 2100 ? year : null;
 }
 
 function normalizeIsoRange(startIso: string, endIso: string): { dateFrom: string; dateTo: string } {
@@ -955,6 +979,7 @@ export function PropertyChessboardWorkspace({
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isDuplicatePricesModalOpen, setIsDuplicatePricesModalOpen] = useState(false);
+  const [isCopyYearPricesModalOpen, setIsCopyYearPricesModalOpen] = useState(false);
   const [isCalendarSyncModalOpen, setIsCalendarSyncModalOpen] = useState(false);
   const [isOccupancyActionsOpen, setIsOccupancyActionsOpen] = useState(false);
   const [isRoomOrderMode, setIsRoomOrderMode] = useState(false);
@@ -975,6 +1000,7 @@ export function PropertyChessboardWorkspace({
   const [occupancyActionsError, setOccupancyActionsError] = useState("");
   const [priceModalError, setPriceModalError] = useState("");
   const [duplicatePricesError, setDuplicatePricesError] = useState("");
+  const [copyYearPricesError, setCopyYearPricesError] = useState("");
   const [calendarSyncError, setCalendarSyncError] = useState("");
   const [calendarSyncSuccess, setCalendarSyncSuccess] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -984,9 +1010,13 @@ export function PropertyChessboardWorkspace({
   const [duplicatePricesForm, setDuplicatePricesForm] = useState<DuplicatePricesFormState | null>(
     null,
   );
+  const [copyYearPricesForm, setCopyYearPricesForm] = useState<CopyYearPricesFormState | null>(
+    null,
+  );
   const [dragSelection, setDragSelection] = useState<DragSelectionState | null>(null);
   const [isSavingOccupancyAction, setIsSavingOccupancyAction] = useState(false);
   const [isDuplicatingPrices, setIsDuplicatingPrices] = useState(false);
+  const [isCopyingYearPrices, setIsCopyingYearPrices] = useState(false);
   const [isLoadingCalendarSync, setIsLoadingCalendarSync] = useState(false);
   const [isSavingCalendarSync, setIsSavingCalendarSync] = useState(false);
   const [isRunningCalendarSync, setIsRunningCalendarSync] = useState(false);
@@ -1092,6 +1122,7 @@ export function PropertyChessboardWorkspace({
       isCalendarSyncModalOpen ||
       isPriceModalOpen ||
       isDuplicatePricesModalOpen ||
+      isCopyYearPricesModalOpen ||
       isOccupancyActionsOpen;
 
     document.body.classList.toggle("dashboard-interaction-open", hasOpenInteraction);
@@ -1103,6 +1134,7 @@ export function PropertyChessboardWorkspace({
     avoidDashboardBottomNav,
     isBookingModalOpen,
     isCalendarSyncModalOpen,
+    isCopyYearPricesModalOpen,
     isDuplicatePricesModalOpen,
     isOccupancyActionsOpen,
     isPriceModalOpen,
@@ -1943,6 +1975,28 @@ export function PropertyChessboardWorkspace({
     setIsDuplicatePricesModalOpen(false);
     setDuplicatePricesForm(null);
     setDuplicatePricesError("");
+  }
+
+  function openCopyYearPricesModal() {
+    const visibleYear = parseIsoDate(periodFromIso)?.getUTCFullYear() ?? new Date().getFullYear();
+    setExpandedMobileRailKey(null);
+    setCopyYearPricesForm({
+      sourceYearInput: String(visibleYear),
+      targetYearInput: String(visibleYear + 1),
+      replaceExisting: false,
+    });
+    setCopyYearPricesError("");
+    setIsCopyYearPricesModalOpen(true);
+  }
+
+  function closeCopyYearPricesModal() {
+    setIsCopyYearPricesModalOpen(false);
+    setCopyYearPricesForm(null);
+    setCopyYearPricesError("");
+  }
+
+  function updateCopyYearPricesForm(patch: Partial<CopyYearPricesFormState>) {
+    setCopyYearPricesForm((prev) => (prev ? { ...prev, ...patch } : prev));
   }
 
   function updateDuplicatePricesForm(patch: Partial<DuplicatePricesFormState>) {
@@ -2829,6 +2883,64 @@ export function PropertyChessboardWorkspace({
     }
   }
 
+  async function copyYearPricePeriods() {
+    if (!selectedPropertyId || !copyYearPricesForm) {
+      return;
+    }
+
+    const sourceYear = parseYearInput(copyYearPricesForm.sourceYearInput);
+    const targetYear = parseYearInput(copyYearPricesForm.targetYearInput);
+
+    if (!sourceYear || !targetYear) {
+      setCopyYearPricesError("Укажите годы в формате 2026");
+      return;
+    }
+
+    if (sourceYear === targetYear) {
+      setCopyYearPricesError("Годы должны отличаться");
+      return;
+    }
+
+    setIsCopyingYearPrices(true);
+    setCopyYearPricesError("");
+
+    try {
+      const response = await fetch(`/api/properties/${selectedPropertyId}/prices/copy-year`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceYear,
+          targetYear,
+          replaceExisting: copyYearPricesForm.replaceExisting,
+        }),
+      });
+
+      const body = (await response.json()) as {
+        copiedCount?: number;
+        roomsCount?: number;
+        replacedCount?: number;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setCopyYearPricesError(readResponseError(body, "Не удалось перенести цены"));
+        return;
+      }
+
+      await refreshRooms();
+      applyBoardPeriodRange(getYearStartIso(targetYear), getYearEndIso(targetYear));
+      setMessageSuccess(
+        `Цены перенесены: ${body.copiedCount ?? 0} периодов из ${sourceYear} в ${targetYear}`,
+      );
+      setMessageError("");
+      closeCopyYearPricesModal();
+    } catch {
+      setCopyYearPricesError("Не удалось перенести цены");
+    } finally {
+      setIsCopyingYearPrices(false);
+    }
+  }
+
   const selectedBookingRoom = bookingForm ? (roomLookupById.get(bookingForm.roomId) ?? null) : null;
   const visibleBookingRoomEntries = useMemo(
     () =>
@@ -2869,6 +2981,36 @@ export function PropertyChessboardWorkspace({
         dateTo: minIsoDate(price.dateTo, duplicatePricesForm.dateTo),
       }));
   }, [duplicatePricesForm, roomLookupById]);
+  const copyYearSourceYear = copyYearPricesForm
+    ? parseYearInput(copyYearPricesForm.sourceYearInput)
+    : null;
+  const copyYearPricePeriodsPreview = useMemo(() => {
+    if (!copyYearSourceYear) {
+      return [];
+    }
+
+    const yearStart = getYearStartIso(copyYearSourceYear);
+    const yearEnd = getYearEndIso(copyYearSourceYear);
+
+    return rooms.flatMap((room) =>
+      room.prices
+        .filter(
+          (price) =>
+            compareIsoDates(price.dateFrom, yearEnd) <= 0 &&
+            compareIsoDates(price.dateTo, yearStart) >= 0,
+        )
+        .map((price) => ({
+          ...price,
+          roomTitle: room.title,
+          dateFrom: maxIsoDate(price.dateFrom, yearStart),
+          dateTo: minIsoDate(price.dateTo, yearEnd),
+        })),
+    );
+  }, [copyYearSourceYear, rooms]);
+  const copyYearRoomsCount = useMemo(
+    () => new Set(copyYearPricePeriodsPreview.map((price) => price.roomId)).size,
+    [copyYearPricePeriodsPreview],
+  );
   const bookingStatusLabel = bookingForm?.status === "CHECKED_IN" ? "Заселен" : "Подтверждено";
   const bookingCreatedAtLabel = bookingForm?.createdAt
     ? new Date(bookingForm.createdAt).toLocaleString("ru-RU")
@@ -3026,15 +3168,6 @@ export function PropertyChessboardWorkspace({
                   >
                     + Бронь
                   </Button>
-                  <button
-                    type="button"
-                    className={cn(compactToolbarButtonClass, "shrink-0 gap-1.5")}
-                    onClick={() => openCalendarSyncModal()}
-                    disabled={!canManageCalendar}
-                  >
-                    <AppIcon icon={CalendarDays} className="h-3.5 w-3.5" />
-                    Синхронизация
-                  </button>
                 </>
               ) : (
                 <>
@@ -3045,31 +3178,8 @@ export function PropertyChessboardWorkspace({
                   >
                     + Цена
                   </Button>
-                  <button
-                    type="button"
-                    className={cn(compactToolbarButtonClass, "shrink-0")}
-                    onClick={openDuplicatePricesModal}
-                    disabled={!canManageCalendar || rooms.length < 2}
-                  >
-                    Дублировать цены
-                  </button>
                 </>
               )}
-              <button
-                type="button"
-                className={cn(
-                  compactToolbarButtonClass,
-                  "shrink-0",
-                  isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
-                )}
-                onClick={() => {
-                  setIsRoomOrderMode((prev) => !prev);
-                  setDragSelection(null);
-                }}
-                disabled={!canManageCalendar || rooms.length < 2}
-              >
-                {isRoomOrderMode ? "Готово" : "Порядок номеров"}
-              </button>
               <button
                 type="button"
                 className={cn(compactToolbarButtonClass, "shrink-0")}
@@ -3142,6 +3252,69 @@ export function PropertyChessboardWorkspace({
                   </button>
                 </div>
               ) : null}
+              {boardMode === "occupancy" ? (
+                <>
+                  <button
+                    type="button"
+                    className={cn(
+                      compactToolbarButtonClass,
+                      "shrink-0",
+                      isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
+                    )}
+                    onClick={() => {
+                      setIsRoomOrderMode((prev) => !prev);
+                      setDragSelection(null);
+                    }}
+                    disabled={!canManageCalendar || rooms.length < 2}
+                  >
+                    {isRoomOrderMode ? "Готово" : "Порядок номеров"}
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0 gap-1.5")}
+                    onClick={() => openCalendarSyncModal()}
+                    disabled={!canManageCalendar}
+                  >
+                    <AppIcon icon={CalendarDays} className="h-3.5 w-3.5" />
+                    Синхронизация
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0 gap-1.5")}
+                    onClick={openCopyYearPricesModal}
+                    disabled={!canManageCalendar}
+                  >
+                    <AppIcon icon={Copy} className="h-3.5 w-3.5" />
+                    Перенести год
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      compactToolbarButtonClass,
+                      "shrink-0",
+                      isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
+                    )}
+                    onClick={() => {
+                      setIsRoomOrderMode((prev) => !prev);
+                      setDragSelection(null);
+                    }}
+                    disabled={!canManageCalendar || rooms.length < 2}
+                  >
+                    {isRoomOrderMode ? "Готово" : "Порядок номеров"}
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0")}
+                    onClick={openDuplicatePricesModal}
+                    disabled={!canManageCalendar || rooms.length < 2}
+                  >
+                    Дублировать цены
+                  </button>
+                </>
+              )}
               <span
                 className={cn(
                   "hidden shrink-0 items-center rounded-full px-2 py-1 text-[10px] font-semibold sm:inline-flex",
@@ -4747,6 +4920,149 @@ export function PropertyChessboardWorkspace({
         </div>
       ) : null}
 
+      {isCopyYearPricesModalOpen && copyYearPricesForm ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-midnight/45 backdrop-blur-[6px] p-1.5 pt-2 sm:items-center sm:p-4 [@media(orientation:landscape)_and_(max-height:560px)]:p-0.5">
+          <div className="popover-enter glass-booking flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-[28px] sm:max-h-[88vh] sm:max-w-xl [@media(orientation:landscape)_and_(max-height:560px)]:max-h-[92dvh] [@media(orientation:landscape)_and_(max-height:560px)]:max-w-[84vw] [@media(orientation:landscape)_and_(max-height:560px)]:rounded-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-olive/10 bg-white/80 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <div>
+                <h2 className="text-base font-semibold text-olive sm:text-xl [@media(orientation:landscape)_and_(max-height:560px)]:text-base">
+                  Перенести цены на другой год
+                </h2>
+                <p className="mt-0.5 text-xs text-olive/60">
+                  Скопируйте все периоды цен по активным номерам с января по декабрь.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-olive/10 bg-white/85 text-olive/70 transition hover:scale-[1.03] hover:bg-cream hover:text-olive [@media(orientation:landscape)_and_(max-height:560px)]:h-8 [@media(orientation:landscape)_and_(max-height:560px)]:w-8"
+                onClick={closeCopyYearPricesModal}
+                aria-label="Закрыть"
+              >
+                <AppIcon icon={X} className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-2 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <section className={modalSectionClass}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-semibold text-olive">Из какого года</span>
+                    <Input
+                      type="number"
+                      min={2000}
+                      max={2100}
+                      value={copyYearPricesForm.sourceYearInput}
+                      onChange={(event) =>
+                        updateCopyYearPricesForm({ sourceYearInput: event.target.value })
+                      }
+                      className={modalTextInputClass}
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-semibold text-olive">На какой год</span>
+                    <Input
+                      type="number"
+                      min={2000}
+                      max={2100}
+                      value={copyYearPricesForm.targetYearInput}
+                      onChange={(event) =>
+                        updateCopyYearPricesForm({ targetYearInput: event.target.value })
+                      }
+                      className={modalTextInputClass}
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 flex items-start gap-3 rounded-2xl border border-olive/12 bg-white/86 p-3">
+                  <input
+                    type="checkbox"
+                    checked={copyYearPricesForm.replaceExisting}
+                    onChange={(event) =>
+                      updateCopyYearPricesForm({ replaceExisting: event.target.checked })
+                    }
+                    className="mt-1 h-4 w-4 rounded border-olive/25 text-primary"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-olive">
+                      Заменить цены в целевом году
+                    </span>
+                    <span className="mt-0.5 block text-xs text-olive/60">
+                      Если в выбранном году уже есть цены, они будут удалены и записаны заново.
+                    </span>
+                  </span>
+                </label>
+              </section>
+
+              <section className={modalSectionClass}>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-olive/12 bg-white/86 p-3">
+                    <p className={modalMetaLabelClass}>Периодов к переносу</p>
+                    <p className="mt-1 text-sm font-semibold text-olive">
+                      {copyYearPricePeriodsPreview.length}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-olive/12 bg-white/86 p-3">
+                    <p className={modalMetaLabelClass}>Номеров с ценами</p>
+                    <p className="mt-1 text-sm font-semibold text-olive">{copyYearRoomsCount}</p>
+                  </div>
+                </div>
+
+                {copyYearPricePeriodsPreview.length > 0 ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {copyYearPricePeriodsPreview.slice(0, 6).map((price) => (
+                      <div
+                        key={`${price.id}-${price.roomId}-${price.dateFrom}-${price.dateTo}`}
+                        className="rounded-2xl border border-olive/10 bg-white/86 p-3"
+                      >
+                        <p className="truncate text-sm font-semibold text-olive">
+                          {price.roomTitle}
+                        </p>
+                        <p className="mt-1 text-xs text-olive/62">
+                          {formatPriceLabel(price)} ·{" "}
+                          {formatDateRangeLabel(price.dateFrom, price.dateTo)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-2xl border border-olive/10 bg-white/72 px-3 py-2 text-sm text-olive/65">
+                    В выбранном исходном году цены пока не найдены.
+                  </p>
+                )}
+                {copyYearPricePeriodsPreview.length > 6 ? (
+                  <p className="mt-2 text-xs text-olive/60">
+                    И еще {copyYearPricePeriodsPreview.length - 6} периодов.
+                  </p>
+                ) : null}
+              </section>
+
+              {copyYearPricesError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {copyYearPricesError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="glass-mobile-bar sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-olive/10 bg-white/80 px-3 py-3 sm:px-4 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
+              <Button
+                variant="ghost"
+                className="px-3 py-2 text-xs sm:text-sm"
+                onClick={closeCopyYearPricesModal}
+              >
+                Закрыть
+              </Button>
+              <Button
+                className="px-3 py-2 text-xs sm:text-sm"
+                onClick={() => void copyYearPricePeriods()}
+                disabled={isCopyingYearPrices || copyYearPricePeriodsPreview.length === 0}
+              >
+                {isCopyingYearPrices ? "Перенос..." : "Перенести цены"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Floating action button for mobile quick add */}
       {showFloatingQuickAdd &&
       canManageCalendar &&
@@ -4755,6 +5071,7 @@ export function PropertyChessboardWorkspace({
       !isCalendarSyncModalOpen &&
       !isPriceModalOpen &&
       !isDuplicatePricesModalOpen &&
+      !isCopyYearPricesModalOpen &&
       !isOccupancyActionsOpen ? (
         <button
           type="button"

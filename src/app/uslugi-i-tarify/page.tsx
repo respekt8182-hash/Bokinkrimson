@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Услуги и тарифы",
     description:
-      "Сезонное, межсезонное и годовое размещение объекта на Крым Вокруг без оплаты за количество номеров.",
+      "Сезонное и годовое размещение объекта на Крым Вокруг без оплаты за количество номеров.",
     url: "/uslugi-i-tarify",
     images: [defaultSocialImageMetadata],
   },
