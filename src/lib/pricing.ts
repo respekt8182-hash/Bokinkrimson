@@ -235,12 +235,23 @@ export function calculateRoomStayPrice(input: {
       requiredMinNights = matched.minNights;
     }
     const extraGuests =
-      priceType === "PER_ROOM" && includedGuests !== null
-        ? Math.max(0, guests - includedGuests)
-        : 0;
-    const extraTotal = extraGuests * (matched.extraBedPrice ?? 0);
+      includedGuests !== null ? Math.max(0, guests - includedGuests) : 0;
+    const hasPerPersonExtraBedPrice =
+      priceType === "PER_PERSON" && extraGuests > 0 && matched.extraBedPrice !== null;
+    const displayedExtraGuests =
+      priceType === "PER_ROOM" || hasPerPersonExtraBedPrice ? extraGuests : 0;
+    const extraTotal =
+      priceType === "PER_ROOM"
+        ? extraGuests * (matched.extraBedPrice ?? 0)
+        : hasPerPersonExtraBedPrice
+          ? extraGuests * (matched.extraBedPrice ?? 0)
+          : 0;
     const totalPrice =
-      priceType === "PER_PERSON" ? matched.price * guests : matched.price + extraTotal;
+      priceType === "PER_PERSON"
+        ? hasPerPersonExtraBedPrice
+          ? matched.price * Math.max(0, guests - extraGuests) + extraTotal
+          : matched.price * guests
+        : matched.price + extraTotal;
     unitTotal += priceType === "PER_PERSON" ? matched.price : totalPrice;
     total += totalPrice;
     currency = matched.currency;
@@ -250,7 +261,7 @@ export function calculateRoomStayPrice(input: {
       price: matched.price,
       priceType,
       extraBedPrice: matched.extraBedPrice,
-      extraGuests,
+      extraGuests: displayedExtraGuests,
       extraTotal,
       totalPrice,
     });

@@ -1,1 +1,1 @@
-ALTER TABLE "RoomPrice" ADD COLUMN "extraBedPrice" DECIMAL(10, 2);
+ALTER TABLE "RoomPrice" ADD COLUMN IF NOT EXISTS "extraBedPrice" DECIMAL(10, 2);

@@ -51,7 +51,7 @@ function PopularPropertyCard({
       : 0;
   const currentImage = visibleImages[safeImageIndex] ?? null;
   const readyImages = useCarouselImagePreload(visibleImages, safeImageIndex, {
-    enabled: visibleImages.length > 1,
+    enabled: prioritizeImage && visibleImages.length > 1,
     preloadCount: 2,
     referenceOptimizedSrc,
   });
@@ -116,6 +116,7 @@ function PopularPropertyCard({
       {/* ── Image carousel ─────────────────────────────────────── */}
       <Link
         href={item.path}
+        prefetch={false}
         className="relative aspect-[4/3] w-full overflow-hidden bg-sand"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -206,7 +207,7 @@ function PopularPropertyCard({
       </div>
 
       {/* ── Card body ──────────────────────────────────────────── */}
-      <Link href={item.path} className="flex flex-1 flex-col p-3 sm:p-4">
+      <Link href={item.path} prefetch={false} className="flex flex-1 flex-col p-3 sm:p-4">
         <h3 className="line-clamp-1 text-sm font-semibold leading-snug text-olive sm:text-base">
           {item.name}
         </h3>
@@ -248,8 +249,8 @@ export function PopularPropertiesSection({ items }: PopularPropertiesSectionProp
       </h2>
 
       <div className="mt-5 grid grid-cols-1 gap-3 xs:grid-cols-2 sm:mt-6 sm:gap-4 lg:grid-cols-4 lg:gap-5">
-        {items.map((item, index) => (
-          <PopularPropertyCard key={item.id} item={item} prioritizeImage={index < 4} />
+        {items.map((item) => (
+          <PopularPropertyCard key={item.id} item={item} prioritizeImage={false} />
         ))}
       </div>
     </section>

@@ -8,7 +8,7 @@ import { getHomeStats } from "@/lib/home-stats";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 600;
 
 export const metadata: Metadata = {
   title: {

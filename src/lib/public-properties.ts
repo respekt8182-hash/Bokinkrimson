@@ -97,6 +97,7 @@ export type PublicCatalogQuery = {
   pageSize?: number;
   trackSearchImpressions?: boolean;
   allowLargePageSize?: boolean;
+  candidateLimit?: number;
 };
 
 export type PublicCatalogRoomPreview = {
@@ -201,6 +202,30 @@ export type PublicCatalogResult = {
     nearbyRadiusKm: number | null;
   };
 };
+
+const CATALOG_CANDIDATE_LIMIT = 5000;
+const CATALOG_CARD_IMAGE_LIMIT = 4;
+const CATALOG_MIN_PRICE_PERIOD_LIMIT = 12;
+const CATALOG_SELECTED_STAY_PRICE_PERIOD_LIMIT = 120;
+
+const catalogRoomPriceSelect = Prisma.validator<Prisma.RoomPriceSelect>()({
+  dateFrom: true,
+  dateTo: true,
+  price: true,
+  priceType: true,
+  minGuests: true,
+  minNights: true,
+  extraBedPrice: true,
+  currency: true,
+});
+const catalogSelectedStayPriceOrderBy: Prisma.RoomPriceOrderByWithRelationInput[] = [
+  { dateFrom: "asc" },
+  { price: "asc" },
+];
+const catalogMinPriceOrderBy: Prisma.RoomPriceOrderByWithRelationInput[] = [
+  { price: "asc" },
+  { dateFrom: "asc" },
+];
 
 export type PublicPropertyCard = {
   id: string;
@@ -967,6 +992,32 @@ function resolveCatalogStayRange(checkIn?: string, checkOut?: string): CatalogSt
   };
 }
 
+function buildCatalogRoomPriceArgs(stayRange: CatalogStayRange) {
+  if (stayRange.mode === "selected") {
+    const checkInDate = parseIsoDate(stayRange.checkIn);
+    const checkOutDate = parseIsoDate(stayRange.checkOut);
+    const lastStayNight = checkOutDate ? addDays(checkOutDate, -1) : null;
+
+    if (checkInDate && lastStayNight) {
+      return {
+        where: {
+          dateFrom: { lte: lastStayNight },
+          dateTo: { gte: checkInDate },
+        },
+        orderBy: catalogSelectedStayPriceOrderBy,
+        take: CATALOG_SELECTED_STAY_PRICE_PERIOD_LIMIT,
+        select: catalogRoomPriceSelect,
+      };
+    }
+  }
+
+  return {
+    orderBy: catalogMinPriceOrderBy,
+    take: CATALOG_MIN_PRICE_PERIOD_LIMIT,
+    select: catalogRoomPriceSelect,
+  };
+}
+
 function getMaxRequiredMinGuestsForStay(
   prices: CatalogRoomPricePoint[],
   checkIn: string,
@@ -1507,8 +1558,13 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const page = Math.max(1, query.page ?? 1);
   const pageSizeCap = query.allowLargePageSize ? 5000 : 30;
   const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
+  const candidateLimit = Math.min(
+    CATALOG_CANDIDATE_LIMIT,
+    Math.max(pageSize, query.candidateLimit ?? CATALOG_CANDIDATE_LIMIT),
+  );
   const searchQuery = query.query?.trim() ?? "";
   const stayRange = resolveCatalogStayRange(query.checkIn, query.checkOut);
+  const catalogRoomPriceArgs = buildCatalogRoomPriceArgs(stayRange);
   const guestsCount =
     typeof query.guests === "number" && Number.isFinite(query.guests) && query.guests > 0
       ? Math.floor(query.guests)
@@ -1576,9 +1632,46 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         ...buildPublicCatalogPropertyVisibilityWhere(),
         ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
         ...(hasReviews ? { reviewsCount: { gt: 0 } } : {}),
+        ...(bounds
+          ? {
+              latitude: { gte: bounds.south, lte: bounds.north },
+              longitude: { gte: bounds.west, lte: bounds.east },
+            }
+          : {}),
       };
 
-      const catalogInclude = Prisma.validator<Prisma.PropertyInclude>()({
+      const catalogSelect = Prisma.validator<Prisma.PropertySelect>()({
+        id: true,
+        ownerId: true,
+        status: true,
+        pendingEditStatus: true,
+        publishedSnapshot: true,
+        name: true,
+        type: true,
+        locationId: true,
+        locationName: true,
+        address: true,
+        seaDistance: true,
+        latitude: true,
+        longitude: true,
+        description: true,
+        checkInFrom: true,
+        childrenAllowed: true,
+        petsPolicy: true,
+        starRating: true,
+        phone: true,
+        phone2: true,
+        phone3: true,
+        whatsappUrl: true,
+        telegramUrl: true,
+        contactEmail: true,
+        receiveRequests: true,
+        avgRating: true,
+        reviewsCount: true,
+        searchImpressions: true,
+        createdAt: true,
+        updatedAt: true,
+        moderatedAt: true,
         owner: {
           select: {
             id: true,
@@ -1587,9 +1680,13 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           },
         },
         media: {
-          where: { roomId: null },
+          where: { roomId: null, type: MediaType.IMAGE },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-          take: 8,
+          take: CATALOG_CARD_IMAGE_LIMIT,
+          select: {
+            url: true,
+            type: true,
+          },
         },
         rooms: {
           where: { isActive: true },
@@ -1601,32 +1698,21 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             extraBeds: true,
             roomsCount: true,
             areaSqm: true,
-            prices: {
-              select: {
-                dateFrom: true,
-                dateTo: true,
-                price: true,
-                priceType: true,
-                minGuests: true,
-                minNights: true,
-                extraBedPrice: true,
-                currency: true,
-              },
-            },
+            prices: catalogRoomPriceArgs,
           },
         },
       });
 
       type CatalogPropertyRow = Prisma.PropertyGetPayload<{
-        include: typeof catalogInclude;
+        select: typeof catalogSelect;
       }>;
       // Step 1: fetch broad candidate pool with lightweight joins.
       // Fine-grained ranking/sorting is applied in memory because it mixes trigram score + dynamic stay pricing.
       const allProperties: CatalogPropertyRow[] = await db.property.findMany({
         where,
         orderBy: [{ updatedAt: "desc" }],
-        include: catalogInclude,
-        take: 5000,
+        select: catalogSelect,
+        take: candidateLimit,
       });
       const rankingStatsById = await getRankingStatsByEntity(
         "property",

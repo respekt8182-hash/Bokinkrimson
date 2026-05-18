@@ -208,6 +208,7 @@ export function HousingCatalogClient({
   const pendingMapBoundsFilterRef = useRef<string | null>(null);
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
+  const filterAbortControllerRef = useRef<AbortController | null>(null);
 
   const {
     items,
@@ -243,6 +244,7 @@ export function HousingCatalogClient({
         window.clearTimeout(mapBoundsRefreshTimerRef.current);
       }
       mapBoundsAbortControllerRef.current?.abort();
+      filterAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -270,6 +272,7 @@ export function HousingCatalogClient({
         mapBoundsRefreshTimerRef.current = null;
       }
       mapBoundsAbortControllerRef.current?.abort();
+      filterAbortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       setIsRefreshing(true);
 
@@ -354,18 +357,21 @@ export function HousingCatalogClient({
         mapBoundsRefreshTimerRef.current = null;
       }
       mapBoundsAbortControllerRef.current?.abort();
+      filterAbortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       const requestId = requestSeqRef.current;
+      const controller = new AbortController();
+      filterAbortControllerRef.current = controller;
 
       try {
         const nextResponse = await fetchAccommodationSearch(
           normalizedFilters,
           1,
           PAGE_SIZE,
-          undefined,
+          controller.signal,
           null,
         );
-        if (requestId !== requestSeqRef.current) {
+        if (requestId !== requestSeqRef.current || controller.signal.aborted) {
           return;
         }
 
@@ -387,11 +393,19 @@ export function HousingCatalogClient({
           pushToast("info", options.announceMessage);
         }
       } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+
         if (requestId === requestSeqRef.current) {
           setFilters(prevFilters);
           pushToast("error", "Ошибка загрузки каталога");
         }
       } finally {
+        if (filterAbortControllerRef.current === controller) {
+          filterAbortControllerRef.current = null;
+        }
+
         if (requestId === requestSeqRef.current) {
           setIsRefreshing(false);
         }

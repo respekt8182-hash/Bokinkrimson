@@ -25,10 +25,6 @@ import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 const SWIPE_THRESHOLD = 50;
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
-function isLocalUploadUrl(value: string | null): boolean {
-  return Boolean(value?.startsWith("/uploads/"));
-}
-
 type PublicPropertySearchCardProps = {
   item: PublicCatalogItem;
   initialIsFavorite: boolean;
@@ -172,8 +168,9 @@ function buildSelectedStaySecondary(item: NonNullable<PublicCatalogItem["stayPri
 
   if (item.extraBedNightly > 0 && item.extraGuests > 0) {
     const extraLabel = item.extraGuests > 1 ? "доп. места" : "доп. место";
+    const baseLabel = item.priceType === "PER_ROOM" ? "номер" : "основные места";
     parts.push(
-      `номер ${formatMoney(item.baseNightly, item.currency)} + ${extraLabel} ${formatMoney(
+      `${baseLabel} ${formatMoney(item.baseNightly, item.currency)} + ${extraLabel} ${formatMoney(
         item.extraBedNightly,
         item.currency,
       )}/сутки`,
@@ -320,7 +317,7 @@ function PublicPropertySearchCardInner({
   const imageCandidates = useMemo(() => {
     const source =
       item.imageUrls.length > 0 ? item.imageUrls : item.coverImageUrl ? [item.coverImageUrl] : [];
-    return Array.from(new Set(source.map((v) => v.trim()).filter((v) => v.length > 0))).slice(0, 8);
+    return Array.from(new Set(source.map((v) => v.trim()).filter((v) => v.length > 0))).slice(0, 4);
   }, [item.coverImageUrl, item.imageUrls]);
 
   const images = useMemo(
@@ -332,14 +329,14 @@ function PublicPropertySearchCardInner({
     images.length > 0 ? ((imageIndex % images.length) + images.length) % images.length : 0;
   const currentImage = images.length > 0 ? images[safeImageIndex] : null;
   const readyImages = useCarouselImagePreload(images, safeImageIndex, {
-    enabled: images.length > 1,
+    enabled: false,
     preloadCount: 2,
     referenceOptimizedSrc,
   });
   const isImageLoaded =
     currentImage !== null && (loadedImageUrl === currentImage || readyImages.has(currentImage));
   const shouldShowImageSkeleton = !isImageLoaded && loadedImageUrl === null;
-  const shouldBypassImageOptimizer = isLocalUploadUrl(currentImage);
+  const shouldBypassImageOptimizer = false;
 
   const priceSummary = useMemo(() => buildPriceSummary(item), [item]);
   const badges = useMemo(() => resolveStatusBadges(item), [item]);
@@ -451,15 +448,10 @@ function PublicPropertySearchCardInner({
             priority={prioritizeImage}
             loading={prioritizeImage ? "eager" : "lazy"}
             fetchPriority={prioritizeImage ? "high" : "low"}
-            width={400}
-            height={300}
+            width={320}
+            height={240}
             quality={72}
             unoptimized={shouldBypassImageOptimizer}
-            sizes={
-              isGrid
-                ? "(min-width: 1536px) 18vw, (min-width: 1280px) 22vw, (min-width: 1024px) 28vw, (min-width: 480px) 50vw, 100vw"
-                : "(min-width: 1280px) 280px, (min-width: 768px) 240px, 100vw"
-            }
             onLoad={(event) => {
               setLoadedImageUrl(currentImage);
               setReferenceOptimizedSrc(event.currentTarget.currentSrc || event.currentTarget.src);
@@ -646,6 +638,7 @@ function PublicPropertySearchCardInner({
       >
         <Link
           href={detailsHref}
+          prefetch={false}
           aria-labelledby={titleId}
           aria-label={`Открыть карточку ${item.name}`}
           onTouchStart={handleOverlayTouchStart}
@@ -719,6 +712,7 @@ function PublicPropertySearchCardInner({
               </div>
               <Link
                 href={detailsHref}
+                prefetch={false}
                 className="pointer-events-auto inline-flex h-9 shrink-0 items-center gap-1 rounded-xl bg-primary px-4 text-[12px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Выбрать
@@ -746,6 +740,7 @@ function PublicPropertySearchCardInner({
     >
       <Link
         href={detailsHref}
+        prefetch={false}
         aria-labelledby={titleId}
         aria-label={`Открыть карточку ${item.name}`}
         onTouchStart={handleOverlayTouchStart}
@@ -817,6 +812,7 @@ function PublicPropertySearchCardInner({
               </div>
               <Link
                 href={detailsHref}
+                prefetch={false}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -861,6 +857,7 @@ function PublicPropertySearchCardInner({
               )}
               <Link
                 href={detailsHref}
+                prefetch={false}
                 className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Подробнее

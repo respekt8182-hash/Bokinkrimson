@@ -4038,7 +4038,7 @@ export function HomeSearchShowcase({
 
         <div className="mt-6 -mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:snap-none md:overflow-visible md:px-0 md:pb-0">
           <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {cities.map((city, cityIndex) => {
+            {cities.map((city) => {
               const price =
                 direction === "housing" ? city.housingPriceFrom : city.excursionPriceFrom;
               const href = buildCityHref({
@@ -4051,6 +4051,7 @@ export function HomeSearchShowcase({
                 <Link
                   key={city.key}
                   href={href}
+                  prefetch={false}
                   className="group relative block w-[240px] shrink-0 snap-start overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
                 >
                   <div className="relative aspect-[3/4] w-full bg-cream">
@@ -4059,7 +4060,8 @@ export function HomeSearchShowcase({
                       alt={city.title}
                       fill
                       sizes="(max-width: 767px) 220px, (max-width: 1023px) 48vw, (max-width: 1279px) 32vw, 25vw"
-                      priority={cityIndex < 4}
+                      loading="lazy"
+                      fetchPriority="low"
                       className="object-cover object-center transition duration-500 group-hover:scale-[1.06]"
                     />
                     {/* gradient overlay */}

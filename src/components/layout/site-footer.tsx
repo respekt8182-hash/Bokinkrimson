@@ -67,6 +67,7 @@ export function SiteFooter() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className="group/link -mx-2 flex min-h-8 items-center gap-2 rounded-xl px-3 py-1 text-sm text-olive/65 transition-all duration-200 hover:bg-primary/[0.04] hover:text-olive"
                 >
                   <span className="h-1 w-1 rounded-full bg-primary/30 transition-all duration-200 group-hover/link:h-1.5 group-hover/link:w-1.5 group-hover/link:bg-primary/60" />
@@ -90,6 +91,7 @@ export function SiteFooter() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className="group/link -mx-2 flex min-h-8 items-center gap-2 rounded-xl px-3 py-1 text-sm text-olive/65 transition-all duration-200 hover:bg-terra/[0.04] hover:text-olive"
                 >
                   <span className="h-1 w-1 shrink-0 rounded-full bg-terra/30 transition-all duration-200 group-hover/link:h-1.5 group-hover/link:w-1.5 group-hover/link:bg-terra/60" />

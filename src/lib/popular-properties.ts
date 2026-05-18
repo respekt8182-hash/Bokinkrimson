@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { normalizeLegacyFotoImageUrl } from "@/lib/media";
 import {
@@ -139,6 +140,12 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
   });
 }
 
+const getCachedPopularProperties = unstable_cache(
+  fetchPopularProperties,
+  ["popular-properties-v2"],
+  { revalidate: 600 },
+);
+
 export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
   const canUseFallback = process.env.NODE_ENV !== "production";
 
@@ -151,7 +158,7 @@ export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
   }
 
   try {
-    return await fetchPopularProperties();
+    return await getCachedPopularProperties();
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;

@@ -191,6 +191,7 @@ export function SiteHeaderMobileDrawer({
       <Link
         key={link.href}
         href={link.href}
+        prefetch={false}
         onClick={closeDrawer}
         className={cn(
           "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition",

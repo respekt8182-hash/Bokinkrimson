@@ -191,4 +191,36 @@ describe("pricing helpers", () => {
       });
     }
   });
+
+  it("uses the extra bed price for per-person stays above the included guests", () => {
+    const result = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+          price: 1000,
+          priceType: "PER_PERSON",
+          extraBedPrice: 600,
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-09-10",
+      checkOut: "2026-09-12",
+      guests: 3,
+      includedGuests: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.nights).toBe(2);
+      expect(result.total).toBe(5200);
+      expect(result.unitTotal).toBe(2000);
+      expect(result.breakdown[0]).toMatchObject({
+        extraGuests: 1,
+        extraBedPrice: 600,
+        extraTotal: 600,
+        totalPrice: 2600,
+      });
+    }
+  });
 });

@@ -12,8 +12,9 @@ import {
   pickFirstListValue,
 } from "@/lib/search-contracts";
 
-const maxCollectedItems = 5000;
+const maxCollectedItems = 800;
 const mapCollectionPageSize = 24;
+const mapCandidateLimit = 1500;
 
 function parseSort(raw: string | null): PublicCatalogQuery["sort"] | undefined {
   const value = (raw ?? "").trim();
@@ -47,6 +48,7 @@ async function collectCatalogItems(query: PublicCatalogQuery) {
     page: 1,
     pageSize: maxCollectedItems,
     allowLargePageSize: true,
+    candidateLimit: mapCandidateLimit,
     trackSearchImpressions: false,
   });
 
@@ -99,6 +101,7 @@ export async function GET(request: Request) {
     familyFriendly:
       parseFlag(searchParams.get("familyFriendly")) || parseFlag(searchParams.get("kidsFriendly")),
     petsAllowed: parseFlag(searchParams.get("petsAllowed")),
+    bounds,
   };
 
   const collected = await collectCatalogItems(query);
@@ -140,13 +143,22 @@ export async function GET(request: Request) {
       };
     });
 
-  return NextResponse.json({
-    total: points.length,
-    map_points: points,
-    meta: {
-      totalAvailable: collected.totalAvailable,
-      truncated: collected.truncated,
-      collectedPages: Math.ceil(collected.items.length / mapCollectionPageSize),
+  return NextResponse.json(
+    {
+      total: points.length,
+      map_points: points,
+      meta: {
+        totalAvailable: collected.totalAvailable,
+        truncated: collected.truncated,
+        collectedPages: Math.ceil(collected.items.length / mapCollectionPageSize),
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": session
+          ? "private, no-store"
+          : "public, s-maxage=45, stale-while-revalidate=180",
+      },
+    },
+  );
 }

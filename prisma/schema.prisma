@@ -408,6 +408,11 @@ model Property {
   @@index([tariffType, paidUntil])
   @@index([pendingEditStatus, updatedAt])
   @@index([ownerDeletedAt, ownerDeletionExpiresAt])
+  @@index([locationId, status, isPublishedVisible, updatedAt], map: "property_catalog_location_visible_updated_idx")
+  @@index([type, status, isPublishedVisible, updatedAt], map: "property_catalog_type_visible_updated_idx")
+  @@index([avgRating, status, isPublishedVisible], map: "property_catalog_rating_visible_idx")
+  @@index([createdAt], map: "property_catalog_created_idx")
+  @@index([latitude, longitude], map: "property_catalog_geo_idx")
 }
 
 model FavoriteProperty {
@@ -818,40 +823,40 @@ model Transfer {
 }
 
 model Review {
-  id                 String           @id @default(cuid())
-  entityType         ReviewEntityType @default(PROPERTY)
-  propertyId         String?
-  excursionId        String?
-  transferId         String?
-  userId             String?
-  rating             Decimal          @db.Decimal(2, 1)
-  text               String
-  likesCount         Int              @default(0)
-  dislikesCount      Int              @default(0)
-  status             ReviewStatus     @default(PENDING)
-  ownerReply         String?
-  ownerRepliedAt     DateTime?
-  isImported         Boolean          @default(false)
-  importedAuthorName String?
-  externalSourceUrl  String?
-  externalSourceName String?
-  importedByOwnerId  String?
-  verifiedAt         DateTime?
-  verifiedByAdminId  String?
-  guestCity          String?
-  reviewedAt         DateTime?        @db.Date
-  reviewCategory     String?          @db.VarChar(40)
-  reviewHighlight    String?          @db.VarChar(160)
+  id                    String           @id @default(cuid())
+  entityType            ReviewEntityType @default(PROPERTY)
+  propertyId            String?
+  excursionId           String?
+  transferId            String?
+  userId                String?
+  rating                Decimal          @db.Decimal(2, 1)
+  text                  String
+  likesCount            Int              @default(0)
+  dislikesCount         Int              @default(0)
+  status                ReviewStatus     @default(PENDING)
+  ownerReply            String?
+  ownerRepliedAt        DateTime?
+  isImported            Boolean          @default(false)
+  importedAuthorName    String?
+  externalSourceUrl     String?
+  externalSourceName    String?
+  importedByOwnerId     String?
+  verifiedAt            DateTime?
+  verifiedByAdminId     String?
+  guestCity             String?
+  reviewedAt            DateTime?        @db.Date
+  reviewCategory        String?          @db.VarChar(40)
+  reviewHighlight       String?          @db.VarChar(160)
   reviewCategoryMatches Json?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  deletedAt          DateTime?
-  property           Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  excursion          Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  transfer           Transfer?        @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  user               User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reactions          ReviewReaction[]
-  reports            ReviewReport[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+  property              Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  excursion             Excursion?       @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  transfer              Transfer?        @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  user                  User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions             ReviewReaction[]
+  reports               ReviewReport[]
 
   @@unique([userId, propertyId])
   @@unique([userId, excursionId])
@@ -1061,22 +1066,24 @@ model Payment {
 }
 
 model RoomPrice {
-  id        String        @id @default(cuid())
-  roomId    String
-  dateFrom  DateTime      @db.Date
-  dateTo    DateTime      @db.Date
-  price     Decimal       @db.Decimal(10, 2)
-  priceType RoomPriceType @default(PER_ROOM)
-  minGuests Int?
-  minNights Int?
-  extraBedPrice Decimal?  @db.Decimal(10, 2)
-  currency  String        @default("RUB") @db.VarChar(3)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  id            String        @id @default(cuid())
+  roomId        String
+  dateFrom      DateTime      @db.Date
+  dateTo        DateTime      @db.Date
+  price         Decimal       @db.Decimal(10, 2)
+  priceType     RoomPriceType @default(PER_ROOM)
+  minGuests     Int?
+  minNights     Int?
+  extraBedPrice Decimal?      @db.Decimal(10, 2)
+  currency      String        @default("RUB") @db.VarChar(3)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  room          Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, dateFrom, dateTo])
   @@index([roomId, createdAt])
+  @@index([price], map: "room_price_price_idx")
+  @@index([dateFrom, dateTo], map: "room_price_date_range_idx")
 }
 
 model RoomOccupancy {
@@ -1386,6 +1393,7 @@ model Media {
   @@index([propertyId, sortOrder])
   @@index([roomId, sortOrder])
   @@index([type, createdAt])
+  @@index([propertyId, type, roomId, sortOrder], map: "media_property_type_room_sort_idx")
 }
 
 // ─── Support Chat ───────────────────────────────────────────────

@@ -110,6 +110,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
     <div ref={containerRef} className="flex items-center gap-1.5">
       <Link
         href="/favorites"
+        prefetch={false}
         aria-label="Избранное"
         title="Избранное"
         className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px]"
@@ -119,6 +120,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
 
       <Link
         href={dashboardHref}
+        prefetch={false}
         aria-label="Мои объекты"
         title="Мои объекты"
         className="icon-button-soft hidden h-11 w-11 items-center justify-center rounded-[15px] sm:inline-flex"
@@ -176,6 +178,7 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={closeMenu}
                   className="flex rounded-lg px-3 py-2 text-sm text-olive/88 transition hover:bg-cream"
                 >

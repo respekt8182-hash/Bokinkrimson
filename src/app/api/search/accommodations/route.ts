@@ -86,6 +86,7 @@ export async function GET(request: Request) {
     familyFriendly,
     petsAllowed: input.petsAllowed === true,
     bounds,
+    candidateLimit: bounds ? 1500 : undefined,
     type:
       pickFirstListValue(searchParams.get("type")) ??
       input.propertyType ??
@@ -109,22 +110,29 @@ export async function GET(request: Request) {
       reviewsCount: item.reviewsCount,
     }));
 
-  return NextResponse.json({
-    items: result.items,
-    total: result.total,
-    page: result.page,
-    page_size: result.pageSize,
-    total_pages: result.totalPages,
-    map_points: mapPoints,
-    meta: {
-      filters: result.filters,
-      requested: {
-        checkin: searchParams.get("checkin"),
-        checkout: searchParams.get("checkout"),
-        adults,
-        children,
-        sort,
+  return NextResponse.json(
+    {
+      items: result.items,
+      total: result.total,
+      page: result.page,
+      page_size: result.pageSize,
+      total_pages: result.totalPages,
+      map_points: mapPoints,
+      meta: {
+        filters: result.filters,
+        requested: {
+          checkin: searchParams.get("checkin"),
+          checkout: searchParams.get("checkout"),
+          adults,
+          children,
+          sort,
+        },
       },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=45, stale-while-revalidate=180",
+      },
+    },
+  );
 }

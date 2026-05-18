@@ -166,6 +166,11 @@ function formatGuestsLabel(guests: number): string {
   return `${count} гостей`;
 }
 
+function formatPeopleFromLabel(value: number): string {
+  const count = Math.max(1, Math.floor(value));
+  return count === 1 ? `${count} человека` : `${count} человек`;
+}
+
 function formatReviewsCountLabel(count: number): string {
   const abs = Math.abs(count) % 100;
   const last = abs % 10;
@@ -705,11 +710,7 @@ function getRoomExtraBedPriceSummary(room: PublicPropertyCard["rooms"][number]):
   let currency: string | null = null;
 
   for (const price of room.prices) {
-    if (
-      price.priceType !== "PER_ROOM" ||
-      price.extraBedPrice === null ||
-      !Number.isFinite(price.extraBedPrice)
-    ) {
+    if (price.extraBedPrice === null || !Number.isFinite(price.extraBedPrice)) {
       continue;
     }
 
@@ -736,6 +737,31 @@ function getMaxRequiredMinGuests(
     if (period?.minGuests && period.minGuests > required) required = period.minGuests;
   }
   return required;
+}
+
+function getRoomMinGuestsSummary(
+  room: PublicPropertyCard["rooms"][number],
+  checkIn: string | null,
+  nights: number,
+): string | null {
+  const selectedRequired =
+    checkIn && nights > 0 ? getMaxRequiredMinGuests(room, checkIn, nights) : 1;
+
+  if (selectedRequired > 1) {
+    return `Бронирование от ${formatPeopleFromLabel(selectedRequired)}`;
+  }
+
+  const minRequiredAcrossPeriods = room.prices.reduce<number | null>((current, price) => {
+    if (!price.minGuests || price.minGuests <= 1) {
+      return current;
+    }
+
+    return current === null ? price.minGuests : Math.min(current, price.minGuests);
+  }, null);
+
+  return minRequiredAcrossPeriods
+    ? `Бронирование от ${formatPeopleFromLabel(minRequiredAcrossPeriods)}`
+    : null;
 }
 
 function getMaxRequiredMinNights(
@@ -771,8 +797,9 @@ function getCalculationExtraBedLabel(
   const baseNightly = Math.round((calculation.total - extraBedTotal) / calculation.nights);
   const extraBedNightly = Math.round(extraBedTotal / calculation.nights);
   const extraLabel = extraGuests > 1 ? "доп. места" : "доп. место";
+  const baseLabel = calculation.priceType === "PER_ROOM" ? "номер" : "основные места";
 
-  return `${formatMoney(totalNightly, calculation.currency)} в сутки: номер ${formatMoney(
+  return `${formatMoney(totalNightly, calculation.currency)} в сутки: ${baseLabel} ${formatMoney(
     baseNightly,
     calculation.currency,
   )} + ${extraLabel} ${formatMoney(extraBedNightly, calculation.currency)}`;
@@ -854,7 +881,7 @@ function getRoomPriceSummary(
   const requiredMinGuests = getMaxRequiredMinGuests(room, checkIn, calculation.nights);
   if (guests < requiredMinGuests) {
     return {
-      text: `Минимальный состав гостей: ${requiredMinGuests}`,
+      text: `Бронирование этого номера от ${formatPeopleFromLabel(requiredMinGuests)}`,
       tone: "warn",
       bigPrice: null,
       sideLabel: null,
@@ -1538,9 +1565,13 @@ export function PublicPropertyDetails({
     sidebarQuote.extraBedNightly > 0 &&
     sidebarQuote.extraGuests > 0 &&
     sidebarQuote.baseNightly !== null
-      ? `номер ${formatMoney(sidebarQuote.baseNightly, sidebarQuote.currency)} + ${
-          sidebarQuote.extraGuests > 1 ? "доп. места" : "доп. место"
-        } ${formatMoney(sidebarQuote.extraBedNightly, sidebarQuote.currency)}/сутки`
+      ? `${sidebarQuote.priceType === "PER_ROOM" ? "номер" : "основные места"} ${formatMoney(
+          sidebarQuote.baseNightly,
+          sidebarQuote.currency,
+        )} + ${sidebarQuote.extraGuests > 1 ? "доп. места" : "доп. место"} ${formatMoney(
+          sidebarQuote.extraBedNightly,
+          sidebarQuote.currency,
+        )}/сутки`
       : null;
   const sidebarPriceMeta =
     sidebarQuote?.priceType === "PER_PERSON" && sidebarQuote.unitNightly !== null
@@ -1959,6 +1990,11 @@ export function PublicPropertyDetails({
                   const activeRoomMedia = roomMedia[roomIndex] ?? roomMedia[0] ?? null;
                   const summary = getRoomPriceSummary(room, checkIn, checkOut, totalGuests);
                   const extraBedPriceSummary = getRoomExtraBedPriceSummary(room);
+                  const shouldShowStandaloneExtraBedPrice = Boolean(
+                    extraBedPriceSummary &&
+                      !summary.smallLabel?.toLowerCase().includes("доп. мест"),
+                  );
+                  const minGuestsSummary = getRoomMinGuestsSummary(room, checkIn, selectedNights);
                   const isDetailsOpen = activeRoomDetailsId === room.id;
                   const bedLabelById = Object.fromEntries(
                     bedTypeOptions.map((o) => [o.id, o.label]),
@@ -2016,6 +2052,17 @@ export function PublicPropertyDetails({
                           },
                         ]
                       : []),
+                    ...(minGuestsSummary
+                      ? [
+                          {
+                            key: `${room.id}-summary-min-guests`,
+                            icon: Users,
+                            name: minGuestsSummary,
+                            category: "beds" as const,
+                            isPrimary: true,
+                          },
+                        ]
+                      : []),
                     {
                       key: `${room.id}-summary-layout`,
                       icon: RulerDimensionLine,
@@ -2054,6 +2101,18 @@ export function PublicPropertyDetails({
                             value: extraBedPriceSummary,
                             className: "border-sun/16 bg-sun/7",
                             iconClassName: "bg-sun/10 text-sun ring-sun/14",
+                          },
+                        ]
+                      : []),
+                    ...(minGuestsSummary
+                      ? [
+                          {
+                            key: `${room.id}-detail-min-guests`,
+                            icon: Users,
+                            label: "Мин. бронь",
+                            value: minGuestsSummary.replace(/^Бронирование\s+/u, ""),
+                            className: "border-primary/14 bg-primary/7",
+                            iconClassName: "bg-primary/10 text-primary ring-primary/14",
                           },
                         ]
                       : []),
@@ -2267,6 +2326,11 @@ export function PublicPropertyDetails({
                                   <p className="mt-1 text-[12px] text-olive/55">
                                     {summary.smallLabel || "в сутки"}
                                   </p>
+                                  {shouldShowStandaloneExtraBedPrice ? (
+                                    <p className="mt-0.5 text-[11px] font-medium text-primary/75">
+                                      Доп. место {extraBedPriceSummary}
+                                    </p>
+                                  ) : null}
                                 </div>
                                 <button
                                   type="button"

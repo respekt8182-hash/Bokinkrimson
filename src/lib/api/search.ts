@@ -6,6 +6,8 @@ import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import type { SearchApiResponse, SearchFilters, SearchResponse } from "@/types/catalog";
 
 const DEFAULT_PAGE_SIZE = 30;
+const SEARCH_RESPONSE_CACHE_TTL_MS = 45_000;
+const searchResponseCache = new Map<string, { expiresAt: number; response: SearchResponse }>();
 
 function appendIfNotEmpty(params: URLSearchParams, key: string, value: string) {
   const normalized = value.trim();
@@ -85,10 +87,15 @@ export async function fetchAccommodationSearch(
   bounds?: string | null,
 ): Promise<SearchResponse> {
   const query = buildAccommodationSearchParams(filters, page, pageSize, bounds).toString();
+  const cached = searchResponseCache.get(query);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.response;
+  }
+
   const response = await fetch(`/api/search/accommodations?${query}`, {
     method: "GET",
     signal,
-    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -96,7 +103,12 @@ export async function fetchAccommodationSearch(
   }
 
   const payload = (await response.json()) as SearchApiResponse;
-  return toSearchResponse(payload);
+  const normalizedResponse = toSearchResponse(payload);
+  searchResponseCache.set(query, {
+    response: normalizedResponse,
+    expiresAt: Date.now() + SEARCH_RESPONSE_CACHE_TTL_MS,
+  });
+  return normalizedResponse;
 }
 
 export function buildHousingCatalogUrl(

@@ -256,6 +256,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[22px] px-2 text-[11px] font-semibold transition active:scale-[0.97]",

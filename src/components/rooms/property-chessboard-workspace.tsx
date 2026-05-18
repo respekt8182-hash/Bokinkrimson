@@ -755,6 +755,11 @@ function readResponseError(body: unknown, fallback: string): string {
 
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
+function formatPeopleFromLabel(value: number): string {
+  const count = Math.max(1, Math.floor(value));
+  return count === 1 ? `${count} человека` : `${count} человек`;
+}
+
 function formatPriceLabel(price: SerializedRoomPrice): string {
   const amount = ruNumberFormat.format(price.price);
   const unitSuffix = normalizeRoomPriceType(price.priceType) === "PER_PERSON" ? "/чел" : "";
@@ -763,13 +768,13 @@ function formatPriceLabel(price: SerializedRoomPrice): string {
 
 function formatPriceRestrictionLabel(price: SerializedRoomPrice): string {
   const parts = [
-    price.minGuests === null ? null : `От ${price.minGuests} гостей`,
+    price.minGuests === null ? null : `от ${formatPeopleFromLabel(price.minGuests)}`,
     price.minNights === null
       ? null
       : `от ${price.minNights} ${price.minNights === 1 ? "ночи" : "ночей"}`,
     price.extraBedPrice === null
       ? null
-      : `доп. место ${ruNumberFormat.format(price.extraBedPrice)} ${price.currency}`,
+      : `доп. место ${ruNumberFormat.format(price.extraBedPrice)} ${price.currency}/ночь`,
   ].filter((item): item is string => Boolean(item));
 
   return parts.length > 0 ? parts.join(" · ") : "Любой состав и срок";
@@ -2752,7 +2757,7 @@ export function PropertyChessboardWorkspace({
 
     const extraBedPriceValue = priceForm.extraBedPriceInput.trim().replace(",", ".");
     let extraBedPrice: number | null = null;
-    if (priceForm.priceType === "PER_ROOM" && room.extraBeds > 0 && extraBedPriceValue.length > 0) {
+    if (room.extraBeds > 0 && extraBedPriceValue.length > 0) {
       const parsedExtraBedPrice = Number(extraBedPriceValue);
       if (!Number.isFinite(parsedExtraBedPrice) || parsedExtraBedPrice <= 0) {
         setPriceModalError("Укажите корректную цену доп. места");
@@ -3038,8 +3043,7 @@ export function PropertyChessboardWorkspace({
     [bookingRoomPage, roomPagerEntries],
   );
   const selectedPriceRoom = priceForm ? (roomLookupById.get(priceForm.roomId) ?? null) : null;
-  const canSetExtraBedPrice =
-    priceForm?.priceType === "PER_ROOM" && (selectedPriceRoom?.extraBeds ?? 0) > 0;
+  const canSetExtraBedPrice = (selectedPriceRoom?.extraBeds ?? 0) > 0;
   const duplicateSourceRoom = duplicatePricesForm
     ? (roomLookupById.get(duplicatePricesForm.sourceRoomId) ?? null)
     : null;
@@ -4714,11 +4718,8 @@ export function PropertyChessboardWorkspace({
                             updatePriceForm(
                               type === "PER_ROOM"
                                 ? { priceType: type, minGuestsInput: "" }
-                                : { priceType: type, extraBedPriceInput: "" },
+                                : { priceType: type },
                             );
-                            if (type === "PER_PERSON") {
-                              setIsPriceExtraSectionOpen(false);
-                            }
                           }}
                           className={cn(
                             "h-10 rounded-xl px-3 text-xs font-semibold transition sm:text-sm",

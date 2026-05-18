@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
-import { parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
+import { defaultRoomPriceType, parseIsoDate, serializeRoomPrice } from "@/lib/pricing";
 import { updateRoomPriceCompat } from "@/lib/room-price-compat";
 import { updateRoomPriceSchema } from "@/lib/schemas";
 
@@ -89,9 +89,23 @@ export async function PATCH(request: Request, context: RouteContext) {
     "minNights",
     "extraBedPrice",
   ]);
+  const usesAdvancedPriceFields =
+    data.priceType !== defaultRoomPriceType ||
+    data.minNights != null ||
+    data.extraBedPrice != null;
 
   if (!dateFrom || !dateTo) {
     return NextResponse.json({ error: "Некорректный формат дат" }, { status: 400 });
+  }
+
+  if (!supportsRoomPriceWriteColumns && usesAdvancedPriceFields) {
+    return NextResponse.json(
+      {
+        error:
+          "База данных не готова сохранить расширенные условия цены. Примените последние миграции и повторите сохранение.",
+      },
+      { status: 409 },
+    );
   }
 
   const overlap = await db.roomPrice.findFirst({

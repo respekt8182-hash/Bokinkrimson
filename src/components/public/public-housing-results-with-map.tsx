@@ -411,7 +411,7 @@ export function PublicHousingResultsWithMap({
   const eagerImageCount = view === "grid" ? 4 : 2;
   const deferredRenderThreshold = view === "grid" ? 6 : 4;
 
-  const [isMapActivated, setIsMapActivated] = useState(true);
+  const [isMapActivated, setIsMapActivated] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
   const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
@@ -466,8 +466,9 @@ export function PublicHousingResultsWithMap({
   );
 
   const mapPoints = useMemo(() => {
-    const shouldUseRemotePoints = mapState.status !== "idle" || mapBoundsQuery !== null;
-    const sourcePoints = shouldUseRemotePoints ? mapState.points : fallbackPoints;
+    const shouldUseRemotePoints = mapState.status !== "idle";
+    const sourcePoints =
+      shouldUseRemotePoints && mapState.points.length > 0 ? mapState.points : fallbackPoints;
     const pointById = new Map(
       sourcePoints
         .map((point) => sanitizePoint(point))
@@ -494,7 +495,6 @@ export function PublicHousingResultsWithMap({
     activePointId,
     fallbackPoints,
     hoveredCardId,
-    mapBoundsQuery,
     mapViewportBounds,
     mapState.points,
     mapState.status,
@@ -583,7 +583,7 @@ export function PublicHousingResultsWithMap({
   }, []);
 
   useEffect(() => {
-    setIsMapActivated(true);
+    setIsMapActivated((current) => (mapPlacement === "mobile" ? current : mapPlacement !== null));
     setIsMapExpanded(false);
     setMobileSheetSnap("preview");
     setMobileSheetTop(null);
@@ -597,7 +597,13 @@ export function PublicHousingResultsWithMap({
     setMapViewportBounds(null);
     setMapBoundsQuery(null);
     hasMapInteractionRef.current = false;
-  }, [mapQuery, selectedLocation]);
+  }, [mapPlacement, mapQuery, selectedLocation]);
+
+  useEffect(() => {
+    if (mapPlacement !== null && mapPlacement !== "mobile") {
+      setIsMapActivated(true);
+    }
+  }, [mapPlacement]);
 
   useEffect(() => {
     const normalizedLocation = selectedLocation.trim();
@@ -636,7 +642,7 @@ export function PublicHousingResultsWithMap({
   }, [selectedLocation]);
 
   useEffect(() => {
-    if (!isMapActivated || !mapBoundsQuery) {
+    if (!isMapActivated || !mapBoundsQuery || !hasMapInteractionRef.current) {
       return;
     }
 
@@ -1187,6 +1193,7 @@ export function PublicHousingResultsWithMap({
     <>
       <section className="space-y-4">
         {mapPlacement === "mobile" ? (
+          isMapActivated ? (
           <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
             <div
               className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
@@ -1304,6 +1311,19 @@ export function PublicHousingResultsWithMap({
               </button>
             ) : null}
           </section>
+          ) : (
+            <section className="space-y-4 md:hidden">
+              {resultsSection}
+              <button
+                type="button"
+                onClick={openMobileMapInSearch}
+                className="float-map-btn md:hidden"
+                aria-label="Показать карту"
+              >
+                Карта
+              </button>
+            </section>
+          )
         ) : (
           <>
             {mapPlacement === "tablet" ? (
