@@ -2027,10 +2027,74 @@ button:focus-visible > .field-adornment-icon {
 }
 
 .catalog-skeleton {
-  background: linear-gradient(90deg, #e8e3d8 25%, #f5f0e8 50%, #e8e3d8 75%);
+  background: linear-gradient(90deg, #e4e8f1 25%, #f5f7fb 50%, #e4e8f1 75%);
   background-size: 200% 100%;
   animation: catalog-shimmer 1.6s ease-in-out infinite;
   border-radius: 12px;
+}
+
+@keyframes catalog-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.72);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.catalog-loading-inline-dots,
+.catalog-map-loading-pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.catalog-loading-inline-dots {
+  gap: 4px;
+}
+
+.catalog-loading-inline-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: catalog-dot-pulse 1s ease-in-out infinite;
+}
+
+.catalog-loading-inline-dots span:nth-child(2),
+.catalog-map-loading-dot:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.catalog-loading-inline-dots span:nth-child(3),
+.catalog-map-loading-dot:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.catalog-map-loading-pill {
+  justify-content: center;
+  gap: 8px;
+  min-width: 96px;
+  height: 54px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: rgba(43, 48, 38, 0.78);
+  box-shadow:
+    0 14px 30px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.catalog-map-loading-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  animation: catalog-dot-pulse 1s ease-in-out infinite;
 }
 
 .sticky-search {
@@ -2471,6 +2535,9 @@ body.dashboard-interaction-open .dashboard-mobile-bottom-nav {
   .favorite-burst-ring,
   .favorite-burst-spark,
   .animate-shimmer,
+  .catalog-skeleton,
+  .catalog-loading-inline-dots span,
+  .catalog-map-loading-dot,
   .sea-toggle,
   .sea-toggle-track,
   .sea-toggle-knob-wrapper,

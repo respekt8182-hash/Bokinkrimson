@@ -959,7 +959,8 @@ export async function getStaticAttractionCatalog(
   const page = parsePage(query.page);
   const pageSize = parsePageSize(query.pageSize, query.allowLargePageSize === true);
   const searchQuery = query.query?.trim() ?? "";
-  const locationQuery = query.location?.trim() ?? "";
+  const bounds = query.bounds ?? null;
+  const locationQuery = bounds ? "" : (query.location?.trim() ?? "");
   const category = query.category?.trim() ?? "";
   const radiusKm = parseRadiusKm(query.radiusKm);
   const sort = parseSort(query.sort);
@@ -1028,7 +1029,7 @@ export async function getStaticAttractionCatalog(
         !isPointInsideBounds(
           point?.latitude ?? null,
           point?.longitude ?? null,
-          query.bounds ?? null,
+          bounds,
         )
       ) {
         return null;

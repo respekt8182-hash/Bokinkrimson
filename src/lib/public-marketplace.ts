@@ -770,7 +770,8 @@ export async function getPublicTransferCatalog(
   const page = parsePage(query.page);
   const pageSize = parsePageSize(query.pageSize, query.allowLargePageSize === true);
   const searchQuery = query.query?.trim() ?? "";
-  const locationQuery = query.location?.trim() ?? "";
+  const bounds = query.bounds ?? null;
+  const locationQuery = bounds ? "" : (query.location?.trim() ?? "");
   const transferType = query.transferType?.trim() ?? "";
   const radiusKm = parseRadiusKm(query.radiusKm);
   const sort = parseTransferSort(query.sort);
@@ -856,7 +857,7 @@ export async function getPublicTransferCatalog(
     minPrice,
     maxPrice,
     sort,
-    bounds: query.bounds ?? null,
+    bounds,
   });
 
   const searchScores = getSearchScoreMap(searchQuery, effectiveRows, (item) => [
@@ -926,7 +927,7 @@ export async function getPublicTransferCatalog(
         !isPointInsideBounds(
           point?.latitude ?? null,
           point?.longitude ?? null,
-          query.bounds ?? null,
+          bounds,
         )
       ) {
         return null;

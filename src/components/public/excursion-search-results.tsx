@@ -66,6 +66,7 @@ import {
   getOfferTypeLabel,
 } from "@/lib/excursion-offers";
 import { getFavoriteEntityTypeFromOfferType } from "@/lib/favorite-entities";
+import { fetchLocationCenter } from "@/lib/location-center-client";
 import { excursionsHubPath, toursHubPath } from "@/lib/seo/routes";
 import type {
   YandexMapPoint,
@@ -150,6 +151,9 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
+const MAP_BOUNDS_PRECISION = 4;
+const SEARCH_LOCATION_MAP_ZOOM = 10;
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -163,18 +167,6 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function resolveCatalogLocationZoom(radiusKm: number): number {
-  if (radiusKm <= 15) {
-    return 13;
-  }
-
-  if (radiusKm <= 35) {
-    return 12;
-  }
-
-  return 11;
 }
 
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
@@ -278,7 +270,7 @@ function buildExcursionSearchParams(
   }
 
   if (filters.query) params.set("q", filters.query);
-  if (filters.locationName) params.set("location", filters.locationName);
+  if (filters.locationName && !options?.bounds) params.set("location", filters.locationName);
   if (filters.offerType) params.set("offerType", filters.offerType);
   if (filters.districtSlug) params.set("district", filters.districtSlug);
   if (filters.categorySlug) params.set("category", filters.categorySlug);
@@ -313,7 +305,32 @@ function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | nu
     return null;
   }
 
-  return [south, west, north, east].map((value) => value.toFixed(6)).join(",");
+  return [south, west, north, east].map((value) => value.toFixed(MAP_BOUNDS_PRECISION)).join(",");
+}
+
+function isPointInsideViewportBounds(
+  point: { latitude: number | null; longitude: number | null },
+  bounds: [[number, number], [number, number]] | null,
+): boolean {
+  if (!bounds) {
+    return true;
+  }
+
+  if (point.latitude === null || point.longitude === null) {
+    return false;
+  }
+
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+
+  return (
+    point.latitude >= south &&
+    point.latitude <= north &&
+    point.longitude >= west &&
+    point.longitude <= east
+  );
 }
 
 const excursionLocationSuggestionsListboxId = "exc-search-suggestions-listbox";
@@ -892,6 +909,7 @@ export function ExcursionSearchResults({
   const mobileResultsScrollTopRef = useRef(0);
   const mobileChromeProgressRef = useRef(0);
   const mapBoundsFilterRef = useRef<string | null>(null);
+  const mapBoundsQueryRef = useRef<string | null>(null);
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
   const mapBoundsBootstrapHandledRef = useRef(false);
@@ -906,9 +924,18 @@ export function ExcursionSearchResults({
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
   const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
   const [mapItems, setMapItems] = useState<PublicExcursionCatalogItem[]>(items);
+  const [mapViewportBounds, setMapViewportBounds] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
+  const [mapBoundsQuery, setMapBoundsQuery] = useState<string | null>(null);
+  const [initialViewport, setInitialViewport] = useState<YandexMapViewport | null>(null);
   const [isMapPointsLoading, setIsMapPointsLoading] = useState(false);
   const [mapPointsError, setMapPointsError] = useState("");
   const [isBoundsRefreshing, setIsBoundsRefreshing] = useState(false);
+  const initialViewportKey = useMemo(() => {
+    const normalizedLocation = (filters.locationName ?? "").trim().toLocaleLowerCase("ru-RU");
+    return normalizedLocation ? `excursion-location:${normalizedLocation}` : "";
+  }, [filters.locationName]);
   useBodyScrollLock(mapExpanded);
 
   // ── Card refs for scroll-to-card on pin hover ────────────────────────────────
@@ -974,7 +1001,10 @@ export function ExcursionSearchResults({
     setMapPointsError("");
     setIsBoundsRefreshing(false);
     mapBoundsFilterRef.current = null;
+    mapBoundsQueryRef.current = null;
     mapBoundsBootstrapHandledRef.current = false;
+    setMapViewportBounds(null);
+    setMapBoundsQuery(null);
     if (mapBoundsRefreshTimerRef.current !== null) {
       window.clearTimeout(mapBoundsRefreshTimerRef.current);
       mapBoundsRefreshTimerRef.current = null;
@@ -982,6 +1012,42 @@ export function ExcursionSearchResults({
     mapBoundsAbortControllerRef.current?.abort();
     cardRefsMap.current.clear();
   }, [items, pagination.page, pagination.total, pagination.totalPages]);
+
+  useEffect(() => {
+    const normalizedLocation = (filters.locationName ?? "").trim();
+    if (!normalizedLocation) {
+      setInitialViewport(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    fetchLocationCenter(normalizedLocation, controller.signal)
+      .then((center) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (!center) {
+          setInitialViewport(null);
+          return;
+        }
+
+        setInitialViewport({
+          center: [center.latitude, center.longitude],
+          zoom: SEARCH_LOCATION_MAP_ZOOM,
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setInitialViewport(null);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [filters.locationName]);
 
   useEffect(() => {
     if (!mapExpanded) {
@@ -1430,12 +1496,20 @@ export function ExcursionSearchResults({
   );
 
   const mapQuery = useMemo(() => {
-    return buildExcursionSearchParams(filters, { page: 1 }).toString();
-  }, [filters]);
+    return buildExcursionSearchParams(filters, { page: 1, bounds: mapBoundsQuery }).toString();
+  }, [filters, mapBoundsQuery]);
 
   useEffect(() => {
+    if (!mapBoundsQuery) {
+      setMapItems(items);
+      setIsMapPointsLoading(false);
+      setMapPointsError("");
+      return;
+    }
+
     const controller = new AbortController();
     let isMounted = true;
+    let refreshTimer: number | null = null;
 
     setMapItems(items);
     setIsMapPointsLoading(true);
@@ -1472,13 +1546,18 @@ export function ExcursionSearchResults({
       }
     };
 
-    void fetchMapItems();
+    refreshTimer = window.setTimeout(() => {
+      void fetchMapItems();
+    }, MAP_BOUNDS_REFRESH_DELAY_MS);
 
     return () => {
       isMounted = false;
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
       controller.abort();
     };
-  }, [items, mapQuery]);
+  }, [items, mapBoundsQuery, mapQuery]);
 
   // ── Map points ───────────────────────────────────────────────────────────────
   const mapPoints = useMemo<YandexMapPoint[]>(() => {
@@ -1502,7 +1581,11 @@ export function ExcursionSearchResults({
           return false;
         }
 
-        if (hasRadiusCenter && radiusKm !== null) {
+        if (!isPointInsideViewportBounds(item, mapViewportBounds)) {
+          return false;
+        }
+
+        if (!mapViewportBounds && hasRadiusCenter && radiusKm !== null) {
           const dist = haversineKm(centerLat!, centerLng!, item.latitude, item.longitude);
           return dist <= radiusKm;
         }
@@ -1519,7 +1602,14 @@ export function ExcursionSearchResults({
         reviewsCount: item.reviewsCount,
         isViewed: viewedPointIds.has(item.id),
       }));
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm, mapItems, viewedPointIds]);
+  }, [
+    filters.centerLat,
+    filters.centerLng,
+    filters.radiusKm,
+    mapItems,
+    mapViewportBounds,
+    viewedPointIds,
+  ]);
   const visibleMapPointIds = useMemo(
     () => new Set(mapPoints.map((point) => point.id)),
     [mapPoints],
@@ -1571,42 +1661,6 @@ export function ExcursionSearchResults({
     }
     return null;
   }, [filters.centerLat, filters.centerLng, filters.radiusKm]);
-  const mapViewport = useMemo<YandexMapViewport | null>(() => {
-    if (
-      filters.centerLat !== null &&
-      filters.centerLng !== null &&
-      Number.isFinite(filters.centerLat) &&
-      Number.isFinite(filters.centerLng)
-    ) {
-      return {
-        center: [filters.centerLat, filters.centerLng],
-        zoom: resolveCatalogLocationZoom(filters.radiusKm),
-      };
-    }
-
-    return null;
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm]);
-  const mapViewportKey = useMemo(() => {
-    if (!mapViewport) {
-      return undefined;
-    }
-
-    return [
-      filters.locationName ?? "",
-      filters.centerLat,
-      filters.centerLng,
-      filters.radiusKm,
-      offerType,
-    ].join(":");
-  }, [
-    filters.centerLat,
-    filters.centerLng,
-    filters.locationName,
-    filters.radiusKm,
-    mapViewport,
-    offerType,
-  ]);
-
   const focusCardById = useCallback((pointId: string) => {
     const node = cardRefsMap.current.get(pointId);
     node?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1615,6 +1669,14 @@ export function ExcursionSearchResults({
   const handleMapBoundsFilterChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (normalizedBounds !== mapBoundsQueryRef.current) {
+        mapBoundsQueryRef.current = normalizedBounds;
+        setMapViewportBounds(bounds);
+        setMapBoundsQuery(normalizedBounds);
+        setActivePointId(null);
+        setHoveredCardId(null);
+        setHoveredPinId(null);
+      }
 
       if (!mapBoundsBootstrapHandledRef.current && mapBoundsFilterRef.current === null) {
         mapBoundsBootstrapHandledRef.current = true;
@@ -1691,7 +1753,7 @@ export function ExcursionSearchResults({
               setIsBoundsRefreshing(false);
             }
           });
-      }, 260);
+      }, MAP_BOUNDS_REFRESH_DELAY_MS);
     },
     [filters],
   );
@@ -3023,13 +3085,13 @@ export function ExcursionSearchResults({
                 onPointClick={handleCatalogMobileMapPointClick}
                 onPointHoverChange={handlePinHover}
                 onBoundsChange={handleMapBoundsFilterChange}
-                initialViewport={mapViewport}
-                viewportKey={mapViewportKey}
+                initialViewport={initialViewport}
+                viewportKey={initialViewportKey}
                 radiusCircle={radiusCircle}
                 controls={[]}
                 showBalloons={false}
                 frameless
-                fitPointsOnChange="initial"
+                fitPointsOnChange="never"
                 className="h-full w-full"
               />
             </div>
@@ -3198,11 +3260,11 @@ export function ExcursionSearchResults({
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
               onBoundsChange={handleMapBoundsFilterChange}
-              initialViewport={mapViewport}
-              viewportKey={mapViewportKey}
+              initialViewport={initialViewport}
+              viewportKey={initialViewportKey}
               radiusCircle={radiusCircle}
               controls={[]}
-              fitPointsOnChange="initial"
+              fitPointsOnChange="never"
               className="h-full w-full rounded-none border-0"
             />
 
@@ -3242,12 +3304,12 @@ export function ExcursionSearchResults({
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
               onBoundsChange={handleMapBoundsFilterChange}
-              initialViewport={mapViewport}
-              viewportKey={mapViewportKey}
+              initialViewport={initialViewport}
+              viewportKey={initialViewportKey}
               radiusCircle={radiusCircle}
               showBalloons={false}
               frameless
-              fitPointsOnChange="initial"
+              fitPointsOnChange="never"
               className="h-full w-full"
             />
             <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
@@ -3412,13 +3474,13 @@ export function ExcursionSearchResults({
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={handlePinHover}
                   onBoundsChange={handleMapBoundsFilterChange}
-                  initialViewport={mapViewport}
-                  viewportKey={mapViewportKey}
+                  initialViewport={initialViewport}
+                  viewportKey={initialViewportKey}
                   radiusCircle={radiusCircle}
                   controls={["zoomControl"]}
                   showBalloons={false}
                   frameless
-                  fitPointsOnChange="initial"
+                  fitPointsOnChange="never"
                   className="h-full w-full"
                 />
 
@@ -3471,13 +3533,13 @@ export function ExcursionSearchResults({
                 }}
                 onPointHoverChange={handlePinHover}
                 onBoundsChange={handleMapBoundsFilterChange}
-                initialViewport={mapViewport}
-                viewportKey={mapViewportKey}
+                initialViewport={initialViewport}
+                viewportKey={initialViewportKey}
                 radiusCircle={radiusCircle}
                 controls={["zoomControl"]}
                 showBalloons={false}
                 frameless
-                fitPointsOnChange="initial"
+                fitPointsOnChange="never"
                 className="h-full min-h-[100dvh] w-full"
               />
             </div>

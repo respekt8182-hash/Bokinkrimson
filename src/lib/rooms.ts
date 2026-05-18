@@ -270,6 +270,7 @@ export function serializeRoom(room: {
     priceType?: string | null;
     minGuests?: number | null;
     minNights?: number | null;
+    extraBedPrice?: Prisma.Decimal | number | null;
     currency: string;
     createdAt: Date;
     updatedAt: Date;
@@ -332,6 +333,7 @@ export function serializeRoomForChessboard(room: {
     priceType?: string | null;
     minGuests?: number | null;
     minNights?: number | null;
+    extraBedPrice?: Prisma.Decimal | number | null;
     currency: string;
     createdAt: Date;
     updatedAt: Date;

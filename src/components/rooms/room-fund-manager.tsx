@@ -2405,7 +2405,7 @@ export function RoomFundManager({
                       openRoomCard(room);
                     }
                   }}
-                  className="group relative min-h-[180px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 sm:h-[180px] sm:min-h-[180px] sm:max-w-[480px]"
+                  className="group relative min-h-[180px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 sm:min-h-[180px] sm:max-w-[480px]"
                 >
                   <div
                     className="absolute right-3 top-3 z-20"
@@ -2526,13 +2526,17 @@ export function RoomFundManager({
                       >
                         {cardDetails.title}
                       </h4>
-                      <p className="mt-1 text-sm text-olive/78">{cardDetails.bedsText}</p>
-                      <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-olive/65">
+                      <p className="mt-1 pr-2 text-sm leading-5 text-olive/78 [overflow-wrap:anywhere]">
+                        {cardDetails.bedsText}
+                      </p>
+                      <p className="mt-0.5 flex w-full min-w-0 items-start gap-1.5 pr-2 text-xs leading-4 text-olive/65">
                         <AppIcon
                           icon={RulerDimensionLine}
-                          className="h-3.5 w-3.5 shrink-0 text-olive/40"
+                          className="mt-px h-3.5 w-3.5 shrink-0 text-olive/40"
                         />
-                        <span>{cardDetails.layoutText}</span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {cardDetails.layoutText}
+                        </span>
                       </p>
                     </div>
                   </div>

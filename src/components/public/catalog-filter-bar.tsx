@@ -61,6 +61,7 @@ export type CatalogFilterBarProps = {
   onApplyFilters: (next: SearchFilters, toast?: string) => void;
   onResetFilters: () => void;
   totalCount: number;
+  isLoading?: boolean;
   locationLabel: string;
   locationNames: string[];
   initialPopularSuggestions: LocationSuggestionItem[];
@@ -110,10 +111,23 @@ function formatCurrency(value: number): string {
 
 function formatFoundObjectsLabel(value: number): string {
   return `Найдено: ${ruNumberFormat.format(value)} ${pluralize(value, [
-    "объект",
-    "объекта",
-    "объектов",
+    "вариант жилья",
+    "варианта жилья",
+    "вариантов жилья",
   ])}`;
+}
+
+function CatalogLoadingLabel() {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2 text-olive/62">
+      <span className="truncate">Ищем лучшие варианты жилья</span>
+      <span className="catalog-loading-inline-dots text-terra" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    </span>
+  );
 }
 
 function formatGuestsChip(filters: SearchFilters): string {
@@ -370,6 +384,7 @@ export function CatalogFilterBar({
   onApplyFilters,
   onResetFilters,
   totalCount,
+  isLoading = false,
   locationLabel,
   locationNames,
   initialPopularSuggestions,
@@ -808,7 +823,7 @@ export function CatalogFilterBar({
           </ResponsiveFilterPanel>
         </>
       }
-      totalLabel={formatFoundObjectsLabel(totalCount)}
+      totalLabel={isLoading ? <CatalogLoadingLabel /> : formatFoundObjectsLabel(totalCount)}
       hasActiveFilters={hasActiveFilters}
       onResetAll={onResetFilters}
     />

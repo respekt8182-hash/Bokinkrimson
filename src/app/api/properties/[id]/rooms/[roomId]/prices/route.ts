@@ -67,6 +67,7 @@ export async function GET(request: Request, context: RouteContext) {
         priceType: item.priceType,
         minGuests: item.minGuests,
         minNights: item.minNights,
+        extraBedPrice: item.extraBedPrice,
         currency: item.currency,
       })),
       checkIn,
@@ -113,6 +114,7 @@ export async function POST(request: Request, context: RouteContext) {
   const supportsRoomPriceWriteColumns = await areDatabaseColumnsAvailable("RoomPrice", [
     "priceType",
     "minNights",
+    "extraBedPrice",
   ]);
 
   if (!dateFrom || !dateTo) {
@@ -145,6 +147,7 @@ export async function POST(request: Request, context: RouteContext) {
           priceType: data.priceType,
           minGuests: data.minGuests ?? null,
           minNights: data.minNights ?? null,
+          extraBedPrice: data.extraBedPrice ?? null,
           currency: data.currency,
         },
       })
@@ -155,6 +158,7 @@ export async function POST(request: Request, context: RouteContext) {
         price: data.price,
         minGuests: data.minGuests ?? null,
         minNights: data.minNights ?? null,
+        extraBedPrice: data.extraBedPrice ?? null,
         currency: data.currency,
       });
 

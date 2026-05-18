@@ -87,6 +87,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const supportsRoomPriceWriteColumns = await areDatabaseColumnsAvailable("RoomPrice", [
     "priceType",
     "minNights",
+    "extraBedPrice",
   ]);
 
   if (!dateFrom || !dateTo) {
@@ -120,6 +121,7 @@ export async function PATCH(request: Request, context: RouteContext) {
           priceType: data.priceType,
           minGuests: data.minGuests ?? null,
           minNights: data.minNights ?? null,
+          extraBedPrice: data.extraBedPrice ?? null,
           currency: data.currency,
         },
       })
@@ -129,6 +131,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         price: data.price,
         minGuests: data.minGuests ?? null,
         minNights: data.minNights ?? null,
+        extraBedPrice: data.extraBedPrice ?? null,
         currency: data.currency,
       });
 

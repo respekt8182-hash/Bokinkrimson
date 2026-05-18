@@ -1059,7 +1059,6 @@ export async function getPublicExcursionCatalog(
   const page = Math.max(1, query.page ?? 1);
   const pageSizeCap = query.allowLargePageSize ? 5000 : 30;
   const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
-  const rawLocationQuery = query.location?.trim() ?? "";
   const searchQuery = query.query?.trim() ?? "";
   const normalizedSearchQuery = normalizeExcursionSearchText(searchQuery);
   const hasTextSearch = normalizedSearchQuery.length >= 2;
@@ -1080,11 +1079,15 @@ export async function getPublicExcursionCatalog(
   const people = query.people && Number.isFinite(query.people) ? Math.max(1, query.people) : null;
   const radiusKm = parseNearbyCatalogRadiusKm(query.radiusKm);
   const bounds = query.bounds ?? null;
+  const hasMapBounds = bounds !== null;
+  const locationFilterId = hasMapBounds ? undefined : query.locationId;
+  const locationFilter = hasMapBounds ? undefined : query.location;
+  const rawLocationQuery = locationFilter?.trim() ?? "";
 
   const [resolvedLocation, resolvedDistrict, resolvedCategory] = await Promise.all([
     resolveExcursionLocation({
-      locationId: query.locationId,
-      location: query.location,
+      locationId: locationFilterId,
+      location: locationFilter,
     }),
     resolveDistrict({
       districtId: query.districtId,
@@ -1096,7 +1099,7 @@ export async function getPublicExcursionCatalog(
     }),
   ]);
   const locationCenterQuery =
-    resolvedLocation?.name ?? (rawLocationQuery || query.locationId?.trim() || "");
+    resolvedLocation?.name ?? (rawLocationQuery || locationFilterId?.trim() || "");
   const resolvedLocationCenter =
     resolvedLocation?.latitude !== null &&
     resolvedLocation?.latitude !== undefined &&
@@ -1108,8 +1111,8 @@ export async function getPublicExcursionCatalog(
           longitude: Number(resolvedLocation.longitude),
         }
       : await resolveCrimeaLocationCenter(locationCenterQuery);
-  const hasLocationFilter = Boolean(rawLocationQuery || query.locationId);
-  const locationTextQuery = rawLocationQuery || resolvedLocation?.name || query.locationId || "";
+  const hasLocationFilter = Boolean(rawLocationQuery || locationFilterId);
+  const locationTextQuery = rawLocationQuery || resolvedLocation?.name || locationFilterId || "";
 
   const formatFilter =
     query.format?.toLowerCase() === "group"

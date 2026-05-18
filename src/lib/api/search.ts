@@ -29,13 +29,16 @@ export function buildAccommodationSearchParams(
   bounds?: string | null,
 ): URLSearchParams {
   const params = new URLSearchParams();
+  const hasBounds = Boolean(bounds?.trim());
 
   params.set("page", String(Math.max(1, page)));
   params.set("page_size", String(Math.max(1, pageSize)));
 
   appendIfNotEmpty(params, "q", filters.query);
-  appendIfNotEmpty(params, "location", filters.location);
-  appendIfNotEmpty(params, "locationId", filters.locationId);
+  if (!hasBounds) {
+    appendIfNotEmpty(params, "location", filters.location);
+    appendIfNotEmpty(params, "locationId", filters.locationId);
+  }
   appendIfNotEmpty(params, "propertyType", filters.propertyType);
   appendIfNotEmpty(params, "checkIn", filters.checkIn);
   appendIfNotEmpty(params, "checkOut", filters.checkOut);

@@ -159,4 +159,36 @@ describe("pricing helpers", () => {
 
     expect(longEnough.ok).toBe(true);
   });
+
+  it("adds extra bed prices to per-room stays above the included guests", () => {
+    const result = calculateRoomStayPrice({
+      prices: [
+        {
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+          price: 5000,
+          priceType: "PER_ROOM",
+          extraBedPrice: 800,
+          currency: "RUB",
+        },
+      ],
+      checkIn: "2026-09-10",
+      checkOut: "2026-09-13",
+      guests: 3,
+      includedGuests: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.nights).toBe(3);
+      expect(result.total).toBe(17400);
+      expect(result.unitTotal).toBe(17400);
+      expect(result.breakdown[0]).toMatchObject({
+        extraGuests: 1,
+        extraBedPrice: 800,
+        extraTotal: 800,
+        totalPrice: 5800,
+      });
+    }
+  });
 });

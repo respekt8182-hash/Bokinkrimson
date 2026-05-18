@@ -5,7 +5,7 @@ export type CatalogGeoPoint = {
 
 export type CatalogSearchMatchKind = "primary" | "nearby";
 
-export const NEARBY_CATALOG_RADIUS_KM = 20;
+export const NEARBY_CATALOG_RADIUS_KM = 80;
 
 const EARTH_RADIUS_KM = 6371;
 const DISTANCE_EPSILON_KM = 0.000001;

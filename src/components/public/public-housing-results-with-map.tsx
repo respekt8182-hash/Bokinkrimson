@@ -31,16 +31,13 @@ import { PublicPropertySearchCard } from "@/components/public/public-property-se
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import { NEARBY_CATALOG_RADIUS_KM } from "@/lib/catalog-radius";
+import { fetchLocationCenter } from "@/lib/location-center-client";
 import { normalizeRoomPriceType, type RoomPriceCalculationType } from "@/lib/pricing";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 import {
   setPublicMobileBottomNavForceHidden,
   setPublicMobileBottomNavProgress,
 } from "@/lib/public-mobile-nav-visibility";
-import {
-  getKnownCrimeaLocationCenter,
-  normalizeCrimeaLocationKey,
-} from "@/lib/crimea-location-coordinates";
 import { housingHubPath } from "@/lib/seo/routes";
 
 type PublicHousingResultsWithMapProps = {
@@ -75,14 +72,6 @@ type MapState = {
   errorMessage: string;
 };
 
-type LocationCenterResponse = {
-  item?: {
-    latitude?: number | null;
-    longitude?: number | null;
-    zoom?: number | null;
-  } | null;
-};
-
 type MobileSheetSnap = "expanded" | "preview" | "collapsed";
 
 type MobileSheetDragState = {
@@ -110,15 +99,9 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
-
-function resolveLocationViewport(value: string | null | undefined): YandexMapViewport | null {
-  const center = getKnownCrimeaLocationCenter(value);
-  if (!center) {
-    return null;
-  }
-
-  return { center: [center.latitude, center.longitude], zoom: Math.min(center.zoom + 2, 15) };
-}
+const MAP_POINTS_REFRESH_DELAY_MS = 650;
+const MAP_BOUNDS_PRECISION = 4;
+const SEARCH_LOCATION_MAP_ZOOM = 10;
 
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const ruPluralRules = new Intl.PluralRules("ru-RU");
@@ -226,7 +209,41 @@ function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | nu
     return null;
   }
 
-  return [south, west, north, east].map((value) => value.toFixed(6)).join(",");
+  return [south, west, north, east].map((value) => value.toFixed(MAP_BOUNDS_PRECISION)).join(",");
+}
+
+function isPointInsideViewportBounds(
+  point: { latitude: number | null; longitude: number | null },
+  bounds: [[number, number], [number, number]] | null,
+): boolean {
+  if (!bounds) {
+    return true;
+  }
+
+  if (point.latitude === null || point.longitude === null) {
+    return false;
+  }
+
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+
+  return (
+    point.latitude >= south &&
+    point.latitude <= north &&
+    point.longitude >= west &&
+    point.longitude <= east
+  );
+}
+
+function buildMapPointsRequestQuery(mapQuery: string, boundsQuery: string): string {
+  const params = new URLSearchParams(mapQuery);
+  params.set("bounds", boundsQuery);
+  params.delete("location");
+  params.delete("locationId");
+  params.delete("location_id");
+  return params.toString();
 }
 
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
@@ -305,6 +322,36 @@ function SkeletonCard({ view }: { view: "list" | "grid" }) {
   );
 }
 
+function CatalogLoadingInlineLabel() {
+  return (
+    <>
+      <span>Ищем лучшие варианты жилья</span>
+      <span className="catalog-loading-inline-dots text-terra" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    </>
+  );
+}
+
+function MapLoadingDotsPill({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "catalog-map-loading-pill pointer-events-none absolute left-1/2 top-4 z-[80] -translate-x-1/2",
+        className,
+      )}
+      role="status"
+      aria-label="Обновляем карту"
+    >
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+    </div>
+  );
+}
+
 export function PublicHousingResultsWithMap({
   items,
   mapQuery,
@@ -329,12 +376,18 @@ export function PublicHousingResultsWithMap({
   const mobileDragHandledRef = useRef(false);
   const mobileResultsScrollTopRef = useRef(0);
   const mobileChromeProgressRef = useRef(0);
+  const hasMapInteractionRef = useRef(false);
+  const mapBoundsQueryRef = useRef<string | null>(null);
   const mapPlacement = useCatalogMapPlacement();
 
   const selectedLocation = useMemo(() => {
     const byQuery = new URLSearchParams(mapQuery).get("location")?.trim() ?? "";
     return (selectedLocationName?.trim() || byQuery || "").trim();
   }, [mapQuery, selectedLocationName]);
+  const initialViewportKey = useMemo(() => {
+    const normalizedLocation = selectedLocation.trim().toLocaleLowerCase("ru-RU");
+    return normalizedLocation ? `housing-location:${normalizedLocation}` : "";
+  }, [selectedLocation]);
   const stayParams = useMemo(() => {
     const params = new URLSearchParams(mapQuery);
     return {
@@ -354,29 +407,6 @@ export function PublicHousingResultsWithMap({
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchGuests, stayParams.guests]);
 
-  const [remoteLocationViewport, setRemoteLocationViewport] = useState<YandexMapViewport | null>(
-    null,
-  );
-  const knownLocationViewport = useMemo(
-    () => resolveLocationViewport(selectedLocation),
-    [selectedLocation],
-  );
-  const locationViewport = knownLocationViewport ?? remoteLocationViewport;
-  const viewportKey = useMemo(() => {
-    const normalized = normalizeCrimeaLocationKey(selectedLocation);
-    if (!locationViewport || !normalized) {
-      return undefined;
-    }
-
-    const center = locationViewport.center;
-    return [
-      "housing",
-      normalized,
-      center?.[0] ?? "",
-      center?.[1] ?? "",
-      locationViewport.zoom ?? "",
-    ].join(":");
-  }, [locationViewport, selectedLocation]);
   const newIdsSet = useMemo(() => new Set(newItemIds), [newItemIds]);
   const eagerImageCount = view === "grid" ? 4 : 2;
   const deferredRenderThreshold = view === "grid" ? 6 : 4;
@@ -390,6 +420,11 @@ export function PublicHousingResultsWithMap({
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [mapViewportBounds, setMapViewportBounds] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
+  const [mapBoundsQuery, setMapBoundsQuery] = useState<string | null>(null);
+  const [initialViewport, setInitialViewport] = useState<YandexMapViewport | null>(null);
   const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
 
   const closeMapFully = useCallback(() => {
@@ -399,66 +434,6 @@ export function PublicHousingResultsWithMap({
     setHoveredCardId(null);
     setHoveredPointId(null);
   }, []);
-
-  useEffect(() => {
-    const normalized = normalizeCrimeaLocationKey(selectedLocation);
-
-    if (!normalized || knownLocationViewport) {
-      setRemoteLocationViewport(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    setRemoteLocationViewport(null);
-
-    const fetchLocationCenter = async () => {
-      try {
-        const response = await fetch(
-          `/api/location-center?location=${encodeURIComponent(selectedLocation)}`,
-          {
-            signal: controller.signal,
-            cache: "force-cache",
-          },
-        );
-
-        if (!response.ok) {
-          return;
-        }
-
-        const body = (await response.json()) as LocationCenterResponse;
-        const latitude = body.item?.latitude;
-        const longitude = body.item?.longitude;
-
-        if (
-          typeof latitude !== "number" ||
-          typeof longitude !== "number" ||
-          !Number.isFinite(latitude) ||
-          !Number.isFinite(longitude) ||
-          controller.signal.aborted
-        ) {
-          return;
-        }
-
-        setRemoteLocationViewport({
-          center: [latitude, longitude],
-          zoom:
-            typeof body.item?.zoom === "number" && Number.isFinite(body.item.zoom)
-              ? Math.min(body.item.zoom + 2, 15)
-              : 14,
-        });
-      } catch {
-        if (!controller.signal.aborted) {
-          setRemoteLocationViewport(null);
-        }
-      }
-    };
-
-    void fetchLocationCenter();
-
-    return () => {
-      controller.abort();
-    };
-  }, [knownLocationViewport, selectedLocation]);
 
   const fallbackPoints = useMemo<MapPointResponse[]>(
     () =>
@@ -491,14 +466,20 @@ export function PublicHousingResultsWithMap({
   );
 
   const mapPoints = useMemo(() => {
-    const sourcePoints =
-      mapState.status === "ready" && mapState.points.length > 0 ? mapState.points : fallbackPoints;
-    const pointById = new Map(sourcePoints.map((point) => [point.id, sanitizePoint(point)]));
+    const shouldUseRemotePoints = mapState.status !== "idle" || mapBoundsQuery !== null;
+    const sourcePoints = shouldUseRemotePoints ? mapState.points : fallbackPoints;
+    const pointById = new Map(
+      sourcePoints
+        .map((point) => sanitizePoint(point))
+        .filter((point) => isPointInsideViewportBounds(point, mapViewportBounds))
+        .map((point) => [point.id, point]),
+    );
 
-    if (mapState.status === "ready" && mapState.points.length > 0) {
+    if (shouldUseRemotePoints) {
       for (const point of fallbackPoints) {
         if (
           !pointById.has(point.id) &&
+          isPointInsideViewportBounds(point, mapViewportBounds) &&
           (viewedPointIds.has(point.id) || hoveredCardId === point.id || activePointId === point.id)
         ) {
           pointById.set(point.id, sanitizePoint(point));
@@ -513,6 +494,8 @@ export function PublicHousingResultsWithMap({
     activePointId,
     fallbackPoints,
     hoveredCardId,
+    mapBoundsQuery,
+    mapViewportBounds,
     mapState.points,
     mapState.status,
     viewedPointIds,
@@ -557,7 +540,9 @@ export function PublicHousingResultsWithMap({
 
   const activePopupItem = activePointId ? (mapPointById.get(activePointId) ?? null) : null;
   const highlightedMapPointId = hoveredPointId ?? hoveredCardId;
-  const hasMapPoints = mapViewerPoints.length > 0;
+  const isCatalogLoading = loadingInitial;
+  const mapLoadingPillVisible =
+    isCatalogLoading || (hasMapInteractionRef.current && mapState.status === "loading");
   const foundCount = totalCount ?? items.length;
   const foundCountLabel = formatRuCount(
     foundCount,
@@ -608,26 +593,68 @@ export function PublicHousingResultsWithMap({
     setHoveredPointId(null);
     setViewedPointIds(new Set());
     setMapState(createInitialMapState());
+    mapBoundsQueryRef.current = null;
+    setMapViewportBounds(null);
+    setMapBoundsQuery(null);
+    hasMapInteractionRef.current = false;
   }, [mapQuery, selectedLocation]);
 
   useEffect(() => {
-    if (!isMapActivated) {
+    const normalizedLocation = selectedLocation.trim();
+    if (!normalizedLocation) {
+      setInitialViewport(null);
       return;
     }
 
     const controller = new AbortController();
 
-    const fetchPoints = async () => {
-      setMapState({
-        status: "loading",
-        points: [],
-        totalAvailable: null,
-        truncated: false,
-        errorMessage: "",
+    fetchLocationCenter(normalizedLocation, controller.signal)
+      .then((center) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (!center) {
+          setInitialViewport(null);
+          return;
+        }
+
+        setInitialViewport({
+          center: [center.latitude, center.longitude],
+          zoom: SEARCH_LOCATION_MAP_ZOOM,
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setInitialViewport(null);
+        }
       });
 
+    return () => {
+      controller.abort();
+    };
+  }, [selectedLocation]);
+
+  useEffect(() => {
+    if (!isMapActivated || !mapBoundsQuery) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const requestQuery = buildMapPointsRequestQuery(mapQuery, mapBoundsQuery);
+    let refreshTimer: number | null = null;
+
+    const fetchPoints = async () => {
+      setMapState((current) => ({
+        status: "loading",
+        points: current.points,
+        totalAvailable: current.totalAvailable,
+        truncated: current.truncated,
+        errorMessage: "",
+      }));
+
       try {
-        const response = await fetch(`/api/map/accommodations?${mapQuery}`, {
+        const response = await fetch(`/api/map/accommodations?${requestQuery}`, {
           signal: controller.signal,
           cache: "no-store",
         });
@@ -673,12 +700,17 @@ export function PublicHousingResultsWithMap({
       }
     };
 
-    void fetchPoints();
+    refreshTimer = window.setTimeout(() => {
+      void fetchPoints();
+    }, MAP_POINTS_REFRESH_DELAY_MS);
 
     return () => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
       controller.abort();
     };
-  }, [isMapActivated, mapQuery]);
+  }, [isMapActivated, mapBoundsQuery, mapQuery]);
 
   useEffect(() => {
     if (!isMapExpanded) {
@@ -842,10 +874,27 @@ export function PublicHousingResultsWithMap({
 
   const handleMapBoundsChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
-      onMapBoundsFilterChange?.(formatMapBoundsFilter(bounds));
+      const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (normalizedBounds !== mapBoundsQueryRef.current) {
+        mapBoundsQueryRef.current = normalizedBounds;
+        setMapViewportBounds(bounds);
+        setMapBoundsQuery(normalizedBounds);
+        setActivePointId(null);
+        setHoveredPointId(null);
+      }
+
+      if (!hasMapInteractionRef.current) {
+        return;
+      }
+
+      onMapBoundsFilterChange?.(normalizedBounds);
     },
     [onMapBoundsFilterChange],
   );
+
+  const handleMapWheelCapture = useCallback(() => {
+    hasMapInteractionRef.current = true;
+  }, []);
 
   function openMapFully() {
     setIsMapActivated(true);
@@ -862,6 +911,8 @@ export function PublicHousingResultsWithMap({
   }
 
   function handleMobileMapPointerDown() {
+    hasMapInteractionRef.current = true;
+
     if (mapPlacement !== "mobile") {
       setActivePointId(null);
       setHoveredCardId(null);
@@ -990,6 +1041,11 @@ export function PublicHousingResultsWithMap({
     mobileSheetSnap === "expanded" &&
     resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
   const isMobileSheetExpanded = mobileSheetSnap === "expanded";
+  const mobileStatusContent = isCatalogLoading ? (
+    <CatalogLoadingInlineLabel />
+  ) : (
+    <>Найдено {foundCountLabel}</>
+  );
   const mobileSheetHandle = (
     <button
       type="button"
@@ -1007,7 +1063,7 @@ export function PublicHousingResultsWithMap({
         aria-hidden="true"
       />
       <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
-        Найдено {foundCountLabel}
+        {mobileStatusContent}
         <AppIcon
           icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
           className="h-4 w-4 text-olive/48"
@@ -1017,15 +1073,15 @@ export function PublicHousingResultsWithMap({
   );
 
   const resultsSection = (
-    <section id="catalog-results" aria-busy={loadingInitial || loadingMore} className="space-y-4">
+    <section id="catalog-results" aria-busy={isCatalogLoading || loadingMore} className="space-y-4">
       <div
         className={cn(
           "grid gap-4 transition-all duration-300",
           view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
         )}
       >
-        {loadingInitial && items.length === 0
-          ? Array.from({ length: view === "grid" ? 4 : 3 }, (_, index) => (
+        {isCatalogLoading
+          ? Array.from({ length: 4 }, (_, index) => (
               <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
             ))
           : items.length === 0
@@ -1095,7 +1151,7 @@ export function PublicHousingResultsWithMap({
               })}
       </div>
 
-      {loadingMore ? (
+      {!isCatalogLoading && loadingMore ? (
         <div
           className={cn(
             "grid gap-4",
@@ -1108,7 +1164,7 @@ export function PublicHousingResultsWithMap({
         </div>
       ) : null}
 
-      {hasMore ? (
+      {!isCatalogLoading && hasMore ? (
         <div className="pt-1">
           <button
             type="button"
@@ -1140,7 +1196,11 @@ export function PublicHousingResultsWithMap({
                   : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
               }}
             >
-              <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
+              <div
+                className="absolute inset-0"
+                onPointerDownCapture={handleMobileMapPointerDown}
+                onWheelCapture={handleMapWheelCapture}
+              >
                 <YandexMapMultiViewer
                   points={mapViewerPoints}
                   activePointId={activePointId}
@@ -1148,14 +1208,17 @@ export function PublicHousingResultsWithMap({
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={handleMapPointHoverChange}
                   onBoundsChange={handleMapBoundsChange}
-                  initialViewport={locationViewport}
-                  viewportKey={viewportKey}
+                  initialViewport={initialViewport}
+                  viewportKey={initialViewportKey}
                   controls={[]}
                   showBalloons={false}
                   frameless
+                  fitPointsOnChange="never"
                   className="h-full w-full"
                 />
               </div>
+
+              {mapLoadingPillVisible ? <MapLoadingDotsPill className="top-3" /> : null}
 
               {activePopupItem && mobileSheetSnap !== "expanded" ? (
                 <div
@@ -1198,7 +1261,7 @@ export function PublicHousingResultsWithMap({
                       aria-hidden="true"
                     />
                     <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
-                      Найдено {foundCountLabel}
+                      {mobileStatusContent}
                       <AppIcon
                         icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
                         className="h-4 w-4 text-olive/48"
@@ -1252,7 +1315,11 @@ export function PublicHousingResultsWithMap({
                   </div>
                 </div>
                 <div className="relative h-[320px] overflow-hidden">
-                  <div className="h-full" onPointerDownCapture={handleMobileMapPointerDown}>
+                  <div
+                    className="h-full"
+                    onPointerDownCapture={handleMobileMapPointerDown}
+                    onWheelCapture={handleMapWheelCapture}
+                  >
                     <YandexMapMultiViewer
                       points={mapViewerPoints}
                       activePointId={activePointId}
@@ -1260,10 +1327,11 @@ export function PublicHousingResultsWithMap({
                       onPointClick={handleMapPointClick}
                       onPointHoverChange={handleMapPointHoverChange}
                       onBoundsChange={handleMapBoundsChange}
-                      initialViewport={locationViewport}
-                      viewportKey={viewportKey}
+                      initialViewport={initialViewport}
+                      viewportKey={initialViewportKey}
                       showBalloons={false}
                       frameless
+                      fitPointsOnChange="never"
                       className="h-full w-full"
                     />
                   </div>
@@ -1277,6 +1345,7 @@ export function PublicHousingResultsWithMap({
                       />
                     </div>
                   ) : null}
+                  {mapLoadingPillVisible ? <MapLoadingDotsPill /> : null}
                 </div>
               </section>
             ) : null}
@@ -1291,6 +1360,7 @@ export function PublicHousingResultsWithMap({
                       <div
                         className="absolute inset-0"
                         onPointerDownCapture={handleMobileMapPointerDown}
+                        onWheelCapture={handleMapWheelCapture}
                       >
                         <YandexMapMultiViewer
                           points={mapViewerPoints}
@@ -1299,11 +1369,12 @@ export function PublicHousingResultsWithMap({
                           onPointClick={handleMapPointClick}
                           onPointHoverChange={handleMapPointHoverChange}
                           onBoundsChange={handleMapBoundsChange}
-                          initialViewport={locationViewport}
-                          viewportKey={viewportKey}
+                          initialViewport={initialViewport}
+                          viewportKey={initialViewportKey}
                           controls={["zoomControl"]}
                           showBalloons={false}
                           frameless
+                          fitPointsOnChange="never"
                           className="h-full w-full"
                         />
                       </div>
@@ -1331,12 +1402,7 @@ export function PublicHousingResultsWithMap({
                         </div>
                       ) : null}
 
-                      {isMapActivated && mapState.status === "loading" ? (
-                        <div className="pointer-events-none absolute bottom-3 left-3 z-20 inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
-                          Обновляем точки
-                        </div>
-                      ) : null}
+                      {mapLoadingPillVisible ? <MapLoadingDotsPill /> : null}
                     </>
                   ) : null}
                 </section>
@@ -1355,7 +1421,11 @@ export function PublicHousingResultsWithMap({
           aria-label="Карта объектов"
         >
           <section className="relative h-full w-full overflow-hidden">
-            <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
+            <div
+              className="absolute inset-0"
+              onPointerDownCapture={handleMobileMapPointerDown}
+              onWheelCapture={handleMapWheelCapture}
+            >
               <YandexMapMultiViewer
                 points={mapViewerPoints}
                 activePointId={activePointId}
@@ -1363,11 +1433,12 @@ export function PublicHousingResultsWithMap({
                 onPointClick={handleMapPointClick}
                 onPointHoverChange={handleMapPointHoverChange}
                 onBoundsChange={handleMapBoundsChange}
-                initialViewport={locationViewport}
-                viewportKey={viewportKey}
+                initialViewport={initialViewport}
+                viewportKey={initialViewportKey}
                 controls={["zoomControl"]}
                 showBalloons={false}
                 frameless
+                fitPointsOnChange="never"
                 className="h-full min-h-[100dvh] w-full"
               />
             </div>
@@ -1384,14 +1455,7 @@ export function PublicHousingResultsWithMap({
               </button>
             </div>
 
-            {mapState.status === "loading" && !hasMapPoints ? (
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/30 backdrop-blur-[1px]">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/94 px-3 py-1.5 text-xs font-semibold text-olive shadow-sm ring-1 ring-black/5">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-olive/30 border-t-olive" />
-                  Загружаем точки
-                </div>
-              </div>
-            ) : null}
+            {mapLoadingPillVisible ? <MapLoadingDotsPill className="top-5" /> : null}
 
             {activePopupItem ? (
               <div className="pointer-events-none absolute left-1/2 top-20 z-20 w-[312px] max-w-[calc(100%-24px)] -translate-x-1/2 sm:top-24">

@@ -22,6 +22,7 @@ import {
   TvMinimalPlay,
   User,
   Users,
+  WalletCards,
   X,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -695,6 +696,32 @@ function formatNightlyPriceLabel(
   return `${formatMoney(value, currency)} ${getRoomPriceNightlySuffix(priceType)}`;
 }
 
+function getRoomExtraBedPriceSummary(room: PublicPropertyCard["rooms"][number]): string | null {
+  if (room.extraBeds <= 0) {
+    return null;
+  }
+
+  let value: number | null = null;
+  let currency: string | null = null;
+
+  for (const price of room.prices) {
+    if (
+      price.priceType !== "PER_ROOM" ||
+      price.extraBedPrice === null ||
+      !Number.isFinite(price.extraBedPrice)
+    ) {
+      continue;
+    }
+
+    if (value === null || price.extraBedPrice < value) {
+      value = price.extraBedPrice;
+      currency = price.currency;
+    }
+  }
+
+  return value !== null && currency ? `от ${formatMoney(value, currency)}/сутки` : null;
+}
+
 function getMaxRequiredMinGuests(
   room: PublicPropertyCard["rooms"][number],
   checkIn: string,
@@ -725,6 +752,30 @@ function getMaxRequiredMinNights(
     if (period?.minNights && period.minNights > required) required = period.minNights;
   }
   return required;
+}
+
+function getCalculationExtraBedLabel(
+  calculation: Extract<ReturnType<typeof calculateRoomStayPrice>, { ok: true }>,
+): string | null {
+  const extraBedTotal = calculation.breakdown.reduce((sum, item) => sum + item.extraTotal, 0);
+  const extraGuests = calculation.breakdown.reduce(
+    (maxGuests, item) => Math.max(maxGuests, item.extraGuests),
+    0,
+  );
+
+  if (extraBedTotal <= 0 || extraGuests <= 0) {
+    return null;
+  }
+
+  const totalNightly = Math.round(calculation.total / calculation.nights);
+  const baseNightly = Math.round((calculation.total - extraBedTotal) / calculation.nights);
+  const extraBedNightly = Math.round(extraBedTotal / calculation.nights);
+  const extraLabel = extraGuests > 1 ? "доп. места" : "доп. место";
+
+  return `${formatMoney(totalNightly, calculation.currency)} в сутки: номер ${formatMoney(
+    baseNightly,
+    calculation.currency,
+  )} + ${extraLabel} ${formatMoney(extraBedNightly, calculation.currency)}`;
 }
 
 function getRoomPriceSummary(
@@ -782,11 +833,13 @@ function getRoomPriceSummary(
       priceType: price.priceType,
       minGuests: price.minGuests,
       minNights: price.minNights,
+      extraBedPrice: price.extraBedPrice,
       currency: price.currency,
     })),
     checkIn,
     checkOut,
     guests,
+    includedGuests: room.beds,
   });
   if (!calculation.ok) {
     return {
@@ -811,6 +864,7 @@ function getRoomPriceSummary(
 
   const totalNightly = Math.round(calculation.total / calculation.nights);
   const unitNightly = Math.round(calculation.unitTotal / calculation.nights);
+  const extraBedLabel = getCalculationExtraBedLabel(calculation);
   const perNight =
     calculation.priceType === "PER_PERSON"
       ? `${formatMoney(unitNightly, calculation.currency)} за человека`
@@ -828,7 +882,7 @@ function getRoomPriceSummary(
     tone: "ok",
     bigPrice: formatMoney(calculation.total, calculation.currency),
     sideLabel,
-    smallLabel: perNight,
+    smallLabel: extraBedLabel ?? perNight,
   };
 }
 
@@ -1328,6 +1382,9 @@ export function PublicPropertyDetails({
         let stayCurrency: string | null = null;
         let stayNightly: number | null = null;
         let stayUnitNightly: number | null = null;
+        let stayBaseNightly: number | null = null;
+        let stayExtraBedNightly = 0;
+        let stayExtraGuests = 0;
         let stayPriceType: RoomPriceCalculationType | null = null;
 
         if (checkIn && checkOut && selectedNights > 0) {
@@ -1339,11 +1396,13 @@ export function PublicPropertyDetails({
               priceType: price.priceType,
               minGuests: price.minGuests,
               minNights: price.minNights,
+              extraBedPrice: price.extraBedPrice,
               currency: price.currency,
             })),
             checkIn,
             checkOut,
             guests: totalGuests,
+            includedGuests: room.beds,
           });
           if (calculation.ok) {
             hasStayPrice = true;
@@ -1351,6 +1410,16 @@ export function PublicPropertyDetails({
             stayCurrency = calculation.currency;
             stayNightly = Math.round(calculation.total / calculation.nights);
             stayUnitNightly = Math.round(calculation.unitTotal / calculation.nights);
+            const extraBedTotal = calculation.breakdown.reduce(
+              (sum, item) => sum + item.extraTotal,
+              0,
+            );
+            stayBaseNightly = Math.round((calculation.total - extraBedTotal) / calculation.nights);
+            stayExtraBedNightly = Math.round(extraBedTotal / calculation.nights);
+            stayExtraGuests = calculation.breakdown.reduce(
+              (maxGuests, item) => Math.max(maxGuests, item.extraGuests),
+              0,
+            );
             stayPriceType = calculation.priceType;
           }
         }
@@ -1367,6 +1436,9 @@ export function PublicPropertyDetails({
           stayCurrency,
           stayNightly,
           stayUnitNightly,
+          stayBaseNightly,
+          stayExtraBedNightly,
+          stayExtraGuests,
           stayPriceType,
           sortPrice,
           capacityDelta: Math.abs(capacity - totalGuests),
@@ -1405,6 +1477,9 @@ export function PublicPropertyDetails({
       nights: number;
       nightly: number;
       unitNightly: number | null;
+      baseNightly: number | null;
+      extraBedNightly: number;
+      extraGuests: number;
       priceType: RoomPriceCalculationType | null;
       roomTitle: string;
     };
@@ -1434,6 +1509,9 @@ export function PublicPropertyDetails({
       nights: selectedNights,
       nightly: bestNightly,
       unitNightly: bestAutoEntry.stayUnitNightly,
+      baseNightly: bestAutoEntry.stayBaseNightly,
+      extraBedNightly: bestAutoEntry.stayExtraBedNightly,
+      extraGuests: bestAutoEntry.stayExtraGuests,
       priceType: bestAutoEntry.stayPriceType,
       roomTitle: bestAutoEntry.room.title,
     } satisfies QuoteResult;
@@ -1455,6 +1533,15 @@ export function PublicPropertyDetails({
   const sidebarNightlyLabel = sidebarQuote
     ? `${formatMoney(sidebarQuote.nightly, sidebarQuote.currency)} за ночь`
     : `${mainPriceLabel} ${getRoomPriceNightlySuffix(item.minNightPriceType)}`;
+  const sidebarExtraBedMeta =
+    sidebarQuote &&
+    sidebarQuote.extraBedNightly > 0 &&
+    sidebarQuote.extraGuests > 0 &&
+    sidebarQuote.baseNightly !== null
+      ? `номер ${formatMoney(sidebarQuote.baseNightly, sidebarQuote.currency)} + ${
+          sidebarQuote.extraGuests > 1 ? "доп. места" : "доп. место"
+        } ${formatMoney(sidebarQuote.extraBedNightly, sidebarQuote.currency)}/сутки`
+      : null;
   const sidebarPriceMeta =
     sidebarQuote?.priceType === "PER_PERSON" && sidebarQuote.unitNightly !== null
       ? `${formatNightsLabel(selectedNights)}, ${formatGuestsLabel(totalGuests)} · ${formatMoney(
@@ -1462,7 +1549,12 @@ export function PublicPropertyDetails({
           sidebarQuote.currency,
         )} за человека`
       : selectedNights > 0
-        ? `${formatNightsLabel(selectedNights)}, ${formatGuestsLabel(totalGuests)}`
+        ? [
+            `${formatNightsLabel(selectedNights)}, ${formatGuestsLabel(totalGuests)}`,
+            sidebarExtraBedMeta,
+          ]
+            .filter((part): part is string => Boolean(part))
+            .join(" · ")
         : "Выберите даты и состав гостей";
   const sidebarPriceRoomHint = sidebarQuote ? `Лучший номер: ${sidebarQuote.roomTitle}` : null;
   const checkInRuleValue = item.rules.checkInFrom
@@ -1866,6 +1958,7 @@ export function PublicPropertyDetails({
                   );
                   const activeRoomMedia = roomMedia[roomIndex] ?? roomMedia[0] ?? null;
                   const summary = getRoomPriceSummary(room, checkIn, checkOut, totalGuests);
+                  const extraBedPriceSummary = getRoomExtraBedPriceSummary(room);
                   const isDetailsOpen = activeRoomDetailsId === room.id;
                   const bedLabelById = Object.fromEntries(
                     bedTypeOptions.map((o) => [o.id, o.label]),
@@ -1912,6 +2005,17 @@ export function PublicPropertyDetails({
                       category: "beds",
                       isPrimary: true,
                     },
+                    ...(extraBedPriceSummary
+                      ? [
+                          {
+                            key: `${room.id}-summary-extra-bed-price`,
+                            icon: WalletCards,
+                            name: `Доп. место ${extraBedPriceSummary}`,
+                            category: "equipment" as const,
+                            isPrimary: true,
+                          },
+                        ]
+                      : []),
                     {
                       key: `${room.id}-summary-layout`,
                       icon: RulerDimensionLine,
@@ -1941,6 +2045,18 @@ export function PublicPropertyDetails({
                       className: "border-primary/14 bg-primary/7",
                       iconClassName: "bg-primary/10 text-primary ring-primary/14",
                     },
+                    ...(extraBedPriceSummary
+                      ? [
+                          {
+                            key: `${room.id}-detail-extra-bed-price`,
+                            icon: WalletCards,
+                            label: "Доп. место",
+                            value: extraBedPriceSummary,
+                            className: "border-sun/16 bg-sun/7",
+                            iconClassName: "bg-sun/10 text-sun ring-sun/14",
+                          },
+                        ]
+                      : []),
                     ...(room.areaSqm !== null
                       ? [
                           {

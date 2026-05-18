@@ -47,7 +47,10 @@ import {
   normalizeVkProfileUrl,
   normalizeWhatsappUrl,
 } from "@/lib/contact-links";
-import { getContactActionTypeFromChannel, getPhoneListingActionType } from "@/lib/listing-analytics";
+import {
+  getContactActionTypeFromChannel,
+  getPhoneListingActionType,
+} from "@/lib/listing-analytics";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { normalizeTelegramProfileUrl } from "@/lib/telegram";
 import { normalizeWebsiteUrl } from "@/lib/website-favicon";
@@ -533,15 +536,14 @@ function CatalogShell({
   eyebrow,
   title,
   description,
-  total,
   hideHeader = false,
   children,
 }: {
   breadcrumbs: SeoBreadcrumbItem[];
   eyebrow: string;
   title: string;
-  description: string;
-  total: number;
+  description?: string | null;
+  total?: number;
   hideHeader?: boolean;
   children: React.ReactNode;
 }) {
@@ -553,11 +555,10 @@ function CatalogShell({
           <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="text-2xl font-semibold leading-tight text-olive">{title}</h1>
-              <p className="mt-0.5 max-w-3xl text-sm leading-6 text-olive/60">{description}</p>
+              {description ? (
+                <p className="mt-0.5 max-w-3xl text-sm leading-6 text-olive/60">{description}</p>
+              ) : null}
             </div>
-            <p className="shrink-0 text-sm font-semibold text-olive/70 md:border-l md:border-olive/10 md:pl-4">
-              {total} {formatPlural(total, "вариант", "варианта", "вариантов")}
-            </p>
           </div>
         </div>
       )}
@@ -1092,6 +1093,8 @@ export function AttractionCatalog({
   };
   const mapItemsEndpoint = buildCatalogPath("/api/map/attractions", {
     ...params,
+    location: null,
+    radiusKm: null,
     bounds: null,
   });
   const initialMapItems = mapItems ?? result.items.map(toAttractionMapItem);
@@ -1112,8 +1115,6 @@ export function AttractionCatalog({
       ]}
       eyebrow="Каталог"
       title="Досуг в Крыму"
-      description="Ищите места для прогулок, самостоятельных остановок и отдыха по названию, городу или радиусу рядом с выбранной локацией."
-      total={result.total}
     >
       <MarketplaceFilterBar
         key={[
@@ -1203,8 +1204,6 @@ export function TransferCatalog({
       ]}
       eyebrow="Каталог"
       title="Трансферы по Крыму"
-      description="Выбирайте водителя по городу, маршруту, типу трансфера, автомобилю и цене."
-      total={result.total}
     >
       <MarketplaceFilterBar
         key={[
@@ -1611,7 +1610,9 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
           }
         : null;
     })
-    .filter((entry): entry is { phone: string; label: string; name: string | null } => entry !== null);
+    .filter(
+      (entry): entry is { phone: string; label: string; name: string | null } => entry !== null,
+    );
   const mobilePhoneLinks = extraPhones
     .map((entry, index) => {
       const href = telHref(entry.phone);
@@ -1623,7 +1624,15 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
           }
         : null;
     })
-    .filter((entry): entry is { href: string; label: string; actionType: ReturnType<typeof getPhoneListingActionType> } => entry !== null);
+    .filter(
+      (
+        entry,
+      ): entry is {
+        href: string;
+        label: string;
+        actionType: ReturnType<typeof getPhoneListingActionType>;
+      } => entry !== null,
+    );
   const mobileMessengerLinks = buildMobileMessengerLinks({
     websiteUrl: item.contacts.websiteUrl,
     email: item.contacts.email,

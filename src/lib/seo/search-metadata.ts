@@ -172,26 +172,26 @@ function resolveDirection(searchParams: SearchParamsInput): SearchDirection {
 
 function buildHousingDescription(location: string | null): string {
   if (location) {
-    return `Подборка жилья у моря ${formatLocationInPrepositional(location) ?? `в ${location}`}. До 20 июня 2026 размещение на Крым Вокруг бесплатно, без комиссии с каждого клиента или бронирования.`;
+    return `Подборка жилья у моря ${formatLocationInPrepositional(location) ?? `в ${location}`}: даты, гости, тип объекта и расположение.`;
   }
 
-  return "Аренда жилья в Крыму у моря на Крым Вокруг. До 20 июня 2026 размещение бесплатно; сервис не удерживает комиссию с каждого клиента или бронирования.";
+  return "";
 }
 
 function buildExcursionDescription(location: string | null): string {
   if (location) {
-    return `Экскурсии ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму с прямой связью с организатором. Крым Вокруг работает без комиссии с каждого бронирования.`;
+    return `Экскурсии ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму: маршруты, расписание, цены и контакты организаторов.`;
   }
 
-  return "Экскурсии и туры по Крыму с прямой связью с организаторами. До 20 июня 2026 размещение бесплатно; Крым Вокруг не удерживает процент с каждого бронирования.";
+  return "";
 }
 
 function buildToursDescription(location: string | null): string {
   if (location) {
-    return `Туры ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму с прямой связью с организатором. Крым Вокруг работает без комиссии с каждого бронирования.`;
+    return `Туры ${formatLocationInPrepositional(location) ?? `в ${location}`} и по Крыму: маршруты, даты, цены и контакты организаторов.`;
   }
 
-  return "Туры по Крыму с прямой связью с организаторами. До 20 июня 2026 размещение бесплатно; Крым Вокруг не удерживает процент с каждого бронирования.";
+  return "";
 }
 
 function buildHousingBreadcrumbs(input: {

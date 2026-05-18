@@ -748,6 +748,12 @@ const roomPriceBaseSchema = z
       .max(60, "Минимум ночей не может быть больше 60")
       .nullable()
       .optional(),
+    extraBedPrice: z
+      .number()
+      .positive("Цена доп. места должна быть больше 0")
+      .max(1_000_000, "Цена доп. места слишком большая")
+      .nullable()
+      .optional(),
     currency: z
       .string()
       .trim()

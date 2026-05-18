@@ -103,6 +103,7 @@ export async function GET(request: Request, context: RouteContext) {
             priceType: true,
             minGuests: true,
             minNights: true,
+            extraBedPrice: true,
             currency: true,
             createdAt: true,
             updatedAt: true,

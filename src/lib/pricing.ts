@@ -43,6 +43,7 @@ export type SerializedRoomPrice = {
   priceType: RoomPriceType;
   minGuests: number | null;
   minNights: number | null;
+  extraBedPrice: number | null;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +63,9 @@ export type RoomPriceCalculation =
         date: string;
         price: number;
         priceType: RoomPriceType;
+        extraBedPrice: number | null;
+        extraGuests: number;
+        extraTotal: number;
         totalPrice: number;
       }>;
     }
@@ -113,6 +117,7 @@ export function serializeRoomPrice(price: {
   priceType?: RoomPriceType | string | null;
   minGuests?: number | null;
   minNights?: number | null;
+  extraBedPrice?: Prisma.Decimal | number | null;
   currency: string;
   createdAt: Date;
   updatedAt: Date;
@@ -126,6 +131,10 @@ export function serializeRoomPrice(price: {
     priceType: normalizeRoomPriceType(price.priceType),
     minGuests: price.minGuests ?? null,
     minNights: price.minNights ?? null,
+    extraBedPrice:
+      price.extraBedPrice === null || price.extraBedPrice === undefined
+        ? null
+        : Number(price.extraBedPrice),
     currency: price.currency,
     createdAt: price.createdAt.toISOString(),
     updatedAt: price.updatedAt.toISOString(),
@@ -135,12 +144,16 @@ export function serializeRoomPrice(price: {
 export function normalizeSerializedRoomPrice(
   price:
     | SerializedRoomPrice
-    | (Omit<SerializedRoomPrice, "minNights"> & { minNights?: number | null }),
+    | (Omit<SerializedRoomPrice, "minNights" | "extraBedPrice"> & {
+        minNights?: number | null;
+        extraBedPrice?: number | null;
+      }),
 ): SerializedRoomPrice {
   return {
     ...price,
     priceType: normalizeRoomPriceType(price.priceType),
     minNights: price.minNights ?? null,
+    extraBedPrice: price.extraBedPrice ?? null,
   };
 }
 
@@ -152,11 +165,13 @@ export function calculateRoomStayPrice(input: {
     priceType?: RoomPriceType | string | null;
     minGuests?: number | null;
     minNights?: number | null;
+    extraBedPrice?: number | null;
     currency: string;
   }>;
   checkIn: string;
   checkOut: string;
   guests?: number;
+  includedGuests?: number | null;
 }): RoomPriceCalculation {
   const checkInDate = parseIsoDate(input.checkIn);
   const checkOutDate = parseIsoDate(input.checkOut);
@@ -174,11 +189,19 @@ export function calculateRoomStayPrice(input: {
     typeof input.guests === "number" && Number.isFinite(input.guests)
       ? Math.max(1, Math.floor(input.guests))
       : 1;
+  const includedGuests =
+    typeof input.includedGuests === "number" && Number.isFinite(input.includedGuests)
+      ? Math.max(1, Math.floor(input.includedGuests))
+      : null;
   const normalizedPrices = input.prices.map((price) => ({
     ...price,
     dateFrom: price.dateFrom,
     dateTo: price.dateTo,
     priceType: normalizeRoomPriceType(price.priceType),
+    extraBedPrice:
+      typeof price.extraBedPrice === "number" && Number.isFinite(price.extraBedPrice)
+        ? Math.max(0, price.extraBedPrice)
+        : null,
   }));
 
   const missingDates: string[] = [];
@@ -186,6 +209,9 @@ export function calculateRoomStayPrice(input: {
     date: string;
     price: number;
     priceType: RoomPriceType;
+    extraBedPrice: number | null;
+    extraGuests: number;
+    extraTotal: number;
     totalPrice: number;
   }> = [];
   const priceTypes = new Set<RoomPriceType>();
@@ -208,12 +234,26 @@ export function calculateRoomStayPrice(input: {
     if (matched.minNights && matched.minNights > requiredMinNights) {
       requiredMinNights = matched.minNights;
     }
-    const totalPrice = priceType === "PER_PERSON" ? matched.price * guests : matched.price;
-    unitTotal += matched.price;
+    const extraGuests =
+      priceType === "PER_ROOM" && includedGuests !== null
+        ? Math.max(0, guests - includedGuests)
+        : 0;
+    const extraTotal = extraGuests * (matched.extraBedPrice ?? 0);
+    const totalPrice =
+      priceType === "PER_PERSON" ? matched.price * guests : matched.price + extraTotal;
+    unitTotal += priceType === "PER_PERSON" ? matched.price : totalPrice;
     total += totalPrice;
     currency = matched.currency;
     priceTypes.add(priceType);
-    breakdown.push({ date: day, price: matched.price, priceType, totalPrice });
+    breakdown.push({
+      date: day,
+      price: matched.price,
+      priceType,
+      extraBedPrice: matched.extraBedPrice,
+      extraGuests,
+      extraTotal,
+      totalPrice,
+    });
   }
 
   if (missingDates.length > 0) {

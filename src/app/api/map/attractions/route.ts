@@ -3,6 +3,7 @@ import {
   getPublicAttractionMapItems,
   type PublicAttractionCatalogQuery,
 } from "@/lib/public-marketplace";
+import { parseBoundsParam } from "@/lib/search-contracts";
 
 function parseRadiusKm(value: string | null): number | undefined {
   const radiusKm = Number.parseFloat(value ?? "");
@@ -15,10 +16,12 @@ function parseSort(value: string | null): PublicAttractionCatalogQuery["sort"] |
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const bounds = parseBoundsParam(searchParams.get("bounds"));
   const result = await getPublicAttractionMapItems({
     query: searchParams.get("q") ?? searchParams.get("query") ?? undefined,
     location: searchParams.get("location") ?? undefined,
     category: searchParams.get("category") ?? undefined,
+    bounds,
     radiusKm: parseRadiusKm(searchParams.get("radiusKm")),
     sort: parseSort(searchParams.get("sort")),
   });

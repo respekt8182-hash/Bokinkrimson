@@ -19,7 +19,7 @@ import type { SearchFilters, SearchResponse } from "@/types/catalog";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30;
-const MAP_BOUNDS_REFRESH_DELAY_MS = 260;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
 
 const SORT_OPTIONS = [
   { value: "", label: "Рекомендуемые" },
@@ -205,6 +205,7 @@ export function HousingCatalogClient({
   const [mapBoundsFilter, setMapBoundsFilter] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
   const mapBoundsFilterRef = useRef<string | null>(null);
+  const pendingMapBoundsFilterRef = useRef<string | null>(null);
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -255,31 +256,37 @@ export function HousingCatalogClient({
   const handleMapBoundsFilterChange = useCallback(
     (nextBounds: string | null) => {
       const normalizedBounds = nextBounds?.trim() || null;
-      if (normalizedBounds === mapBoundsFilterRef.current) {
+      if (
+        normalizedBounds === mapBoundsFilterRef.current ||
+        normalizedBounds === pendingMapBoundsFilterRef.current
+      ) {
         return;
       }
 
-      mapBoundsFilterRef.current = normalizedBounds;
-      setMapBoundsFilter(normalizedBounds);
+      pendingMapBoundsFilterRef.current = normalizedBounds;
 
       if (mapBoundsRefreshTimerRef.current) {
         window.clearTimeout(mapBoundsRefreshTimerRef.current);
         mapBoundsRefreshTimerRef.current = null;
       }
       mapBoundsAbortControllerRef.current?.abort();
+      requestSeqRef.current += 1;
+      setIsRefreshing(true);
 
       if (!normalizedBounds) {
+        mapBoundsFilterRef.current = null;
+        pendingMapBoundsFilterRef.current = null;
+        setMapBoundsFilter(null);
+        setIsRefreshing(false);
         return;
       }
 
-      requestSeqRef.current += 1;
       const requestId = requestSeqRef.current;
 
       mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
         mapBoundsRefreshTimerRef.current = null;
         const controller = new AbortController();
         mapBoundsAbortControllerRef.current = controller;
-        setIsRefreshing(true);
 
         fetchAccommodationSearch(filters, 1, PAGE_SIZE, controller.signal, normalizedBounds)
           .then((nextResponse) => {
@@ -287,6 +294,9 @@ export function HousingCatalogClient({
               return;
             }
 
+            pendingMapBoundsFilterRef.current = null;
+            mapBoundsFilterRef.current = normalizedBounds;
+            setMapBoundsFilter(normalizedBounds);
             replaceAll(nextResponse);
             setNewItemIds([]);
           })
@@ -297,6 +307,7 @@ export function HousingCatalogClient({
           })
           .finally(() => {
             if (requestId === requestSeqRef.current) {
+              pendingMapBoundsFilterRef.current = null;
               setIsRefreshing(false);
             }
           });
@@ -335,6 +346,9 @@ export function HousingCatalogClient({
 
       setFilters(normalizedFilters);
       setIsRefreshing(true);
+      mapBoundsFilterRef.current = null;
+      pendingMapBoundsFilterRef.current = null;
+      setMapBoundsFilter(null);
       if (mapBoundsRefreshTimerRef.current) {
         window.clearTimeout(mapBoundsRefreshTimerRef.current);
         mapBoundsRefreshTimerRef.current = null;
@@ -342,7 +356,6 @@ export function HousingCatalogClient({
       mapBoundsAbortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       const requestId = requestSeqRef.current;
-      const boundsForRequest = mapBoundsFilterRef.current;
 
       try {
         const nextResponse = await fetchAccommodationSearch(
@@ -350,7 +363,7 @@ export function HousingCatalogClient({
           1,
           PAGE_SIZE,
           undefined,
-          boundsForRequest,
+          null,
         );
         if (requestId !== requestSeqRef.current) {
           return;
@@ -483,6 +496,7 @@ export function HousingCatalogClient({
         onApplyFilters={(next, toast) => void applyFilters(next, toast)}
         onResetFilters={() => void resetFilters()}
         totalCount={total}
+        isLoading={isRefreshing}
         locationLabel={locationLabel}
         locationNames={locationNames}
         initialPopularSuggestions={initialPopularLocationSuggestions}
@@ -498,7 +512,7 @@ export function HousingCatalogClient({
             searchGuests={Number.parseInt(filters.guests, 10) || 2}
             hasMore={hasMore}
             loadingMore={loadingMore}
-            loadingInitial={isRefreshing && items.length === 0}
+            loadingInitial={isRefreshing}
             totalCount={total}
             emptyContent={emptyCatalogContent}
             newItemIds={newItemIds}

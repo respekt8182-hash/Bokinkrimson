@@ -113,7 +113,7 @@ describe("db compatibility sanitizer", () => {
 
   it("sanitizes create payloads even when Prisma exposes a lower-case model name", () => {
     const missingColumnsByModel = new Map<string, Set<string>>([
-      ["RoomPrice", new Set(["priceType", "minNights"])],
+      ["RoomPrice", new Set(["priceType", "minNights", "extraBedPrice"])],
     ]);
 
     const args = {
@@ -124,6 +124,7 @@ describe("db compatibility sanitizer", () => {
         price: 1500,
         priceType: "PER_PERSON",
         minNights: 3,
+        extraBedPrice: 800,
         currency: "RUB",
       },
     };

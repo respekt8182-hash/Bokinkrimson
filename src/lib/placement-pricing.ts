@@ -40,6 +40,22 @@ const categoryGenitiveLabels: Record<PlacementCategory, string> = {
   transfer: "трансфера",
 };
 
+type PaymentFindManyRunner<TPayment> = {
+  payment: {
+    findMany(args: unknown): Promise<TPayment[]>;
+  };
+};
+
+type PaidYearPlacementProbePayment = {
+  id: string;
+  tariffCode: string;
+  providerPayload: Prisma.JsonValue | null;
+};
+
+type LaunchDemoPlacementProbePayment = {
+  providerPayload: Prisma.JsonValue | null;
+};
+
 function normalizePeriod(period: PlacementPeriod): PlacementPeriod {
   const normalized = period.trim().toLowerCase();
   if (normalized === "yearly" || normalized === "annual") return "year";
@@ -132,7 +148,9 @@ async function hasSuccessfulPaidYearPlacementInCategory(input: {
   excludePaymentId?: string | null;
   client?: Prisma.TransactionClient;
 }): Promise<boolean> {
-  const client = input.client ?? db;
+  const client = (input.client ?? db) as unknown as PaymentFindManyRunner<
+    PaidYearPlacementProbePayment
+  >;
   const payments = await client.payment.findMany({
     where: {
       ownerId: input.userId,
@@ -190,7 +208,9 @@ async function hasSuccessfulLaunchDemoPlacementInCategory(input: {
   category: PlacementCategory;
   client?: Prisma.TransactionClient;
 }): Promise<boolean> {
-  const client = input.client ?? db;
+  const client = (input.client ?? db) as unknown as PaymentFindManyRunner<
+    LaunchDemoPlacementProbePayment
+  >;
   const payments = await client.payment.findMany({
     where: {
       ownerId: input.userId,

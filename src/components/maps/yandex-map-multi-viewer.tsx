@@ -1353,6 +1353,10 @@ export function YandexMapMultiViewer({
     const hasPinnedViewport = Boolean(initialViewport) && Boolean(viewportKey);
 
     if (normalizedPoints.length === 0) {
+      if (!canApplyViewport && fitPointsOnChange === "never") {
+        return;
+      }
+
       applyViewport(map, initialViewport);
       window.setTimeout(() => reportCurrentBounds(map), 240);
       if (viewportKey) {

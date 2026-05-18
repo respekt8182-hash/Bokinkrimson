@@ -130,6 +130,7 @@ type PriceFormState = {
   currency: string;
   minGuestsInput: string;
   minNightsInput: string;
+  extraBedPriceInput: string;
   editingPriceId: string | null;
 };
 
@@ -245,13 +246,51 @@ const chessboardToneClasses = {
   selectedCell: "bg-sage/24",
   selectionRange: "border-terra/45 bg-sage/18 shadow-[inset_0_0_0_1px_rgba(15,118,110,0.16)]",
 } as const;
-const modalSectionClass =
-  "wizard-section-enter rounded-[24px] border border-olive/12 bg-[linear-gradient(180deg,rgba(248,242,232,0.86),rgba(255,255,255,0.98))] p-3 shadow-sm sm:p-4";
+const modalSectionToneBaseClass =
+  "wizard-section-enter rounded-[24px] border p-3 sm:p-4";
+const modalSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-olive/12 bg-[linear-gradient(180deg,rgba(248,242,232,0.86),rgba(255,255,255,0.98))] shadow-sm",
+);
+const modalPriceRoomSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-primary/18 bg-[linear-gradient(135deg,rgba(240,253,250,0.96),rgba(255,255,255,0.98)_52%,rgba(239,232,222,0.78))] shadow-[0_18px_38px_-30px_rgba(15,118,110,0.55)]",
+);
+const modalPricePeriodSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-sage/35 bg-[linear-gradient(135deg,rgba(250,248,245,0.98),rgba(255,255,255,0.96)_48%,rgba(242,196,77,0.22))] shadow-[0_18px_38px_-30px_rgba(180,83,9,0.35)]",
+);
+const modalPriceValueSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-terra/24 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96)_45%,rgba(167,101,73,0.14))] shadow-[0_18px_38px_-30px_rgba(167,101,73,0.42)]",
+);
+const modalBookingPeriodSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-primary/20 bg-[linear-gradient(135deg,rgba(240,253,250,0.98),rgba(255,255,255,0.98)_46%,rgba(14,116,144,0.12))] shadow-[0_18px_38px_-30px_rgba(15,118,110,0.55)]",
+);
+const modalBookingPhoneSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-terra/24 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(250,248,245,0.95)_48%,rgba(167,101,73,0.16))] shadow-[0_18px_38px_-30px_rgba(167,101,73,0.42)]",
+);
+const modalBookingTimeSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-accent/20 bg-[linear-gradient(135deg,rgba(240,253,250,0.93),rgba(255,255,255,0.98)_50%,rgba(14,116,144,0.16))] shadow-[0_18px_38px_-30px_rgba(14,116,144,0.42)]",
+);
+const modalBookingGuestsSectionClass = cn(
+  modalSectionToneBaseClass,
+  "border-sage/35 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(250,248,245,0.96)_48%,rgba(242,196,77,0.2))] shadow-[0_18px_38px_-30px_rgba(180,83,9,0.34)]",
+);
 const modalTextInputClass =
   "min-h-11 rounded-2xl border-olive/15 bg-white shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]";
 const modalSelectClass =
   "w-full rounded-2xl border border-olive/15 bg-white px-3.5 py-3 text-sm text-olive shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/22";
 const modalMetaLabelClass = "text-[11px] uppercase tracking-[0.14em] text-olive/50";
+const modalMetaPrimaryLabelClass =
+  "text-[11px] uppercase tracking-[0.14em] text-primary/70";
+const modalMetaWarmLabelClass =
+  "text-[11px] uppercase tracking-[0.14em] text-terra-ink/70";
+const modalMetaGoldLabelClass =
+  "text-[11px] uppercase tracking-[0.14em] text-warning/70";
 const modalPickerCardClass =
   "h-full rounded-2xl border border-olive/14 bg-white px-3.5 py-3 shadow-[0_14px_28px_-24px_rgba(60,42,20,0.7)] transition group-hover:border-primary/30 group-focus-within:border-primary/40 group-focus-within:ring-2 group-focus-within:ring-primary/12";
 const compactToolbarButtonClass =
@@ -728,6 +767,9 @@ function formatPriceRestrictionLabel(price: SerializedRoomPrice): string {
     price.minNights === null
       ? null
       : `от ${price.minNights} ${price.minNights === 1 ? "ночи" : "ночей"}`,
+    price.extraBedPrice === null
+      ? null
+      : `доп. место ${ruNumberFormat.format(price.extraBedPrice)} ${price.currency}`,
   ].filter((item): item is string => Boolean(item));
 
   return parts.length > 0 ? parts.join(" · ") : "Любой состав и срок";
@@ -914,6 +956,9 @@ type OverlayPickerFieldProps = {
   inputValue: string;
   onChange: (value: string) => void;
   icon: LucideIcon;
+  labelClassName?: string;
+  iconShellClassName?: string;
+  promptClassName?: string;
 };
 
 function OverlayPickerField({
@@ -924,22 +969,35 @@ function OverlayPickerField({
   inputValue,
   onChange,
   icon,
+  labelClassName,
+  iconShellClassName,
+  promptClassName,
 }: OverlayPickerFieldProps) {
   return (
     <label className="group relative block">
       <div className={modalPickerCardClass}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className={modalMetaLabelClass}>{label}</p>
+            <p className={labelClassName ?? modalMetaLabelClass}>{label}</p>
             <p className="mt-1 truncate text-sm font-semibold text-olive sm:text-[15px]">
               {valueLabel}
             </p>
           </div>
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <span
+            className={cn(
+              "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary",
+              iconShellClassName,
+            )}
+          >
             <AppIcon icon={icon} className="h-4 w-4" />
           </span>
         </div>
-        <span className="mt-3 inline-flex items-center rounded-full bg-primary/8 px-2.5 py-1 text-[11px] font-semibold text-primary/85">
+        <span
+          className={cn(
+            "mt-3 inline-flex items-center rounded-full bg-primary/8 px-2.5 py-1 text-[11px] font-semibold text-primary/85",
+            promptClassName,
+          )}
+        >
           {promptLabel}
         </span>
       </div>
@@ -978,6 +1036,7 @@ export function PropertyChessboardWorkspace({
   const [isObjectMenuOpen, setIsObjectMenuOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [isPriceExtraSectionOpen, setIsPriceExtraSectionOpen] = useState(false);
   const [isDuplicatePricesModalOpen, setIsDuplicatePricesModalOpen] = useState(false);
   const [isCopyYearPricesModalOpen, setIsCopyYearPricesModalOpen] = useState(false);
   const [isCalendarSyncModalOpen, setIsCalendarSyncModalOpen] = useState(false);
@@ -1250,8 +1309,13 @@ export function PropertyChessboardWorkspace({
           sourcePrice?.minNights === null || sourcePrice?.minNights === undefined
             ? ""
             : String(sourcePrice.minNights),
+        extraBedPriceInput:
+          sourcePrice?.extraBedPrice === null || sourcePrice?.extraBedPrice === undefined
+            ? ""
+            : String(sourcePrice.extraBedPrice),
         editingPriceId: sourcePrice?.id ?? null,
       });
+      setIsPriceExtraSectionOpen(Boolean(sourcePrice?.extraBedPrice));
       setPriceModalError("");
       setIsPriceModalOpen(true);
       setDragSelection(null);
@@ -1943,8 +2007,13 @@ export function PropertyChessboardWorkspace({
         sourcePrice?.minNights === null || sourcePrice?.minNights === undefined
           ? ""
           : String(sourcePrice.minNights),
+      extraBedPriceInput:
+        sourcePrice?.extraBedPrice === null || sourcePrice?.extraBedPrice === undefined
+          ? ""
+          : String(sourcePrice.extraBedPrice),
       editingPriceId: sourcePrice?.id ?? null,
     });
+    setIsPriceExtraSectionOpen(Boolean(sourcePrice?.extraBedPrice));
     setPriceModalError("");
     setIsPriceModalOpen(true);
   }
@@ -1953,6 +2022,7 @@ export function PropertyChessboardWorkspace({
     setIsPriceModalOpen(false);
     setPriceForm(null);
     setPriceModalError("");
+    setIsPriceExtraSectionOpen(false);
   }
 
   function updatePriceForm(patch: Partial<PriceFormState>) {
@@ -2647,7 +2717,7 @@ export function PropertyChessboardWorkspace({
 
     const minGuestsValue = priceForm.minGuestsInput.trim();
     let minGuests: number | null = null;
-    if (minGuestsValue.length > 0) {
+    if (priceForm.priceType === "PER_PERSON" && minGuestsValue.length > 0) {
       const parsedMinGuests = Number.parseInt(minGuestsValue, 10);
       if (!Number.isFinite(parsedMinGuests) || parsedMinGuests < 1) {
         setPriceModalError("Минимум гостей должен быть целым числом от 1");
@@ -2680,6 +2750,21 @@ export function PropertyChessboardWorkspace({
       minNights = parsedMinNights;
     }
 
+    const extraBedPriceValue = priceForm.extraBedPriceInput.trim().replace(",", ".");
+    let extraBedPrice: number | null = null;
+    if (priceForm.priceType === "PER_ROOM" && room.extraBeds > 0 && extraBedPriceValue.length > 0) {
+      const parsedExtraBedPrice = Number(extraBedPriceValue);
+      if (!Number.isFinite(parsedExtraBedPrice) || parsedExtraBedPrice <= 0) {
+        setPriceModalError("Укажите корректную цену доп. места");
+        return;
+      }
+      if (parsedExtraBedPrice > 1_000_000) {
+        setPriceModalError("Цена доп. места слишком большая");
+        return;
+      }
+      extraBedPrice = parsedExtraBedPrice;
+    }
+
     setIsSavingPrice(true);
     setPriceModalError("");
 
@@ -2698,6 +2783,7 @@ export function PropertyChessboardWorkspace({
           priceType: priceForm.priceType,
           minGuests,
           minNights,
+          extraBedPrice,
           currency: priceForm.currency.trim().toUpperCase() || "RUB",
         }),
       });
@@ -2806,6 +2892,7 @@ export function PropertyChessboardWorkspace({
         priceType: price.priceType,
         minGuests: price.minGuests,
         minNights: price.minNights,
+        extraBedPrice: price.extraBedPrice,
         currency: price.currency,
       }));
 
@@ -2951,6 +3038,8 @@ export function PropertyChessboardWorkspace({
     [bookingRoomPage, roomPagerEntries],
   );
   const selectedPriceRoom = priceForm ? (roomLookupById.get(priceForm.roomId) ?? null) : null;
+  const canSetExtraBedPrice =
+    priceForm?.priceType === "PER_ROOM" && (selectedPriceRoom?.extraBeds ?? 0) > 0;
   const duplicateSourceRoom = duplicatePricesForm
     ? (roomLookupById.get(duplicatePricesForm.sourceRoomId) ?? null)
     : null;
@@ -3259,7 +3348,9 @@ export function PropertyChessboardWorkspace({
                     className={cn(
                       compactToolbarButtonClass,
                       "shrink-0",
-                      isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
+                      isRoomOrderMode
+                        ? "border-primary/30 bg-primary/8 text-primary"
+                        : "text-olive/72",
                     )}
                     onClick={() => {
                       setIsRoomOrderMode((prev) => !prev);
@@ -3295,7 +3386,9 @@ export function PropertyChessboardWorkspace({
                     className={cn(
                       compactToolbarButtonClass,
                       "shrink-0",
-                      isRoomOrderMode ? "border-primary/30 bg-primary/8 text-primary" : "text-olive/72",
+                      isRoomOrderMode
+                        ? "border-primary/30 bg-primary/8 text-primary"
+                        : "text-olive/72",
                     )}
                     onClick={() => {
                       setIsRoomOrderMode((prev) => !prev);
@@ -4296,23 +4389,12 @@ export function PropertyChessboardWorkspace({
                 </div>
               </section>
 
-              <section className={modalSectionClass}>
-                <p className="text-sm font-semibold text-olive sm:text-[15px]">Номер телефона</p>
-                <div className="mt-3">
-                  <Input
-                    className={modalTextInputClass}
-                    value={bookingForm.phone}
-                    onChange={(event) => updateBookingForm({ phone: event.target.value })}
-                    placeholder="+7 (___) ___-__-__"
-                  />
-                </div>
-              </section>
-              <section className={modalSectionClass}>
+              <section className={modalBookingPeriodSectionClass}>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-olive sm:text-[15px]">
+                  <p className="text-sm font-semibold text-primary sm:text-[15px]">
                     Период проживания
                   </p>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-olive/70 shadow-sm">
+                  <span className="rounded-full bg-primary/8 px-2.5 py-1 text-xs font-semibold text-primary shadow-sm">
                     {formatNightsLabel(bookingNights)}
                   </span>
                 </div>
@@ -4337,12 +4419,26 @@ export function PropertyChessboardWorkspace({
                 </div>
               </section>
 
-              <section className={modalSectionClass}>
+              <section className={modalBookingPhoneSectionClass}>
+                <p className="text-sm font-semibold text-terra-ink sm:text-[15px]">
+                  Номер телефона
+                </p>
+                <div className="mt-3">
+                  <Input
+                    className={modalTextInputClass}
+                    value={bookingForm.phone}
+                    onChange={(event) => updateBookingForm({ phone: event.target.value })}
+                    placeholder="+7 (___) ___-__-__"
+                  />
+                </div>
+              </section>
+
+              <section className={modalBookingTimeSectionClass}>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-olive sm:text-[15px]">
+                  <p className="text-sm font-semibold text-accent sm:text-[15px]">
                     Время заезда и выезда
                   </p>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-olive/70 shadow-sm">
+                  <span className="rounded-full bg-accent/8 px-2.5 py-1 text-xs font-semibold text-accent shadow-sm">
                     {formatTimeRangeLabel(bookingForm.timeFrom, bookingForm.timeTo)}
                   </span>
                 </div>
@@ -4358,6 +4454,9 @@ export function PropertyChessboardWorkspace({
                     inputValue={bookingForm.timeFrom}
                     onChange={(value) => updateBookingForm({ timeFrom: value })}
                     icon={Clock3}
+                    labelClassName={modalMetaPrimaryLabelClass}
+                    iconShellClassName="bg-accent/10 text-accent"
+                    promptClassName="bg-accent/8 text-accent/85"
                   />
                   <OverlayPickerField
                     label="Выезд"
@@ -4367,15 +4466,18 @@ export function PropertyChessboardWorkspace({
                     inputValue={bookingForm.timeTo}
                     onChange={(value) => updateBookingForm({ timeTo: value })}
                     icon={Clock3}
+                    labelClassName={modalMetaPrimaryLabelClass}
+                    iconShellClassName="bg-accent/10 text-accent"
+                    promptClassName="bg-accent/8 text-accent/85"
                   />
                 </div>
               </section>
 
-              <section className={modalSectionClass}>
-                <p className="text-sm font-semibold text-olive sm:text-[15px]">Гости</p>
+              <section className={modalBookingGuestsSectionClass}>
+                <p className="text-sm font-semibold text-warning sm:text-[15px]">Гости</p>
                 <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-olive/14 bg-white p-3 shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]">
-                    <p className={modalMetaLabelClass}>Взрослые</p>
+                    <p className={modalMetaGoldLabelClass}>Взрослые</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Button
                         variant="ghost"
@@ -4406,7 +4508,7 @@ export function PropertyChessboardWorkspace({
                   </div>
 
                   <div className="rounded-2xl border border-olive/14 bg-white p-3 shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]">
-                    <p className={modalMetaLabelClass}>Детей</p>
+                    <p className={modalMetaGoldLabelClass}>Детей</p>
                     <div className="mt-2 flex items-center gap-2">
                       <Button
                         variant="ghost"
@@ -4511,9 +4613,9 @@ export function PropertyChessboardWorkspace({
             </div>
 
             <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 [@media(orientation:landscape)_and_(max-height:560px)]:space-y-2 [@media(orientation:landscape)_and_(max-height:560px)]:px-2.5 [@media(orientation:landscape)_and_(max-height:560px)]:py-1.5">
-              <section className={modalSectionClass}>
+              <section className={modalPriceRoomSectionClass}>
                 <label className="space-y-1.5">
-                  <span className="text-sm font-semibold text-olive">Номер</span>
+                  <span className="text-sm font-semibold text-primary">Номер</span>
                   <select
                     className={modalSelectClass}
                     value={priceForm.roomId}
@@ -4521,6 +4623,7 @@ export function PropertyChessboardWorkspace({
                       updatePriceForm({
                         roomId: event.target.value,
                         editingPriceId: null,
+                        extraBedPriceInput: "",
                       })
                     }
                   >
@@ -4539,10 +4642,10 @@ export function PropertyChessboardWorkspace({
                 ) : null}
               </section>
 
-              <section className={modalSectionClass}>
+              <section className={modalPricePeriodSectionClass}>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-olive sm:text-[15px]">Период</p>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-olive/70 shadow-sm">
+                  <p className="text-sm font-semibold text-warning sm:text-[15px]">Период</p>
+                  <span className="rounded-full bg-sage/18 px-2.5 py-1 text-xs font-semibold text-warning shadow-sm">
                     {formatNightsLabel(pricePeriodNights)}
                   </span>
                 </div>
@@ -4567,10 +4670,10 @@ export function PropertyChessboardWorkspace({
                 </div>
               </section>
 
-              <section className={modalSectionClass}>
+              <section className={modalPriceValueSectionClass}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1.5">
-                    <span className={modalMetaLabelClass}>
+                    <span className={modalMetaWarmLabelClass}>
                       {priceForm.priceType === "PER_PERSON"
                         ? "Цена за человека"
                         : "Цена за комнату/ночь"}
@@ -4586,7 +4689,7 @@ export function PropertyChessboardWorkspace({
                     />
                   </label>
                   <label className="space-y-1.5">
-                    <span className={modalMetaLabelClass}>Валюта</span>
+                    <span className={modalMetaWarmLabelClass}>Валюта</span>
                     <Input
                       className={modalTextInputClass}
                       value={priceForm.currency}
@@ -4599,7 +4702,7 @@ export function PropertyChessboardWorkspace({
                   </label>
                 </div>
                 <div className="mt-3 space-y-1.5">
-                  <span className={modalMetaLabelClass}>Как считать цену</span>
+                  <span className={modalMetaWarmLabelClass}>Как считать цену</span>
                   <div className="grid grid-cols-2 gap-1 rounded-2xl border border-olive/12 bg-white p-1 shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]">
                     {(["PER_ROOM", "PER_PERSON"] as const).map((type) => {
                       const isSelected = priceForm.priceType === type;
@@ -4607,7 +4710,16 @@ export function PropertyChessboardWorkspace({
                         <button
                           key={type}
                           type="button"
-                          onClick={() => updatePriceForm({ priceType: type })}
+                          onClick={() => {
+                            updatePriceForm(
+                              type === "PER_ROOM"
+                                ? { priceType: type, minGuestsInput: "" }
+                                : { priceType: type, extraBedPriceInput: "" },
+                            );
+                            if (type === "PER_PERSON") {
+                              setIsPriceExtraSectionOpen(false);
+                            }
+                          }}
                           className={cn(
                             "h-10 rounded-xl px-3 text-xs font-semibold transition sm:text-sm",
                             isSelected
@@ -4623,39 +4735,48 @@ export function PropertyChessboardWorkspace({
                     })}
                   </div>
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-1.5">
-                    <span className={modalMetaLabelClass}>Минимум гостей</span>
-                    <Input
-                      className={modalTextInputClass}
-                      type="number"
-                      min={1}
-                      max={40}
-                      value={priceForm.minGuestsInput}
-                      onChange={(event) => updatePriceForm({ minGuestsInput: event.target.value })}
-                      placeholder="Без ограничения"
-                    />
-                    <div className="flex flex-wrap gap-1.5">
-                      {["", "1", "2", "3", "4", "5"].map((value) => (
-                        <button
-                          key={`min-guests-${value || "any"}`}
-                          type="button"
-                          className={cn(
-                            "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
-                            priceForm.minGuestsInput === value
-                              ? "border-primary/25 bg-primary/10 text-primary"
-                              : "border-olive/12 bg-white text-olive/65 hover:border-primary/20 hover:text-primary",
-                          )}
-                          onClick={() => updatePriceForm({ minGuestsInput: value })}
-                        >
-                          {value ? `от ${value}` : "любой"}
-                        </button>
-                      ))}
-                    </div>
-                  </label>
+                <div
+                  className={cn(
+                    "mt-3 grid gap-3",
+                    priceForm.priceType === "PER_PERSON" ? "sm:grid-cols-2" : "",
+                  )}
+                >
+                  {priceForm.priceType === "PER_PERSON" ? (
+                    <label className="block space-y-1.5">
+                      <span className={modalMetaWarmLabelClass}>Минимум гостей</span>
+                      <Input
+                        className={modalTextInputClass}
+                        type="number"
+                        min={1}
+                        max={40}
+                        value={priceForm.minGuestsInput}
+                        onChange={(event) =>
+                          updatePriceForm({ minGuestsInput: event.target.value })
+                        }
+                        placeholder="Без ограничения"
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        {["", "1", "2", "3", "4", "5"].map((value) => (
+                          <button
+                            key={`min-guests-${value || "any"}`}
+                            type="button"
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+                              priceForm.minGuestsInput === value
+                                ? "border-primary/25 bg-primary/10 text-primary"
+                                : "border-olive/12 bg-white text-olive/65 hover:border-primary/20 hover:text-primary",
+                            )}
+                            onClick={() => updatePriceForm({ minGuestsInput: value })}
+                          >
+                            {value ? `от ${value}` : "любой"}
+                          </button>
+                        ))}
+                      </div>
+                    </label>
+                  ) : null}
 
                   <label className="block space-y-1.5">
-                    <span className={modalMetaLabelClass}>Минимум ночей</span>
+                    <span className={modalMetaWarmLabelClass}>Минимум ночей</span>
                     <Input
                       className={modalTextInputClass}
                       type="number"
@@ -4684,6 +4805,45 @@ export function PropertyChessboardWorkspace({
                     </div>
                   </label>
                 </div>
+                {canSetExtraBedPrice ? (
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-olive/12 bg-white shadow-[0_10px_24px_-20px_rgba(60,42,20,0.55)]">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left text-sm font-semibold text-olive transition hover:bg-cream/55"
+                      onClick={() => setIsPriceExtraSectionOpen((prev) => !prev)}
+                      aria-expanded={isPriceExtraSectionOpen}
+                    >
+                      <span>Дополнительно</span>
+                      <span className="inline-flex items-center gap-2 text-xs text-olive/55">
+                        {selectedPriceRoom?.extraBeds ?? 0} доп.
+                        <AppIcon
+                          icon={isPriceExtraSectionOpen ? ChevronUp : ChevronDown}
+                          className="h-4 w-4"
+                        />
+                      </span>
+                    </button>
+                    {isPriceExtraSectionOpen ? (
+                      <div className="border-t border-olive/10 px-3.5 py-3">
+                        <label className="block space-y-1.5">
+                          <span className={modalMetaWarmLabelClass}>
+                            Цена доп. места за ночь
+                          </span>
+                          <Input
+                            className={modalTextInputClass}
+                            type="number"
+                            min={1}
+                            step="0.01"
+                            value={priceForm.extraBedPriceInput}
+                            onChange={(event) =>
+                              updatePriceForm({ extraBedPriceInput: event.target.value })
+                            }
+                            placeholder="Например, 800"
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
 
               {priceModalError ? (

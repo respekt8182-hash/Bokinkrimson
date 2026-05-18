@@ -1,6 +1,7 @@
 import { MapPin } from "lucide-react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
+import { NEARBY_CATALOG_RADIUS_KM } from "@/lib/catalog-radius";
 
 type CatalogNearbyContinuationNoteProps = {
   locationName: string | null | undefined;
@@ -14,7 +15,10 @@ export function CatalogNearbyContinuationNote({
   className,
 }: CatalogNearbyContinuationNoteProps) {
   const location = locationName?.trim();
-  const radius = typeof radiusKm === "number" && Number.isFinite(radiusKm) ? radiusKm : 20;
+  const radius =
+    typeof radiusKm === "number" && Number.isFinite(radiusKm)
+      ? radiusKm
+      : NEARBY_CATALOG_RADIUS_KM;
   const prefix = location
     ? `Предложения для «${location}» закончились`
     : "Предложения в выбранной локации закончились";

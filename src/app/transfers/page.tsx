@@ -58,6 +58,7 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
     }),
     getPublicTransferCatalog({
       ...catalogQuery,
+      location: "",
       page: 1,
       pageSize: 5000,
       allowLargePageSize: true,

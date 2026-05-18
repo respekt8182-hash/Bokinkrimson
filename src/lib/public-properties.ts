@@ -152,6 +152,10 @@ export type PublicCatalogItem = {
     nights: number;
     nightly: number;
     totalNightly: number;
+    baseNightly: number;
+    extraBedNightly: number;
+    extraBedTotal: number;
+    extraGuests: number;
     priceType: RoomPriceType | "MIXED";
     roomTitle: string | null;
     guests: number;
@@ -726,6 +730,7 @@ type CatalogRoomPricePoint = {
   priceType: RoomPriceType;
   minGuests: number | null;
   minNights: number | null;
+  extraBedPrice: number | null;
   currency: string;
 };
 
@@ -751,6 +756,7 @@ type CatalogLiveRoomForPriceOverlay = {
     priceType?: RoomPriceType | string | null;
     minGuests: number | null;
     minNights: number | null;
+    extraBedPrice?: Prisma.Decimal | number | null;
     currency: string;
   }>;
 };
@@ -768,6 +774,10 @@ function getLiveCatalogRoomPricesByRoomId(
         priceType: normalizeRoomPriceType(price.priceType),
         minGuests: price.minGuests ?? null,
         minNights: price.minNights ?? null,
+        extraBedPrice:
+          price.extraBedPrice === null || price.extraBedPrice === undefined
+            ? null
+            : Number(price.extraBedPrice),
         currency: price.currency,
       })),
     ]),
@@ -828,6 +838,7 @@ export function resolvePublicCatalogDisplayState(property: {
       priceType?: RoomPriceType | string | null;
       minGuests: number | null;
       minNights: number | null;
+      extraBedPrice?: Prisma.Decimal | number | null;
       currency: string;
     }>;
   }>;
@@ -856,6 +867,7 @@ export function resolvePublicCatalogDisplayState(property: {
             priceType: normalizeRoomPriceType(price.priceType),
             minGuests: price.minGuests ?? null,
             minNights: price.minNights ?? null,
+            extraBedPrice: price.extraBedPrice ?? null,
             currency: price.currency,
           })),
       }))
@@ -873,6 +885,10 @@ export function resolvePublicCatalogDisplayState(property: {
           priceType: normalizeRoomPriceType(price.priceType),
           minGuests: price.minGuests ?? null,
           minNights: price.minNights ?? null,
+          extraBedPrice:
+            price.extraBedPrice === null || price.extraBedPrice === undefined
+              ? null
+              : Number(price.extraBedPrice),
           currency: price.currency,
         })),
       }));
@@ -984,6 +1000,10 @@ function getBestStayPriceByRooms(input: {
   nights: number;
   nightly: number;
   totalNightly: number;
+  baseNightly: number;
+  extraBedNightly: number;
+  extraBedTotal: number;
+  extraGuests: number;
   priceType: RoomPriceType | "MIXED";
   roomTitle: string | null;
   guests: number;
@@ -994,6 +1014,8 @@ function getBestStayPriceByRooms(input: {
     currency: string;
     nights: number;
     unitTotal: number;
+    extraBedTotal: number;
+    extraGuests: number;
     priceType: RoomPriceType | "MIXED";
     roomTitle: string | null;
   } | null = null;
@@ -1011,6 +1033,7 @@ function getBestStayPriceByRooms(input: {
       checkIn: input.checkIn,
       checkOut: input.checkOut,
       guests,
+      includedGuests: room.beds,
     });
 
     if (!calculation.ok || calculation.nights <= 0) {
@@ -1026,12 +1049,20 @@ function getBestStayPriceByRooms(input: {
       continue;
     }
 
+    const extraBedTotal = calculation.breakdown.reduce((sum, item) => sum + item.extraTotal, 0);
+    const extraGuests = calculation.breakdown.reduce(
+      (maxGuests, item) => Math.max(maxGuests, item.extraGuests),
+      0,
+    );
+
     if (!best || calculation.total < best.total) {
       best = {
         total: calculation.total,
         currency: calculation.currency,
         nights: calculation.nights,
         unitTotal: calculation.unitTotal,
+        extraBedTotal,
+        extraGuests,
         priceType: calculation.priceType,
         roomTitle: normalizeRoomTitle(room.title) || null,
       };
@@ -1042,12 +1073,18 @@ function getBestStayPriceByRooms(input: {
     return null;
   }
 
+  const extraBedNightly = Math.round(best.extraBedTotal / best.nights);
+
   return {
     total: best.total,
     currency: best.currency,
     nights: best.nights,
     nightly: Math.round((best.priceType === "MIXED" ? best.total : best.unitTotal) / best.nights),
     totalNightly: Math.round(best.total / best.nights),
+    baseNightly: Math.round((best.total - best.extraBedTotal) / best.nights),
+    extraBedNightly,
+    extraBedTotal: best.extraBedTotal,
+    extraGuests: best.extraGuests,
     priceType: best.priceType,
     roomTitle: best.roomTitle,
     guests,
@@ -1494,13 +1531,16 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const familyFriendly = query.familyFriendly === true;
   const petsAllowed = query.petsAllowed === true;
   const bounds = query.bounds ?? null;
+  const hasMapBounds = bounds !== null;
+  const locationFilterId = hasMapBounds ? undefined : query.locationId;
+  const locationFilter = hasMapBounds ? undefined : query.location;
   const rankingNow = new Date();
   const hasExplicitLocationFilter =
-    Boolean(query.locationId?.trim()) || Boolean(query.location?.trim());
+    Boolean(locationFilterId?.trim()) || Boolean(locationFilter?.trim());
   const [resolvedLocation, queryLocationHint] = await Promise.all([
     resolveLocation({
-      locationId: query.locationId,
-      location: query.location,
+      locationId: locationFilterId,
+      location: locationFilter,
     }),
     !hasExplicitLocationFilter && searchQuery.length >= 2
       ? resolveLocation({ location: searchQuery })
@@ -1512,7 +1552,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       : null;
   const resolvedLocationCenter = hasExplicitLocationFilter
     ? await resolveCrimeaLocationCenter(
-        resolvedLocation?.name ?? query.location ?? query.locationId ?? null,
+        resolvedLocation?.name ?? locationFilter ?? locationFilterId ?? null,
       )
     : null;
   const locationCenterPoint: CatalogGeoPoint | null = resolvedLocationCenter
@@ -1569,6 +1609,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
                 priceType: true,
                 minGuests: true,
                 minNights: true,
+                extraBedPrice: true,
                 currency: true,
               },
             },
@@ -1598,7 +1639,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       );
       const searchFingerprint = buildSearchFingerprint({
         vertical: "property",
-        location: resolvedLocation?.id ?? query.location ?? null,
+        location: resolvedLocation?.id ?? locationFilter ?? null,
         type,
         query: searchQuery,
         checkIn: stayRange.checkIn,

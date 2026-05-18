@@ -119,6 +119,7 @@ export async function POST(request: Request, context: RouteContext) {
           priceType: true,
           minGuests: true,
           minNights: true,
+          extraBedPrice: true,
           currency: true,
         },
       },
@@ -143,6 +144,7 @@ export async function POST(request: Request, context: RouteContext) {
         priceType: normalizeRoomPriceType(price.priceType),
         minGuests: price.minGuests,
         minNights: price.minNights,
+        extraBedPrice: price.extraBedPrice === null ? null : Number(price.extraBedPrice),
         currency: price.currency,
       };
     }),
@@ -191,6 +193,7 @@ export async function POST(request: Request, context: RouteContext) {
   const supportsRoomPriceWriteColumns = await areDatabaseColumnsAvailable("RoomPrice", [
     "priceType",
     "minNights",
+    "extraBedPrice",
   ]);
 
   const replacedCount = await db.$transaction(async (tx) => {
@@ -214,6 +217,7 @@ export async function POST(request: Request, context: RouteContext) {
           priceType: row.priceType,
           minGuests: row.minGuests,
           minNights: row.minNights,
+          extraBedPrice: row.extraBedPrice === null ? null : new Prisma.Decimal(row.extraBedPrice),
           currency: row.currency,
         })),
       });

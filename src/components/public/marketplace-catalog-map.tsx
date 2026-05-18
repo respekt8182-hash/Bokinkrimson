@@ -20,7 +20,6 @@ import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-but
 import type {
   YandexMapPoint,
   YandexMapRadiusCircle,
-  YandexMapViewport,
 } from "@/components/maps/yandex-map-multi-viewer";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
@@ -135,16 +134,49 @@ function formatMapBoundsFilter(bounds: [[number, number], [number, number]] | nu
   return [south, west, north, east].map((value) => value.toFixed(MAP_BOUNDS_PRECISION)).join(",");
 }
 
-function resolveCatalogLocationZoom(radiusKm: number): number {
-  if (radiusKm <= 15) {
-    return 13;
+function parseMapBoundsFilter(value: string | null): [[number, number], [number, number]] | null {
+  if (!value) {
+    return null;
   }
 
-  if (radiusKm <= 35) {
-    return 12;
+  const [south, west, north, east] = value.split(",").map((part) => Number.parseFloat(part));
+  if (![south, west, north, east].every(Number.isFinite)) {
+    return null;
   }
 
-  return 11;
+  if (south >= north || west >= east) {
+    return null;
+  }
+
+  return [
+    [south, west],
+    [north, east],
+  ];
+}
+
+function isPointInsideViewportBounds(
+  item: { latitude: number | null; longitude: number | null },
+  bounds: [[number, number], [number, number]] | null,
+): boolean {
+  if (!bounds) {
+    return true;
+  }
+
+  if (item.latitude === null || item.longitude === null) {
+    return false;
+  }
+
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+
+  return (
+    item.latitude >= south &&
+    item.latitude <= north &&
+    item.longitude >= west &&
+    item.longitude <= east
+  );
 }
 
 function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): MobileSheetSnap {
@@ -660,7 +692,13 @@ export function MarketplaceCatalogMap({
   const boundsBootstrapHandledRef = useRef(false);
   const boundsUpdateTimerRef = useRef<number | null>(null);
   const lastRequestedBoundsRef = useRef<string | null>(currentBoundsParam);
+  const hasMapInteractionRef = useRef(false);
+  const mapBoundsQueryRef = useRef<string | null>(currentBoundsParam);
   const mapPlacement = useCatalogMapPlacement();
+  const currentBounds = useMemo(
+    () => parseMapBoundsFilter(currentBoundsParam),
+    [currentBoundsParam],
+  );
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
   const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
@@ -669,6 +707,17 @@ export function MarketplaceCatalogMap({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
+  const [mapViewportBoundsState, setMapViewportBoundsState] = useState<{
+    sourceBoundsParam: string | null;
+    bounds: [[number, number], [number, number]] | null;
+  }>(() => ({
+    sourceBoundsParam: currentBoundsParam,
+    bounds: currentBounds,
+  }));
+  const mapViewportBounds =
+    mapViewportBoundsState.sourceBoundsParam === currentBoundsParam
+      ? mapViewportBoundsState.bounds
+      : currentBounds;
   const [loadedMapItemsState, setLoadedMapItemsState] = useState<{
     endpoint: string;
     items: MarketplaceCatalogMapItem[];
@@ -742,7 +791,11 @@ export function MarketplaceCatalogMap({
             return false;
           }
 
-          if (hasRadiusCenter && radiusKm !== null) {
+          if (!isPointInsideViewportBounds(item, mapViewportBounds ?? currentBounds)) {
+            return false;
+          }
+
+          if (!mapViewportBounds && !currentBounds && hasRadiusCenter && radiusKm !== null) {
             return haversineKm(centerLat!, centerLng!, item.latitude, item.longitude) <= radiusKm;
           }
 
@@ -754,7 +807,16 @@ export function MarketplaceCatalogMap({
         ...point,
         isViewed: viewedPointIds.has(point.id),
       }));
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm, kind, resolvedItems, viewedPointIds]);
+  }, [
+    filters.centerLat,
+    filters.centerLng,
+    filters.radiusKm,
+    kind,
+    currentBounds,
+    mapViewportBounds,
+    resolvedItems,
+    viewedPointIds,
+  ]);
 
   const visibleMapPointIds = useMemo(
     () => new Set(mapPoints.map((point) => point.id)),
@@ -817,41 +879,6 @@ export function MarketplaceCatalogMap({
 
     return null;
   }, [filters.centerLat, filters.centerLng, filters.radiusKm]);
-  const mapViewport = useMemo<YandexMapViewport | null>(() => {
-    if (
-      filters.centerLat !== null &&
-      filters.centerLng !== null &&
-      Number.isFinite(filters.centerLat) &&
-      Number.isFinite(filters.centerLng)
-    ) {
-      return {
-        center: [filters.centerLat, filters.centerLng],
-        zoom: resolveCatalogLocationZoom(filters.radiusKm),
-      };
-    }
-
-    return null;
-  }, [filters.centerLat, filters.centerLng, filters.radiusKm]);
-  const mapViewportKey = useMemo(() => {
-    if (!mapViewport) {
-      return undefined;
-    }
-
-    return [
-      kind,
-      filters.locationName ?? "",
-      filters.centerLat,
-      filters.centerLng,
-      filters.radiusKm,
-    ].join(":");
-  }, [
-    filters.centerLat,
-    filters.centerLng,
-    filters.locationName,
-    filters.radiusKm,
-    kind,
-    mapViewport,
-  ]);
   const openMapFully = useCallback(() => {
     setMapExpanded(true);
   }, []);
@@ -865,11 +892,26 @@ export function MarketplaceCatalogMap({
 
   const handleMapBoundsChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
+      const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (normalizedBounds !== mapBoundsQueryRef.current) {
+        mapBoundsQueryRef.current = normalizedBounds;
+        setMapViewportBoundsState({
+          sourceBoundsParam: currentBoundsParam,
+          bounds,
+        });
+        setActivePointId(null);
+        setHoveredCardId(null);
+        setHoveredPointId(null);
+      }
+
       if (!syncBoundsToUrl) {
         return;
       }
 
-      const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (!hasMapInteractionRef.current) {
+        return;
+      }
+
       const lastRequestedBounds = lastRequestedBoundsRef.current;
 
       if (!boundsBootstrapHandledRef.current && !lastRequestedBounds) {
@@ -910,8 +952,16 @@ export function MarketplaceCatalogMap({
         });
       }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [pathname, router, syncBoundsToUrl],
+    [currentBoundsParam, pathname, router, syncBoundsToUrl],
   );
+
+  const markMapInteraction = useCallback(() => {
+    hasMapInteractionRef.current = true;
+  }, []);
+
+  const handleMapWheelCapture = useCallback(() => {
+    markMapInteraction();
+  }, [markMapInteraction]);
 
   const setMobileChromeProgress = useCallback((progress: number, force = false) => {
     const nextProgress = clamp(Math.round(progress * 1000) / 1000, 0, 1);
@@ -1060,6 +1110,8 @@ export function MarketplaceCatalogMap({
   }, [setMobileChromeProgress, snapMobileSheet]);
 
   const handleMobileMapPointerDown = useCallback(() => {
+    markMapInteraction();
+
     if (mapPlacement !== "mobile") {
       setActivePointId(null);
       setHoveredCardId(null);
@@ -1074,7 +1126,7 @@ export function MarketplaceCatalogMap({
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPointId(null);
-  }, [mapPlacement, mobileSheetSnap, snapMobileSheet]);
+  }, [mapPlacement, markMapInteraction, mobileSheetSnap, snapMobileSheet]);
 
   const handleCatalogCardMouseOver = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
@@ -1149,10 +1201,12 @@ export function MarketplaceCatalogMap({
 
   useEffect(() => {
     lastRequestedBoundsRef.current = currentBoundsParam;
+    mapBoundsQueryRef.current = currentBoundsParam;
     if (!currentBoundsParam) {
       boundsBootstrapHandledRef.current = false;
+      hasMapInteractionRef.current = false;
     }
-  }, [currentBoundsParam, mapViewportKey]);
+  }, [currentBoundsParam]);
 
   useEffect(() => {
     if (mapPlacement !== "mobile" || mapExpanded || mobileSheetSnap !== "expanded") {
@@ -1283,7 +1337,11 @@ export function MarketplaceCatalogMap({
                 : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
             }}
           >
-            <div className="absolute inset-0" onPointerDownCapture={handleMobileMapPointerDown}>
+            <div
+              className="absolute inset-0"
+              onPointerDownCapture={handleMobileMapPointerDown}
+              onWheelCapture={handleMapWheelCapture}
+            >
               <YandexMapMultiViewer
                 points={mapPoints}
                 activePointId={activePointId}
@@ -1291,13 +1349,11 @@ export function MarketplaceCatalogMap({
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}
                 onBoundsChange={handleMapBoundsChange}
-                initialViewport={mapViewport}
-                viewportKey={mapViewportKey}
                 radiusCircle={radiusCircle}
                 controls={[]}
                 showBalloons={false}
                 frameless
-                fitPointsOnChange="initial"
+                fitPointsOnChange="never"
                 className="h-full w-full"
               />
             </div>
@@ -1379,11 +1435,9 @@ export function MarketplaceCatalogMap({
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
               onBoundsChange={handleMapBoundsChange}
-              initialViewport={mapViewport}
-              viewportKey={mapViewportKey}
               radiusCircle={radiusCircle}
               controls={[]}
-              fitPointsOnChange="initial"
+              fitPointsOnChange="never"
               className="h-full w-full rounded-none border-0"
             />
 
@@ -1415,7 +1469,11 @@ export function MarketplaceCatalogMap({
               <p className="text-xs text-olive/65">{mapStatsLabel}</p>
             </div>
           </div>
-          <div className="relative h-[320px] overflow-hidden">
+          <div
+            className="relative h-[320px] overflow-hidden"
+            onPointerDownCapture={markMapInteraction}
+            onWheelCapture={handleMapWheelCapture}
+          >
             <YandexMapMultiViewer
               points={mapPoints}
               activePointId={activePointId}
@@ -1423,12 +1481,10 @@ export function MarketplaceCatalogMap({
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
               onBoundsChange={handleMapBoundsChange}
-              initialViewport={mapViewport}
-              viewportKey={mapViewportKey}
               radiusCircle={radiusCircle}
               showBalloons={false}
               frameless
-              fitPointsOnChange="initial"
+              fitPointsOnChange="never"
               className="h-full w-full"
             />
             <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
@@ -1489,7 +1545,11 @@ export function MarketplaceCatalogMap({
             </div>
 
             {mapPlacement === "desktop" ? (
-              <div className="absolute inset-0">
+              <div
+                className="absolute inset-0"
+                onPointerDownCapture={markMapInteraction}
+                onWheelCapture={handleMapWheelCapture}
+              >
                 <YandexMapMultiViewer
                   points={mapPoints}
                   activePointId={activePointId}
@@ -1497,13 +1557,11 @@ export function MarketplaceCatalogMap({
                   onPointClick={handlePointClick}
                   onPointHoverChange={setHoveredPointId}
                   onBoundsChange={handleMapBoundsChange}
-                  initialViewport={mapViewport}
-                  viewportKey={mapViewportKey}
                   radiusCircle={radiusCircle}
                   controls={["zoomControl"]}
                   showBalloons={false}
                   frameless
-                  fitPointsOnChange="initial"
+                  fitPointsOnChange="never"
                   className="h-full w-full"
                 />
 
@@ -1544,7 +1602,11 @@ export function MarketplaceCatalogMap({
           aria-label={mapTitle}
         >
           <section className="relative h-full w-full overflow-hidden">
-            <div className="absolute inset-0">
+            <div
+              className="absolute inset-0"
+              onPointerDownCapture={markMapInteraction}
+              onWheelCapture={handleMapWheelCapture}
+            >
               <YandexMapMultiViewer
                 points={mapPoints}
                 activePointId={activePointId}
@@ -1552,13 +1614,11 @@ export function MarketplaceCatalogMap({
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}
                 onBoundsChange={handleMapBoundsChange}
-                initialViewport={mapViewport}
-                viewportKey={mapViewportKey}
                 radiusCircle={radiusCircle}
                 controls={["zoomControl"]}
                 showBalloons={false}
                 frameless
-                fitPointsOnChange="initial"
+                fitPointsOnChange="never"
                 className="h-full min-h-[100dvh] w-full"
               />
             </div>

@@ -35,12 +35,8 @@ function pick(value: string | string[] | undefined): string {
 
 function CatalogSeoHeader({
   heading,
-  description,
-  total,
 }: {
   heading: string;
-  description: string;
-  total: number;
 }) {
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
@@ -49,11 +45,7 @@ function CatalogSeoHeader({
           <h1 className="text-2xl font-semibold leading-tight text-olive md:text-3xl">
             {heading}
           </h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-olive/60">{description}</p>
         </div>
-        <p className="shrink-0 text-sm font-semibold text-olive/70 md:border-l md:border-olive/10 md:pl-4">
-          Найдено: {total}
-        </p>
       </div>
     </div>
   );
@@ -220,11 +212,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </>
         ) : null}
 
-        <CatalogSeoHeader
-          heading={seoState.heading}
-          description={seoState.description}
-          total={result.total}
-        />
+        <CatalogSeoHeader heading={seoState.heading} />
 
         <ExcursionSearchResults
           items={result.items}
@@ -309,11 +297,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </>
       ) : null}
 
-      <CatalogSeoHeader
-        heading={seoState.heading}
-        description={seoState.description}
-        total={initialHousingResult.total}
-      />
+      <CatalogSeoHeader heading={seoState.heading} />
 
       <HousingCatalogClient
         initialResponse={{

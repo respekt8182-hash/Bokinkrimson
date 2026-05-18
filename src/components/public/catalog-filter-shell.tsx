@@ -41,7 +41,7 @@ export type CatalogActiveFilterItem = {
 
 type CatalogFilterShellProps = {
   chips: ReactNode;
-  totalLabel: string;
+  totalLabel: ReactNode;
   hasActiveFilters: boolean;
   onResetAll?: () => void;
   desktopAside?: ReactNode;

@@ -15,19 +15,6 @@ import {
 const maxCollectedItems = 5000;
 const mapCollectionPageSize = 24;
 
-function normalizeLocationFilterValue(value: string | null | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/^(г\.?|город|с\.?|село|пос\.?|поселок|пгт)\s+/i, "")
-    .replace(/\s+/g, " ");
-}
-
 function parseSort(raw: string | null): PublicCatalogQuery["sort"] | undefined {
   const value = (raw ?? "").trim();
   if (
@@ -115,10 +102,6 @@ export async function GET(request: Request) {
   };
 
   const collected = await collectCatalogItems(query);
-  const effectiveLocationId = query.locationId ?? collected.filters.locationId ?? null;
-  const normalizedRequestedLocation = effectiveLocationId
-    ? ""
-    : normalizeLocationFilterValue(query.location ?? null);
   const session = await getSession();
   const favoritePropertyIds = session
     ? await getFavoritePropertyIds(
@@ -131,14 +114,6 @@ export async function GET(request: Request) {
     .filter((item) => {
       if (!isPointInsideBounds(item.latitude, item.longitude, bounds)) {
         return false;
-      }
-
-      if (effectiveLocationId) {
-        return item.locationId === effectiveLocationId;
-      }
-
-      if (normalizedRequestedLocation) {
-        return normalizeLocationFilterValue(item.locationName) === normalizedRequestedLocation;
       }
 
       return true;
