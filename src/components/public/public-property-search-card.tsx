@@ -256,14 +256,6 @@ function formatAmenityLabel(name: string): string {
   return name;
 }
 
-function getRatingText(rating: number): string {
-  if (rating >= 4.8) return "Превосходно";
-  if (rating >= 4.5) return "Отлично";
-  if (rating >= 4.0) return "Очень хорошо";
-  if (rating >= 3.5) return "Хорошо";
-  return "Нормально";
-}
-
 const NEW_BADGE_DAYS = 5;
 
 type StatusBadgeTone = "top" | "new" | "sale";
@@ -558,16 +550,11 @@ function PublicPropertySearchCardInner({
         <span className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1 text-[13px] font-bold leading-none text-white">
           {item.avgRating.toFixed(1)}
         </span>
-        <div className="min-w-0">
-          <span className="text-[12px] font-semibold text-olive">
-            {getRatingText(item.avgRating)}
+        {item.reviewsCount > 0 && (
+          <span className="min-w-0 text-[12px] text-olive/45">
+            {formatReviewsLabel(item.reviewsCount)}
           </span>
-          {item.reviewsCount > 0 && (
-            <span className="ml-1 text-[12px] text-olive/45">
-              · {formatReviewsLabel(item.reviewsCount)}
-            </span>
-          )}
-        </div>
+        )}
       </div>
     ) : null;
 
@@ -829,16 +816,11 @@ function PublicPropertySearchCardInner({
             <div className="text-right">
               {item.avgRating > 0 ? (
                 <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <span className="text-[12px] font-semibold text-olive">
-                      {getRatingText(item.avgRating)}
+                  {item.reviewsCount > 0 && (
+                    <span className="text-[11px] text-olive/40">
+                      {formatReviewsLabel(item.reviewsCount)}
                     </span>
-                    {item.reviewsCount > 0 && (
-                      <p className="text-[11px] text-olive/40">
-                        {formatReviewsLabel(item.reviewsCount)}
-                      </p>
-                    )}
-                  </div>
+                  )}
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-[14px] font-bold text-white">
                     {item.avgRating.toFixed(1)}
                   </span>
