@@ -694,6 +694,7 @@ export function MarketplaceCatalogMap({
   const lastRequestedBoundsRef = useRef<string | null>(currentBoundsParam);
   const hasMapInteractionRef = useRef(false);
   const mapBoundsQueryRef = useRef<string | null>(currentBoundsParam);
+  const suppressBoundsSyncUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
   const currentBounds = useMemo(
     () => parseMapBoundsFilter(currentBoundsParam),
@@ -893,20 +894,23 @@ export function MarketplaceCatalogMap({
   const handleMapBoundsChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      const shouldSuppressBoundsSync = Date.now() <= suppressBoundsSyncUntilRef.current;
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
         setMapViewportBoundsState({
           sourceBoundsParam: currentBoundsParam,
           bounds,
         });
-        setActivePointId(null);
-        setHoveredCardId(null);
-        setHoveredPointId(null);
       }
 
       if (!syncBoundsToUrl) {
         return;
       }
+
+      if (shouldSuppressBoundsSync) {
+        return;
+      }
+      suppressBoundsSyncUntilRef.current = 0;
 
       if (!hasMapInteractionRef.current) {
         return;
@@ -1081,6 +1085,7 @@ export function MarketplaceCatalogMap({
 
   const handlePointClick = useCallback(
     (pointId: string) => {
+      suppressBoundsSyncUntilRef.current = Date.now() + 900;
       setViewedPointIds((prev) => {
         if (prev.has(pointId)) {
           return prev;

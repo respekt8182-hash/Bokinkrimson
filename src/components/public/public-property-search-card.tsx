@@ -18,7 +18,6 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
-import { getRoomPriceNightlySuffix } from "@/lib/pricing";
 import type { PublicCatalogItem } from "@/lib/public-properties";
 import { stripSearchParamsFromPath } from "@/lib/seo/url-normalize";
 
@@ -49,16 +48,16 @@ function formatNightlyPrice(
   currency: string,
   priceType: PublicCatalogItem["minNightPriceType"] | "MIXED",
 ): string {
-  return `${formatMoney(value, currency)} ${getRoomPriceNightlySuffix(priceType)}`;
+  return `${formatMoney(value, currency)} ${priceType === "PER_PERSON" ? "за гостя" : "за сутки"}`;
 }
 
 function formatNightsLabel(nights: number): string {
-  const abs = Math.abs(nights) % 100;
+  const count = Math.max(1, Math.floor(nights));
+  const abs = Math.abs(count) % 100;
   const last = abs % 10;
-  if (abs >= 11 && abs <= 14) return `${nights} ночей`;
-  if (last === 1) return `${nights} ночь`;
-  if (last >= 2 && last <= 4) return `${nights} ночи`;
-  return `${nights} ночей`;
+  if (abs >= 11 && abs <= 14) return `${count} суток`;
+  if (last === 1) return `${count} сутки`;
+  return `${count} суток`;
 }
 
 function formatGuestsLabel(guests: number): string {
@@ -163,8 +162,10 @@ type PriceSummary = {
 };
 
 function buildSelectedStaySecondary(item: NonNullable<PublicCatalogItem["stayPrice"]>): string {
-  const perNight = formatNightlyPrice(item.totalNightly, item.currency, "PER_ROOM");
-  const parts = [perNight, formatGuestsLabel(item.guests)];
+  const parts = [
+    `${formatMoney(item.total, item.currency)} за ${formatNightsLabel(item.nights)}`,
+    formatGuestsLabel(item.guests),
+  ];
 
   if (item.extraBedNightly > 0 && item.extraGuests > 0) {
     const extraLabel = item.extraGuests > 1 ? "доп. места" : "доп. место";
@@ -175,8 +176,6 @@ function buildSelectedStaySecondary(item: NonNullable<PublicCatalogItem["stayPri
         item.currency,
       )}/сутки`,
     );
-  } else if (item.priceType === "PER_PERSON") {
-    parts.push(`${formatMoney(item.nightly, item.currency)} за человека`);
   }
 
   return parts.join(" · ");
@@ -190,9 +189,11 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
   if (item.stayPrice) {
     if (hasDates) {
       return {
-        primary: `${formatMoney(item.stayPrice.total, item.stayPrice.currency)} за ${formatNightsLabel(
-          item.stayPrice.nights,
-        )}`,
+        primary: formatNightlyPrice(
+          item.stayPrice.nightly,
+          item.stayPrice.currency,
+          item.stayPrice.priceType,
+        ),
         secondary: buildSelectedStaySecondary(item.stayPrice),
         roomLabel: item.stayPrice.roomTitle ? `Номер: ${item.stayPrice.roomTitle}` : null,
       };
@@ -214,19 +215,17 @@ function buildPriceSummary(item: PublicCatalogItem): PriceSummary {
       const isPerPerson = item.minNightPriceType === "PER_PERSON";
       const nightlyEstimate = isPerPerson ? item.minNightPrice * guests : item.minNightPrice;
       const estimatedTotal = nightlyEstimate * nights;
-      const secondaryParts = [
-        formatNightlyPrice(
-          nightlyEstimate,
-          item.currency,
-          isPerPerson ? "PER_ROOM" : item.minNightPriceType,
-        ),
-        isPerPerson ? formatGuestsLabel(guests) : null,
-        isPerPerson ? `${formatMoney(item.minNightPrice, item.currency)} за человека` : null,
-      ].filter((part): part is string => Boolean(part));
 
       return {
-        primary: `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
-        secondary: secondaryParts.join(" · "),
+        primary: `от ${formatNightlyPrice(
+          item.minNightPrice,
+          item.currency,
+          item.minNightPriceType,
+        )}`,
+        secondary: [
+          `от ${formatMoney(estimatedTotal, item.currency)} за ${formatNightsLabel(nights)}`,
+          formatGuestsLabel(guests),
+        ].join(" · "),
         roomLabel: item.roomSnapshot?.title ? `Номер: ${item.roomSnapshot.title}` : null,
       };
     }
@@ -808,6 +807,9 @@ function PublicPropertySearchCardInner({
                 </p>
                 {priceSummary.secondary && (
                   <p className="text-[11px] text-olive/40">{priceSummary.secondary}</p>
+                )}
+                {priceSummary.roomLabel && (
+                  <p className="text-[11px] text-olive/40">{priceSummary.roomLabel}</p>
                 )}
               </div>
               <Link
