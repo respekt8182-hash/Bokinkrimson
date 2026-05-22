@@ -578,7 +578,7 @@ export function ExcursionPaymentPanel({
                 </p>
                 <p className="mt-1">
                   {selectedPlacementPrice?.discountText ??
-                    "Скидка 20% применяется только к первому годовому продлению после тестового периода."}
+                    "После бесплатного периода действует базовая стоимость выбранного тарифа."}
                 </p>
               </div>
             ) : null}

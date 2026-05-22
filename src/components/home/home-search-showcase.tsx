@@ -195,7 +195,7 @@ const countFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 });
 
-const STARTER_PROGRAM_LIMIT = 100;
+const STARTER_PROGRAM_LIMIT = 1000;
 
 function normalizeLocation(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase().replace(/ё/g, "е");
@@ -1129,8 +1129,8 @@ export function HomeSearchShowcase({
       usedLabel: `${countFormatter.format(used)} ${pluralize(used, ["объект", "объекта", "объектов"])}`,
       leftLabel:
         left > 0
-          ? `Осталось мест: ${countFormatter.format(left)}`
-          : "Стартовая программа заполнена",
+          ? `Осталось мест в программе: ${countFormatter.format(left)}`
+          : "Места в программе заполнены",
       progressPercent: Math.min(100, (used / STARTER_PROGRAM_LIMIT) * 100),
     };
   }, [publishedPropertiesCount]);
@@ -3952,19 +3952,14 @@ export function HomeSearchShowcase({
             <div className="min-w-0">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
                 <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ до
-                20 июня
+                мая 2027
               </span>
-              <p className="mt-2 text-sm font-semibold leading-6 text-olive">
-                Бесплатное размещение для первых 100 объектов жилья
-              </p>
-              <p className="mt-1 text-xs leading-5 text-olive/55">
-                Идёт набор стартовой базы жилья перед сезоном.
-              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-olive">Программа первых партнёров</p>
             </div>
 
             <div className="w-full shrink-0 rounded-xl border border-olive/10 bg-cream/45 p-3 sm:w-[220px]">
               <div className="flex items-center justify-between gap-3 text-xs text-olive/60">
-                <span>Уже подключено:</span>
+                <span>В каталоге:</span>
                 <span className="font-semibold text-olive">{starterProgram.usedLabel}</span>
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
@@ -4018,8 +4013,8 @@ export function HomeSearchShowcase({
               </div>
               <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                {housingStat.value} {housingStat.label} и {leisureStat.value} {leisureStat.label}
-                {" "}— всё на одном сайте.
+                {housingStat.value} {housingStat.label} и {leisureStat.value} {leisureStat.label} —
+                всё на одном сайте.
               </p>
             </div>
           </div>

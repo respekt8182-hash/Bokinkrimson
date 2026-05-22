@@ -4,7 +4,6 @@ import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
 import { cn } from "@/lib/cn";
 import {
   additionalServiceRows,
-  annualTariffBenefitText,
   publicObjectTariffCards,
   publicServiceTariffRows,
 } from "@/lib/site-tariffs";
@@ -55,9 +54,6 @@ export function ServicesAndTariffsSection({
         карточка участвовала в раннем бронировании на лето.
       </p>
       <PlacementPromoNotice className="mt-5" />
-      <div className="mt-5 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm font-semibold leading-6 text-olive">
-        {annualTariffBenefitText}
-      </div>
 
       <div className="mt-6 grid gap-3 lg:grid-cols-2">
         {publicObjectTariffCards.map((card) => (
@@ -136,7 +132,6 @@ export function ServicesAndTariffsSection({
                 <th className="px-4 py-3">Услуга</th>
                 <th className="px-4 py-3">Сезон до 31 октября</th>
                 <th className="px-4 py-3">Год</th>
-                <th className="px-4 py-3">Первое годовое</th>
                 <th className="px-4 py-3">Условия</th>
               </tr>
             </thead>
@@ -152,9 +147,6 @@ export function ServicesAndTariffsSection({
                   </td>
                   <td className="px-4 py-4 align-top font-semibold text-olive">
                     {formatRub(row.priceRub)}
-                  </td>
-                  <td className="px-4 py-4 align-top font-semibold text-emerald-700">
-                    {row.firstYearPriceRub ? `от ${formatRub(row.firstYearPriceRub)}` : "-"}
                   </td>
                   <td className="px-4 py-4 align-top text-olive/75">
                     {row.conditionsLabel}
@@ -186,12 +178,6 @@ export function ServicesAndTariffsSection({
                   <dd className="text-right font-semibold text-olive">{formatRub(row.priceRub)}</dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <dt className="text-olive/55">Первое годовое</dt>
-                  <dd className="text-right font-semibold text-emerald-700">
-                    {row.firstYearPriceRub ? `от ${formatRub(row.firstYearPriceRub)}` : "-"}
-                  </dd>
-                </div>
-                <div className="flex items-start justify-between gap-3">
                   <dt className="text-olive/55">Условия</dt>
                   <dd className="text-right text-olive/75">
                     {row.conditionsLabel}
@@ -206,11 +192,12 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-4 rounded-2xl border border-olive/10 bg-white/80 px-4 py-3 text-sm leading-6 text-olive/70">
         <p>
-          Стартовая цена доступна при первом годовом размещении в выбранной категории. Персональная
-          цена отображается в личном кабинете после входа или регистрации.
+          Персональная стоимость выбранного периода отображается в личном кабинете после входа или
+          регистрации.
         </p>
         <p className="mt-1">
-          Скидка действует отдельно для каждой категории: объект, экскурсия, тур и трансфер.
+          После бесплатного периода действует базовая стоимость выбранного тарифа без комиссии с
+          заявок и бронирований.
         </p>
       </div>
 

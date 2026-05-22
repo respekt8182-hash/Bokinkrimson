@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ObjectTariffType, PropertyStatus } from "@prisma/client";
-import { MessageSquareText, Plus } from "lucide-react";
+import { Download, MessageSquareText, Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
@@ -25,10 +25,7 @@ import { getEmptyDraftExpiresAt } from "@/lib/draft-cleanup";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
-import {
-  isPropertyEmptyDraft,
-  isPropertyWorkflowPendingModeration,
-} from "@/lib/properties";
+import { isPropertyEmptyDraft, isPropertyWorkflowPendingModeration } from "@/lib/properties";
 
 type Props = {
   searchParams: Promise<{
@@ -57,8 +54,7 @@ const STATUS_COLORS: Record<PropertyStatus, string> = {
 const PAYMENT_FILTER_LABELS: Record<string, string> = {
   paid: "Оплаченные",
   unpaid: "Неоплаченные",
-  demo: "Демо",
-  expired: "Истекшие",
+  demo: "Ранний доступ",
   expiring: "Скоро истекают",
   season: "Сезонные",
   offseason: "Межсезонные",
@@ -189,9 +185,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
 
   const filteredRows =
     selectedStatus && selectedStatus in PropertyStatus
-      ? rows.filter((item) =>
-          matchesPropertyWorkflowStatus(item, selectedStatus as PropertyStatus),
-        )
+      ? rows.filter((item) => matchesPropertyWorkflowStatus(item, selectedStatus as PropertyStatus))
       : rows;
 
   const queriedRows =
@@ -307,13 +301,22 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
         title="Жильё и размещение"
         description="Карточки жилья, владельцы, статусы и быстрый переход в редактор."
         actions={
-          <Link
-            href="/admin/objects/new"
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Новое жильё
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/api/admin/objects/export"
+              className="inline-flex items-center gap-2 rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
+            >
+              <Download className="h-4 w-4" />
+              Выгрузить Excel
+            </Link>
+            <Link
+              href="/admin/objects/new"
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Новое жильё
+            </Link>
+          </div>
         }
       />
 
@@ -448,16 +451,17 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
       ) : (
         <div className="space-y-3">
           {items.map(({ item, payment }) => {
-            const isEmptyDraft =
-              item.status === PropertyStatus.DRAFT && isPropertyEmptyDraft(item);
+            const isEmptyDraft = item.status === PropertyStatus.DRAFT && isPropertyEmptyDraft(item);
             const cleanupAt = isEmptyDraft ? getEmptyDraftExpiresAt(item.updatedAt) : null;
             const isPublished = item.status === PropertyStatus.PUBLISHED;
             const isPendingDeletion = Boolean(item.ownerDeletedAt);
             const pendingEditLabel = isPublished
               ? getAdminPropertyPendingEditLabel(item.pendingEditStatus, item.moderationNotes)
               : null;
-            const showModerationLink =
-              isPropertyWorkflowPendingModeration(item.status, item.pendingEditStatus);
+            const showModerationLink = isPropertyWorkflowPendingModeration(
+              item.status,
+              item.pendingEditStatus,
+            );
             const primaryStatusLabel = getAdminPropertyBaseStatusLabel(item.status);
 
             return (
@@ -550,7 +554,9 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Сумма</dt>
                     <dd className="font-medium text-olive">
-                      {payment.paidAmount !== null ? `${payment.paidAmount.toLocaleString("ru-RU")} ₽` : "—"}
+                      {payment.paidAmount !== null
+                        ? `${payment.paidAmount.toLocaleString("ru-RU")} ₽`
+                        : "—"}
                     </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">

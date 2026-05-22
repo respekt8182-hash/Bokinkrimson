@@ -74,6 +74,6 @@ describe("admin placement renewals", () => {
       },
     ]);
 
-    expect(latest?.validUntil.toISOString()).toBe("2026-06-20T21:00:00.000Z");
+    expect(latest?.validUntil.toISOString()).toBe("2027-04-30T21:00:00.000Z");
   });
 });

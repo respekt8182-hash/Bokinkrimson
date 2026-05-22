@@ -198,7 +198,7 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
       <AdminPageHeader
         eyebrow="Продление"
         title="Заканчивается размещение"
-        description={`Опубликованные объявления, у которых срок размещения закончится в ближайшие ${lookaheadDays} ${pluralizeDays(lookaheadDays)}. Демо-размещения показываются за ${PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS} ${pluralizeDays(PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS)} до окончания.`}
+        description={`Опубликованные объявления, у которых срок размещения закончится в ближайшие ${lookaheadDays} ${pluralizeDays(lookaheadDays)}. Размещения раннего доступа показываются за ${PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS} ${pluralizeDays(PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS)} до окончания.`}
       />
 
       {isDatabaseFallback ? (
@@ -223,7 +223,7 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
           tone={nextSevenDaysCount > 0 ? "warning" : "default"}
         />
         <AdminStatCard
-          label="Демо-режим"
+          label="Ранний доступ"
           value={demoCount}
           description="Бесплатные размещения"
           icon={Clock3}
@@ -388,7 +388,7 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
                 <dl className="mt-4 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">
-                      {item.payment.isDemo ? "Демо до" : "Оплачено до"}
+                      {item.payment.isDemo ? "Ранний доступ до" : "Оплачено до"}
                     </dt>
                     <dd className="font-semibold text-olive">{formatDate(item.validUntil)}</dd>
                   </div>
@@ -402,7 +402,9 @@ export default async function AdminRenewalsPage({ searchParams }: Props) {
                         : formatMoney(item.payment.amount)}
                     </dd>
                     <dd className="mt-1 text-xs text-olive/52">
-                      {item.payment.isDemo ? "0 ₽, демо-режим" : getProviderLabel(item.payment.provider)}
+                      {item.payment.isDemo
+                        ? "0 ₽, ранний доступ"
+                        : getProviderLabel(item.payment.provider)}
                       {item.payment.paidAt && !item.payment.isDemo
                         ? ` • ${formatDateTime(item.payment.paidAt)}`
                         : ""}

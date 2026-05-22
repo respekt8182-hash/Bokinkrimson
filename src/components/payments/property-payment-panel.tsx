@@ -520,7 +520,7 @@ export function PropertyPaymentPanel({
               </p>
               <p className="mt-1">
                 {selectedPlacementPricing?.discountText ??
-                  "Скидка 20% применяется только к первому годовому продлению после тестового периода."}
+                  "После бесплатного периода действует базовая стоимость выбранного тарифа."}
               </p>
             </div>
           ) : null}

@@ -606,7 +606,7 @@ export function TransferEditorPage({
           : `Публичная карточка останется на сайте. После правок к доплате ${formatMoney(requiredPaymentAmount)}.`
         : hasFullPaymentCoverage
           ? livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement
-            ? "Размещение бесплатно до 20 июня 2026 включительно. Карточку можно отправить на модерацию без оплаты."
+            ? "Размещение бесплатно до 1 мая 2027. Карточку можно отправить на модерацию без оплаты."
             : "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
           : latestPaymentIsOpen
             ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
@@ -715,9 +715,7 @@ export function TransferEditorPage({
         </>
       ) : null}
       {!showWebsite ? <input type="hidden" name="websiteUrl" value={websiteUrl} /> : null}
-      {!showContactEmail ? (
-        <input type="hidden" name="contactEmail" value={contactEmail} />
-      ) : null}
+      {!showContactEmail ? <input type="hidden" name="contactEmail" value={contactEmail} /> : null}
       {!showWhatsapp ? <input type="hidden" name="whatsappUrl" value={whatsappUrl} /> : null}
       {!showTelegram ? <input type="hidden" name="telegramUrl" value={telegramUrl} /> : null}
       {!showVk ? <input type="hidden" name="vkUrl" value={vkUrl} /> : null}
@@ -1561,7 +1559,7 @@ export function TransferEditorPage({
                 <li>Проверьте, что карточка, география, автопарк и контакты заполнены.</li>
                 <li>
                   {livePublicationFeeRub <= 0
-                    ? "До 20 июня размещение бесплатно, оплата не требуется."
+                    ? "До 1 мая 2027 размещение бесплатно, оплата не требуется."
                     : "Выберите онлайн-оплату или заявку менеджеру."}
                 </li>
                 <li>Отправьте карточку на модерацию.</li>
@@ -1747,9 +1745,8 @@ export function TransferEditorPage({
                   <>
                     <p className="font-semibold">Размещение бесплатно</p>
                     <p className="mt-1">
-                      До 20 июня 2026 включительно карточку трансфера можно отправить на модерацию
-                      без оплаты. Размещение перейдет в демо-режим до 20 июня, а на продление
-                      сохранится скидка 20%.
+                      До 1 мая 2027 карточку трансфера можно отправить на модерацию без оплаты.
+                      Размещение перейдет в режим раннего доступа до конца бесплатного периода.
                     </p>
                   </>
                 ) : (

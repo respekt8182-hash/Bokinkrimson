@@ -155,7 +155,7 @@ function getTariffLabel(tariffCode: string): string {
     object_season: "Сезонное размещение до 31 октября",
     object_offseason: "Межсезонное размещение",
     object_yearly: "Годовое размещение",
-    object_demo: "Демо до 20 июня",
+    object_demo: "Ранний доступ до 1 мая 2027",
     excursion_standard: "Публикация карточки экскурсии",
     excursion_year: "Годовое размещение экскурсии",
     excursion_season: "Сезонное размещение экскурсии",
@@ -432,18 +432,9 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
               Базовая цена: {formatMoney(payment.placementPricing.basePrice)} • итоговая цена:{" "}
               {formatMoney(payment.placementPricing.totalPrice)}
             </p>
-            <p>
-              Скидка:{" "}
-              {payment.placementPricing.discountLabel ??
-                (payment.placementPricing.discountPercent > 0
-                  ? `${payment.placementPricing.discountPercent}%`
-                  : "нет")}
-            </p>
-            <p>Причина: {payment.placementPricing.discountReason}</p>
             {payment.placementPricing.additionalOptionsPrice > 0 ? (
               <p>
-                Дополнительные опции:{" "}
-                {formatMoney(payment.placementPricing.additionalOptionsPrice)}
+                Дополнительные опции: {formatMoney(payment.placementPricing.additionalOptionsPrice)}
               </p>
             ) : null}
             {payment.placementPricing.freePeriodActive ? (
@@ -685,62 +676,61 @@ export function ManagerPaymentsList({
         </section>
       ) : (
         <>
-      {/* Pending section */}
-      <section>
-        <h2 className="text-lg font-semibold text-olive">
-          Ожидают подтверждения
-          {pendingPayments.length > 0 && (
-            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm text-amber-700">
-              {pendingPayments.length}
-            </span>
-          )}
-        </h2>
-        {pendingPayments.length === 0 ? (
-          <p className="mt-2 rounded-xl border border-dashed border-olive/20 bg-cream/50 p-4 text-sm text-olive/55">
-            Нет заявок, ожидающих подтверждения
-          </p>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {pendingTransferTopUps.length > 0 ? (
-              <>
-                <div className="rounded-[24px] border border-amber-200 bg-amber-50/75 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-amber-900">
-                        Доплаты после обновления трансфера
-                      </p>
-                      <p className="mt-0.5 text-xs leading-5 text-amber-800/75">
-                        Эти заявки появились после того, как пользователь добавил транспорт в уже
-                        оплаченный трансфер.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                      {formatMoney(pendingTransferTopUpTotal)}
-                    </span>
-                  </div>
-                </div>
-                {pendingTransferTopUps.map((payment) => (
-                  <PaymentCard key={payment.id} payment={payment} />
-                ))}
-              </>
-            ) : null}
-
-            {regularPendingPayments.length > 0 ? (
-              <div className="space-y-3">
+          {/* Pending section */}
+          <section>
+            <h2 className="text-lg font-semibold text-olive">
+              Ожидают подтверждения
+              {pendingPayments.length > 0 && (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm text-amber-700">
+                  {pendingPayments.length}
+                </span>
+              )}
+            </h2>
+            {pendingPayments.length === 0 ? (
+              <p className="mt-2 rounded-xl border border-dashed border-olive/20 bg-cream/50 p-4 text-sm text-olive/55">
+                Нет заявок, ожидающих подтверждения
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3">
                 {pendingTransferTopUps.length > 0 ? (
-                  <h3 className="text-sm font-semibold text-olive/70">Остальные заявки</h3>
+                  <>
+                    <div className="rounded-[24px] border border-amber-200 bg-amber-50/75 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900">
+                            Доплаты после обновления трансфера
+                          </p>
+                          <p className="mt-0.5 text-xs leading-5 text-amber-800/75">
+                            Эти заявки появились после того, как пользователь добавил транспорт в
+                            уже оплаченный трансфер.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                          {formatMoney(pendingTransferTopUpTotal)}
+                        </span>
+                      </div>
+                    </div>
+                    {pendingTransferTopUps.map((payment) => (
+                      <PaymentCard key={payment.id} payment={payment} />
+                    ))}
+                  </>
                 ) : null}
-                {regularPendingPayments.map((payment) => (
-                  <PaymentCard key={payment.id} payment={payment} />
-                ))}
+
+                {regularPendingPayments.length > 0 ? (
+                  <div className="space-y-3">
+                    {pendingTransferTopUps.length > 0 ? (
+                      <h3 className="text-sm font-semibold text-olive/70">Остальные заявки</h3>
+                    ) : null}
+                    {regularPendingPayments.map((payment) => (
+                      <PaymentCard key={payment.id} payment={payment} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        )}
-      </section>
+            )}
+          </section>
         </>
       )}
-
     </div>
   );
 }

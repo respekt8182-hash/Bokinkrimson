@@ -52,6 +52,7 @@ import {
   IconDeviceDesktop,
   IconDeviceFloppy,
   IconDeviceTv,
+  IconDownload,
   IconDoorEnter,
   IconDotsVertical,
   IconEyeglass,
@@ -204,6 +205,7 @@ export const Copy = asLucideIcon(IconCopy);
 export const CookingPot = asLucideIcon(IconToolsKitchen2);
 export const CreditCard = asLucideIcon(IconCreditCard);
 export const DoorOpen = asLucideIcon(IconDoorEnter);
+export const Download = asLucideIcon(IconDownload);
 export const MoreVertical = asLucideIcon(IconDotsVertical);
 export const EllipsisVertical = asLucideIcon(IconDotsVertical);
 export const ExternalLink = asLucideIcon(IconArrowUpRight);

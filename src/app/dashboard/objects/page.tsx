@@ -201,7 +201,11 @@ export default async function DashboardObjectsPage() {
                 ? PLACEMENT_PROMO_SHORT_END_LABEL
                 : (publicationUntilDate?.toLocaleDateString("ru-RU") ?? null);
             const publicationCaption =
-              paymentDisplay?.status === "demo" ? "Тестовый период до" : "Размещается до";
+              paymentDisplay?.status === "unpaid" && publicationUntilDate
+                ? "Не оплачено с"
+                : paymentDisplay?.status === "demo"
+                  ? "Тестовый период до"
+                  : "Размещается до";
             const daysLeft = publicationUntilDate
               ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)
               : null;

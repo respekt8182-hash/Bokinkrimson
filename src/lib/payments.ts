@@ -20,6 +20,7 @@ import {
 import {
   PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE,
   PLACEMENT_POST_LAUNCH_TRIAL_CODE,
+  PLACEMENT_PROMO_CAMPAIGN_TYPE,
   PLACEMENT_PROMO_CODE,
   PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
   PLACEMENT_PROMO_DEMO_MODE,
@@ -39,12 +40,11 @@ import {
   type PlacementPriceResult,
 } from "@/lib/placement-tariffs";
 
-export type PlacementTariff =
-  SerializedObjectPlacementTariffOption & {
-    baseAmountRub?: number;
-    finalAmountRub?: number;
-    placementPricing?: PlacementPriceResult;
-  };
+export type PlacementTariff = SerializedObjectPlacementTariffOption & {
+  baseAmountRub?: number;
+  finalAmountRub?: number;
+  placementPricing?: PlacementPriceResult;
+};
 export type LegacyRoomCountPlacementTariff =
   (typeof placementTariffsByGroup)[keyof typeof placementTariffsByGroup][number];
 
@@ -344,7 +344,7 @@ export function buildFreePlacementPaymentPayload(input: {
   return {
     ...(input.context ?? {}),
     placementCampaign: PLACEMENT_PROMO_CODE,
-    placementCampaignType: "free_placement_until_2026_06_20",
+    placementCampaignType: PLACEMENT_PROMO_CAMPAIGN_TYPE,
     placementMode: PLACEMENT_PROMO_DEMO_MODE,
     placementDemoEndsAtIso: PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
     includeInAdminRevenue: false,
@@ -544,10 +544,7 @@ export function serializePayment(payment: {
     : (payment.tariffType ?? null);
   const normalizedTariffType =
     normalizePrismaObjectTariffType(resolvedTariffType) ?? tariffTypeFromCode;
-  const tariffLabel = getObjectTariffLabel(
-    normalizedTariffType,
-    payment.tariffCode,
-  );
+  const tariffLabel = getObjectTariffLabel(normalizedTariffType, payment.tariffCode);
   const placementPricing = parsePlacementPricingPayload(payment.providerPayload);
 
   return {

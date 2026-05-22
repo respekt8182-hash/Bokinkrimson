@@ -1,6 +1,6 @@
-export const OBJECT_SEASON_FULL_PRICE_RUB = 3900;
+export const OBJECT_SEASON_FULL_PRICE_RUB = 4600;
 export const OBJECT_OFFSEASON_PRICE_RUB = 2800;
-export const OBJECT_YEARLY_PRICE_RUB = 4500;
+export const OBJECT_YEARLY_PRICE_RUB = 5200;
 export const OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB =
   OBJECT_SEASON_FULL_PRICE_RUB + OBJECT_OFFSEASON_PRICE_RUB;
 export const OBJECT_YEARLY_SAVINGS_RUB =
@@ -40,7 +40,7 @@ export const OBJECT_TARIFF_LABELS: Record<ObjectPlacementPaymentTariffType, stri
   season: "Сезон",
   offseason: "Межсезонье",
   yearly: "Годовой",
-  demo: "Демо до 20 июня",
+  demo: "Ранний доступ до 1 мая 2027",
 };
 
 export const OBJECT_TARIFF_CODES: Record<ObjectPlacementTariffType, string> = {
@@ -50,13 +50,13 @@ export const OBJECT_TARIFF_CODES: Record<ObjectPlacementTariffType, string> = {
 };
 
 export const OBJECT_TARIFF_PRICE_TABLE = [
-  { label: "Январь", amountRub: 3900 },
-  { label: "Февраль", amountRub: 3700 },
-  { label: "Март", amountRub: 3500 },
-  { label: "Апрель", amountRub: 3300 },
-  { label: "Май-июнь", amountRub: 3000 },
-  { label: "Июль", amountRub: 2800 },
-  { label: "Август", amountRub: 2500 },
+  { label: "Январь", amountRub: 4600 },
+  { label: "Февраль", amountRub: 4300 },
+  { label: "Март", amountRub: 4000 },
+  { label: "Апрель", amountRub: 3700 },
+  { label: "Май-июнь", amountRub: 3400 },
+  { label: "Июль", amountRub: 3000 },
+  { label: "Август", amountRub: 2600 },
   { label: "Сентябрь", amountRub: 1900 },
   { label: "Октябрь", amountRub: 990 },
 ] as const;
@@ -101,13 +101,13 @@ function getInclusiveMonthCount(from: Date, until: Date): number {
 }
 
 function getSeasonPriceByMonth(monthIndex: number): number | null {
-  if (monthIndex === 0) return 3900;
-  if (monthIndex === 1) return 3700;
-  if (monthIndex === 2) return 3500;
-  if (monthIndex === 3) return 3300;
-  if (monthIndex === 4 || monthIndex === 5) return 3000;
-  if (monthIndex === 6) return 2800;
-  if (monthIndex === 7) return 2500;
+  if (monthIndex === 0) return 4600;
+  if (monthIndex === 1) return 4300;
+  if (monthIndex === 2) return 4000;
+  if (monthIndex === 3) return 3700;
+  if (monthIndex === 4 || monthIndex === 5) return 3400;
+  if (monthIndex === 6) return 3000;
+  if (monthIndex === 7) return 2600;
   if (monthIndex === 8) return 1900;
   if (monthIndex === 9) return 990;
   return null;
@@ -276,7 +276,7 @@ function buildYearlyOption(now: Date): ObjectPlacementTariffOption {
     periodLabel: "12 месяцев с даты оплаты",
     paidFrom: period.paidFrom,
     paidUntil: period.paidUntil,
-    monthlyLabel: "375 ₽ в месяц",
+    monthlyLabel: "около 433 ₽ в месяц",
     description:
       "Размещение объекта на 12 месяцев с даты оплаты. Подходит для тех, кто хочет быть на сайте круглый год: в сезон, в период раннего бронирования, осенью, зимой и весной.",
     buttonLabel: "Выбрать годовой тариф",

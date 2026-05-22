@@ -1,21 +1,21 @@
 import type { PlacementPriceResult } from "@/lib/placement-tariffs";
 
 export const PLACEMENT_PROMO_CODE = "launch-free-placement-2026";
+export const PLACEMENT_PROMO_CAMPAIGN_TYPE = "free_placement_until_2027_05_01";
+export const PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE = "free_placement_until_2026_06_20";
 export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 100;
-export const PLACEMENT_PROMO_RENEWAL_DISCOUNT_PERCENT = 20;
-export const PLACEMENT_PROMO_ENDS_AT_ISO = "2026-06-21T00:00:00.000+03:00";
-export const PLACEMENT_PROMO_END_LABEL = "20 июня 2026 включительно";
-export const PLACEMENT_PROMO_SHORT_END_LABEL = "20 июня";
-export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ до 20 июня";
+export const PLACEMENT_PROMO_ENDS_AT_ISO = "2027-05-01T00:00:00.000+03:00";
+export const PLACEMENT_PROMO_END_LABEL = "1 мая 2027";
+export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 мая 2027";
+export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ до мая 2027";
 export const PLACEMENT_PROMO_NOTICE =
-  "До 20 июня 2026 включительно размещение объектов, экскурсий, туров и трансферов бесплатно. Участники, которые разместятся в этот период, получат скидку 20% на дальнейшее продление размещения.";
+  "Идёт набор в программу раннего доступа: размещение объектов, экскурсий, туров и трансферов бесплатно до 1 мая 2027 года.";
 export const PLACEMENT_PROMO_DEMO_MODE = "demo";
-export const PLACEMENT_PROMO_DEMO_LABEL = "Демо-режим";
+export const PLACEMENT_PROMO_DEMO_LABEL = "Ранний доступ";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
 export const PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS = 7;
 export const PLACEMENT_POST_LAUNCH_TRIAL_CODE = "post-launch-new-listing-trial-2026";
-export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE =
-  "post_launch_new_listing_trial_1_month";
+export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE = "post_launch_new_listing_trial_1_month";
 export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 месяц";
 
 const LEGACY_PLACEMENT_PROMO_CODES = new Map<string, number>([["season-start-2026-20", 20]]);
@@ -432,7 +432,10 @@ export function isLaunchPlacementDemoPayload(value: unknown): boolean {
     return true;
   }
 
-  if (value.placementCampaignType === "free_placement_until_2026_06_20") {
+  if (
+    value.placementCampaignType === PLACEMENT_PROMO_CAMPAIGN_TYPE ||
+    value.placementCampaignType === PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE
+  ) {
     return true;
   }
 

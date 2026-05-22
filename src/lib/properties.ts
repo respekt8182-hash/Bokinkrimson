@@ -1014,8 +1014,9 @@ function resolvePropertyTariffTypeFromPayment(
     return ObjectTariffType.DEMO;
   }
 
-  return payment.tariffType ?? toPrismaObjectTariffType(
-    getObjectTariffTypeFromPaymentTariffCode(payment.tariffCode),
+  return (
+    payment.tariffType ??
+    toPrismaObjectTariffType(getObjectTariffTypeFromPaymentTariffCode(payment.tariffCode))
   );
 }
 
@@ -1033,7 +1034,7 @@ export function resolvePropertyPaymentStatus(input: {
   }
 
   if (input.paidUntil.getTime() <= now.getTime()) {
-    return ObjectPaymentStatus.EXPIRED;
+    return ObjectPaymentStatus.UNPAID;
   }
 
   if (input.paidFrom && input.paidFrom.getTime() > now.getTime()) {
@@ -1063,7 +1064,8 @@ export async function syncPropertyPlacementFromPayment(
   const paidFrom = payment.paidFrom ?? payment.paidAt ?? payment.createdAt;
   const paidUntil = resolvePaymentPlacementValidUntil(payment);
   const paymentStatus = resolvePropertyPaymentStatus({
-    paymentStatus: tariffType === ObjectTariffType.DEMO ? ObjectPaymentStatus.DEMO : ObjectPaymentStatus.PAID,
+    paymentStatus:
+      tariffType === ObjectTariffType.DEMO ? ObjectPaymentStatus.DEMO : ObjectPaymentStatus.PAID,
     tariffType,
     paidFrom,
     paidUntil,

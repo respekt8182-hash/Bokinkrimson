@@ -369,9 +369,7 @@ function getRenewalTimingForLatest(input: {
   return getPlacementRenewalTiming({
     validUntil: input.latest.validUntil,
     now: input.now,
-    lookaheadDays: isDemo
-      ? PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS
-      : input.lookaheadDays,
+    lookaheadDays: isDemo ? PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS : input.lookaheadDays,
   });
 }
 
@@ -695,11 +693,7 @@ export async function hideExpiredPublishedListings(input?: {
             id: true,
             payments: {
               where: successfulRealPaymentWhere,
-              orderBy: [
-                { placementValidUntil: "desc" },
-                { paidAt: "desc" },
-                { createdAt: "desc" },
-              ],
+              orderBy: [{ placementValidUntil: "desc" }, { paidAt: "desc" }, { createdAt: "desc" }],
               select: renewalPaymentSelect,
             },
           },
@@ -731,8 +725,7 @@ export async function hideExpiredPublishedListings(input?: {
       ? client.property.updateMany({
           where: { id: { in: expiredPropertyIds } },
           data: {
-            isPublishedVisible: false,
-            paymentStatus: ObjectPaymentStatus.EXPIRED,
+            paymentStatus: ObjectPaymentStatus.UNPAID,
           },
         })
       : Promise.resolve({ count: 0 }),

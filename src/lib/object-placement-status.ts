@@ -8,12 +8,7 @@ import {
 import { isFreePlacementDemoPayload } from "@/lib/placement-promo";
 import { resolvePaymentPlacementValidUntil } from "@/lib/payments";
 
-export type ObjectPaymentDisplayStatus =
-  | "paid"
-  | "unpaid"
-  | "demo"
-  | "expired"
-  | "expiring";
+export type ObjectPaymentDisplayStatus = "paid" | "unpaid" | "demo" | "expired" | "expiring";
 
 export type ObjectPaymentDisplay = {
   status: ObjectPaymentDisplayStatus;
@@ -76,7 +71,7 @@ function getStatusLabel(input: {
 }): string {
   switch (input.status) {
     case "demo":
-      return "Демо до 20 июня";
+      return "Ранний доступ до 1 мая 2027";
     case "paid":
       return "Оплачено";
     case "expired":
@@ -140,17 +135,22 @@ export function getObjectPaymentDisplay(input: {
   const paidAt = input.paidAt ?? fallback.paidAt;
   const tariffType = input.tariffType ?? fallback.tariffType;
   const tariffLabel =
-    tariffType !== null ? getObjectTariffLabel(normalizeTariffType(tariffType)) : fallback.tariffLabel;
+    tariffType !== null
+      ? getObjectTariffLabel(normalizeTariffType(tariffType))
+      : fallback.tariffLabel;
   const daysLeft = paidUntil ? getDaysUntil(paidUntil, now) : null;
 
   let status: ObjectPaymentDisplayStatus;
   if (!paidUntil) {
     status = "unpaid";
   } else if (paidUntil.getTime() <= now.getTime()) {
-    status = "expired";
+    status = "unpaid";
   } else if (paidFrom && paidFrom.getTime() > now.getTime()) {
     status = "unpaid";
-  } else if (input.paymentStatus === ObjectPaymentStatus.DEMO || tariffType === ObjectTariffType.DEMO) {
+  } else if (
+    input.paymentStatus === ObjectPaymentStatus.DEMO ||
+    tariffType === ObjectTariffType.DEMO
+  ) {
     status = "demo";
   } else if (daysLeft !== null && daysLeft <= expiringDays) {
     status = "expiring";

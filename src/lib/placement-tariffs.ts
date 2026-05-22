@@ -1,6 +1,6 @@
 import { OBJECT_YEARLY_PRICE_RUB } from "@/lib/object-placement-tariffs";
 
-export const PLACEMENT_PRICE_VERSION = "placement-pricing-2026-05-17";
+export const PLACEMENT_PRICE_VERSION = "placement-pricing-2026-05-22";
 
 export const PLACEMENT_CATEGORIES = ["object", "excursion", "tour", "transfer"] as const;
 export type PlacementCategory = (typeof PLACEMENT_CATEGORIES)[number];
@@ -21,29 +21,21 @@ export const placementTariffs = {
   object: {
     label: "Объект",
     yearPrice: OBJECT_YEARLY_PRICE_RUB,
-    firstYearDiscountPercent: 20,
-    discountsOnlyForPeriod: "year",
   },
   excursion: {
     label: "Экскурсия",
     seasonPrice: 990,
     yearPrice: 1490,
-    firstYearDiscountPercent: 20,
-    discountsOnlyForPeriod: "year",
   },
   tour: {
     label: "Тур",
     seasonPrice: 1290,
     yearPrice: 1790,
-    firstYearDiscountPercent: 20,
-    discountsOnlyForPeriod: "year",
   },
   transfer: {
     label: "Трансфер",
     seasonPrice: 990,
     yearPrice: 1490,
-    firstYearDiscountPercent: 20,
-    discountsOnlyForPeriod: "year",
     includedCars: 1,
     additionalCarPrice: 490,
   },
@@ -68,7 +60,7 @@ export function calculateDiscountedPlacementPrice(
   return roundDownToTenRub((basePrice * (100 - discountPercent)) / 100);
 }
 
-export type PlacementDiscountType = "launch_renewal_year_20" | null;
+export type PlacementDiscountType = null;
 
 export type PlacementAdditionalOptions = {
   additionalCars?: number;
@@ -82,7 +74,7 @@ export type PlacementPriceResult = {
   finalPrice: number;
   discountPercent: number;
   discountType: PlacementDiscountType;
-  discountLabel: "Скидка 20% после тестового периода" | null;
+  discountLabel: string | null;
   discountText: string;
   discountReason: string;
   isDiscountApplied: boolean;
