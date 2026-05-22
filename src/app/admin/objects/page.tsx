@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ObjectTariffType, PropertyStatus } from "@prisma/client";
 import { Download, MessageSquareText, Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
+import { AdminChessboardYearTransfer } from "@/components/admin/admin-chessboard-year-transfer";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
@@ -326,6 +327,8 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
           подключения.
         </AdminNotice>
       ) : null}
+
+      <AdminChessboardYearTransfer />
 
       <AdminPanel title="Фильтры">
         <form className="grid gap-3 md:grid-cols-5">

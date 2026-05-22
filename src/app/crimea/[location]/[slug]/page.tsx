@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
+import { NearbyAttractionsSectionServer } from "@/components/public/nearby-attractions-section-server";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
 import { PublicPropertyBottomSections } from "@/components/public/public-property-bottom-sections";
@@ -19,6 +20,7 @@ import { buildSeoDescription, buildWebPageMetadata } from "@/lib/seo/metadata";
 import {
   buildExcursionsHubPath,
   buildExcursionsLocationPath,
+  buildAttractionsHubPath,
   buildHousingHubPath,
   buildHousingLocationPath,
   housingHubPath,
@@ -154,6 +156,12 @@ export default async function PublicPropertyPage({
     : item.locationName
       ? buildExcursionsHubPath({ location: item.locationName })
       : buildExcursionsHubPath();
+  const attractionsSearchHref = item.locationName
+    ? buildAttractionsHubPath({
+        location: item.locationName,
+        radiusKm: DEFAULT_NEARBY_RADIUS_KM,
+      })
+    : buildAttractionsHubPath();
   const breadcrumbItems = [
     { name: "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", path: "/" },
     { name: "\u0416\u0438\u043b\u044c\u0451 \u0432 \u041a\u0440\u044b\u043c\u0443", path: housingHubPath },
@@ -262,6 +270,15 @@ export default async function PublicPropertyPage({
           latitude={item.latitude}
           longitude={item.longitude}
           searchHref={locationSearchHref}
+          radiusKm={DEFAULT_NEARBY_RADIUS_KM}
+        />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <NearbyAttractionsSectionServer
+          latitude={item.latitude}
+          longitude={item.longitude}
+          searchHref={attractionsSearchHref}
           radiusKm={DEFAULT_NEARBY_RADIUS_KM}
         />
       </Suspense>

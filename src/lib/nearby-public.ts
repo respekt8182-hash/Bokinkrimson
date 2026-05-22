@@ -8,12 +8,14 @@ import {
   formatAvailabilitySummary,
   getResolvedAvailabilityMode,
 } from "@/lib/excursion-offers";
+import { buildPublicAttractionPath } from "@/lib/public-marketplace";
 import { buildPublicExcursionPath } from "@/lib/public-excursions";
 import { buildPublicPropertyPath, resolvePublicCatalogDisplayState } from "@/lib/public-properties";
 import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
+import { getStaticAttractions, type StaticAttraction } from "@/lib/static-attractions";
 
 const ROAD_DISTANCE_FACTOR = 1.3;
 
@@ -41,6 +43,17 @@ export type NearbyPropertyItem = {
   coverImageUrl: string | null;
   minNightPrice: number | null;
   currency: string | null;
+  distanceKm: number;
+};
+
+export type NearbyAttractionItem = {
+  id: string;
+  path: string;
+  title: string;
+  category: string | null;
+  locationName: string | null;
+  shortDescription: string | null;
+  coverImageUrl: string | null;
   distanceKm: number;
 };
 
@@ -287,6 +300,22 @@ function buildNearbyPropertyItem(
   };
 }
 
+function buildNearbyAttractionItem(
+  row: StaticAttraction,
+  distanceKm: number,
+): NearbyAttractionItem {
+  return {
+    id: row.id,
+    path: buildPublicAttractionPath({ id: row.id, title: row.title, slug: row.slug }),
+    title: row.title,
+    category: row.category,
+    locationName: row.locationName,
+    shortDescription: row.shortDescription,
+    coverImageUrl: row.gallery[0]?.url ?? null,
+    distanceKm,
+  };
+}
+
 export async function getNearbyExcursions(input: {
   latitude: number | null;
   longitude: number | null;
@@ -389,4 +418,50 @@ export async function getNearbyProperties(input: {
   return picked
     .slice(0, input.limit ?? 4)
     .sort((left, right) => left.distanceKm - right.distanceKm);
+}
+
+export async function getNearbyAttractions(input: {
+  latitude: number | null;
+  longitude: number | null;
+  excludeId?: string | null;
+  radiusKm?: number;
+  limit?: number;
+}): Promise<NearbyAttractionItem[]> {
+  if (input.latitude === null || input.longitude === null) {
+    return [];
+  }
+
+  const origin = {
+    latitude: input.latitude,
+    longitude: input.longitude,
+  };
+  const radiusKm = input.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
+  const rows = await getStaticAttractions();
+
+  return rows
+    .map((row) => {
+      if (input.excludeId && row.id === input.excludeId) {
+        return null;
+      }
+
+      if (row.latitude === null || row.longitude === null) {
+        return null;
+      }
+
+      const roadDistanceKm = toRoadDistanceKm(
+        haversineDistanceKm(origin, {
+          latitude: row.latitude,
+          longitude: row.longitude,
+        }),
+      );
+
+      if (roadDistanceKm > radiusKm) {
+        return null;
+      }
+
+      return buildNearbyAttractionItem(row, roadDistanceKm);
+    })
+    .filter((item): item is NearbyAttractionItem => Boolean(item))
+    .sort((left, right) => left.distanceKm - right.distanceKm)
+    .slice(0, input.limit ?? 4);
 }

@@ -13,6 +13,7 @@ export type YandexMapPoint = {
   reviewsCount?: number | null;
   balloonVariant?: "details" | "title-only";
   isViewed?: boolean;
+  showPriceAtLowZoom?: boolean;
 };
 
 export type YandexMapViewport = {
@@ -140,6 +141,8 @@ const MARKER_OVERLAP_GRID_CELL_PX = PRICE_MARKER_MAX_WIDTH + 32;
 const MARKER_OVERLAP_PADDING_PX = 4;
 const MARKER_FAIR_ROTATION_MIN_POINTS = 3;
 const MARKER_FAIR_ROTATION_DAY_MS = 24 * 60 * 60 * 1000;
+const MARKER_DENSITY_MIN_TOTAL_POINTS = 90;
+const MARKER_DENSITY_FULL_DETAIL_MIN_ZOOM = 13;
 
 let scriptPromise: Promise<void> | null = null;
 
@@ -351,8 +354,63 @@ function shouldShowPricePlacemark(input: {
   return (
     input.zoom >= PRICE_MARKER_MIN_ZOOM ||
     input.point.id === input.activePointId ||
-    input.point.isViewed === true
+    input.point.isViewed === true ||
+    input.point.showPriceAtLowZoom === true
   );
+}
+
+function getMarkerDensityZoomBucket(zoom: number): number {
+  return Math.max(0, Math.floor(Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM));
+}
+
+function getDensityGridCellSizePx(zoom: number): number | null {
+  if (zoom >= MARKER_DENSITY_FULL_DETAIL_MIN_ZOOM) {
+    return null;
+  }
+
+  if (zoom >= 12) return 28;
+  if (zoom >= 11) return 34;
+  if (zoom >= 10) return 42;
+  if (zoom >= 9) return 50;
+  if (zoom >= 8) return 58;
+  if (zoom >= 7) return 66;
+  return 74;
+}
+
+function getDensityMaxRenderedPoints(zoom: number): number {
+  if (zoom >= MARKER_DENSITY_FULL_DETAIL_MIN_ZOOM) return Number.POSITIVE_INFINITY;
+  if (zoom >= 12) return 760;
+  if (zoom >= 11) return 560;
+  if (zoom >= 10) return 380;
+  if (zoom >= 9) return 260;
+  if (zoom >= 8) return 180;
+  if (zoom >= 7) return 130;
+  return 90;
+}
+
+function getFeaturedPriceGridCellSizePx(zoom: number): number | null {
+  if (zoom >= PRICE_MARKER_MIN_ZOOM) {
+    return null;
+  }
+
+  if (zoom >= 12) return 84;
+  if (zoom >= 11) return 96;
+  if (zoom >= 10) return 112;
+  if (zoom >= 9) return 132;
+  if (zoom >= 8) return 150;
+  if (zoom >= 7) return 166;
+  return 184;
+}
+
+function getFeaturedPriceMaxCount(zoom: number): number {
+  if (zoom >= PRICE_MARKER_MIN_ZOOM) return Number.POSITIVE_INFINITY;
+  if (zoom >= 12) return 72;
+  if (zoom >= 11) return 56;
+  if (zoom >= 10) return 42;
+  if (zoom >= 9) return 30;
+  if (zoom >= 8) return 22;
+  if (zoom >= 7) return 16;
+  return 10;
 }
 
 type MarkerOverlapBounds = {
@@ -404,8 +462,175 @@ function projectPointToWorldPixels(point: YandexMapPoint, zoom: number): [number
   return [x, y];
 }
 
+function getDensityCellKey(point: YandexMapPoint, zoom: number, cellSizePx: number): string {
+  const [x, y] = projectPointToWorldPixels(point, zoom);
+  return `${Math.floor(x / cellSizePx)}:${Math.floor(y / cellSizePx)}`;
+}
+
+function isProtectedDensityPoint(
+  point: YandexMapPoint,
+  activePointId: string | null,
+  hoveredPointId: string | null,
+): boolean {
+  return (
+    point.id === activePointId ||
+    point.id === hoveredPointId ||
+    point.isViewed === true
+  );
+}
+
+function pickDensityRepresentative(
+  entries: Array<{ point: YandexMapPoint; index: number }>,
+  cellKey: string,
+  fairRotationSeed: number,
+): { point: YandexMapPoint; index: number } {
+  if (entries.length < MARKER_FAIR_ROTATION_MIN_POINTS) {
+    return entries[0];
+  }
+
+  const sortedEntries = [...entries].sort((left, right) =>
+    left.point.id.localeCompare(right.point.id),
+  );
+  const rotation = (getStableHash(cellKey) + fairRotationSeed) % sortedEntries.length;
+  return sortedEntries[rotation];
+}
+
+function markFeaturedLowZoomPricePoints(
+  points: YandexMapPoint[],
+  zoom: number,
+  activePointId: string | null,
+): YandexMapPoint[] {
+  const cellSize = getFeaturedPriceGridCellSizePx(zoom);
+  if (!cellSize) {
+    return points;
+  }
+
+  const maxFeatured = getFeaturedPriceMaxCount(zoom);
+  const featuredPointIds = new Set<string>();
+  const occupiedPriceCells = new Set<string>();
+
+  points.forEach((point) => {
+    if (
+      !hasPointPriceLabel(point) ||
+      (point.id !== activePointId && point.isViewed !== true)
+    ) {
+      return;
+    }
+
+    occupiedPriceCells.add(getDensityCellKey(point, zoom, cellSize));
+  });
+
+  for (const point of points) {
+    if (!hasPointPriceLabel(point) || point.id === activePointId || point.isViewed === true) {
+      continue;
+    }
+
+    const cellKey = getDensityCellKey(point, zoom, cellSize);
+    if (occupiedPriceCells.has(cellKey)) {
+      continue;
+    }
+
+    occupiedPriceCells.add(cellKey);
+    featuredPointIds.add(point.id);
+
+    if (featuredPointIds.size >= maxFeatured) {
+      break;
+    }
+  }
+
+  if (featuredPointIds.size === 0) {
+    return points.map((point) =>
+      point.showPriceAtLowZoom ? { ...point, showPriceAtLowZoom: undefined } : point,
+    );
+  }
+
+  return points.map((point) => {
+    const showPriceAtLowZoom = featuredPointIds.has(point.id);
+    if (Boolean(point.showPriceAtLowZoom) === showPriceAtLowZoom) {
+      return point;
+    }
+
+    return {
+      ...point,
+      showPriceAtLowZoom: showPriceAtLowZoom || undefined,
+    };
+  });
+}
+
+function buildDensityLimitedPoints(input: {
+  points: YandexMapPoint[];
+  zoom: number;
+  activePointId: string | null;
+  hoveredPointId: string | null;
+  fairRotationSeed: number;
+}): YandexMapPoint[] {
+  const cellSize = getDensityGridCellSizePx(input.zoom);
+  if (!cellSize || input.points.length <= MARKER_DENSITY_MIN_TOTAL_POINTS) {
+    return markFeaturedLowZoomPricePoints(input.points, input.zoom, input.activePointId);
+  }
+
+  const protectedEntries: Array<{ point: YandexMapPoint; index: number }> = [];
+  const occupiedCells = new Set<string>();
+  const entriesByCell = new Map<string, Array<{ point: YandexMapPoint; index: number }>>();
+
+  input.points.forEach((point, index) => {
+    const cellKey = getDensityCellKey(point, input.zoom, cellSize);
+
+    if (isProtectedDensityPoint(point, input.activePointId, input.hoveredPointId)) {
+      protectedEntries.push({ point, index });
+      occupiedCells.add(cellKey);
+    }
+  });
+
+  input.points.forEach((point, index) => {
+    const cellKey = getDensityCellKey(point, input.zoom, cellSize);
+
+    if (
+      occupiedCells.has(cellKey) ||
+      isProtectedDensityPoint(point, input.activePointId, input.hoveredPointId)
+    ) {
+      return;
+    }
+
+    const entries = entriesByCell.get(cellKey);
+    if (entries) {
+      entries.push({ point, index });
+    } else {
+      entriesByCell.set(cellKey, [{ point, index }]);
+    }
+  });
+
+  const representatives = Array.from(entriesByCell.entries()).map(([cellKey, entries]) => ({
+    ...pickDensityRepresentative(entries, cellKey, input.fairRotationSeed),
+    cellKey,
+  }));
+  const maxRendered = getDensityMaxRenderedPoints(input.zoom);
+  const availableSlots = Math.max(0, maxRendered - protectedEntries.length);
+  const limitedRepresentatives =
+    representatives.length > availableSlots
+      ? representatives
+          .sort((left, right) => {
+            const leftHash = getStableHash(`${left.cellKey}:${input.fairRotationSeed}`);
+            const rightHash = getStableHash(`${right.cellKey}:${input.fairRotationSeed}`);
+            return leftHash - rightHash;
+          })
+          .slice(0, availableSlots)
+      : representatives;
+
+  const selected = [...protectedEntries, ...limitedRepresentatives]
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.point);
+
+  return markFeaturedLowZoomPricePoints(selected, input.zoom, input.activePointId);
+}
+
 function shouldUsePriceSizeForOverlap(point: YandexMapPoint, zoom: number): boolean {
-  return hasPointPriceLabel(point) && (zoom >= PRICE_MARKER_MIN_ZOOM || point.isViewed === true);
+  return (
+    hasPointPriceLabel(point) &&
+    (zoom >= PRICE_MARKER_MIN_ZOOM ||
+      point.isViewed === true ||
+      point.showPriceAtLowZoom === true)
+  );
 }
 
 function getMarkerOverlapBounds(
@@ -839,13 +1064,26 @@ export function YandexMapMultiViewer({
     });
   }, [points]);
 
+  const markerDensityZoom = useMemo(() => getMarkerDensityZoomBucket(mapZoom), [mapZoom]);
+  const displayPoints = useMemo(
+    () =>
+      buildDensityLimitedPoints({
+        points: normalizedPoints,
+        zoom: markerDensityZoom,
+        activePointId,
+        hoveredPointId: null,
+        fairRotationSeed,
+      }),
+    [activePointId, fairRotationSeed, markerDensityZoom, normalizedPoints],
+  );
+
   const pointById = useMemo(
-    () => new Map(normalizedPoints.map((point) => [point.id, point])),
-    [normalizedPoints],
+    () => new Map(displayPoints.map((point) => [point.id, point])),
+    [displayPoints],
   );
   const markerBaseZIndexByPointId = useMemo(
-    () => buildMarkerBaseZIndexByPointId(normalizedPoints, mapZoom, fairRotationSeed),
-    [fairRotationSeed, mapZoom, normalizedPoints],
+    () => buildMarkerBaseZIndexByPointId(displayPoints, mapZoom, fairRotationSeed),
+    [displayPoints, fairRotationSeed, mapZoom],
   );
 
   useEffect(() => {
@@ -1221,7 +1459,7 @@ export function YandexMapMultiViewer({
     const currentHoveredPointId = hoveredPointIdRef.current;
     const currentZoom = mapZoomRef.current;
 
-    normalizedPoints.forEach((point) => {
+    displayPoints.forEach((point) => {
       const hasPriceLabel = hasPointPriceLabel(point);
       const isPricePlacemark = shouldShowPricePlacemark({
         point,
@@ -1344,7 +1582,9 @@ export function YandexMapMultiViewer({
     const previousSignature = pointsSignatureRef.current;
     const pointsChanged = signature !== previousSignature;
     pointsSignatureRef.current = signature;
-    lastCenteredActiveRef.current = null;
+    if (pointsChanged) {
+      lastCenteredActiveRef.current = null;
+    }
 
     const canApplyViewport =
       Boolean(initialViewport) &&
@@ -1385,6 +1625,7 @@ export function YandexMapMultiViewer({
   }, [
     closeAllBalloons,
     closeBalloonForPoint,
+    displayPoints,
     fitPointsOnChange,
     handlePlacemarkMouseEnter,
     handlePlacemarkMouseLeave,
