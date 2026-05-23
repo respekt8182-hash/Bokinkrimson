@@ -385,10 +385,6 @@ export function PublicHousingResultsWithMap({
     const byQuery = new URLSearchParams(mapQuery).get("location")?.trim() ?? "";
     return (selectedLocationName?.trim() || byQuery || "").trim();
   }, [mapQuery, selectedLocationName]);
-  const hasFocusedMapLocation = useMemo(() => {
-    const params = new URLSearchParams(mapQuery);
-    return Boolean(params.get("location")?.trim() || params.get("locationId")?.trim());
-  }, [mapQuery]);
   const initialViewportKey = useMemo(() => {
     const normalizedLocation = selectedLocation.trim().toLocaleLowerCase("ru-RU");
     return normalizedLocation ? `housing-location:${normalizedLocation}` : "";
@@ -594,7 +590,7 @@ export function PublicHousingResultsWithMap({
       }
 
       if (mapPlacement === "mobile") {
-        return current || hasFocusedMapLocation;
+        return true;
       }
 
       return true;
@@ -613,7 +609,7 @@ export function PublicHousingResultsWithMap({
     setMapBoundsQuery(null);
     hasMapInteractionRef.current = false;
     suppressBoundsRefreshUntilRef.current = 0;
-  }, [hasFocusedMapLocation, mapPlacement, mapQuery, selectedLocation]);
+  }, [mapPlacement, mapQuery, selectedLocation]);
 
   useEffect(() => {
     if (mapPlacement !== null && mapPlacement !== "mobile") {
