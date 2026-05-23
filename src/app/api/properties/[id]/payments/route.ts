@@ -10,6 +10,7 @@ import {
   getPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
+import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { buildPlacementPricingPayload } from "@/lib/placement-pricing";
 import {
@@ -25,6 +26,17 @@ import {
   purgeExpiredPropertyDraftsForOwner,
   syncPropertyPlacementFromPayment,
 } from "@/lib/properties";
+import {
+  buildAbsoluteAppUrl,
+  buildYooKassaPaymentReceipt,
+  buildYooKassaReceiptItemDescription,
+  createYooKassaPayment,
+  isYooKassaConfigured,
+  mapYooKassaPaymentStatus,
+  mergeYooKassaPaymentPayload,
+  YooKassaApiError,
+  YooKassaConfigurationError,
+} from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -34,6 +46,9 @@ async function getOwnedPropertyForPayment(propertyId: string) {
   return db.property.findUnique({
     where: { id: propertyId },
     include: {
+      owner: {
+        select: { email: true, firstName: true, lastName: true, phone: true },
+      },
       media: {
         where: { roomId: null },
         select: { id: true, type: true, url: true, sortOrder: true },
@@ -114,7 +129,7 @@ async function listPropertyPayments(propertyId: string, ownerId: string) {
       propertyId,
       ownerId,
       provider: {
-        in: [PaymentProvider.MANAGER],
+        in: getOnlinePaymentProviders(),
       },
     },
     orderBy: [{ createdAt: "desc" }],
@@ -168,11 +183,12 @@ export async function GET(request: Request, context: RouteContext) {
     moderationNotes: property.moderationNotes,
     placement,
     items: payments.map(serializePayment),
+    onlinePaymentAvailable: isYooKassaConfigured(),
   });
 }
 
 const createPaymentSchema = z.object({
-  provider: z.literal("MANAGER").optional().default("MANAGER"),
+  provider: z.enum(["MANAGER", "YOOKASSA"]).optional().default("MANAGER"),
   tariffType: z.enum(["season", "yearly"]).optional(),
 });
 
@@ -188,10 +204,7 @@ export async function POST(request: Request, context: RouteContext) {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Онлайн-оплата отключена. Используйте заявку менеджеру." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Выберите доступный способ оплаты." }, { status: 400 });
     }
     body = parsed.data;
   } catch {
@@ -331,6 +344,14 @@ export async function POST(request: Request, context: RouteContext) {
   const paidFrom = new Date(readiness.quote.paidFrom);
   const paidUntil = new Date(readiness.quote.paidUntil);
   const selectedTariffType = toPrismaObjectTariffType(readiness.quote.tariffType);
+  const tariffLabel = readiness.quote.tariff.shortTitle || readiness.quote.tariff.title;
+  const receiptItemDescription = buildYooKassaReceiptItemDescription({
+    serviceLabel: "Размещение объекта на сайте Крым Вокруг",
+    listingName: property.name,
+    tariffLabel,
+    paidFrom,
+    paidUntil,
+  });
 
   const created = await db.payment.create({
     data: {
@@ -340,8 +361,8 @@ export async function POST(request: Request, context: RouteContext) {
       tariffCode: readiness.quote.tariff.code,
       tariffType: selectedTariffType,
       roomCount: readiness.quote.roomCount,
-      status: PaymentStatus.PENDING,
-      provider: PaymentProvider.MANAGER,
+      status: body.provider === "YOOKASSA" ? PaymentStatus.CREATED : PaymentStatus.PENDING,
+      provider: body.provider === "YOOKASSA" ? PaymentProvider.YOOKASSA : PaymentProvider.MANAGER,
       idempotenceKey,
       confirmationUrl: null,
       paidFrom,
@@ -357,6 +378,85 @@ export async function POST(request: Request, context: RouteContext) {
       property: { select: { name: true } },
     },
   });
+
+  if (body.provider === "YOOKASSA") {
+    if (!isYooKassaConfigured()) {
+      await db.payment.update({
+        where: { id: created.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+      });
+      return NextResponse.json(
+        { error: "Онлайн-оплата временно недоступна. Выберите оплату через менеджера." },
+        { status: 503 },
+      );
+    }
+
+    try {
+      const yooPayment = await createYooKassaPayment({
+        amountRub: Number(amount),
+        idempotenceKey,
+        description: receiptItemDescription,
+        returnUrl: buildAbsoluteAppUrl(`/dashboard/objects/${property.id}/payment`),
+        metadata: {
+          local_payment_id: created.id,
+          entity_type: "property",
+          property_id: property.id,
+          owner_id: session.id,
+          tariff_code: readiness.quote.tariff.code,
+          tariff_type: readiness.quote.tariffType,
+          tariff_label: tariffLabel,
+          paid_from: paidFrom.toISOString(),
+          paid_until: paidUntil.toISOString(),
+        },
+        receipt: buildYooKassaPaymentReceipt({
+          amountRub: Number(amount),
+          itemDescription: receiptItemDescription,
+          customer: {
+            email: property.contactEmail ?? property.owner.email,
+            phone: property.phone ?? property.owner.phone ?? session.phone,
+            fullName:
+              property.contactPersonName ??
+              `${property.owner.firstName} ${property.owner.lastName}`,
+          },
+        }),
+      });
+      const providerPayload = mergeYooKassaPaymentPayload(created.providerPayload, yooPayment);
+      const updated = await applyProviderPaymentStatus(
+        db,
+        created.id,
+        mapYooKassaPaymentStatus(yooPayment.status),
+        {
+          providerPaymentId: yooPayment.id,
+          confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+          providerPayload,
+        },
+      );
+
+      return NextResponse.json({
+        item: serializePayment(updated ?? created),
+        redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
+        managerRequested: false,
+      });
+    } catch (error) {
+      await db.payment.update({
+        where: { id: created.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+      });
+
+      const isConfigurationError = error instanceof YooKassaConfigurationError;
+      const isApiError = error instanceof YooKassaApiError;
+      return NextResponse.json(
+        {
+          error: isConfigurationError
+            ? "Онлайн-оплата временно недоступна. Выберите оплату через менеджера."
+            : isApiError
+              ? "YooKassa не приняла платеж. Проверьте настройки магазина или выберите оплату через менеджера."
+              : "Не удалось создать онлайн-платеж. Выберите оплату через менеджера.",
+        },
+        { status: isConfigurationError ? 503 : 502 },
+      );
+    }
+  }
 
   return NextResponse.json({
     item: serializePayment(created),

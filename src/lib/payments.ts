@@ -149,6 +149,20 @@ export function getPaymentStatusLabel(status: PaymentStatus, provider?: PaymentP
     }
   }
 
+  if (provider === PaymentProvider.YOOKASSA) {
+    switch (status) {
+      case PaymentStatus.CREATED:
+      case PaymentStatus.PENDING:
+        return "Ожидает онлайн-оплаты";
+      case PaymentStatus.SUCCEEDED:
+        return "Оплачено онлайн";
+      case PaymentStatus.CANCELED:
+        return "Онлайн-оплата отменена";
+      default:
+        return status;
+    }
+  }
+
   switch (status) {
     case PaymentStatus.CREATED:
       return "Создан";
@@ -167,6 +181,8 @@ export function getProviderLabel(provider: PaymentProvider): string {
   switch (provider) {
     case PaymentProvider.MANAGER:
       return "Через менеджера";
+    case PaymentProvider.YOOKASSA:
+      return "YooKassa";
     case PaymentProvider.MOCK:
       return "Тестовый";
     default:
@@ -584,6 +600,15 @@ export function getPlacementValidUntil(anchorDate: Date): Date {
   const next = new Date(anchorDate);
   next.setDate(next.getDate() + PLACEMENT_VALIDITY_DAYS);
   return next;
+}
+
+export function getSeasonPlacementValidUntil(now: Date): Date {
+  const year = now.getMonth() <= 9 ? now.getFullYear() : now.getFullYear() + 1;
+  return new Date(year, 9, 31, 23, 59, 59, 999);
+}
+
+export function getProgramPlacementValidUntil(period: "season" | "year", now: Date): Date {
+  return period === "season" ? getSeasonPlacementValidUntil(now) : getPlacementValidUntil(now);
 }
 
 export function hasActivePlacementFromPaidAt(anchorDate: Date, now = new Date()): boolean {

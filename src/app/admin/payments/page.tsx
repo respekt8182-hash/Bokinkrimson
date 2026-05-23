@@ -1,5 +1,4 @@
-// Admin page for managing manager payment requests.
-import { PaymentProvider } from "@prisma/client";
+// Admin page for managing payment requests and online payment history.
 import { redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/admin-ui";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
@@ -10,6 +9,7 @@ import {
   getTransferPaymentReference,
   shouldCountPaymentInAdminRevenue,
 } from "@/lib/payments";
+import { getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import { parsePlacementPricingPayload } from "@/lib/placement-pricing";
 import { ManagerPaymentsList } from "@/components/admin/manager-payments-list";
 
@@ -22,7 +22,7 @@ export default async function AdminPaymentsPage() {
   const transferPaymentsSupported = await areDatabaseColumnsAvailable("Payment", ["transferId"]);
   const payments = await db.payment.findMany({
     where: {
-      provider: PaymentProvider.MANAGER,
+      provider: { in: getOnlinePaymentProviders() },
     },
     orderBy: [{ createdAt: "desc" }],
     include: {
@@ -163,7 +163,7 @@ export default async function AdminPaymentsPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Оплата"
-        description="Заявки на оплату через менеджера и история решений."
+        description="Заявки на оплату через менеджера, онлайн-платежи YooKassa и история решений."
       />
       <PlacementPromoNotice />
 

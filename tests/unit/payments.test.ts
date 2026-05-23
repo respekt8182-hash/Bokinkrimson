@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildTransferPaymentPayload,
   getPlacementCoverageState,
+  getProgramPlacementValidUntil,
+  getSeasonPlacementValidUntil,
   getTariffQuote,
   getTransferPaymentPayload,
   getTransferPaymentReference,
@@ -162,6 +164,23 @@ describe("payments domain", () => {
     expect(quote.tariff.code).toBe("object_yearly");
     expect(quote.originalAmount).toBe(5200);
     expect(requestedSeasonAfterSeasonEnd.tariff.code).toBe("object_yearly");
+  });
+
+  it("uses October 31 as the paid-until date for season payments", () => {
+    const seasonUntil = getSeasonPlacementValidUntil(new Date("2026-05-23T09:00:00.000Z"));
+    const nextSeasonUntil = getProgramPlacementValidUntil(
+      "season",
+      new Date("2026-12-10T09:00:00.000Z"),
+    );
+
+    expect(seasonUntil.getFullYear()).toBe(2026);
+    expect(seasonUntil.getMonth()).toBe(9);
+    expect(seasonUntil.getDate()).toBe(31);
+    expect(seasonUntil.getHours()).toBe(23);
+    expect(seasonUntil.getMinutes()).toBe(59);
+    expect(nextSeasonUntil.getFullYear()).toBe(2027);
+    expect(nextSeasonUntil.getMonth()).toBe(9);
+    expect(nextSeasonUntil.getDate()).toBe(31);
   });
 
   it("applies free placement before May 1 2027", () => {

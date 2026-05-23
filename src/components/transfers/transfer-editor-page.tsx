@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CircleCheckBig,
   CircleX,
+  CreditCard,
   FileText,
   Globe,
   Mail,
@@ -43,6 +44,7 @@ type TransferEditorAction = (formData: FormData) => void | Promise<void>;
 
 type StepId = "info" | "location" | "fleet" | "contacts" | "publish";
 type TransferStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
+type PaymentProviderValue = "MANAGER" | "YOOKASSA";
 
 type LocationSuggestionItem = {
   id: string;
@@ -100,6 +102,7 @@ type TransferEditorPageProps = {
   originalPublicationFeeRub: number;
   extraVehicleFeeRub: number;
   initialPayments: SerializedPayment[];
+  onlinePaymentAvailable?: boolean;
   saved: boolean;
   paymentNotice?: string | null;
   initialStep?: StepId | null;
@@ -255,6 +258,10 @@ function getPaymentProviderLabel(provider: SerializedPayment["provider"]): strin
     return "Через менеджера";
   }
 
+  if (provider === "YOOKASSA") {
+    return "YooKassa";
+  }
+
   return provider;
 }
 
@@ -308,6 +315,7 @@ export function TransferEditorPage({
   originalPublicationFeeRub,
   extraVehicleFeeRub,
   initialPayments,
+  onlinePaymentAvailable = false,
   saved,
   paymentNotice = null,
   initialStep = null,
@@ -368,6 +376,8 @@ export function TransferEditorPage({
   const [fleet, setFleet] = useState<TransferFleetItem[]>(initialFleet);
   const [serviceTags, setServiceTags] = useState<string[]>(initialServiceTags);
   const [payments] = useState(initialPayments);
+  const [selectedPaymentProvider, setSelectedPaymentProvider] =
+    useState<PaymentProviderValue>("MANAGER");
   const paymentMessage = "";
   const paymentError = "";
 
@@ -504,8 +514,10 @@ export function TransferEditorPage({
                 ? "Выбранный способ оплаты временно недоступен."
                 : paymentNotice === "not-ready"
                   ? "Заполните обязательные поля перед оплатой и модерацией."
-                  : paymentNotice === "online-payment-error"
-                    ? "Онлайн-оплата отключена. Отправьте заявку менеджеру."
+              : paymentNotice === "online-payment-error"
+                    ? "Не удалось создать онлайн-платеж. Отправьте заявку менеджеру или попробуйте позже."
+                    : paymentNotice === "online-created"
+                      ? "Онлайн-платеж создан. Если страница оплаты не открылась, продолжите оплату из блока последнего платежа."
                     : paymentNotice === "schema-missing"
                       ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
                       : null;
@@ -530,6 +542,7 @@ export function TransferEditorPage({
   const needsPayment = publishReady && !hasFullPaymentCoverage;
   const needsTransferTopUp = needsPayment && paymentCoverage.hasActivePlacement;
   const managerPaymentPending = latestPaymentIsOpen && latestPayment?.provider === "MANAGER";
+  const onlinePaymentPending = latestPaymentIsOpen && latestPayment?.provider === "YOOKASSA";
   const alreadyOnModeration = transfer.workflowStatus === "PENDING_MODERATION";
   const canSubmitPublishedEdit =
     publishReady &&
@@ -556,12 +569,18 @@ export function TransferEditorPage({
       : canSubmitPaidCard
         ? "Отправить на модерацию"
         : latestPaymentIsOpen
-          ? "Заявка уже у менеджера"
+          ? onlinePaymentPending
+            ? "Ожидает оплаты онлайн"
+            : "Заявка уже у менеджера"
           : needsTransferTopUp
-            ? `Отправить заявку на доплату ${formatMoney(requiredPaymentAmount)}`
+            ? selectedPaymentProvider === "YOOKASSA"
+              ? `Оплатить доплату ${formatMoney(requiredPaymentAmount)} онлайн`
+              : `Отправить заявку на доплату ${formatMoney(requiredPaymentAmount)}`
             : hasFullPaymentCoverage
               ? "Оплата подтверждена"
-              : "Отправить заявку менеджеру";
+              : selectedPaymentProvider === "YOOKASSA"
+                ? "Перейти к онлайн-оплате"
+                : "Отправить заявку менеджеру";
   const readinessIssues = checklist.filter((item) => !item.done && item.step !== "publish");
   const paidUntil = paymentCoverage.paidUntil;
   const transferStatusMeta: Record<
@@ -701,7 +720,7 @@ export function TransferEditorPage({
       <input type="hidden" name="locationId" value={locationId} />
       <input type="hidden" name="latitude" value={latitude !== null ? String(latitude) : ""} />
       <input type="hidden" name="longitude" value={longitude !== null ? String(longitude) : ""} />
-      <input type="hidden" name="paymentProvider" value="MANAGER" />
+      <input type="hidden" name="paymentProvider" value={selectedPaymentProvider} />
       {!showPhone2 ? (
         <>
           <input type="hidden" name="phone2" value={phone2} />
@@ -1786,24 +1805,79 @@ export function TransferEditorPage({
               </div>
             ) : null}
 
+            {onlinePaymentPending ? (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AppIcon icon={CreditCard} className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
+                  <div>
+                    <p className="font-semibold text-sky-900">Ожидает оплаты в YooKassa</p>
+                    <p className="mt-1 text-sm text-sky-800/75">
+                      После оплаты карточка автоматически уйдет на модерацию.
+                    </p>
+                    {latestPayment?.confirmationUrl ? (
+                      <a
+                        href={latestPayment.confirmationUrl}
+                        className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                      >
+                        Продолжить оплату
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {canCreatePayment ? (
-              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-                  <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold text-primary">
-                    Оплата через менеджера
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPaymentProvider("MANAGER")}
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                    selectedPaymentProvider === "MANAGER"
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-olive/12 bg-white hover:border-primary/25",
+                  )}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                    <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
                   </span>
-                  <span className="mt-0.5 block text-xs text-olive/60">
-                    Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                  <span>
+                    <span className="block text-sm font-semibold text-primary">
+                      Через менеджера
+                    </span>
+                    <span className="mt-0.5 block text-xs text-olive/60">
+                      Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                    </span>
                   </span>
-                </span>
+                </button>
+                {onlinePaymentAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentProvider("YOOKASSA")}
+                    className={cn(
+                      "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                      selectedPaymentProvider === "YOOKASSA"
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-olive/12 bg-white hover:border-primary/25",
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100">
+                      <AppIcon icon={CreditCard} className="h-5 w-5 text-sky-700" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-sky-800">YooKassa</span>
+                      <span className="mt-0.5 block text-xs text-olive/60">
+                        Оплатите онлайн на защищенной странице YooKassa.
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
               </div>
             ) : null}
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              {!managerPaymentPending && !alreadyOnModeration ? (
+              {!latestPaymentIsOpen && !alreadyOnModeration ? (
                 <Button
                   type="submit"
                   name="intent"
@@ -1859,6 +1933,21 @@ export function TransferEditorPage({
                     <p className="mt-0.5 text-xs text-amber-700/70">
                       После подтверждения карточка будет отправлена на модерацию автоматически.
                     </p>
+                  </div>
+                ) : latestPayment.provider === "YOOKASSA" ? (
+                  <div className="w-full rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
+                    <p className="font-medium">Ожидает оплаты в YooKassa</p>
+                    <p className="mt-0.5 text-xs text-sky-700/75">
+                      После оплаты статус обновится автоматически.
+                    </p>
+                    {latestPayment.confirmationUrl ? (
+                      <a
+                        href={latestPayment.confirmationUrl}
+                        className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                      >
+                        Продолжить оплату
+                      </a>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1992,7 +2081,7 @@ export function TransferEditorPage({
                 Предпросмотр
               </Button>
             </div>
-            {!managerPaymentPending && !alreadyOnModeration ? (
+            {!latestPaymentIsOpen && !alreadyOnModeration ? (
               <Button
                 type="submit"
                 name="intent"

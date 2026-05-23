@@ -7,9 +7,11 @@ import { db } from "@/lib/db";
 import {
   buildFreePlacementPaymentPayload,
   buildPostLaunchTrialPaymentPayload,
+  getProgramPlacementValidUntil,
   resolvePaymentPlacementValidUntil,
   serializePayment,
 } from "@/lib/payments";
+import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
 import {
   applyPlacementFreePeriodToPricing,
@@ -21,13 +23,24 @@ import {
 } from "@/lib/placement-promo";
 import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
+import {
+  buildAbsoluteAppUrl,
+  buildYooKassaPaymentReceipt,
+  buildYooKassaReceiptItemDescription,
+  createYooKassaPayment,
+  isYooKassaConfigured,
+  mapYooKassaPaymentStatus,
+  mergeYooKassaPaymentPayload,
+  YooKassaApiError,
+  YooKassaConfigurationError,
+} from "@/lib/yookassa";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 const createPaymentSchema = z.object({
-  provider: z.literal("MANAGER").optional().default("MANAGER"),
+  provider: z.enum(["MANAGER", "YOOKASSA"]).optional().default("MANAGER"),
   period: z.enum(["season", "year"]).optional().default("year"),
 });
 
@@ -39,9 +52,16 @@ async function getOwnedExcursion(excursionId: string) {
       ownerId: true,
       offerType: true,
       title: true,
+      contactEmail: true,
+      contactPhone: true,
+      contactFirstName: true,
+      contactLastName: true,
       createdAt: true,
       status: true,
       pendingEditStatus: true,
+      owner: {
+        select: { email: true, firstName: true, lastName: true, phone: true },
+      },
     },
   });
 }
@@ -52,7 +72,7 @@ async function listExcursionPayments(excursionId: string, ownerId: string) {
       excursionId,
       ownerId,
       provider: {
-        in: [PaymentProvider.MANAGER],
+        in: getOnlinePaymentProviders(),
       },
     },
     orderBy: [{ createdAt: "desc" }],
@@ -142,8 +162,10 @@ export async function GET(_request: Request, context: RouteContext) {
         resolvePaymentPlacementValidUntil(item).getTime() > now.getTime(),
     ),
     hasPendingManagerPayment: latestOpenPayment?.provider === PaymentProvider.MANAGER,
+    hasPendingOnlinePayment: latestOpenPayment?.provider === PaymentProvider.YOOKASSA,
     quote: yearPrice,
     availablePrices: [seasonPrice, yearPrice],
+    onlinePaymentAvailable: isYooKassaConfigured(),
   });
 }
 
@@ -158,7 +180,7 @@ export async function POST(request: Request, context: RouteContext) {
     const raw = await request.json();
     const parsed = createPaymentSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Онлайн-оплата отключена. Используйте заявку менеджеру." }, { status: 400 });
+      return NextResponse.json({ error: "Выберите доступный способ оплаты." }, { status: 400 });
     }
     body = parsed.data;
   } catch {
@@ -242,6 +264,20 @@ export async function POST(request: Request, context: RouteContext) {
     originalAmountRub: publicationPrice.originalAmountRub,
     discountedAmountRub: amount,
   });
+  const paidFrom = now;
+  const paidUntil = getProgramPlacementValidUntil(body.period, now);
+  const tariffLabel = body.period === "season" ? "Сезон" : "Годовое размещение";
+  const serviceLabel =
+    excursion.offerType === ExcursionOfferType.TOUR
+      ? "Размещение тура на сайте Крым Вокруг"
+      : "Размещение экскурсии на сайте Крым Вокруг";
+  const receiptItemDescription = buildYooKassaReceiptItemDescription({
+    serviceLabel,
+    listingName: excursion.title,
+    tariffLabel,
+    paidFrom,
+    paidUntil,
+  });
 
   if (amount <= 0) {
     const created = await db.payment.create({
@@ -297,9 +333,12 @@ export async function POST(request: Request, context: RouteContext) {
       amount,
       tariffCode,
       roomCount: 0,
-      status: PaymentStatus.PENDING,
-      provider: PaymentProvider.MANAGER,
+      status: body.provider === "YOOKASSA" ? PaymentStatus.CREATED : PaymentStatus.PENDING,
+      provider: body.provider === "YOOKASSA" ? PaymentProvider.YOOKASSA : PaymentProvider.MANAGER,
       idempotenceKey,
+      confirmationUrl: null,
+      paidFrom,
+      placementValidUntil: paidUntil,
       providerPayload: {
         ...(placementPromo ? { placementPromo } : {}),
         ...buildPlacementPricingPayload(placementPricing),
@@ -313,6 +352,84 @@ export async function POST(request: Request, context: RouteContext) {
       },
     },
   });
+
+  if (body.provider === "YOOKASSA") {
+    if (!isYooKassaConfigured()) {
+      await db.payment.update({
+        where: { id: created.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+      });
+      return NextResponse.json(
+        { error: "Онлайн-оплата временно недоступна. Выберите оплату через менеджера." },
+        { status: 503 },
+      );
+    }
+
+    try {
+      const yooPayment = await createYooKassaPayment({
+        amountRub: amount,
+        idempotenceKey,
+        description: receiptItemDescription,
+        returnUrl: buildAbsoluteAppUrl(`/dashboard/excursions/${excursion.id}`),
+        metadata: {
+          local_payment_id: created.id,
+          entity_type: excursion.offerType === ExcursionOfferType.TOUR ? "tour" : "excursion",
+          excursion_id: excursion.id,
+          owner_id: session.id,
+          tariff_code: tariffCode,
+          tariff_label: tariffLabel,
+          paid_from: paidFrom.toISOString(),
+          paid_until: paidUntil.toISOString(),
+        },
+        receipt: buildYooKassaPaymentReceipt({
+          amountRub: amount,
+          itemDescription: receiptItemDescription,
+          customer: {
+            email: excursion.contactEmail ?? excursion.owner.email,
+            phone: excursion.contactPhone ?? excursion.owner.phone ?? session.phone,
+            fullName:
+              [excursion.contactFirstName, excursion.contactLastName].filter(Boolean).join(" ") ||
+              `${excursion.owner.firstName} ${excursion.owner.lastName}`,
+          },
+        }),
+      });
+      const providerPayload = mergeYooKassaPaymentPayload(created.providerPayload, yooPayment);
+      const updated = await applyProviderPaymentStatus(
+        db,
+        created.id,
+        mapYooKassaPaymentStatus(yooPayment.status),
+        {
+          providerPaymentId: yooPayment.id,
+          confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+          providerPayload,
+        },
+      );
+
+      return NextResponse.json({
+        item: serializePayment(updated ?? created),
+        managerRequested: false,
+        redirectUrl: yooPayment.confirmation?.confirmation_url ?? null,
+      });
+    } catch (error) {
+      await db.payment.update({
+        where: { id: created.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+      });
+
+      const isConfigurationError = error instanceof YooKassaConfigurationError;
+      const isApiError = error instanceof YooKassaApiError;
+      return NextResponse.json(
+        {
+          error: isConfigurationError
+            ? "Онлайн-оплата временно недоступна. Выберите оплату через менеджера."
+            : isApiError
+              ? "YooKassa не приняла платеж. Проверьте настройки магазина или выберите оплату через менеджера."
+              : "Не удалось создать онлайн-платеж. Выберите оплату через менеджера.",
+        },
+        { status: isConfigurationError ? 503 : 502 },
+      );
+    }
+  }
 
   return NextResponse.json({
     item: serializePayment(created),

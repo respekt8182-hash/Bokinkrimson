@@ -14,14 +14,14 @@ import {
   buildFreePlacementPaymentPayload,
   buildPostLaunchTrialPaymentPayload,
   buildTransferPaymentPayload,
+  getPlacementValidUntil,
   getTransferPaymentTariffCode,
   getTransferPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
+import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
-import {
-  TRANSFER_EXTRA_VEHICLE_FEE_RUB,
-} from "@/lib/site-tariffs";
+import { TRANSFER_EXTRA_VEHICLE_FEE_RUB } from "@/lib/site-tariffs";
 import {
   applyPlacementFreePeriodToPricing,
   buildPlacementPromoPayload,
@@ -47,6 +47,17 @@ import {
   normalizeTransferServiceTags,
   submitTransferToModerationIfReady,
 } from "@/lib/transfers";
+import {
+  buildAbsoluteAppUrl,
+  buildYooKassaPaymentReceipt,
+  buildYooKassaReceiptItemDescription,
+  createYooKassaPayment,
+  isYooKassaConfigured,
+  mapYooKassaPaymentStatus,
+  mergeYooKassaPaymentPayload,
+  YooKassaApiError,
+  YooKassaConfigurationError,
+} from "@/lib/yookassa";
 
 type DashboardTransferPageProps = {
   params: Promise<{ id: string }>;
@@ -284,6 +295,8 @@ export default async function DashboardTransferEditPage({
       priceUnitLabel: current.priceUnitLabel,
     });
     const intent = formString(formData, "intent");
+    const paymentProvider =
+      formString(formData, "paymentProvider") === "YOOKASSA" ? "YOOKASSA" : "MANAGER";
     const previewPath = `${buildPublicTransferPath({ id, title })}?preview=1`;
     const transferType = resolveString("transferType", current.transferType);
     const locationName =
@@ -444,7 +457,7 @@ export default async function DashboardTransferEditPage({
       ? {
           ownerId: currentSession.id,
           provider: {
-            in: [PaymentProvider.MANAGER],
+            in: getOnlinePaymentProviders(),
           },
           OR: [{ transferId: id }, { tariffCode: legacyTransferPaymentTariffCode }],
         }
@@ -452,7 +465,7 @@ export default async function DashboardTransferEditPage({
           ownerId: currentSession.id,
           tariffCode: transferPaymentTariffCode,
           provider: {
-            in: [PaymentProvider.MANAGER],
+            in: getOnlinePaymentProviders(),
           },
         };
     const payments = shouldPreparePayment
@@ -649,6 +662,20 @@ export default async function DashboardTransferEditPage({
         placementPromo,
       });
       const placementPricingPayload = buildPlacementPricingPayload(transferPlacementPricing);
+      const paymentPaidFrom = now;
+      const paymentValidUntil =
+        transferPaymentCoverage.hasActivePlacement && transferPaymentCoverage.paidUntil
+          ? new Date(transferPaymentCoverage.paidUntil)
+          : getPlacementValidUntil(now);
+      const tariffLabel =
+        paymentReason === "fleet_topup" ? "Доплата за автопарк" : "Годовое размещение";
+      const receiptItemDescription = buildYooKassaReceiptItemDescription({
+        serviceLabel: "Размещение трансфера на сайте Крым Вокруг",
+        listingName: title,
+        tariffLabel,
+        paidFrom: paymentPaidFrom,
+        paidUntil: paymentValidUntil,
+      });
 
       const openPayment =
         payments.find(
@@ -664,9 +691,8 @@ export default async function DashboardTransferEditPage({
                 amount: requiredPaymentAmount,
                 roomCount: fleet.length,
                 providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
-                placementValidUntil: transferPaymentCoverage.paidUntil
-                  ? new Date(transferPaymentCoverage.paidUntil)
-                  : null,
+                paidFrom: openPayment.paidFrom ?? paymentPaidFrom,
+                placementValidUntil: paymentValidUntil,
               },
             });
           }
@@ -677,22 +703,97 @@ export default async function DashboardTransferEditPage({
 
       const idempotenceKey = crypto.randomUUID();
 
-      await db.payment.create({
+      const created = await db.payment.create({
         data: {
           ...(transferPaymentsSupported ? { transferId: id } : {}),
           ownerId: currentSession.id,
           amount: requiredPaymentAmount,
           tariffCode: transferPaymentTariffCode,
           roomCount: fleet.length,
-          status: PaymentStatus.PENDING,
-          provider: PaymentProvider.MANAGER,
+          status: paymentProvider === "YOOKASSA" ? PaymentStatus.CREATED : PaymentStatus.PENDING,
+          provider:
+            paymentProvider === "YOOKASSA" ? PaymentProvider.YOOKASSA : PaymentProvider.MANAGER,
           idempotenceKey,
+          confirmationUrl: null,
           providerPayload: { ...transferPaymentPayload, ...placementPricingPayload },
-          placementValidUntil: transferPaymentCoverage.paidUntil
-            ? new Date(transferPaymentCoverage.paidUntil)
-            : null,
+          paidFrom: paymentPaidFrom,
+          placementValidUntil: paymentValidUntil,
         },
       });
+
+      if (paymentProvider === "YOOKASSA") {
+        if (!isYooKassaConfigured()) {
+          await db.payment.update({
+            where: { id: created.id },
+            data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+          });
+          redirect(`/dashboard/transfers/${id}?saved=1&payment=provider-disabled`);
+        }
+
+        let redirectUrl: string | null = null;
+
+        try {
+          const yooPayment = await createYooKassaPayment({
+            amountRub: requiredPaymentAmount,
+            idempotenceKey,
+            description: receiptItemDescription,
+            returnUrl: buildAbsoluteAppUrl(`/dashboard/transfers/${id}`),
+            metadata: {
+              local_payment_id: created.id,
+              entity_type: "transfer",
+              transfer_id: id,
+              owner_id: currentSession.id,
+              tariff_code: transferPaymentTariffCode,
+              payment_reason: paymentReason,
+              tariff_label: tariffLabel,
+              vehicle_count: fleet.length,
+              paid_from: paymentPaidFrom.toISOString(),
+              paid_until: paymentValidUntil.toISOString(),
+            },
+            receipt: buildYooKassaPaymentReceipt({
+              amountRub: requiredPaymentAmount,
+              itemDescription: receiptItemDescription,
+              customer: {
+                email: contactEmail,
+                phone: phone ?? currentSession.phone,
+                fullName: contactName ?? `${currentSession.firstName} ${currentSession.lastName}`,
+              },
+            }),
+          });
+          const providerPayload = mergeYooKassaPaymentPayload(created.providerPayload, yooPayment);
+
+          await applyProviderPaymentStatus(
+            db,
+            created.id,
+            mapYooKassaPaymentStatus(yooPayment.status),
+            {
+              providerPaymentId: yooPayment.id,
+              confirmationUrl: yooPayment.confirmation?.confirmation_url ?? null,
+              providerPayload,
+            },
+          );
+          redirectUrl = yooPayment.confirmation?.confirmation_url ?? null;
+        } catch (error) {
+          await db.payment.update({
+            where: { id: created.id },
+            data: { status: PaymentStatus.CANCELED, canceledAt: new Date() },
+          });
+
+          const isConfigurationError = error instanceof YooKassaConfigurationError;
+          const isApiError = error instanceof YooKassaApiError;
+          redirect(
+            `/dashboard/transfers/${id}?saved=1&payment=${
+              isConfigurationError || isApiError ? "provider-disabled" : "online-payment-error"
+            }`,
+          );
+        }
+
+        if (redirectUrl) {
+          redirect(redirectUrl);
+        }
+
+        redirect(`/dashboard/transfers/${id}?saved=1&payment=online-created`);
+      }
 
       redirect(`/dashboard/transfers/${id}?saved=1&payment=manager`);
     }
@@ -720,7 +821,7 @@ export default async function DashboardTransferEditPage({
     ? {
         ownerId: session.id,
         provider: {
-          in: [PaymentProvider.MANAGER],
+          in: getOnlinePaymentProviders(),
         },
         OR: [{ transferId: id }, { tariffCode: transferPaymentTariffCode }],
       }
@@ -728,7 +829,7 @@ export default async function DashboardTransferEditPage({
         ownerId: session.id,
         tariffCode: transferPaymentTariffCode,
         provider: {
-          in: [PaymentProvider.MANAGER],
+          in: getOnlinePaymentProviders(),
         },
       };
   const payments = await db.payment.findMany({
@@ -809,11 +910,14 @@ export default async function DashboardTransferEditPage({
       initialServiceTags={serviceTags}
       publicPath={publicPath}
       publicationFeeRub={
-        initialTransferPlacementPricing.freePeriodActive ? 0 : transferPublicationPrice.finalAmountRub
+        initialTransferPlacementPricing.freePeriodActive
+          ? 0
+          : transferPublicationPrice.finalAmountRub
       }
       originalPublicationFeeRub={initialTransferPlacementPricing.basePrice}
       extraVehicleFeeRub={TRANSFER_EXTRA_VEHICLE_FEE_RUB}
       initialPayments={payments.map(serializePayment)}
+      onlinePaymentAvailable={isYooKassaConfigured()}
       saved={saved}
       paymentNotice={paymentNotice}
       initialStep={initialStep}

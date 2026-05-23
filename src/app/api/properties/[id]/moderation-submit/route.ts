@@ -9,6 +9,7 @@ import {
   getPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
+import { getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import {
   getPlacementPromoDemoValidUntil,
@@ -118,7 +119,7 @@ export async function POST(_request: Request, context: RouteContext) {
     where: {
       propertyId: property.id,
       ownerId: session.id,
-      provider: PaymentProvider.MANAGER,
+      provider: { in: getOnlinePaymentProviders() },
     },
     orderBy: [{ createdAt: "desc" }],
     include: {

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { buildOffsetPagination, parsePagination } from "@/lib/pagination";
+import { getOnlinePaymentProviders } from "@/lib/payment-finalization";
 import {
   getTransferPaymentPayload,
   getTransferPaymentReference,
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
         ? [PaymentStatus.CREATED, PaymentStatus.PENDING]
         : [statusFilter as PaymentStatus];
 
-  const whereProvider: PaymentProvider[] = [PaymentProvider.MANAGER];
+  const whereProvider: PaymentProvider[] = getOnlinePaymentProviders();
 
   const [payments, total] = await Promise.all([
     db.payment.findMany({

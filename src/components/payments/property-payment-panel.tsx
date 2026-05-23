@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CircleCheckBig,
   CircleX,
+  CreditCard,
   Phone,
   TriangleAlert,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { getPlacementPromoPrice } from "@/lib/placement-promo";
 
 type PaymentStatusValue = "CREATED" | "PENDING" | "SUCCEEDED" | "CANCELED";
 type PropertyStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
+type PaymentProviderValue = "MANAGER" | "YOOKASSA";
 
 type PaymentReadinessIssue = {
   id: string;
@@ -49,6 +51,7 @@ type PropertyPaymentPanelProps = {
   initialReadiness: PaymentReadiness;
   initialPlacement: PlacementCoverageState;
   initialPayments: SerializedPayment[];
+  initialOnlinePaymentAvailable?: boolean;
   previewHref?: string | null;
 };
 
@@ -59,6 +62,7 @@ type PaymentsApiResponse = {
   moderationNotes: string | null;
   placement: PlacementCoverageState;
   items: SerializedPayment[];
+  onlinePaymentAvailable?: boolean;
 };
 
 type PaymentRouteResponse = {
@@ -117,6 +121,7 @@ export function PropertyPaymentPanel({
   initialReadiness,
   initialPlacement,
   initialPayments,
+  initialOnlinePaymentAvailable = false,
   previewHref = null,
 }: PropertyPaymentPanelProps) {
   const [propertyStatus, setPropertyStatus] = useState<PropertyStatusValue>(initialPropertyStatus);
@@ -132,6 +137,11 @@ export function PropertyPaymentPanel({
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedTariffType, setSelectedTariffType] = useState(
     initialReadiness.quote?.tariffType ?? "yearly",
+  );
+  const [selectedPaymentProvider, setSelectedPaymentProvider] =
+    useState<PaymentProviderValue>("MANAGER");
+  const [onlinePaymentAvailable, setOnlinePaymentAvailable] = useState(
+    initialOnlinePaymentAvailable,
   );
   const [managerRequested, setManagerRequested] = useState(false);
   const [error, setError] = useState("");
@@ -224,6 +234,7 @@ export function PropertyPaymentPanel({
       setReadiness(body.readiness);
       setPlacement(body.placement);
       setPayments(body.items);
+      setOnlinePaymentAvailable(Boolean(body.onlinePaymentAvailable));
       setPropertyStatus(body.status);
       setPendingEditStatus(body.pendingEditStatus);
       setModerationNotes(body.moderationNotes);
@@ -243,7 +254,10 @@ export function PropertyPaymentPanel({
       const response = await fetch(`/api/properties/${propertyId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "MANAGER", tariffType: selectedTariff?.type }),
+        body: JSON.stringify({
+          provider: selectedPaymentProvider,
+          tariffType: selectedTariff?.type,
+        }),
       });
 
       const body = (await response.json()) as PaymentRouteResponse & { managerRequested?: boolean };
@@ -334,7 +348,9 @@ export function PropertyPaymentPanel({
     : isCreating || !canCreatePayment;
   const primaryActionPendingLabel = canSubmitModerationWithPaidPlacement
     ? "Отправка..."
-    : "Создание...";
+    : selectedPaymentProvider === "YOOKASSA"
+      ? "Создание платежа..."
+      : "Создание...";
   const readinessIssues = useMemo<PaymentReadinessIssue[]>(() => {
     if (readiness.issues && readiness.issues.length > 0) {
       return readiness.issues;
@@ -720,16 +736,49 @@ export function PropertyPaymentPanel({
             readiness.ready &&
             amountDue > 0 &&
             !managerRequested && (
-              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-                  <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-primary">Оплата через менеджера</p>
-                  <p className="text-xs text-olive/60">
-                    Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
-                  </p>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPaymentProvider("MANAGER")}
+                  className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
+                    selectedPaymentProvider === "MANAGER"
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-olive/12 bg-white hover:border-primary/25"
+                  }`}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                    <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-primary">
+                      Через менеджера
+                    </span>
+                    <span className="mt-0.5 block text-xs text-olive/60">
+                      Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                    </span>
+                  </span>
+                </button>
+                {onlinePaymentAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentProvider("YOOKASSA")}
+                    className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
+                      selectedPaymentProvider === "YOOKASSA"
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-olive/12 bg-white hover:border-primary/25"
+                    }`}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100">
+                      <AppIcon icon={CreditCard} className="h-5 w-5 text-sky-700" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-sky-800">YooKassa</span>
+                      <span className="mt-0.5 block text-xs text-olive/60">
+                        Перейдите на защищенную страницу YooKassa и оплатите онлайн.
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
               </div>
             )}
 
@@ -748,7 +797,9 @@ export function PropertyPaymentPanel({
                   ? primaryActionPendingLabel
                   : canSubmitModerationWithPaidPlacement
                     ? primaryActionLabel
-                    : "Отправить заявку менеджеру"}
+                    : selectedPaymentProvider === "YOOKASSA"
+                      ? "Перейти к онлайн-оплате"
+                      : "Отправить заявку менеджеру"}
               </Button>
             )}
             {readiness.ready && previewHref ? (
@@ -802,6 +853,21 @@ export function PropertyPaymentPanel({
                     Менеджер свяжется с вами для подтверждения оплаты. После подтверждения карточка
                     будет отправлена на модерацию автоматически.
                   </p>
+                </div>
+              ) : latestPayment.provider === "YOOKASSA" ? (
+                <div className="w-full rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
+                  <p className="font-medium">Ожидает оплаты в YooKassa</p>
+                  <p className="mt-0.5 text-xs text-sky-700/75">
+                    После оплаты статус обновится автоматически.
+                  </p>
+                  {latestPayment.confirmationUrl ? (
+                    <a
+                      href={latestPayment.confirmationUrl}
+                      className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                    >
+                      Продолжить оплату
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -30,6 +30,8 @@ const paidOptionFeatureIds = new Set<string>([
   "ironing_board",
   "desk_lamp",
   "monitor",
+  "pool",
+  "transfer",
   "pet_food",
   "safe",
   "lockers",

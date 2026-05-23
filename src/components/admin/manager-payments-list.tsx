@@ -198,6 +198,8 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
   const [done, setDone] = useState(false);
 
   const isPending = payment.status === "CREATED" || payment.status === "PENDING";
+  const isOnlinePending = isPending && payment.provider === "YOOKASSA";
+  const canManualReview = isPending && payment.provider === "MANAGER";
   const tariffCode = getBaseTariffCode(payment.tariffCode);
   const entityName = payment.property
     ? (payment.property.name ?? "Объект без названия")
@@ -332,12 +334,19 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
                 icon={isPending ? Clock3 : payment.status === "SUCCEEDED" ? CircleCheckBig : X}
                 className="h-3 w-3"
               />
-              {isPending
-                ? "Ожидает подтверждения"
+              {isOnlinePending
+                ? "Ожидает оплаты онлайн"
+                : isPending
+                  ? "Ожидает подтверждения"
                 : payment.status === "SUCCEEDED"
                   ? "Подтверждено"
                   : "Отклонено"}
             </span>
+            {payment.provider === "YOOKASSA" ? (
+              <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                YooKassa
+              </span>
+            ) : null}
             {payment.status === "SUCCEEDED" && !payment.includeInMonthlyRevenue ? (
               <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                 Не считается в месяце
@@ -512,7 +521,16 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
       ) : null}
 
       {/* Actions for pending */}
-      {isPending && (
+      {isOnlinePending ? (
+        <div className="mt-3 rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
+          <p className="font-medium">Платеж создан в YooKassa</p>
+          <p className="mt-0.5 text-xs text-sky-700/75">
+            Подтверждение придет автоматически через webhook после оплаты или отмены.
+          </p>
+        </div>
+      ) : null}
+
+      {canManualReview && (
         <div className="mt-3 space-y-3 border-t border-olive/10 pt-3">
           <textarea
             value={notes}

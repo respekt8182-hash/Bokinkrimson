@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   CircleAlert,
   CircleCheckBig,
+  CreditCard,
   LoaderCircle,
   Phone,
   ShieldCheck,
@@ -22,6 +23,7 @@ import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/s
 
 type ExcursionOfferTypeValue = "EXCURSION" | "TOUR";
 type ExcursionStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "NEEDS_FIX" | "REJECTED";
+type PaymentProviderValue = "MANAGER" | "YOOKASSA";
 
 type ExcursionPaymentPanelProps = {
   excursionId: string;
@@ -47,8 +49,10 @@ type ExcursionPaymentsApiResponse = {
   items: SerializedPayment[];
   hasPaid: boolean;
   hasPendingManagerPayment: boolean;
+  hasPendingOnlinePayment?: boolean;
   quote?: PlacementPriceResult;
   availablePrices?: PlacementPriceResult[];
+  onlinePaymentAvailable?: boolean;
 };
 
 function toStatusLabel(status: ExcursionStatusValue): string {
@@ -150,6 +154,9 @@ export function ExcursionPaymentPanel({
   const [payments, setPayments] = useState<SerializedPayment[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<"year" | "season">("year");
   const [availablePrices, setAvailablePrices] = useState<PlacementPriceResult[]>([]);
+  const [selectedPaymentProvider, setSelectedPaymentProvider] =
+    useState<PaymentProviderValue>("MANAGER");
+  const [onlinePaymentAvailable, setOnlinePaymentAvailable] = useState(false);
   const [managerRequested, setManagerRequested] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -168,6 +175,7 @@ export function ExcursionPaymentPanel({
   const latestPayment = payments[0] ?? null;
   const hasPaid = payments.some((item) => item.status === "SUCCEEDED");
   const hasOpenPayment = isOpenPayment(latestPayment);
+  const onlinePaymentPending = hasOpenPayment && latestPayment?.provider === "YOOKASSA";
   const fallbackYearPrice =
     offerType === "TOUR" ? TOUR_PUBLICATION_FEE_RUB : EXCURSION_PUBLICATION_FEE_RUB;
   const selectedPlacementPrice =
@@ -231,6 +239,7 @@ export function ExcursionPaymentPanel({
 
       setPayments(body.items);
       setAvailablePrices(body.availablePrices ?? []);
+      setOnlinePaymentAvailable(Boolean(body.onlinePaymentAvailable));
       setStatus(body.status);
       setPendingEditStatus(body.pendingEditStatus);
       setManagerRequested(body.hasPendingManagerPayment);
@@ -343,7 +352,7 @@ export function ExcursionPaymentPanel({
       const response = await fetch(`/api/excursions/${excursionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "MANAGER", period: selectedPeriod }),
+        body: JSON.stringify({ provider: selectedPaymentProvider, period: selectedPeriod }),
       });
 
       const body = (await response.json()) as {
@@ -583,23 +592,58 @@ export function ExcursionPaymentPanel({
               </div>
             ) : null}
             {!isFreePublication ? (
-              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-                  <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-primary">Оплата через менеджера</p>
-                  <p className="text-xs text-olive/60">
-                    Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
-                  </p>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPaymentProvider("MANAGER")}
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                    selectedPaymentProvider === "MANAGER"
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-olive/15 bg-white hover:border-primary/25",
+                  )}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                    <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-primary">
+                      Через менеджера
+                    </span>
+                    <span className="mt-0.5 block text-xs text-olive/60">
+                      Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                    </span>
+                  </span>
+                </button>
+                {onlinePaymentAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentProvider("YOOKASSA")}
+                    className={cn(
+                      "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                      selectedPaymentProvider === "YOOKASSA"
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-olive/15 bg-white hover:border-primary/25",
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100">
+                      <AppIcon icon={CreditCard} className="h-5 w-5 text-sky-700" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-sky-800">YooKassa</span>
+                      <span className="mt-0.5 block text-xs text-olive/60">
+                        Оплатите онлайн на защищенной странице YooKassa.
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
         ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {!adminMode && !alreadyOnModeration && !managerRequested ? (
+          {!adminMode && !alreadyOnModeration && !managerRequested && !onlinePaymentPending ? (
             <Button
               onClick={() => void (canSubmitModeration ? submitModeration() : payAndContinue())}
               disabled={
@@ -616,6 +660,8 @@ export function ExcursionPaymentPanel({
                 "Отправить на модерацию"
               ) : isFreePublication ? (
                 "Отправить на модерацию"
+              ) : selectedPaymentProvider === "YOOKASSA" ? (
+                "Перейти к онлайн-оплате"
               ) : (
                 "Отправить заявку менеджеру"
               )}
@@ -697,12 +743,29 @@ export function ExcursionPaymentPanel({
           </div>
 
           {isOpenPayment(latestPayment) ? (
-            <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-              <p className="font-medium">Ожидает подтверждения менеджером</p>
-              <p className="mt-0.5 text-xs text-amber-700/70">
-                После подтверждения карточка будет отправлена на модерацию автоматически.
-              </p>
-            </div>
+            latestPayment.provider === "YOOKASSA" ? (
+              <div className="mt-3 rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
+                <p className="font-medium">Ожидает оплаты в YooKassa</p>
+                <p className="mt-0.5 text-xs text-sky-700/75">
+                  После оплаты статус обновится автоматически.
+                </p>
+                {latestPayment.confirmationUrl ? (
+                  <a
+                    href={latestPayment.confirmationUrl}
+                    className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                  >
+                    Продолжить оплату
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                <p className="font-medium">Ожидает подтверждения менеджером</p>
+                <p className="mt-0.5 text-xs text-amber-700/70">
+                  После подтверждения карточка будет отправлена на модерацию автоматически.
+                </p>
+              </div>
+            )
           ) : null}
 
           {latestPayment.status === "CANCELED" ? (

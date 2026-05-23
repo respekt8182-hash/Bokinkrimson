@@ -12,6 +12,7 @@ import {
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { getPropertyPaymentReadinessIssues, getPropertyProgress } from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
+import { isYooKassaConfigured } from "@/lib/yookassa";
 
 type PaymentPageProps = {
   params: Promise<{ id: string }>;
@@ -126,6 +127,7 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
           }}
           initialPlacement={initialPlacement}
           initialPayments={payments.map(serializePayment)}
+          initialOnlinePaymentAvailable={isYooKassaConfigured()}
           previewHref={previewHref}
         />
       </div>

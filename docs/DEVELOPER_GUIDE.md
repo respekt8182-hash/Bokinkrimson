@@ -51,6 +51,7 @@
 - Прогресс шагов и сериализация: `src/lib/properties.ts`
 
 Текущее правило потока:
+
 - шаги 1-8 заполняются в мастере;
 - шаг 9 — номерной фонд;
 - шаг 10 — цены из полноэкранной шахматки;
@@ -67,6 +68,7 @@
 - Доменные типы: `src/lib/occupancy.ts`, `src/lib/pricing.ts`
 
 Практическое правило:
+
 - `room-fund-manager` отвечает только за категории/вместимость/санузлы/медиа;
 - удобства категории (`featureIds`, платность, охват по категориям) редактируются только через `room-amenities-manager`;
 - `rooms` API оставляет поля `featureIds/customFeatures` для совместимости контрактов.
@@ -76,7 +78,10 @@
 - Экран оплаты: `src/components/payments/property-payment-panel.tsx`
 - API оплаты: `src/app/api/properties/[id]/payments/route.ts`
 - API quote: `src/app/api/properties/[id]/payments/quote/route.ts`
-- Оплата размещения фиксируется заявкой менеджеру; онлайн-эквайринг отключен.
+- Оплата размещения доступна через заявку менеджеру или YooKassa, если заданы `YOOKASSA_SHOP_ID` и `YOOKASSA_SECRET_KEY`.
+- Чеки YooKassa формируются в запросе создания платежа через `receipt`: по умолчанию `YOOKASSA_RECEIPT_VAT_CODE=1` (без НДС) и `YOOKASSA_RECEIPT_PAYMENT_MODE=full_payment`.
+- URL для HTTP-уведомлений YooKassa: `https://<домен>/api/yookassa/webhook`.
+- Подключенные события YooKassa: `payment.succeeded`, `payment.waiting_for_capture`, `payment.canceled`, `refund.succeeded`.
 
 ### Экскурсии
 
