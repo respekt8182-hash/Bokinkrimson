@@ -19,7 +19,13 @@ function getInitialBlockFromSearchParam(
     return undefined;
   }
 
-  if (raw === "info" || raw === "location" || raw === "ksr" || raw === "contacts" || raw === "photo") {
+  if (
+    raw === "info" ||
+    raw === "location" ||
+    raw === "ksr" ||
+    raw === "contacts" ||
+    raw === "photo"
+  ) {
     return raw;
   }
 
@@ -82,8 +88,10 @@ export default async function DashboardObjectAboutPage({
   const initialBlock = getInitialBlockFromSearchParam(resolvedSearchParams.block);
 
   return (
-    <div className="space-y-5">
-      <ObjectSectionNav propertyId={property.id} activeSection="about" />
+    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+      <div className="hidden lg:block">
+        <ObjectSectionNav propertyId={property.id} activeSection="about" />
+      </div>
       <div className="min-w-0">
         <ObjectAboutPage
           initialProperty={serializeProperty(property)}

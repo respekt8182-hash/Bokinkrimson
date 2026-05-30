@@ -7,12 +7,14 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { AdminPagination } from "@/components/admin/admin-pagination";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicAttractionPath } from "@/lib/public-marketplace";
 import { getStaticAttractions, type StaticAttractionStatus } from "@/lib/static-attractions";
 
 type AdminAttractionsPageProps = {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; page?: string }>;
 };
 
 const STATUS_LABELS: Record<StaticAttractionStatus, string> = {
@@ -31,6 +33,7 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
   const filters = await searchParams;
   const selectedStatus = filters.status?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   const rows = await getStaticAttractions({ includeUnpublished: true });
 
@@ -72,11 +75,15 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
     const params = new URLSearchParams();
     const status = overrides.status ?? selectedStatus;
     const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/attractions?${search}` : "/admin/attractions";
   };
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -150,7 +157,7 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {paginatedItems.map((item) => {
             const publicPath =
               item.status === "PUBLISHED" && item.isPublishedVisible
                 ? buildPublicAttractionPath({ id: item.id, title: item.title, slug: item.slug })
@@ -214,6 +221,11 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="мест"
+          />
         </div>
       )}
     </div>

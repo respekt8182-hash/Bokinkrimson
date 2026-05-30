@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/listing-analytics",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/chessboard-year-transfer",
+      "schedule": "20 2 * * *"
     }
   ]
 }

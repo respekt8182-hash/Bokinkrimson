@@ -625,6 +625,8 @@ function PublicPropertySearchCardInner({
         <Link
           href={detailsHref}
           prefetch={false}
+          data-catalog-detail-link="housing"
+          data-catalog-item-id={item.id}
           aria-labelledby={titleId}
           aria-label={`Открыть карточку ${item.name}`}
           onTouchStart={handleOverlayTouchStart}
@@ -699,6 +701,8 @@ function PublicPropertySearchCardInner({
               <Link
                 href={detailsHref}
                 prefetch={false}
+                data-catalog-detail-link="housing"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto inline-flex h-9 shrink-0 items-center gap-1 rounded-xl bg-primary px-4 text-[12px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Выбрать
@@ -727,6 +731,8 @@ function PublicPropertySearchCardInner({
       <Link
         href={detailsHref}
         prefetch={false}
+        data-catalog-detail-link="housing"
+        data-catalog-item-id={item.id}
         aria-labelledby={titleId}
         aria-label={`Открыть карточку ${item.name}`}
         onTouchStart={handleOverlayTouchStart}
@@ -802,6 +808,8 @@ function PublicPropertySearchCardInner({
               <Link
                 href={detailsHref}
                 prefetch={false}
+                data-catalog-detail-link="housing"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -842,6 +850,8 @@ function PublicPropertySearchCardInner({
               <Link
                 href={detailsHref}
                 prefetch={false}
+                data-catalog-detail-link="housing"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Подробнее

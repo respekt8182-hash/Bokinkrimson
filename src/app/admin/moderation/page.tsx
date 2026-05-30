@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PropertyStatus } from "@prisma/client";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import {
   AdminEmptyState,
   AdminNotice,
@@ -8,6 +9,7 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
@@ -24,6 +26,7 @@ type ModerationQueuePageProps = {
     dateFrom?: string;
     dateTo?: string;
     q?: string;
+    page?: string;
   }>;
 };
 
@@ -86,6 +89,7 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
   const dateFrom = filters.dateFrom?.trim() ?? "";
   const dateTo = filters.dateTo?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   const { rows, isDatabaseFallback } = await loadDataWithDatabaseFallback(
     {
@@ -188,17 +192,21 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
     const nextDateFrom = overrides.dateFrom ?? dateFrom;
     const nextDateTo = overrides.dateTo ?? dateTo;
     const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (locationId) params.set("locationId", locationId);
     if (nextDateFrom) params.set("dateFrom", nextDateFrom);
     if (nextDateTo) params.set("dateTo", nextDateTo);
     if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/moderation?${search}` : "/admin/moderation";
   };
 
   const isDefaultPendingView =
     selectedStatus === DEFAULT_STATUS && !selectedLocationId && !dateFrom && !dateTo && !query;
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -318,8 +326,9 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {paginatedItems.map((item) => {
             const ownerEmail = item.owner.email?.trim();
+            const publicNumber = item.publicId ? `№${item.publicId}` : "без публичного номера";
 
             return (
               <article
@@ -331,7 +340,9 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                     <h2 className="text-lg font-semibold text-olive">
                       {item.name ?? "Жильё без названия"}
                     </h2>
-                    <p className="mt-1 text-xs text-olive/50">ID: {item.id}</p>
+                    <p className="mt-1 text-xs text-olive/50">
+                      Объект {publicNumber} · технический ID: {item.id}
+                    </p>
                   </div>
                   <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold text-olive">
                     {getPropertyWorkflowStatusLabel(
@@ -342,7 +353,7 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                   </span>
                 </div>
 
-                <dl className="mt-4 grid gap-2 text-sm md:grid-cols-4">
+                <dl className="mt-4 grid gap-2 text-sm md:grid-cols-3 xl:grid-cols-6">
                   <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Владелец</dt>
                     <dd className="font-medium text-olive">{item.owner.firstName}</dd>
@@ -358,8 +369,22 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
                     <dd className="font-medium text-olive">{item.locationName ?? "Не указана"}</dd>
                   </div>
                   <div className="rounded-2xl bg-cream px-3 py-3">
+                    <dt className="text-olive/60">Адрес</dt>
+                    <dd className="font-medium text-olive">{item.address ?? "Не указан"}</dd>
+                  </div>
+                  <div className="rounded-2xl bg-cream px-3 py-3">
+                    <dt className="text-olive/60">Тип жилья</dt>
+                    <dd className="font-medium text-olive">{item.type ?? "Не указан"}</dd>
+                  </div>
+                  <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Номеров</dt>
                     <dd className="font-medium text-olive">{item.rooms.length}</dd>
+                  </div>
+                  <div className="rounded-2xl bg-cream px-3 py-3">
+                    <dt className="text-olive/60">Создано</dt>
+                    <dd className="font-medium text-olive">
+                      {new Date(item.createdAt).toLocaleDateString("ru-RU")}
+                    </dd>
                   </div>
                 </dl>
 
@@ -383,6 +408,11 @@ export default async function ModerationQueuePage({ searchParams }: ModerationQu
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="карточек"
+          />
         </div>
       )}
     </div>

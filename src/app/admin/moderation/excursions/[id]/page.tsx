@@ -148,9 +148,7 @@ export default async function AdminModerationExcursionPage({
         <dl className="mt-3 grid gap-2 text-sm md:grid-cols-4">
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Организатор</dt>
-            <dd className="font-medium text-olive">
-              {excursion.owner.firstName}
-            </dd>
+            <dd className="font-medium text-olive">{excursion.owner.firstName}</dd>
             {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>
           <div className="rounded-xl bg-cream px-3 py-2">
@@ -266,6 +264,7 @@ export default async function AdminModerationExcursionPage({
         initialReviews={reviews}
         initialAvgRating={Number(excursion.avgRating)}
         initialReviewsCount={excursion.reviewsCount}
+        pageSize={5}
       />
 
       <ExcursionModerationActions

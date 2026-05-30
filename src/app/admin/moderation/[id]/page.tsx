@@ -74,6 +74,40 @@ function formatMoney(value: number, currency: string): string {
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
 }
 
+function formatIsoDate(value: string): string {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("ru-RU");
+}
+
+function formatPricePeriodRange(dateFrom: string, dateTo: string): string {
+  return `с ${formatIsoDate(dateFrom)} по ${formatIsoDate(dateTo)}`;
+}
+
+function getPricePeriodDays(dateFrom: string, dateTo: string): number | null {
+  const start = new Date(`${dateFrom}T00:00:00.000Z`);
+  const end = new Date(`${dateTo}T00:00:00.000Z`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return null;
+  }
+
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function formatDaysCount(days: number | null): string {
+  if (days === null) {
+    return "длительность не определена";
+  }
+
+  const lastTwo = days % 100;
+  const last = days % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return `${days} дней`;
+  if (last === 1) return `${days} день`;
+  if (last >= 2 && last <= 4) return `${days} дня`;
+  return `${days} дней`;
+}
+
 const bedTypeLabelById = Object.fromEntries(
   bedTypeOptions.map((item) => [item.id, item.label]),
 ) as Record<string, string>;
@@ -205,9 +239,7 @@ export default async function AdminModerationObjectPage({
         <dl className="mt-3 grid gap-2 text-sm md:grid-cols-3">
           <div className="rounded-xl bg-cream px-3 py-2">
             <dt className="text-olive/60">Владелец</dt>
-            <dd className="font-medium text-olive">
-              {property.owner.firstName}
-            </dd>
+            <dd className="font-medium text-olive">{property.owner.firstName}</dd>
             {ownerEmail ? <dd className="text-olive/75">{ownerEmail}</dd> : null}
           </div>
           <div className="rounded-xl bg-cream px-3 py-2">
@@ -478,23 +510,41 @@ export default async function AdminModerationObjectPage({
                         <tr className="text-left text-olive/65">
                           <th className="py-1 pr-4">Период</th>
                           <th className="py-1">Цена</th>
-                          <th className="py-1 pl-4">Мин. гостей</th>
+                          <th className="py-1 pl-4">Условия</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {room.prices.map((price) => (
-                          <tr key={price.id} className="border-t border-olive/10">
-                            <td className="py-1 pr-4 text-olive">
-                              {price.dateFrom} - {price.dateTo}
-                            </td>
-                            <td className="py-1 font-semibold text-olive">
-                              {formatMoney(price.price, price.currency)}
-                            </td>
-                            <td className="py-1 pl-4 text-olive">
-                              {price.minGuests === null ? "Без ограничений" : price.minGuests}
-                            </td>
-                          </tr>
-                        ))}
+                        {room.prices.map((price) => {
+                          const periodDays = getPricePeriodDays(price.dateFrom, price.dateTo);
+                          const conditions = [
+                            price.minGuests === null
+                              ? "без ограничения по гостям"
+                              : `минимум гостей: ${price.minGuests}`,
+                            price.minNights === null ? null : `минимум ночей: ${price.minNights}`,
+                            price.extraBedPrice === null
+                              ? null
+                              : `доп. место: ${formatMoney(price.extraBedPrice, price.currency)}`,
+                          ].filter(Boolean);
+
+                          return (
+                            <tr key={price.id} className="border-t border-olive/10">
+                              <td className="py-2 pr-4 text-olive">
+                                <span className="block font-semibold">
+                                  {formatPricePeriodRange(price.dateFrom, price.dateTo)}
+                                </span>
+                                <span className="text-xs text-olive/58">
+                                  {formatDaysCount(periodDays)}
+                                </span>
+                              </td>
+                              <td className="py-2 font-semibold text-olive">
+                                {formatMoney(price.price, price.currency)}
+                              </td>
+                              <td className="py-2 pl-4 text-olive">
+                                {conditions.length > 0 ? conditions.join(" · ") : "Без условий"}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -547,6 +597,7 @@ export default async function AdminModerationObjectPage({
         initialReviews={reviews}
         initialAvgRating={Number(property.avgRating)}
         initialReviewsCount={property.reviewsCount}
+        pageSize={5}
       />
 
       <ModerationActions

@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import {
-  BriefcaseBusiness,
   Building2,
   Check,
   Globe,
+  ImageIcon as PhotoIcon,
   ListChecks,
   Mail,
   MapPin,
@@ -19,7 +19,7 @@ import { type TextareaHTMLAttributes, useEffect, useMemo, useRef, useState } fro
 import { FaqEditor } from "@/components/excursions/editor/faq-editor";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 import { PropertyMediaManager } from "@/components/media/property-media-manager";
-import { AppIcon } from "@/components/ui/app-icon";
+import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,8 +71,45 @@ type LocationLookupResponse = {
 };
 
 type AboutBlockId = "info" | "location" | "ksr" | "contacts" | "photo";
+type AboutFieldId =
+  | "type"
+  | "name"
+  | "description"
+  | "location"
+  | "address"
+  | "map"
+  | "registryNumber"
+  | "phone";
 
 const aboutBlockOrder: AboutBlockId[] = ["info", "location", "ksr", "contacts", "photo"];
+
+const aboutBlockCopy: Record<AboutBlockId, { title: string; description: string }> = {
+  info: {
+    title: "Информация",
+    description:
+      "Начнем с базовых данных: выберите тип объекта, добавьте название и короткое понятное описание.",
+  },
+  location: {
+    title: "Локация",
+    description:
+      "Укажите город, адрес и точку на карте. Так гости быстрее поймут, где находится объект.",
+  },
+  ksr: {
+    title: "КСР",
+    description:
+      "Добавьте номер из реестра или спокойно пропустите шаг, если для вашего объекта он не нужен.",
+  },
+  contacts: {
+    title: "Контакты",
+    description:
+      "Укажите телефоны и способы связи. Можно добавить несколько телефонов и выбрать удобные мессенджеры.",
+  },
+  photo: {
+    title: "Фото",
+    description:
+      "Добавьте фото фасада, общих зон и территории. Хорошие снимки помогают гостям быстрее принять решение.",
+  },
+};
 
 function getInitialBlock(property: SerializedProperty): AboutBlockId {
   if (!property.progress.step1 || !property.progress.step5) {
@@ -164,6 +201,7 @@ export function ObjectAboutPage({
   const [isResolvingLocationFromMap, setIsResolvingLocationFromMap] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<AboutFieldId, string>>>({});
 
   const [selectedType, setSelectedType] = useState(
     normalizePropertyTypeId(initialProperty.type) ?? "",
@@ -206,22 +244,17 @@ export function ObjectAboutPage({
   const [contactPersonRole, setContactPersonRole] = useState(
     initialProperty.contactPersonRole ?? "",
   );
-  const [listingChannels, setListingChannels] = useState(initialProperty.listingChannels ?? "");
   const [whatsappUrl, setWhatsappUrl] = useState(initialProperty.whatsappUrl ?? "");
   const [telegramUrl, setTelegramUrl] = useState(initialProperty.telegramUrl ?? "");
   const [vkUrl, setVkUrl] = useState(initialProperty.vkUrl ?? "");
   const [maxUrl, setMaxUrl] = useState(initialProperty.maxUrl ?? "");
   const [okUrl, setOkUrl] = useState(initialProperty.okUrl ?? "");
 
-  const [showContactRole, setShowContactRole] = useState(
-    Boolean(initialProperty.contactPersonRole),
+  const [showPhone2, setShowPhone2] = useState(
+    Boolean(initialProperty.phone2 || initialProperty.phone3),
   );
   const [showPhone3, setShowPhone3] = useState(Boolean(initialProperty.phone3));
-  const [showContactEmail, setShowContactEmail] = useState(Boolean(initialProperty.contactEmail));
   const [showWebsite, setShowWebsite] = useState(Boolean(initialProperty.websiteUrl));
-  const [showListingChannels, setShowListingChannels] = useState(
-    Boolean(initialProperty.listingChannels),
-  );
   const [showWhatsapp, setShowWhatsapp] = useState(Boolean(initialProperty.whatsappUrl));
   const [showTelegram, setShowTelegram] = useState(Boolean(initialProperty.telegramUrl));
   const [showVk, setShowVk] = useState(Boolean(initialProperty.vkUrl));
@@ -247,20 +280,50 @@ export function ObjectAboutPage({
     property.progress.step5 ||
     property.progress.step8;
 
-  const blockChecks: Array<{ id: AboutBlockId; title: string; done: boolean }> = [
+  function setSoftError(message: string, field?: AboutFieldId) {
+    setError(message);
+    setSuccess("");
+    setFieldErrors(field ? { [field]: message } : {});
+  }
+
+  function clearFieldError(field: AboutFieldId) {
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  const blockChecks: Array<{
+    id: AboutBlockId;
+    title: string;
+    hint: string;
+    icon: LucideIcon;
+    done: boolean;
+  }> = [
     {
       id: "info",
       title: "Информация",
+      hint: "Тип, название, описание",
+      icon: Building2,
       done: property.progress.step1 && property.progress.step5,
     },
     {
       id: "location",
       title: "Локация",
+      hint: "Город, адрес, точка на карте",
+      icon: MapPin,
       done: property.progress.step3,
     },
     {
       id: "ksr",
       title: "КСР",
+      hint: "Реестр или причина пропуска",
+      icon: ListChecks,
       done:
         property.progress.step7 &&
         (hasKsrNumber || (property.classificationApplicable === false && hasAnyNonKsrProgress)),
@@ -268,11 +331,15 @@ export function ObjectAboutPage({
     {
       id: "contacts",
       title: "Контакты",
+      hint: "Телефоны и каналы связи",
+      icon: Phone,
       done: property.progress.step4,
     },
     {
       id: "photo",
       title: "Фото",
+      hint: "Фасад и общие зоны",
+      icon: PhotoIcon,
       done: property.progress.step8,
     },
   ];
@@ -312,6 +379,7 @@ export function ObjectAboutPage({
           setIsKsrWarningOpen(true);
           setError("");
           setSuccess("");
+          setFieldErrors({});
           return false;
         }
 
@@ -337,6 +405,7 @@ export function ObjectAboutPage({
     if (nextBlockIndex <= activeBlockIndex) {
       setError("");
       setSuccess("");
+      setFieldErrors({});
       setActiveBlock(nextBlock);
       return;
     }
@@ -466,6 +535,7 @@ export function ObjectAboutPage({
     setMapDraftLocationId(selectedLocationId);
     setIsMapDialogOpen(true);
     setError("");
+    setFieldErrors({});
   }
 
   function closeMapDialog() {
@@ -474,8 +544,7 @@ export function ObjectAboutPage({
 
   function saveMapSelection() {
     if (mapDraftLatitude === null || mapDraftLongitude === null || !mapDraftAddress.trim()) {
-      setError("Выберите точку на карте и нажмите «Подтвердить геопозицию».");
-      setSuccess("");
+      setSoftError("Выберите точку на карте и нажмите «Подтвердить геопозицию».", "map");
       return;
     }
 
@@ -487,6 +556,7 @@ export function ObjectAboutPage({
     setIsMapDialogOpen(false);
     setError("");
     setSuccess("");
+    setFieldErrors({});
   }
 
   function applyProperty(item: SerializedProperty) {
@@ -516,14 +586,19 @@ export function ObjectAboutPage({
     setContactEmail(item.contactEmail ?? "");
     setContactPersonName(item.contactPersonName ?? "");
     setContactPersonRole(item.contactPersonRole ?? "");
-    setListingChannels(item.listingChannels ?? "");
     setWhatsappUrl(item.whatsappUrl ?? "");
     setTelegramUrl(item.telegramUrl ?? "");
     setVkUrl(item.vkUrl ?? "");
     setMaxUrl(item.maxUrl ?? "");
     setOkUrl(item.okUrl ?? "");
+    setShowPhone2(Boolean(item.phone2 || item.phone3));
     setShowPhone3(Boolean(item.phone3));
-    setShowContactEmail(Boolean(item.contactEmail));
+    setShowWebsite(Boolean(item.websiteUrl));
+    setShowWhatsapp(Boolean(item.whatsappUrl));
+    setShowTelegram(Boolean(item.telegramUrl));
+    setShowVk(Boolean(item.vkUrl));
+    setShowMax(Boolean(item.maxUrl));
+    setShowOk(Boolean(item.okUrl));
     setRegistryNumber(item.registryNumberPending ?? item.registryNumber ?? "");
   }
 
@@ -538,15 +613,15 @@ export function ObjectAboutPage({
     });
 
     if (!response.ok) {
-      setError(await readErrorMessage(response, "Не удалось сохранить изменения"));
-      setSuccess("");
+      setSoftError(await readErrorMessage(response, "Не удалось сохранить изменения"));
       return null;
     }
 
     const body = (await response.json()) as PatchStepResponse;
     applyProperty(body.item);
     setError("");
-    setSuccess("");
+    setFieldErrors({});
+    setSuccess("Изменения сохранены");
     return body.item;
   }
 
@@ -555,48 +630,45 @@ export function ObjectAboutPage({
     const normalizedDescription = description.trim();
 
     if (!selectedType) {
-      setError("Выберите тип объекта");
-      setSuccess("");
+      setSoftError("Выберите тип объекта, чтобы продолжить", "type");
       return false;
     }
 
     if (!normalizedName) {
-      setError("Введите название объекта");
-      setSuccess("");
+      setSoftError("Введите название объекта, чтобы продолжить", "name");
       return false;
     }
 
     if (!normalizedDescription) {
-      setError("Добавьте описание объекта");
-      setSuccess("");
+      setSoftError("Добавьте короткое описание объекта, чтобы продолжить", "description");
       return false;
     }
 
     if (normalizedDescription.length < propertyAboutLimits.description.min) {
-      setError(
+      setSoftError(
         `Описание объекта должно содержать минимум ${propertyAboutLimits.description.min} символов`,
+        "description",
       );
-      setSuccess("");
       return false;
     }
 
     if (normalizedDescription.length > propertyAboutLimits.description.max) {
-      setError(
+      setSoftError(
         `Описание объекта не должно превышать ${propertyAboutLimits.description.max} символов`,
+        "description",
       );
-      setSuccess("");
       return false;
     }
 
     if (faqItems.some((item) => item.q.trim().length > propertyAboutLimits.faq.questionMax)) {
-      setError(`Вопрос в FAQ не должен превышать ${propertyAboutLimits.faq.questionMax} символов`);
-      setSuccess("");
+      setSoftError(
+        `Вопрос в FAQ не должен превышать ${propertyAboutLimits.faq.questionMax} символов`,
+      );
       return false;
     }
 
     if (faqItems.some((item) => item.a.trim().length > propertyAboutLimits.faq.answerMax)) {
-      setError(`Ответ в FAQ не должен превышать ${propertyAboutLimits.faq.answerMax} символов`);
-      setSuccess("");
+      setSoftError(`Ответ в FAQ не должен превышать ${propertyAboutLimits.faq.answerMax} символов`);
       return false;
     }
 
@@ -634,20 +706,17 @@ export function ObjectAboutPage({
     const normalizedSeaDistance = seaDistance.trim();
 
     if (!normalizedLocation) {
-      setError("Укажите населённый пункт");
-      setSuccess("");
+      setSoftError("Укажите город или населённый пункт, чтобы продолжить", "location");
       return false;
     }
 
     if (!normalizedAddress) {
-      setError("Укажите адрес объекта");
-      setSuccess("");
+      setSoftError("Укажите адрес объекта, чтобы продолжить", "address");
       return false;
     }
 
     if (latitude === null || longitude === null) {
-      setError("Поставьте метку на карте, чтобы сохранить координаты объекта");
-      setSuccess("");
+      setSoftError("Поставьте метку на карте, чтобы продолжить", "map");
       return false;
     }
 
@@ -675,8 +744,7 @@ export function ObjectAboutPage({
 
   async function saveContactsBlock(): Promise<boolean> {
     if (!phone.trim()) {
-      setError("Введите телефон");
-      setSuccess("");
+      setSoftError("Заполните номер телефона, чтобы продолжить", "phone");
       return false;
     }
 
@@ -693,11 +761,11 @@ export function ObjectAboutPage({
         contactEmail: contactEmail.trim(),
         contactPersonName: contactPersonName.trim(),
         contactPersonRole: contactPersonRole.trim(),
-        listingChannels: listingChannels.trim(),
-        whatsappUrl: normalizeWhatsappUrl(whatsappUrl) ?? "",
-        telegramUrl: normalizeTelegramProfileUrl(telegramUrl) ?? "",
+        listingChannels: "",
+        whatsappUrl: showWhatsapp ? (normalizeWhatsappUrl(whatsappUrl) ?? "") : "",
+        telegramUrl: showTelegram ? (normalizeTelegramProfileUrl(telegramUrl) ?? "") : "",
         vkUrl: normalizeVkProfileUrl(vkUrl) ?? "",
-        maxUrl: normalizeMaxProfileUrl(maxUrl) ?? "",
+        maxUrl: showMax ? (normalizeMaxProfileUrl(maxUrl) ?? "") : "",
         okUrl: normalizeOkProfileUrl(okUrl) ?? "",
         receiveRequests: false,
       });
@@ -711,14 +779,15 @@ export function ObjectAboutPage({
     const normalizedRegistryNumber = registryNumber.trim();
 
     if (!normalizedRegistryNumber) {
-      setError("Укажите номер записи в реестре КСР");
-      setSuccess("");
+      setSoftError(
+        "Укажите номер записи в реестре КСР или выберите пропуск шага",
+        "registryNumber",
+      );
       return false;
     }
 
     if (normalizedRegistryNumber.length < 3) {
-      setError("Номер записи в реестре слишком короткий");
-      setSuccess("");
+      setSoftError("Номер записи в реестре слишком короткий", "registryNumber");
       return false;
     }
 
@@ -733,6 +802,7 @@ export function ObjectAboutPage({
 
       if (updated) {
         setError("");
+        setFieldErrors({});
         setSuccess(
           "После отправки номер записи в реестре уйдет на модерацию. Если все хорошо, номер пройдет проверку.",
         );
@@ -774,6 +844,7 @@ export function ObjectAboutPage({
       setIsKsrWarningOpen(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
       return;
     }
 
@@ -798,6 +869,7 @@ export function ObjectAboutPage({
     setIsSkippingKsr(true);
     setError("");
     setSuccess("");
+    setFieldErrors({});
 
     try {
       const updated = await patchStep(7, {
@@ -822,14 +894,87 @@ export function ObjectAboutPage({
 
   const activeBlockMeta = blockChecks[activeBlockIndex] ?? blockChecks[0];
   const activeBlockTitle = activeBlockMeta?.title ?? "Раздел";
+  const activeBlockCopy = aboutBlockCopy[activeBlock];
   const isCurrentBlockSaving =
     (activeBlock === "info" && isSavingInfo) ||
     (activeBlock === "location" && isSavingLocation) ||
     (activeBlock === "contacts" && isSavingContacts) ||
     (activeBlock === "ksr" && (isSavingKsr || isSkippingKsr));
+  const currentProgressPercent = Math.round(((activeBlockIndex + 1) / blockChecks.length) * 100);
+  const hasUnsavedChanges = useMemo(() => {
+    const savedType = normalizePropertyTypeId(property.type) ?? "";
+    const savedRegistryNumber = property.registryNumberPending ?? property.registryNumber ?? "";
+
+    return (
+      selectedType !== savedType ||
+      name !== (property.name ?? "") ||
+      description !== (property.description ?? "") ||
+      JSON.stringify(faqItems) !== JSON.stringify(property.faqItems ?? []) ||
+      locationInput !== (property.locationName ?? "") ||
+      selectedLocationId !== (property.locationId ?? "") ||
+      address !== (property.address ?? "") ||
+      seaDistance !== (property.seaDistance ?? "") ||
+      latitude !== property.latitude ||
+      longitude !== property.longitude ||
+      phone !== (property.phone ?? "") ||
+      phoneName !== (property.phoneName ?? "") ||
+      phone2 !== (property.phone2 ?? "") ||
+      phone2Name !== (property.phone2Name ?? "") ||
+      phone3 !== (property.phone3 ?? "") ||
+      phone3Name !== (property.phone3Name ?? "") ||
+      websiteUrl !== (property.websiteUrl ?? "") ||
+      contactEmail !== (property.contactEmail ?? "") ||
+      contactPersonName !== (property.contactPersonName ?? "") ||
+      contactPersonRole !== (property.contactPersonRole ?? "") ||
+      whatsappUrl !== (property.whatsappUrl ?? "") ||
+      telegramUrl !== (property.telegramUrl ?? "") ||
+      vkUrl !== (property.vkUrl ?? "") ||
+      maxUrl !== (property.maxUrl ?? "") ||
+      okUrl !== (property.okUrl ?? "") ||
+      registryNumber !== savedRegistryNumber
+    );
+  }, [
+    address,
+    contactEmail,
+    contactPersonName,
+    contactPersonRole,
+    description,
+    faqItems,
+    latitude,
+    locationInput,
+    longitude,
+    maxUrl,
+    name,
+    okUrl,
+    phone,
+    phone2,
+    phone2Name,
+    phone3,
+    phone3Name,
+    phoneName,
+    property,
+    registryNumber,
+    seaDistance,
+    selectedLocationId,
+    selectedType,
+    telegramUrl,
+    vkUrl,
+    websiteUrl,
+    whatsappUrl,
+  ]);
+  const saveStatusLabel = isAnySaving
+    ? "Сохраняем..."
+    : hasUnsavedChanges
+      ? "Есть несохраненные изменения"
+      : "Сохранено";
+  const saveStatusClass = isAnySaving
+    ? "bg-primary/10 text-primary"
+    : hasUnsavedChanges
+      ? "bg-amber-50 text-amber-800"
+      : "bg-sage/20 text-olive";
   const mobilePrimaryActionLabel =
     activeBlock === "photo"
-      ? "К правилам"
+      ? "Готово"
       : isCurrentBlockSaving
         ? "Сохраняем..."
         : "Сохранить и дальше";
@@ -857,671 +1002,639 @@ export function ObjectAboutPage({
   }
 
   return (
-    <div className="space-y-4 pb-28 sm:space-y-5 sm:pb-0">
-      <div className="space-y-4 overflow-hidden rounded-3xl border border-primary/18 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_18px_34px_-26px_rgba(15,118,110,0.95)] sm:p-6">
-        <div className="sm:hidden">
-          <div className="rounded-[24px] border border-primary/12 bg-white/88 p-3 shadow-[0_20px_38px_-26px_rgba(15,118,110,0.55)]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/60">
-                  Этап {activeBlockIndex + 1}/{blockChecks.length}
-                </p>
-                <p className="mt-1 truncate text-lg font-semibold text-olive">{activeBlockTitle}</p>
-              </div>
-              <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                {completedBlocksCount}/{blockChecks.length}
-              </span>
+    <div className="pb-28 sm:pb-0">
+      <div className="min-w-0 space-y-4 sm:space-y-5">
+        <section className="rounded-3xl border border-olive/10 bg-white/95 p-4 shadow-[0_18px_44px_-34px_rgba(15,74,64,0.34)] sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                Карточка недвижимости #{displayPropertyNumber}
+              </p>
+              <h1 className="mt-2 text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                Шаг {activeBlockIndex + 1} из {blockChecks.length} - {activeBlockCopy.title}
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/64">
+                {activeBlockCopy.description}
+              </p>
             </div>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.18em] text-olive/55">
-              Карточка объекта #{displayPropertyNumber}
-            </p>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl text-olive sm:text-3xl">Об объекте</h1>
-              <span className="inline-flex items-center rounded-full border border-primary/20 bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                этап {activeBlockIndex + 1} из {blockChecks.length}
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold",
+                  saveStatusClass,
+                )}
+              >
+                {saveStatusLabel}
+              </span>
+              <span className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64">
+                Готово {completedBlocksCount}/{blockChecks.length} ({progressPercent}%)
               </span>
             </div>
           </div>
 
-          <span className="inline-flex items-center rounded-full border border-primary/20 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary shadow-sm shadow-primary/10">
-            {property.statusLabel}
-          </span>
-        </div>
-
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/75 p-3 backdrop-blur-sm sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                Прогресс заполнения
-              </span>
-              <span className="text-xs font-semibold tabular-nums text-primary">
-                {progressPercent}%
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-primary/12">
+          <div className="mt-4">
+            <div className="h-2 overflow-hidden rounded-full bg-olive/8">
               <div
-                className="wizard-progress-bar h-full rounded-full bg-gradient-to-r from-primary via-teal-600 to-sun transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
+                className="wizard-progress-bar h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${currentProgressPercent}%` }}
               />
             </div>
-            <p className="text-[11px] text-olive/45 sm:hidden">
-              Переключайтесь между шагами сверху, а продолжить можно из нижней панели.
-            </p>
           </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-olive/70">
-            <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-primary">
-              {completedBlocksCount}
-            </span>
-            <span>из {blockChecks.length} этапов</span>
-          </div>
-        </div>
 
-        <div className="relative">
-          <div className="grid grid-cols-2 gap-2 sm:hidden">
+          <div className="custom-scrollbar -mx-1 mt-4 flex max-w-full gap-2 overflow-x-auto px-1 pb-1">
             {blockChecks.map((item, index) => {
               const isCurrent = activeBlock === item.id;
-              const statusLabel = isCurrent ? "Текущий" : item.done ? "Готово" : "Ожидает";
+              const StepIcon = item.icon;
 
               return (
                 <button
                   key={item.id}
                   type="button"
+                  title={item.title}
                   onClick={() => void switchBlockWithAutosave(item.id)}
                   disabled={isAnySaving}
                   className={cn(
-                    "group rounded-2xl border px-3 py-3 text-left transition-all duration-200",
-                    index === blockChecks.length - 1 && "col-span-2",
-                    isCurrent &&
-                      "border-sun/50 bg-gradient-to-br from-sun/[0.10] to-sun/[0.04] shadow-[0_10px_18px_-14px_rgba(14,116,144,0.5)] ring-1 ring-sun/20",
-                    !isCurrent &&
-                      item.done &&
-                      "border-primary/20 bg-white/95 hover:border-primary/30 hover:bg-primary/[0.04]",
-                    !isCurrent &&
-                      !item.done &&
-                      "border-olive/12 bg-white/80 hover:border-olive/20 hover:bg-white",
+                    "group flex min-w-[128px] flex-1 items-center gap-2 overflow-hidden rounded-2xl border px-2.5 py-3 text-left transition-all duration-200 sm:min-w-0",
+                    isCurrent
+                      ? "border-primary/32 bg-primary/8 shadow-sm ring-1 ring-primary/14"
+                      : "border-olive/10 bg-white hover:border-primary/20 hover:bg-cream/45",
+                    !isCurrent && item.done && "text-olive",
+                    !isCurrent && !item.done && "text-olive/68",
                     isAnySaving && "cursor-not-allowed opacity-70",
                   )}
-                  title={item.title}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex h-8 min-w-8 items-center justify-center rounded-xl px-1.5 text-xs font-bold transition-colors",
-                        isCurrent
-                          ? "bg-sun text-white shadow-sm shadow-sun/30 ring-1 ring-white/80"
-                          : item.done
-                            ? "bg-primary/10 text-primary/85"
-                            : "bg-olive/8 text-olive/60",
-                      )}
-                    >
-                      {item.done && !isCurrent ? (
-                        <AppIcon icon={Check} className="h-4 w-4 wizard-check-enter" />
-                      ) : (
-                        <span>{index + 1}</span>
-                      )}
-                    </span>
-
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wide",
-                        isCurrent ? "text-sun/95" : item.done ? "text-primary/65" : "text-olive/45",
-                      )}
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
-
-                  <p
+                  <span
                     className={cn(
-                      "mt-2 text-sm font-semibold leading-tight",
+                      "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
                       isCurrent
-                        ? "font-bold text-olive"
+                        ? "bg-primary/12 text-primary"
                         : item.done
-                          ? "text-olive/75"
-                          : "text-olive/80",
+                          ? "bg-white text-emerald-700 ring-1 ring-emerald-200"
+                          : "bg-olive/6 text-olive/50 group-hover:bg-primary/8 group-hover:text-primary",
                     )}
                   >
-                    {item.title}
-                  </p>
+                    {item.done && !isCurrent ? (
+                      <AppIcon icon={Check} className="h-4 w-4 wizard-check-enter" />
+                    ) : (
+                      <AppIcon icon={StepIcon} className="h-4 w-4" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="block truncate text-[11px] font-semibold text-olive/42">
+                      Шаг {index + 1}
+                    </span>
+                    <span className="block truncate text-sm font-semibold leading-tight text-olive">
+                      {item.title}
+                    </span>
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="custom-scrollbar hidden overflow-x-auto pb-2 sm:block">
-            <div className="mx-auto flex min-w-max items-stretch justify-center gap-2">
-              {blockChecks.map((item, index) => {
-                const isCurrent = activeBlock === item.id;
-                const statusLabel = isCurrent ? "Текущий" : item.done ? "Готово" : "Ожидает";
+          {error ? (
+            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {error}
+            </p>
+          ) : success && !hasUnsavedChanges ? (
+            <p className="mt-3 rounded-2xl border border-sage/30 bg-sage/15 px-3 py-2 text-sm text-olive/75">
+              {success}
+            </p>
+          ) : null}
+        </section>
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => void switchBlockWithAutosave(item.id)}
-                    disabled={isAnySaving}
+        {activeBlock === "info" ? (
+          <section className="wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]">
+            <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
+                  <AppIcon icon={Building2} className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-olive">Информация об объекте</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-olive/58">
+                    Заполните базовые сведения. Этого достаточно, чтобы перейти к адресу и
+                    контактам.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-olive">1. Тип объекта</span>
+                  {selectedType ? (
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+                      Выбрано
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-olive/8 px-2.5 py-0.5 text-[11px] font-medium text-olive/50">
+                      Не выбрано
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-olive/50">
+                  Выберите один вариант, который лучше всего описывает ваш объект
+                </p>
+                {fieldErrors.type ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {fieldErrors.type}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {propertyTypes.map((item) => {
+                    const isSelected = selectedType === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedType(item.id);
+                          clearFieldError("type");
+                        }}
+                        className={cn(
+                          "group flex items-center rounded-2xl border p-3.5 text-left transition-all duration-200",
+                          isSelected
+                            ? "border-primary/35 bg-gradient-to-br from-primary/8 to-foam ring-1 ring-primary/20 shadow-sm shadow-primary/10"
+                            : "border-olive/12 bg-white/70 hover:border-olive/22 hover:bg-white hover:shadow-sm",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "text-sm font-semibold leading-tight transition-colors",
+                            isSelected ? "text-primary" : "text-olive/80 group-hover:text-olive",
+                          )}
+                        >
+                          {item.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-sm font-semibold text-olive">2. Название объекта</span>
+                <Input
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    clearFieldError("name");
+                  }}
+                  maxLength={120}
+                  placeholder="Например: Гостевой дом «Крымский»"
+                  className={cn(fieldErrors.name && "border-amber-300 bg-amber-50/45")}
+                />
+                {fieldErrors.name ? (
+                  <p className="text-xs font-medium text-amber-800">{fieldErrors.name}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-olive">3. Описание объекта</span>
+                  <span
                     className={cn(
-                      "group min-w-[132px] rounded-2xl border px-3 py-3 text-left transition-all duration-200 sm:min-w-[148px]",
-                      isCurrent &&
-                        "border-sun/50 bg-gradient-to-br from-sun/[0.10] to-sun/[0.04] shadow-[0_10px_18px_-14px_rgba(14,116,144,0.5)] ring-1 ring-sun/20",
-                      !isCurrent &&
-                        item.done &&
-                        "border-primary/20 bg-white/95 hover:border-primary/30 hover:bg-primary/[0.04]",
-                      !isCurrent &&
-                        !item.done &&
-                        "border-olive/12 bg-white/80 hover:border-olive/20 hover:bg-white",
-                      isAnySaving && "cursor-not-allowed opacity-70",
+                      "text-xs tabular-nums",
+                      description.length > propertyAboutLimits.description.max
+                        ? "text-red-500"
+                        : "text-olive/45",
                     )}
-                    title={item.title}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-1.5 text-xs font-bold transition-colors",
-                          isCurrent
-                            ? "bg-sun text-white shadow-sm shadow-sun/30 ring-1 ring-white/80"
-                            : item.done
-                              ? "bg-primary/10 text-primary/85"
-                              : "bg-olive/8 text-olive/60",
-                        )}
-                      >
-                        {item.done && !isCurrent ? (
-                          <AppIcon icon={Check} className="h-4 w-4 wizard-check-enter" />
-                        ) : (
-                          <span>{index + 1}</span>
-                        )}
-                      </span>
+                    {description.length}/{propertyAboutLimits.description.max}
+                  </span>
+                </div>
+                <TextArea
+                  value={description}
+                  onChange={(event) => {
+                    setDescription(
+                      event.target.value.slice(0, propertyAboutLimits.description.max),
+                    );
+                    clearFieldError("description");
+                  }}
+                  maxLength={propertyAboutLimits.description.max}
+                  rows={5}
+                  placeholder="Расскажите об объекте: что делает его особенным, какая атмосфера, чем вы гордитесь"
+                  className={cn(fieldErrors.description && "border-amber-300 bg-amber-50/45")}
+                />
+                {fieldErrors.description ? (
+                  <p className="text-xs font-medium text-amber-800">{fieldErrors.description}</p>
+                ) : null}
+                <p className="text-xs text-olive/45">
+                  Хорошее описание помогает гостям выбрать именно ваш объект. Оптимально 2-4 абзаца,
+                  до {propertyAboutLimits.description.max} символов.
+                </p>
+              </div>
 
-                      <span
-                        className={cn(
-                          "text-[10px] font-semibold uppercase tracking-wide",
-                          isCurrent
-                            ? "text-sun/95"
-                            : item.done
-                              ? "text-primary/65"
-                              : "text-olive/45",
-                        )}
-                      >
-                        {statusLabel}
+              <div className="space-y-3 rounded-3xl border border-primary/12 bg-gradient-to-br from-white via-foam/55 to-cream/70 p-4 shadow-[0_14px_34px_-24px_rgba(15,118,110,0.34)] sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/70 bg-white/75 px-3 py-2.5 shadow-sm shadow-olive/5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/12">
+                      <AppIcon icon={ListChecks} className="h-4 w-4" />
+                    </span>
+                    <p className="truncate text-sm font-semibold text-olive">
+                      Часто задаваемые вопросы
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/12">
+                    {faqItems.filter((item) => item.q.trim() && item.a.trim()).length}/
+                    {propertyAboutLimits.faq.maxItems}
+                  </span>
+                </div>
+                <FaqEditor
+                  items={faqItems}
+                  onChange={(items) =>
+                    setFaqItems(items.slice(0, propertyAboutLimits.faq.maxItems))
+                  }
+                  maxItems={propertyAboutLimits.faq.maxItems}
+                  questionMaxLength={propertyAboutLimits.faq.questionMax}
+                  answerMaxLength={propertyAboutLimits.faq.answerMax}
+                  showCounters
+                />
+              </div>
+
+              <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
+                <p className="text-xs text-olive/50">Шаг 1 из 5 - Информация</p>
+                <Button onClick={() => void goNextFromInfo()} disabled={isSavingInfo}>
+                  {isSavingInfo ? "Сохраняем..." : "Далее"}
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activeBlock === "location" ? (
+          <section className="wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]">
+            <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
+                  <AppIcon icon={MapPin} className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-olive">Локация</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-olive/58">
+                    Укажите населенный пункт, адрес и точку на карте. Это поможет гостям быстро
+                    сориентироваться.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 sm:p-5">
+              <div className="space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-1.5 rounded-2xl border border-olive/10 bg-white/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-olive">1. Населённый пункт</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary/70">
+                        <AppIcon icon={ListChecks} className="h-2.5 w-2.5" />
+                        Список
                       </span>
                     </div>
-
-                    <p
-                      className={cn(
-                        "mt-2 text-sm font-semibold leading-tight",
-                        isCurrent
-                          ? "font-bold text-olive"
-                          : item.done
-                            ? "text-olive/75"
-                            : "text-olive/80",
-                      )}
-                    >
-                      {item.title}
+                    <Input
+                      value={locationInput}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        const exactMatch = findExactLocationSuggestion(
+                          nextValue,
+                          locationSuggestions,
+                        );
+                        setLocationInput(nextValue);
+                        setSelectedLocationId(exactMatch?.id ?? "");
+                        clearFieldError("location");
+                      }}
+                      list={`property-location-suggestions-${property.id}`}
+                      placeholder="Начните вводить город или посёлок"
+                      autoComplete="off"
+                      className={cn(fieldErrors.location && "border-amber-300 bg-amber-50/45")}
+                    />
+                    <datalist id={`property-location-suggestions-${property.id}`}>
+                      {locationSuggestions.map((item) => (
+                        <option key={item.id} value={item.name} />
+                      ))}
+                    </datalist>
+                    <p className="text-xs text-olive/55">
+                      Выберите вариант из списка. Так объявление попадёт в правильный поиск по
+                      Крыму.
                     </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+                    {fieldErrors.location ? (
+                      <p className="text-xs font-medium text-amber-800">{fieldErrors.location}</p>
+                    ) : null}
+                  </div>
 
-      {activeBlock === "info" ? (
-        <section className="wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]">
-          <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
-                <AppIcon icon={Building2} className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-olive">Информация об объекте</h2>
-                <p className="mt-0.5 text-sm text-olive/55">Тип, название и описание</p>
-              </div>
-            </div>
-          </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5 rounded-2xl border border-olive/10 bg-white/70 p-3">
+                      <span className="text-sm font-semibold text-olive">2. Адрес</span>
+                      <Input
+                        value={address}
+                        onChange={(event) => {
+                          setAddress(event.target.value);
+                          clearFieldError("address");
+                        }}
+                        placeholder="Улица, дом"
+                        className={cn(fieldErrors.address && "border-amber-300 bg-amber-50/45")}
+                      />
+                      {fieldErrors.address ? (
+                        <p className="text-xs font-medium text-amber-800">{fieldErrors.address}</p>
+                      ) : null}
+                    </div>
+                    <div className="space-y-1.5 rounded-2xl border border-olive/10 bg-white/70 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-olive">До моря</span>
+                        <span className="inline-flex items-center rounded-full bg-olive/8 px-2 py-0.5 text-[10px] font-medium text-olive/45">
+                          Необяз.
+                        </span>
+                      </div>
+                      <Input
+                        value={seaDistance}
+                        onChange={(event) => setSeaDistance(event.target.value)}
+                        placeholder="700 м или 1.1 км"
+                      />
+                    </div>
+                  </div>
+                </div>
 
-          <div className="space-y-5 p-4 sm:p-5">
-            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Заполните основные данные об объекте: выберите тип, укажите название и добавьте
-              описание. Эти данные увидят гости при поиске жилья.
-            </p>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-olive">1. Тип объекта</span>
-                {selectedType ? (
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-                    Выбрано
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full bg-olive/8 px-2.5 py-0.5 text-[11px] font-medium text-olive/50">
-                    Не выбрано
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-olive/50">
-                Выберите один вариант, который лучше всего описывает ваш объект
-              </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {propertyTypes.map((item) => {
-                  const isSelected = selectedType === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedType(item.id)}
-                      className={cn(
-                        "group flex items-center rounded-2xl border p-3.5 text-left transition-all duration-200",
-                        isSelected
-                          ? "border-primary/35 bg-gradient-to-br from-primary/8 to-foam ring-1 ring-primary/20 shadow-sm shadow-primary/10"
-                          : "border-olive/12 bg-white/70 hover:border-olive/22 hover:bg-white hover:shadow-sm",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "text-sm font-semibold leading-tight transition-colors",
-                          isSelected ? "text-primary" : "text-olive/80 group-hover:text-olive",
-                        )}
-                      >
-                        {item.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-sm font-semibold text-olive">2. Название объекта</span>
-              <Input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={120}
-                placeholder="Например: Гостевой дом «Крымский»"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-olive">3. Описание объекта</span>
-                <span
+                <div
                   className={cn(
-                    "text-xs tabular-nums",
-                    description.length > propertyAboutLimits.description.max
-                      ? "text-red-500"
-                      : "text-olive/45",
+                    "overflow-hidden rounded-2xl border border-olive/15 bg-cream",
+                    fieldErrors.map && "border-amber-300 ring-2 ring-amber-100",
                   )}
                 >
-                  {description.length}/{propertyAboutLimits.description.max}
-                </span>
-              </div>
-              <TextArea
-                value={description}
-                onChange={(event) =>
-                  setDescription(event.target.value.slice(0, propertyAboutLimits.description.max))
-                }
-                maxLength={propertyAboutLimits.description.max}
-                rows={5}
-                placeholder="Расскажите об объекте: что делает его особенным, какая атмосфера, чем вы гордитесь"
-              />
-              <p className="text-xs text-olive/45">
-                Хорошее описание помогает гостям выбрать именно ваш объект. Оптимально 2-4 абзаца,
-                до {propertyAboutLimits.description.max} символов.
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-2xl border border-olive/10 bg-white/70 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-olive">Часто задаваемые вопросы</p>
+                  <div className="relative h-52 sm:h-60 lg:h-64">
+                    <Image
+                      src="/crimea-map-preview.svg"
+                      alt="Превью карты Крыма"
+                      fill
+                      sizes="(min-width: 1024px) 360px, 100vw"
+                      className="scale-110 object-cover object-center"
+                      priority={false}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-midnight/60 via-midnight/15 to-transparent" />
+                    <div className="absolute inset-x-4 bottom-4 space-y-2">
+                      <div className="rounded-xl bg-white/92 px-3 py-2 text-xs text-olive shadow-sm">
+                        <p className="truncate font-semibold">
+                          {locationInput.trim() || "Населённый пункт не выбран"}
+                        </p>
+                        <p className="mt-0.5 truncate text-olive/58">
+                          {address.trim() || "Адрес появится после выбора точки"}
+                        </p>
+                      </div>
+                      <Button type="button" onClick={openMapDialog} className="w-full">
+                        <AppIcon icon={MapPin} className="mr-1.5 h-4 w-4" />
+                        Выбрать точку на карте
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                  {faqItems.filter((item) => item.q.trim() && item.a.trim()).length}/
-                  {propertyAboutLimits.faq.maxItems}
-                </span>
+                {fieldErrors.map ? (
+                  <p className="text-xs font-medium text-amber-800">{fieldErrors.map}</p>
+                ) : null}
               </div>
-              <FaqEditor
-                items={faqItems}
-                onChange={(items) => setFaqItems(items.slice(0, propertyAboutLimits.faq.maxItems))}
-                maxItems={propertyAboutLimits.faq.maxItems}
-                questionMaxLength={propertyAboutLimits.faq.questionMax}
-                answerMaxLength={propertyAboutLimits.faq.answerMax}
-                showCounters
-              />
-            </div>
 
-            <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
-              <p className="text-xs text-olive/50">Шаг 1 из 5 — Информация</p>
-              <Button onClick={() => void goNextFromInfo()} disabled={isSavingInfo}>
-                {isSavingInfo ? "Сохраняем..." : "Далее →"}
-              </Button>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeBlock === "location" ? (
-        <section className="wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]">
-          <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
-                <AppIcon icon={MapPin} className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-olive">Локация</h2>
-                <p className="mt-0.5 text-sm text-olive/55">Адрес и расположение на карте</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4 p-4 sm:p-5">
-            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Укажите, где находится ваш объект. Гости смогут найти его по населённому пункту и
-              увидят точку на карте.
-            </p>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-olive">Населённый пункт</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary/70">
-                  <AppIcon icon={ListChecks} className="h-2.5 w-2.5" />
-                  Карта + список
-                </span>
-              </div>
-              <Input
-                value={locationInput}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  const exactMatch = findExactLocationSuggestion(nextValue, locationSuggestions);
-                  setLocationInput(nextValue);
-                  setSelectedLocationId(exactMatch?.id ?? "");
-                }}
-                list={`property-location-suggestions-${property.id}`}
-                placeholder="Начните вводить и выберите из списка или по метке на карте"
-                autoComplete="off"
-              />
-              <datalist id={`property-location-suggestions-${property.id}`}>
-                {locationSuggestions.map((item) => (
-                  <option key={item.id} value={item.name} />
-                ))}
-              </datalist>
-              <p className="text-xs text-olive/55">
-                Можно выбрать населённый пункт вручную из списка. Метка на карте подставит его после
-                подтверждения геопозиции.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <span className="text-sm font-semibold text-olive">Адрес</span>
-                <Input
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                  placeholder="Улица, дом"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-olive">Дистанция до моря</span>
-                  <span className="inline-flex items-center rounded-full bg-olive/8 px-2 py-0.5 text-[10px] font-medium text-olive/45">
-                    Необяз.
-                  </span>
-                </div>
-                <Input
-                  value={seaDistance}
-                  onChange={(event) => setSeaDistance(event.target.value)}
-                  placeholder="700 м или 1.1 км"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-olive/15 bg-cream">
-              <div className="relative h-44 sm:h-52">
-                <Image
-                  src="/crimea-map-preview.svg"
-                  alt="Превью карты Крыма"
-                  fill
-                  sizes="100vw"
-                  className="scale-110 object-cover object-center"
-                  priority={false}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-midnight/60 via-midnight/15 to-transparent" />
-                <div className="absolute inset-x-4 bottom-4">
-                  <Button type="button" onClick={openMapDialog} className="w-full sm:w-auto">
-                    <AppIcon icon={MapPin} className="mr-1.5 h-4 w-4" />
-                    Открыть карту
+              <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
+                <p className="text-xs text-olive/50">Шаг 2 из 5 - Локация</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
+                    disabled={isAnySaving}
+                  >
+                    Назад
+                  </Button>
+                  <Button onClick={() => void goNextFromLocation()} disabled={isSavingLocation}>
+                    {isSavingLocation ? "Сохраняем..." : "Далее"}
                   </Button>
                 </div>
               </div>
             </div>
+          </section>
+        ) : null}
 
-            <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
-              <p className="text-xs text-olive/50">Шаг 2 из 5 — Локация</p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
-                  disabled={isAnySaving}
-                >
-                  ← Назад
-                </Button>
-                <Button onClick={() => void goNextFromLocation()} disabled={isSavingLocation}>
-                  {isSavingLocation ? "Сохраняем..." : "Далее →"}
-                </Button>
+        {activeBlock === "ksr" ? (
+          <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <AppIcon icon={ListChecks} className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-olive">Реестр КСР</h2>
+                <p className="mt-1 text-sm leading-relaxed text-olive/58">
+                  Этот раздел нужен для проверки средств размещения. Если ваш объект не относится к
+                  ним, шаг можно пропустить.
+                </p>
               </div>
             </div>
-          </div>
-        </section>
-      ) : null}
 
-      {activeBlock === "ksr" ? (
-        <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-              <AppIcon icon={ListChecks} className="h-5 w-5" />
+            <div className="rounded-xl border border-olive/15 bg-cream/35 p-4 text-sm text-olive/80">
+              <p className="font-semibold text-olive">Что это такое?</p>
+              <p className="mt-2">
+                КСР - это реестр, по которому проверяют гостиницы, гостевые дома, базы отдыха,
+                санатории, кемпинги и похожие форматы размещения.
+              </p>
+              <p className="mt-3 font-semibold text-olive">Можно ли пропустить этот шаг?</p>
+              <p className="mt-1">
+                Да, если вы сдаете обычное жилое помещение: квартиру, комнату, дом или часть дома
+                без статуса гостиницы или гостевого дома. В этом случае нажмите &laquo;Далее&raquo;
+                без номера и подтвердите пропуск.
+              </p>
+              <p className="mt-2">
+                Если объект работает как средство размещения, номер записи нужен для модерации
+                объявления.
+              </p>
+              <p className="mt-3 font-semibold text-olive">Как найти номер?</p>
+              <p className="mt-1">
+                Откройте реестр, найдите объект по названию или адресу и скопируйте номер записи.
+              </p>
+              <p className="mt-2 text-xs text-olive/55">
+                Основание: ФЗ N 132-ФЗ от 24.11.1996, ФЗ N 436-ФЗ от 30.11.2024, постановления
+                Правительства РФ N 1951 и N 1952 от 27.12.2024, ФЗ N 127-ФЗ от 07.06.2025.
+              </p>
+              <a
+                href="https://tourism.fsa.gov.ru/"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-terra/10 px-3 py-2 text-sm font-semibold text-terra transition hover:bg-terra/15"
+              >
+                <AppIcon icon={Globe} className="h-4 w-4" />
+                Открыть реестр КСР
+              </a>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-olive">Реестр КСР</h2>
-              <p className="mt-0.5 text-sm text-olive/55">Классифицированные средства размещения</p>
+            <div className="space-y-1.5">
+              <span className="text-sm font-semibold text-olive">Номер записи в реестре</span>
+              <Input
+                value={registryNumber}
+                onChange={(event) => {
+                  setRegistryNumber(event.target.value);
+                  clearFieldError("registryNumber");
+                }}
+                placeholder="Например: 012345678"
+                className={cn(fieldErrors.registryNumber && "border-amber-300 bg-amber-50/45")}
+              />
+              <p className="text-xs text-olive/50">
+                Скопируйте номер с сайта реестра и вставьте сюда
+              </p>
+              {fieldErrors.registryNumber ? (
+                <p className="text-xs font-medium text-amber-800">{fieldErrors.registryNumber}</p>
+              ) : null}
             </div>
-          </div>
-
-          <div className="rounded-xl border border-olive/15 bg-cream/35 p-4 text-sm text-olive/80">
-            <p className="font-semibold text-olive">Что это такое?</p>
-            <p className="mt-2">
-              Реестр КСР - часть Единого реестра объектов классификации в сфере туристской
-              индустрии. Если объект является средством размещения, укажите номер записи в реестре:
-              он нужен для проверки и прохождения модерации.
-            </p>
-            <p className="mt-3 font-semibold text-olive">Можно ли пропустить этот шаг?</p>
-            <p className="mt-1">
-              Да, если вы сдаете{" "}
-              <span className="font-medium text-olive">не средство размещения</span>, а жилое
-              помещение во временное владение и пользование: квартиру, комнату, жилой дом или часть
-              жилого дома без статуса гостиницы, гостевого дома или похожего объекта. В этом случае
-              можно нажать &laquo;Далее&raquo; без указания номера.
-            </p>
-            <p className="mt-2">
-              Если объект используется для{" "}
-              <span className="font-medium text-olive">услуг средства размещения</span>, номер
-              записи <span className="font-medium text-olive">обязателен</span>. Это касается
-              гостиниц и гостиничных форматов (отель, мини-отель, хостел, апарт-отель), санаториев,
-              баз отдыха, кемпингов, глэмпингов, гостевых домов в регионах эксперимента и похожих
-              объектов. Без номера объект не пройдет модерацию.
-            </p>
-            <p className="mt-2">
-              Сезонная работа, посуточная сдача, небольшое количество номеров или отсутствие питания
-              не освобождают от реестра, если объект фактически является средством размещения.
-            </p>
-            <p className="mt-3 font-semibold text-olive">Как найти номер?</p>
-            <p className="mt-1">
-              Откройте сайт реестра Росаккредитации, найдите объект по названию или адресу и
-              скопируйте номер записи.
-            </p>
-            <p className="mt-2 text-xs text-olive/55">
-              Основание: ФЗ N 132-ФЗ от 24.11.1996, ФЗ N 436-ФЗ от 30.11.2024, постановления
-              Правительства РФ N 1951 и N 1952 от 27.12.2024, ФЗ N 127-ФЗ от 07.06.2025.
-            </p>
-            <a
-              href="https://tourism.fsa.gov.ru/"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-terra/10 px-3 py-2 text-sm font-semibold text-terra transition hover:bg-terra/15"
-            >
-              <AppIcon icon={Globe} className="h-4 w-4" />
-              Открыть реестр КСР
-            </a>
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-sm font-semibold text-olive">Номер записи в реестре</span>
-            <Input
-              value={registryNumber}
-              onChange={(event) => setRegistryNumber(event.target.value)}
-              placeholder="Например: 012345678"
-            />
-            <p className="text-xs text-olive/50">
-              Скопируйте номер с сайта реестра и вставьте сюда
-            </p>
-          </div>
-          {!property.classificationApplicable ? (
-            <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
-              КСР отмечен как неприменимый для этого объекта. Раздел завершен без номера реестра.
-            </p>
-          ) : null}
-          {property.registryModerationPending ? (
-            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              После отправки номер записи в реестре уйдет на модерацию. Если все хорошо, номер
-              пройдет проверку и будет показан в карточке объекта.
-              <span className="block pt-1 text-xs text-amber-700">
-                На проверке: {property.registryNumberPending}
-              </span>
-            </p>
-          ) : null}
-          {!property.registryModerationPending && property.registryNumber ? (
-            <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
-              Подтвержденный номер в карточке: {property.registryNumber}
-            </p>
-          ) : null}
-          <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
-            <Button
-              variant="ghost"
-              onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
-              disabled={isAnySaving}
-            >
-              Назад
-            </Button>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void goNextFromKsr()} disabled={isSavingKsr}>
-                Далее
+            {!property.classificationApplicable ? (
+              <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
+                КСР отмечен как неприменимый для этого объекта. Раздел завершен без номера реестра.
+              </p>
+            ) : null}
+            {property.registryModerationPending ? (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                После отправки номер записи в реестре уйдет на модерацию. Если все хорошо, номер
+                пройдет проверку и будет показан в карточке объекта.
+                <span className="block pt-1 text-xs text-amber-700">
+                  На проверке: {property.registryNumberPending}
+                </span>
+              </p>
+            ) : null}
+            {!property.registryModerationPending && property.registryNumber ? (
+              <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
+                Подтвержденный номер в карточке: {property.registryNumber}
+              </p>
+            ) : null}
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
+              <Button
+                variant="ghost"
+                onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
+                disabled={isAnySaving}
+              >
+                Назад
               </Button>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeBlock === "contacts" ? (
-        <section className="wizard-section-enter space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
-          {/* Header */}
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
-              <AppIcon icon={Phone} className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-olive">Контакты</h2>
-              <p className="mt-0.5 text-sm text-olive/55">Как гости смогут с вами связаться</p>
-            </div>
-          </div>
-
-          <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-            Укажите хотя бы один телефон — он обязателен. Мессенджеры и соцсети добавляйте по
-            желанию, чтобы гостям было удобнее связаться.
-          </p>
-
-          {/* Required fields */}
-          <div className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Основные данные (обязательно)
-            </p>
-            <div className="space-y-2.5">
-              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="tel"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    placeholder="Телефон *"
-                    className="pl-10"
-                  />
-                </div>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={phoneName}
-                    onChange={(event) => setPhoneName(event.target.value)}
-                    placeholder="Имя у телефона"
-                    className="pl-10"
-                  />
-                </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void goNextFromKsr()} disabled={isSavingKsr}>
+                  Далее
+                </Button>
               </div>
-              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="tel"
-                    value={phone2}
-                    onChange={(event) => setPhone2(event.target.value)}
-                    placeholder="Телефон 2"
-                    className="pl-10"
-                  />
-                </div>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={phone2Name}
-                    onChange={(event) => setPhone2Name(event.target.value)}
-                    placeholder="Имя у телефона 2"
-                    className="pl-10"
-                  />
-                </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activeBlock === "contacts" ? (
+          <section className="wizard-section-enter space-y-5 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                <AppIcon icon={Phone} className="h-5 w-5" />
               </div>
-              {showPhone3 ? (
-                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+              <div>
+                <h2 className="text-xl font-semibold text-olive">Контакты</h2>
+                <p className="mt-1 text-sm leading-relaxed text-olive/58">
+                  Эти данные будут использоваться в объявлении, чтобы гости могли связаться с вами.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-olive/10 bg-cream/35 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Телефон 1</p>
+                    <p className="mt-0.5 text-xs text-olive/55">Основной контакт для гостей</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                    Обязательно
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
                       <AppIcon icon={Phone} className="h-4 w-4" />
                     </span>
                     <Input
                       type="tel"
-                      value={phone3}
-                      onChange={(event) => setPhone3(event.target.value)}
-                      placeholder="Телефон 3"
-                      className="pl-10"
+                      value={phone}
+                      onChange={(event) => {
+                        setPhone(event.target.value);
+                        clearFieldError("phone");
+                      }}
+                      placeholder="Номер телефона"
+                      className={cn(
+                        "pl-10",
+                        fieldErrors.phone && "border-amber-300 bg-amber-50/45",
+                      )}
                     />
+                    {fieldErrors.phone ? (
+                      <p className="mt-1 text-xs font-medium text-amber-800">{fieldErrors.phone}</p>
+                    ) : null}
                   </div>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
                       <AppIcon icon={UserRound} className="h-4 w-4" />
                     </span>
                     <Input
-                      value={phone3Name}
-                      onChange={(event) => setPhone3Name(event.target.value)}
-                      placeholder="Имя у телефона 3"
-                      className="pl-10 pr-10"
+                      value={phoneName}
+                      onChange={(event) => setPhoneName(event.target.value)}
+                      placeholder="Имя контактного лица"
+                      className="pl-10"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {showPhone2 ? (
+                <div className="rounded-2xl border border-olive/10 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Телефон 2</p>
+                      <p className="mt-0.5 text-xs text-olive/55">Дополнительный контакт</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhone2("");
+                        setPhone2Name("");
+                        setPhone3("");
+                        setPhone3Name("");
+                        setShowPhone2(false);
+                        setShowPhone3(false);
+                      }}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/12 text-olive/45 transition hover:bg-cream hover:text-olive"
+                      aria-label="Убрать второй телефон"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        type="tel"
+                        value={phone2}
+                        onChange={(event) => setPhone2(event.target.value)}
+                        placeholder="Номер телефона"
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        value={phone2Name}
+                        onChange={(event) => setPhone2Name(event.target.value)}
+                        placeholder="Имя контактного лица"
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {showPhone3 ? (
+                <div className="rounded-2xl border border-olive/10 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Телефон 3</p>
+                      <p className="mt-0.5 text-xs text-olive/55">Еще один контакт, если нужен</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -1529,402 +1642,404 @@ export function ObjectAboutPage({
                         setPhone3Name("");
                         setShowPhone3(false);
                       }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-olive/12 text-olive/45 transition hover:bg-cream hover:text-olive"
+                      aria-label="Убрать третий телефон"
                     >
                       <AppIcon icon={X} className="h-4 w-4" />
                     </button>
                   </div>
+                  <div className="mt-3 grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        type="tel"
+                        value={phone3}
+                        onChange={(event) => setPhone3(event.target.value)}
+                        placeholder="Номер телефона"
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        value={phone3Name}
+                        onChange={(event) => setPhone3Name(event.target.value)}
+                        placeholder="Имя контактного лица"
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
                 </div>
-              ) : (
+              ) : null}
+
+              {(!showPhone2 || (showPhone2 && !showPhone3)) && (
                 <button
                   type="button"
-                  onClick={() => setShowPhone3(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                  onClick={() => {
+                    if (!showPhone2) {
+                      setShowPhone2(true);
+                      return;
+                    }
+
+                    setShowPhone3(true);
+                  }}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-2 text-sm font-semibold text-olive/65 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                 >
                   <AppIcon icon={Plus} className="h-4 w-4" />
-                  Добавить телефон
+                  Добавить еще телефон
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Optional fields */}
-          <div className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Дополнительно
-            </p>
-            <div className="space-y-2.5">
-              {showContactEmail ? (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={Mail} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    type="email"
-                    value={contactEmail}
-                    onChange={(event) => setContactEmail(event.target.value)}
-                    placeholder="Email"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setContactEmail("");
-                      setShowContactEmail(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowContactEmail(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:border-amber-500/55 hover:bg-amber-500/10 focus:outline-none"
-                >
+            <div className="rounded-2xl border border-olive/10 bg-white p-4">
+              <p className="text-sm font-semibold text-olive">Email</p>
+              <p className="mt-0.5 text-xs text-olive/55">
+                Можно использовать для уведомлений или дополнительной связи.
+              </p>
+              <div className="relative mt-3">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
                   <AppIcon icon={Mail} className="h-4 w-4" />
-                  Email
-                </button>
-              )}
-              {showContactRole && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={BriefcaseBusiness} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={contactPersonRole}
-                    onChange={(event) => setContactPersonRole(event.target.value)}
-                    placeholder="Должность"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setContactPersonRole("");
-                      setShowContactRole(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showListingChannels && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={ListChecks} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={listingChannels}
-                    onChange={(event) => setListingChannels(event.target.value)}
-                    placeholder="Площадки размещения"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setListingChannels("");
-                      setShowListingChannels(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                </span>
+                <Input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(event) => setContactEmail(event.target.value)}
+                  placeholder="name@example.ru"
+                  className="pl-10"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Messengers & Socials */}
-          <div className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Мессенджеры и соцсети
-            </p>
-            <div className="space-y-2.5">
-              {showWebsite && (
-                <div className="relative">
-                  <span
-                    className={cn(
-                      "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2",
-                      shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]",
-                    )}
-                  >
-                    {shouldShowWebsiteFavicon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={websiteFaviconUrl!}
-                        alt=""
-                        aria-hidden="true"
-                        className="h-4 w-4 rounded-sm object-contain"
-                        onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
-                      />
-                    ) : (
-                      <AppIcon icon={Globe} className="h-4 w-4" />
-                    )}
-                  </span>
-                  <Input
-                    value={websiteUrl}
-                    onChange={(event) => setWebsiteUrl(event.target.value)}
-                    placeholder="Сайт"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWebsiteUrl("");
-                      setShowWebsite(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showWhatsapp && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={whatsappUrl}
-                    onChange={(event) => setWhatsappUrl(event.target.value)}
-                    onBlur={() =>
-                      setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
-                    }
-                    placeholder="WhatsApp: номер или ссылка"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWhatsappUrl("");
-                      setShowWhatsapp(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showTelegram && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={telegramUrl}
-                    onChange={(event) => setTelegramUrl(event.target.value)}
-                    onBlur={() =>
-                      setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim())
-                    }
-                    placeholder="Telegram: @username, username или телефон"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTelegramUrl("");
-                      setShowTelegram(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showVk && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={vkUrl}
-                    onChange={(event) => setVkUrl(event.target.value)}
-                    placeholder="ВКонтакте URL"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVkUrl("");
-                      setShowVk(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showMax && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={maxUrl}
-                    onChange={(event) => setMaxUrl(event.target.value)}
-                    placeholder="Max URL"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMaxUrl("");
-                      setShowMax(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {showOk && (
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                    <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={okUrl}
-                    onChange={(event) => setOkUrl(event.target.value)}
-                    placeholder="Одноклассники URL"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOkUrl("");
-                      setShowOk(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {(!showWebsite ||
-                !showWhatsapp ||
-                !showTelegram ||
-                !showVk ||
-                !showMax ||
-                !showOk) && (
-                <div className="flex flex-wrap gap-2">
-                  {!showWebsite && (
+            <div className="rounded-2xl border border-olive/10 bg-white p-4">
+              <p className="text-sm font-semibold text-olive">Сайт и соцсети</p>
+              <p className="mt-0.5 text-xs text-olive/55">
+                Добавьте только те каналы, которые действительно хотите показать гостям.
+              </p>
+
+              <div className="mt-3 space-y-2.5">
+                {showWebsite ? (
+                  <div className="relative">
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2",
+                        shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]",
+                      )}
+                    >
+                      {shouldShowWebsiteFavicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={websiteFaviconUrl!}
+                          alt=""
+                          aria-hidden="true"
+                          className="h-4 w-4 rounded-sm object-contain"
+                          onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                        />
+                      ) : (
+                        <AppIcon icon={Globe} className="h-4 w-4" />
+                      )}
+                    </span>
+                    <Input
+                      value={websiteUrl}
+                      onChange={(event) => setWebsiteUrl(event.target.value)}
+                      placeholder="Сайт"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setShowWebsite(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                      onClick={() => {
+                        setWebsiteUrl("");
+                        setShowWebsite(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать сайт"
                     >
-                      <AppIcon icon={Globe} className="h-4 w-4" />
-                      Сайт
+                      <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  )}
-                  {!showWhatsapp && (
-                    <button
-                      type="button"
-                      onClick={() => setShowWhatsapp(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10 focus:outline-none"
-                    >
+                  </div>
+                ) : null}
+
+                {showWhatsapp ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
                       <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                      WhatsApp
-                    </button>
-                  )}
-                  {!showTelegram && (
+                    </span>
+                    <Input
+                      value={whatsappUrl}
+                      onChange={(event) => setWhatsappUrl(event.target.value)}
+                      onBlur={() =>
+                        setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
+                      }
+                      placeholder="WhatsApp: номер или ссылка"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
-                      onClick={() => setShowTelegram(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10 focus:outline-none"
+                      onClick={() => {
+                        setWhatsappUrl("");
+                        setShowWhatsapp(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать WhatsApp"
                     >
-                      <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                      Telegram
+                      <AppIcon icon={X} className="h-4 w-4" />
                     </button>
-                  )}
-                  {!showVk && (
-                    <button
-                      type="button"
-                      onClick={() => setShowVk(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10 focus:outline-none"
-                    >
-                      <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                      ВКонтакте
-                    </button>
-                  )}
-                  {!showMax && (
-                    <button
-                      type="button"
-                      onClick={() => setShowMax(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10 focus:outline-none"
-                    >
-                      <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                      Max
-                    </button>
-                  )}
-                  {!showOk && (
-                    <button
-                      type="button"
-                      onClick={() => setShowOk(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10 focus:outline-none"
-                    >
-                      <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                      Одноклассники
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+                  </div>
+                ) : null}
 
-          {/* Footer */}
-          <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
-            <Button
-              variant="ghost"
-              onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
-              disabled={isAnySaving}
-            >
-              Назад
-            </Button>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void goNextFromContacts()} disabled={isSavingContacts}>
-                Далее
+                {showTelegram ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={telegramUrl}
+                      onChange={(event) => setTelegramUrl(event.target.value)}
+                      onBlur={() =>
+                        setTelegramUrl(
+                          (value) => normalizeTelegramProfileUrl(value) ?? value.trim(),
+                        )
+                      }
+                      placeholder="Telegram: @username или телефон"
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTelegramUrl("");
+                        setShowTelegram(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать Telegram"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+
+                {showVk ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={vkUrl}
+                      onChange={(event) => setVkUrl(event.target.value)}
+                      placeholder="ВКонтакте URL"
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVkUrl("");
+                        setShowVk(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать ВКонтакте"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+
+                {showOk ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={okUrl}
+                      onChange={(event) => setOkUrl(event.target.value)}
+                      placeholder="Одноклассники URL"
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOkUrl("");
+                        setShowOk(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать Одноклассники"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+
+                {showMax ? (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                      <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                    </span>
+                    <Input
+                      value={maxUrl}
+                      onChange={(event) => setMaxUrl(event.target.value)}
+                      placeholder="Max URL"
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMaxUrl("");
+                        setShowMax(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                      aria-label="Убрать Max"
+                    >
+                      <AppIcon icon={X} className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+
+                {(!showWebsite ||
+                  !showWhatsapp ||
+                  !showTelegram ||
+                  !showVk ||
+                  !showOk ||
+                  !showMax) && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {!showWebsite ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowWebsite(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <AppIcon icon={Globe} className="h-4 w-4" />
+                        Сайт
+                      </button>
+                    ) : null}
+                    {!showWhatsapp ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhatsapp(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                        WhatsApp
+                      </button>
+                    ) : null}
+                    {!showTelegram ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowTelegram(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                        Telegram
+                      </button>
+                    ) : null}
+                    {!showVk ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowVk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                        ВКонтакте
+                      </button>
+                    ) : null}
+                    {!showOk ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowOk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                        Одноклассники
+                      </button>
+                    ) : null}
+                    {!showMax ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowMax(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/18 bg-cream/35 px-3 py-2 text-xs font-semibold text-olive/62 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                        Max
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
+              <Button
+                variant="ghost"
+                onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
+                disabled={isAnySaving}
+              >
+                Назад
+              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void goNextFromContacts()} disabled={isSavingContacts}>
+                  Далее
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activeBlock === "photo" ? (
+          <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
+            <div>
+              <h2 className="text-xl font-semibold text-olive">Фото объекта</h2>
+              <p className="mt-1 text-sm text-olive/55">
+                Загрузите фотографии вашего объекта: фасад, территорию, общие зоны. Фото номеров
+                добавляются отдельно на вкладке «Номера».
+              </p>
+            </div>
+            <div className="grid gap-2 text-sm text-olive/70 sm:grid-cols-3">
+              <div className="rounded-2xl border border-olive/10 bg-cream/35 p-3">
+                <p className="font-semibold text-olive">Фасад</p>
+                <p className="mt-1 text-xs leading-relaxed text-olive/58">
+                  Лучше выбрать светлое фото входа или здания целиком.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-olive/10 bg-cream/35 p-3">
+                <p className="font-semibold text-olive">Общие зоны</p>
+                <p className="mt-1 text-xs leading-relaxed text-olive/58">
+                  Покажите двор, ресепшен, кухню, бассейн или другие общие места.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-olive/10 bg-cream/35 p-3">
+                <p className="font-semibold text-olive">Качество</p>
+                <p className="mt-1 text-xs leading-relaxed text-olive/58">
+                  Используйте четкие горизонтальные снимки без темных фильтров.
+                </p>
+              </div>
+            </div>
+            <PropertyMediaManager
+              propertyId={property.id}
+              initialMedia={property.media}
+              onChanged={async () => {
+                const response = await fetch(`/api/properties/${property.id}`);
+                if (!response.ok) {
+                  return;
+                }
+                const body = (await response.json()) as { item: SerializedProperty };
+                applyProperty(body.item);
+              }}
+            />
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
+              <Button
+                variant="ghost"
+                onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
+                disabled={isAnySaving}
+              >
+                Назад
+              </Button>
+              <Button onClick={() => router.push(`${basePath}/${property.id}/rules`)}>
+                Готово
               </Button>
             </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeBlock === "photo" ? (
-        <section className="wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
-          <div>
-            <h2 className="text-xl font-semibold text-olive">Фото объекта</h2>
-            <p className="mt-1 text-sm text-olive/55">
-              Загрузите фотографии вашего объекта — фасад, территорию, общие зоны. Фото номеров
-              добавляются отдельно на вкладке «Номера».
-            </p>
-          </div>
-          <PropertyMediaManager
-            propertyId={property.id}
-            initialMedia={property.media}
-            onChanged={async () => {
-              const response = await fetch(`/api/properties/${property.id}`);
-              if (!response.ok) {
-                return;
-              }
-              const body = (await response.json()) as { item: SerializedProperty };
-              applyProperty(body.item);
-            }}
-          />
-          <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
-            <Button
-              variant="ghost"
-              onClick={() => previousBlock && void switchBlockWithAutosave(previousBlock)}
-              disabled={isAnySaving}
-            >
-              Назад
-            </Button>
-            <Button onClick={() => router.push(`${basePath}/${property.id}/rules`)}>Далее</Button>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
 
       <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
         <div className="flex items-center justify-between gap-3">
@@ -2058,13 +2173,6 @@ export function ObjectAboutPage({
             </div>
           </div>
         </div>
-      ) : null}
-
-      {error ? (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      ) : null}
-      {success ? (
-        <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">{success}</p>
       ) : null}
 
       {isKsrWarningOpen ? (

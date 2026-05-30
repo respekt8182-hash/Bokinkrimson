@@ -3,6 +3,7 @@ import { ObjectTariffType, PropertyStatus } from "@prisma/client";
 import { Download, MessageSquareText, Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminChessboardYearTransfer } from "@/components/admin/admin-chessboard-year-transfer";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
@@ -14,6 +15,7 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import {
   getAdminPropertyBaseStatusLabel,
   getAdminPropertyPendingEditLabel,
@@ -35,6 +37,7 @@ type Props = {
     locationId?: string;
     q?: string;
     sort?: string;
+    page?: string;
   }>;
 };
 
@@ -115,6 +118,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
   const selectedLocationId = filters.locationId?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
   const selectedSort = filters.sort?.trim() || "updated_desc";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   await purgeExpiredDeletedProperties(db, now);
   const isPropertyVisibilityControlAvailable = await isPropertyPublicationControlAvailable();
@@ -287,14 +291,18 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
     const locationId = overrides.locationId ?? selectedLocationId;
     const nextQuery = overrides.q ?? query;
     const sort = overrides.sort ?? selectedSort;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (payment) params.set("payment", payment);
     if (locationId) params.set("locationId", locationId);
     if (nextQuery) params.set("q", nextQuery);
     if (sort && sort !== "updated_desc") params.set("sort", sort);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/objects?${search}` : "/admin/objects";
   };
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -453,7 +461,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
         />
       ) : (
         <div className="space-y-3">
-          {items.map(({ item, payment }) => {
+          {paginatedItems.map(({ item, payment }) => {
             const isEmptyDraft = item.status === PropertyStatus.DRAFT && isPropertyEmptyDraft(item);
             const cleanupAt = isEmptyDraft ? getEmptyDraftExpiresAt(item.updatedAt) : null;
             const isPublished = item.status === PropertyStatus.PUBLISHED;
@@ -671,6 +679,11 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="объектов"
+          />
         </div>
       )}
     </div>

@@ -1,5 +1,13 @@
 import { ExcursionOfferType, ExcursionSessionStatus, ExcursionStatus } from "@prisma/client";
-import { CircleCheckBig, Eye, MessageCircle, PenLine, Star } from "lucide-react";
+import {
+  ArrowRight,
+  CircleCheckBig,
+  Eye,
+  MapPin,
+  MessageCircle,
+  PenLine,
+  Star,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -188,25 +196,52 @@ export default async function DashboardExcursionsPage({
   const publishedCount = items.filter((item) => item.status === ExcursionStatus.PUBLISHED).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col items-start gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
-        <div>
-          <h1 className="text-3xl text-olive">Экскурсии и туры</h1>
+    <div className="space-y-4 sm:space-y-5">
+      <div className="rounded-2xl border border-olive/10 bg-cream/65 p-4 sm:p-5">
+        <div className="flex flex-col items-stretch gap-3 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-primary">Программы и маршруты</p>
+            <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">Экскурсии и туры</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-olive/68">
+              Здесь собраны ваши карточки программ: черновики, опубликованные туры, экскурсии,
+              оплата и статистика. Создайте карточку и заполните ее по шагам.
+            </p>
+          </div>
+          <CreateExcursionButton />
         </div>
-        <CreateExcursionButton />
       </div>
 
       {items.length === 0 ? (
         <div
           id="excursions-list"
-          className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75"
+          className="rounded-2xl border border-dashed border-primary/30 bg-white p-5 text-olive shadow-sm"
         >
-          У вас пока нет программ. Нажмите «Добавить программу», чтобы создать первую карточку.
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <AppIcon icon={MapPin} className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-semibold">Пока нет карточек экскурсий и туров</p>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-olive/65">
+                  Создайте первую программу. После этого откроется редактор с шагами: описание,
+                  география, программа, расписание, цена, медиа и контакты.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/excursions?create=1"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              Начать создание
+              <AppIcon icon={ArrowRight} className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       ) : filteredItems.length === 0 ? (
         <div
           id="excursions-list"
-          className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75"
+          className="rounded-2xl border border-dashed border-olive/25 bg-white p-5 text-sm text-olive/70 shadow-sm"
         >
           По выбранным фильтрам программы не найдены.
         </div>

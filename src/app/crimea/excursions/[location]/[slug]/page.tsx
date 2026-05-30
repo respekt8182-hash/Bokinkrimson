@@ -42,6 +42,7 @@ import { ExcursionTimeline } from "@/components/excursions/excursion-timeline";
 import { StaticMapPreview } from "@/components/maps/static-map-preview";
 import { NearbyPropertiesSection } from "@/components/public/nearby-properties-section";
 import { ExcursionViewTracker } from "@/components/public/excursion-view-tracker";
+import { CatalogBackLink } from "@/components/public/catalog-scroll-memory";
 import { PropertyReviewsSection } from "@/components/reviews/property-reviews-section";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -474,6 +475,8 @@ function formatRoomType(value: string): string {
       return "Twin";
     case "TRIPLE":
       return "Трёхместное";
+    case "APARTMENT":
+      return "Квартира";
     case "SHARED":
       return "Общее размещение";
     case "CAMPING":
@@ -1377,6 +1380,7 @@ export default async function PublicExcursionPage({
         : item.locationName
           ? buildExcursionsHubPath({ location: item.locationName })
           : listingHubHref;
+  const catalogMemoryKey = item.offerType === "TOUR" ? "tours" : "excursions";
   const housingCatalogHref = item.locationId
     ? buildHousingLocationPath(item.locationId)
     : item.locationName
@@ -1409,6 +1413,15 @@ export default async function PublicExcursionPage({
             </p>
           </section>
         ) : null}
+
+        <CatalogBackLink
+          catalogKey={catalogMemoryKey}
+          fallbackHref={catalogHref}
+          className="mb-4 inline-flex w-fit items-center gap-1.5 rounded-xl border border-olive/18 bg-white/92 px-4 py-2 text-sm font-medium text-olive/68 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition hover:border-olive/25 hover:bg-cream hover:text-olive"
+        >
+          <AppIcon icon={ChevronLeft} className="h-4 w-4" />
+          Назад в каталог
+        </CatalogBackLink>
 
         <PublicBreadcrumbs items={breadcrumbItems} className="mb-5" />
 
@@ -2374,13 +2387,14 @@ export default async function PublicExcursionPage({
         ) : null}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <Link
-            href={catalogHref}
+          <CatalogBackLink
+            catalogKey={catalogMemoryKey}
+            fallbackHref={catalogHref}
             className="flex items-center gap-1.5 rounded-xl border border-olive/18 px-4 py-2 text-sm font-medium text-olive/60 transition-colors hover:border-olive/25 hover:bg-cream"
           >
             <AppIcon icon={ChevronLeft} className="h-4 w-4" />
             Назад в каталог
-          </Link>
+          </CatalogBackLink>
           <Link
             href="/"
             className="rounded-xl border border-olive/18 px-4 py-2 text-sm font-medium text-olive/60 transition-colors hover:border-olive/25 hover:bg-cream"
@@ -2433,6 +2447,15 @@ export default async function PublicExcursionPage({
           </p>
         </section>
       ) : null}
+
+      <CatalogBackLink
+        catalogKey={catalogMemoryKey}
+        fallbackHref={catalogHref}
+        className="mb-4 inline-flex w-fit items-center gap-1.5 rounded-xl border border-olive/18 bg-white/92 px-4 py-2 text-sm font-medium text-olive/68 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition hover:border-olive/25 hover:bg-cream hover:text-olive"
+      >
+        <AppIcon icon={ChevronLeft} className="h-4 w-4" />
+        Назад в каталог
+      </CatalogBackLink>
 
       <PublicBreadcrumbs items={breadcrumbItems} className="mb-5" />
 
@@ -3601,13 +3624,14 @@ export default async function PublicExcursionPage({
       ) : null}
 
       <div className="mt-6 flex flex-wrap gap-2">
-        <Link
-          href={catalogHref}
+        <CatalogBackLink
+          catalogKey={catalogMemoryKey}
+          fallbackHref={catalogHref}
           className="flex items-center gap-1.5 rounded-xl border border-olive/18 px-4 py-2 text-sm font-medium text-olive/60 transition-colors hover:border-olive/25 hover:bg-cream"
         >
           <AppIcon icon={ChevronLeft} className="h-4 w-4" />
           Назад в каталог
-        </Link>
+        </CatalogBackLink>
         <Link
           href="/"
           className="rounded-xl border border-olive/18 px-4 py-2 text-sm font-medium text-olive/60 transition-colors hover:border-olive/25 hover:bg-cream"

@@ -27,6 +27,7 @@ type ReviewEntityPickerProps = {
 };
 
 type SortMode = "number" | "name" | "location";
+const pickerPageSize = 10;
 
 function buildEntityHref(item: ReviewEntityPickerItem, status: string): string {
   const params = new URLSearchParams();
@@ -54,6 +55,13 @@ export function ReviewEntityPicker({
 }: ReviewEntityPickerProps) {
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("number");
+  const [page, setPage] = useState(() => {
+    const selectedIndex = items.findIndex(
+      (item) => item.entityType === selectedEntityType && item.id === selectedEntityId,
+    );
+
+    return selectedIndex >= 0 ? Math.floor(selectedIndex / pickerPageSize) + 1 : 1;
+  });
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = normalizeSearch(query);
@@ -91,6 +99,12 @@ export function ReviewEntityPicker({
       return left.number - right.number;
     });
   }, [items, query, sortMode]);
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / pickerPageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedItems = visibleItems.slice(
+    (currentPage - 1) * pickerPageSize,
+    currentPage * pickerPageSize,
+  );
 
   return (
     <div className="space-y-3">
@@ -104,14 +118,20 @@ export function ReviewEntityPicker({
             />
             <Input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
               placeholder="Название, город или номер"
               className="pr-10 pl-9"
             />
             {query ? (
               <button
                 type="button"
-                onClick={() => setQuery("")}
+                onClick={() => {
+                  setQuery("");
+                  setPage(1);
+                }}
                 className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-olive/54 transition hover:bg-olive/8 hover:text-olive"
                 aria-label="Очистить поиск"
               >
@@ -130,7 +150,10 @@ export function ReviewEntityPicker({
             />
             <select
               value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as SortMode)}
+              onChange={(event) => {
+                setSortMode(event.target.value as SortMode);
+                setPage(1);
+              }}
               className="h-11 w-full rounded-xl border border-olive/18 bg-white px-9 pr-3 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/22"
             >
               <option value="number">По номеру</option>
@@ -143,14 +166,17 @@ export function ReviewEntityPicker({
 
       <div className="flex items-center justify-between gap-3 text-xs font-medium text-olive/56">
         <span>
-          Показано {visibleItems.length} из {items.length}
+          Страница {currentPage} из {totalPages}
         </span>
         {query ? (
           <Button
             type="button"
             variant="ghost"
             className="px-3 py-1.5"
-            onClick={() => setQuery("")}
+            onClick={() => {
+              setQuery("");
+              setPage(1);
+            }}
           >
             Сбросить поиск
           </Button>
@@ -158,8 +184,8 @@ export function ReviewEntityPicker({
       </div>
 
       {visibleItems.length > 0 ? (
-        <div className="grid max-h-[430px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
-          {visibleItems.map((item) => {
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {paginatedItems.map((item) => {
             const active = selectedEntityType === item.entityType && selectedEntityId === item.id;
 
             return (
@@ -209,6 +235,32 @@ export function ReviewEntityPicker({
           По такому запросу карточек не найдено.
         </div>
       )}
+
+      {totalPages > 1 ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-3 py-1.5"
+            disabled={currentPage === 1}
+            onClick={() => setPage(Math.max(1, currentPage - 1))}
+          >
+            Назад
+          </Button>
+          <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/62">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-3 py-1.5"
+            disabled={currentPage === totalPages}
+            onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+          >
+            Вперёд
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

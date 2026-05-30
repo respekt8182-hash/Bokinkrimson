@@ -5,6 +5,7 @@ import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { NearbyAttractionsSectionServer } from "@/components/public/nearby-attractions-section-server";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
+import { CatalogBackLink } from "@/components/public/catalog-scroll-memory";
 import { PublicPropertyBottomSections } from "@/components/public/public-property-bottom-sections";
 import { PublicPropertyDetails } from "@/components/public/public-property-details";
 import { ViewTracker } from "@/components/public/view-tracker";
@@ -74,7 +75,8 @@ export async function generateMetadata({
 
   if (!item) {
     return {
-      title: "\u041e\u0431\u044a\u0435\u043a\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d",
+      title:
+        "\u041e\u0431\u044a\u0435\u043a\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d",
       robots: { index: false, follow: false },
     };
   }
@@ -164,12 +166,15 @@ export default async function PublicPropertyPage({
     : buildAttractionsHubPath();
   const breadcrumbItems = [
     { name: "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", path: "/" },
-    { name: "\u0416\u0438\u043b\u044c\u0451 \u0432 \u041a\u0440\u044b\u043c\u0443", path: housingHubPath },
-    ...(item.locationName
-      ? [{ name: item.locationName, path: locationSearchHref }]
-      : []),
     {
-      name: item.name ?? "\u041e\u0431\u044a\u0435\u043a\u0442 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f",
+      name: "\u0416\u0438\u043b\u044c\u0451 \u0432 \u041a\u0440\u044b\u043c\u0443",
+      path: housingHubPath,
+    },
+    ...(item.locationName ? [{ name: item.locationName, path: locationSearchHref }] : []),
+    {
+      name:
+        item.name ??
+        "\u041e\u0431\u044a\u0435\u043a\u0442 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f",
       path: item.path,
     },
   ];
@@ -185,7 +190,9 @@ export default async function PublicPropertyPage({
       {isPreview ? (
         <section className="rounded-2xl border border-primary/20 bg-primary/6 px-4 py-3 text-sm text-olive shadow-sm">
           <p className="font-semibold text-primary">
-            {"\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438"}
+            {
+              "\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438"
+            }
           </p>
           <p className="mt-1 text-olive/72">
             {
@@ -194,6 +201,15 @@ export default async function PublicPropertyPage({
           </p>
         </section>
       ) : null}
+
+      <CatalogBackLink
+        catalogKey="housing"
+        fallbackHref={locationSearchHref}
+        className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-olive/18 bg-white/92 px-4 py-2 text-sm font-medium text-olive/68 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition hover:border-olive/25 hover:bg-cream hover:text-olive"
+      >
+        <span aria-hidden="true">←</span>
+        {"Назад в каталог"}
+      </CatalogBackLink>
 
       <nav
         aria-label="Хлебные крошки"
@@ -259,10 +275,7 @@ export default async function PublicPropertyPage({
         ownerUserId={item.owner.id}
       />
 
-      <PublicPropertyBottomSections
-        item={item}
-        showPublishedWithoutRegistryNotice={!isPreview}
-      />
+      <PublicPropertyBottomSections item={item} showPublishedWithoutRegistryNotice={!isPreview} />
 
       <Suspense fallback={null}>
         <NearbyPropertiesSectionServer
@@ -293,12 +306,13 @@ export default async function PublicPropertyPage({
       </Suspense>
 
       <div className="flex flex-wrap gap-2 rounded-2xl bg-white/94 p-3 ring-1 ring-olive/10">
-        <Link
-          href={locationSearchHref}
+        <CatalogBackLink
+          catalogKey="housing"
+          fallbackHref={locationSearchHref}
           className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive transition hover:bg-cream"
         >
           {"\u041d\u0430\u0437\u0430\u0434 \u0432 \u043a\u0430\u0442\u0430\u043b\u043e\u0433"}
-        </Link>
+        </CatalogBackLink>
         <Link
           href="/"
           className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive transition hover:bg-cream"

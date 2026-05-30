@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ExcursionStatus } from "@prisma/client";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import {
   AdminEmptyState,
   AdminNotice,
@@ -8,12 +9,10 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
-import {
-  getExcursionStatusLabel,
-  getExcursionWorkflowStatus,
-} from "@/lib/excursions";
+import { getExcursionStatusLabel, getExcursionWorkflowStatus } from "@/lib/excursions";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 
@@ -24,6 +23,7 @@ type ExcursionModerationQueuePageProps = {
     dateFrom?: string;
     dateTo?: string;
     q?: string;
+    page?: string;
   }>;
 };
 
@@ -78,6 +78,7 @@ export default async function ExcursionModerationQueuePage({
   const dateFrom = filters.dateFrom?.trim() ?? "";
   const dateTo = filters.dateTo?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   const { rows, isDatabaseFallback } = await loadDataWithDatabaseFallback(
     {
@@ -176,17 +177,21 @@ export default async function ExcursionModerationQueuePage({
     const nextDateFrom = overrides.dateFrom ?? dateFrom;
     const nextDateTo = overrides.dateTo ?? dateTo;
     const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (locationId) params.set("locationId", locationId);
     if (nextDateFrom) params.set("dateFrom", nextDateFrom);
     if (nextDateTo) params.set("dateTo", nextDateTo);
     if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/moderation/excursions?${search}` : "/admin/moderation/excursions";
   };
 
   const isDefaultPendingView =
     selectedStatus === DEFAULT_STATUS && !selectedLocationId && !dateFrom && !dateTo && !query;
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -306,7 +311,7 @@ export default async function ExcursionModerationQueuePage({
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {paginatedItems.map((item) => {
             const ownerEmail = item.owner.email?.trim();
 
             return (
@@ -333,9 +338,7 @@ export default async function ExcursionModerationQueuePage({
                 <dl className="mt-4 grid gap-2 text-sm md:grid-cols-4">
                   <div className="rounded-2xl bg-cream px-3 py-3">
                     <dt className="text-olive/60">Организатор</dt>
-                    <dd className="font-medium text-olive">
-                      {item.owner.firstName}
-                    </dd>
+                    <dd className="font-medium text-olive">{item.owner.firstName}</dd>
                   </div>
                   {ownerEmail ? (
                     <div className="rounded-2xl bg-cream px-3 py-3">
@@ -377,6 +380,11 @@ export default async function ExcursionModerationQueuePage({
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="карточек"
+          />
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { TransferStatus } from "@prisma/client";
-import { Car, CircleCheckBig, CreditCard, Eye, PenLine, Plus } from "lucide-react";
+import { ArrowRight, Car, CircleCheckBig, CreditCard, Eye, PenLine } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   dashboardSecondaryActionClass,
   dashboardStatsActionClass,
 } from "@/components/dashboard/listing-actions";
+import { CreateTransferButton } from "@/components/transfers/create-transfer-button";
 import { DeleteTransferButton } from "@/components/transfers/delete-transfer-button";
 import { TransferStatsButton } from "@/components/transfers/transfer-stats-button";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -106,30 +107,44 @@ export default async function DashboardTransfersPage() {
   ).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl text-olive">Трансферы</h1>
-          <p className="mt-1 text-sm text-olive/64">
-            Карточки водителей и автомобилей для каталога трансферов.
-          </p>
+    <div className="space-y-4 sm:space-y-5">
+      <div className="rounded-2xl border border-olive/10 bg-cream/65 p-4 sm:p-5">
+        <div className="flex flex-col items-stretch gap-3 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-primary">Услуги в дороге</p>
+            <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">Трансферы</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-olive/68">
+              Здесь собраны карточки водителей и автомобилей: черновики, публикация, оплата, рейтинг
+              и статистика. Создайте карточку и заполните ее по шагам.
+            </p>
+          </div>
+          <CreateTransferButton action={createTransfer} />
         </div>
-
-        <form action={createTransfer} className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="submit"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover"
-          >
-            <AppIcon icon={Plus} className="h-4 w-4" />
-            Создать
-          </button>
-        </form>
       </div>
 
       {transfers.length === 0 ? (
-        <section className="rounded-2xl border border-dashed border-olive/25 bg-cream/70 p-6 text-sm leading-6 text-olive/70">
-          Пока нет карточек трансфера. Создайте первую, добавьте автомобиль, цену, город, фото и
-          контакты водителя.
+        <section className="rounded-2xl border border-dashed border-primary/30 bg-white p-5 text-olive shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <AppIcon icon={Car} className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-semibold">Пока нет карточек трансфера</p>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-olive/65">
+                  Создайте первую карточку, добавьте автомобиль, цену, город, фото и контакты
+                  водителя.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/transfers?create=1"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              Начать создание
+              <AppIcon icon={ArrowRight} className="h-4 w-4" />
+            </Link>
+          </div>
         </section>
       ) : (
         <div className="grid gap-3">

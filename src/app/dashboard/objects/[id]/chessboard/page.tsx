@@ -63,7 +63,7 @@ export default async function DashboardObjectChessboardPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
       <ObjectSectionNav propertyId={property.id} activeSection="chessboard" />
 
       <div className="min-w-0 space-y-4">

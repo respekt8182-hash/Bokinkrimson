@@ -9,6 +9,8 @@ type CopyYearResult = {
   roomsCount: number;
   propertiesCount: number;
   replacedCount: number;
+  skippedRoomsCount?: number;
+  skippedPricesCount?: number;
   sourceYear: number;
   targetYear: number;
 };
@@ -128,7 +130,7 @@ export function AdminChessboardYearTransfer() {
   return (
     <AdminPanel
       title="Массовый перенос шахматок"
-      description="Копирует ценовые периоды всех активных номеров из выбранного года в другой."
+      description="Копирует ценовые периоды всех активных номеров из выбранного года в другой. С ноября система дополнительно запускает безопасный автоперенос на следующий год и не трогает уже заполненные цены."
       actions={
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <CalendarDays className="h-5 w-5" />
@@ -224,7 +226,7 @@ export function AdminChessboardYearTransfer() {
       ) : null}
 
       {result ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-emerald-900">
             <p className="text-xs font-semibold uppercase tracking-wide opacity-60">Периоды</p>
             <p className="mt-1 text-xl font-semibold">{result.copiedCount}</p>
@@ -240,6 +242,10 @@ export function AdminChessboardYearTransfer() {
           <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-emerald-900">
             <p className="text-xs font-semibold uppercase tracking-wide opacity-60">Заменено</p>
             <p className="mt-1 text-xl font-semibold">{result.replacedCount}</p>
+          </div>
+          <div className="rounded-2xl bg-sky-50 px-4 py-3 text-sky-900">
+            <p className="text-xs font-semibold uppercase tracking-wide opacity-60">Пропущено</p>
+            <p className="mt-1 text-xl font-semibold">{result.skippedRoomsCount ?? 0}</p>
           </div>
         </div>
       ) : null}

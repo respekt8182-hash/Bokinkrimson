@@ -20,6 +20,7 @@ import { ExcursionPhotoGallery } from "@/components/excursions/excursion-photo-g
 import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
+import { CatalogBackLink, CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
@@ -807,6 +808,8 @@ function AttractionCard({
     >
       <Link
         href={item.path}
+        data-catalog-detail-link="attractions"
+        data-catalog-item-id={item.id}
         aria-label={`Открыть ${item.title}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
       />
@@ -877,6 +880,8 @@ function AttractionCard({
               </div>
               <Link
                 href={item.path}
+                data-catalog-detail-link="attractions"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -893,6 +898,8 @@ function AttractionCard({
             <div className="mt-auto text-right">
               <Link
                 href={item.path}
+                data-catalog-detail-link="attractions"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Подробнее
@@ -935,6 +942,8 @@ function TransferCard({
     >
       <Link
         href={item.path}
+        data-catalog-detail-link="transfers"
+        data-catalog-item-id={item.id}
         aria-label={`Открыть ${item.title}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
       />
@@ -1026,6 +1035,8 @@ function TransferCard({
               </div>
               <Link
                 href={item.path}
+                data-catalog-detail-link="transfers"
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -1060,6 +1071,8 @@ function TransferCard({
               <div className="mt-2.5 flex flex-col gap-2">
                 <Link
                   href={item.path}
+                  data-catalog-detail-link="transfers"
+                  data-catalog-item-id={item.id}
                   className="pointer-events-auto inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
                 >
                   Подробнее
@@ -1108,63 +1121,66 @@ export function AttractionCatalog({
   );
 
   return (
-    <CatalogShell
-      breadcrumbs={[
-        { name: "Главная", path: "/" },
-        { name: "Досуг в Крыму", path: "/attractions" },
-      ]}
-      eyebrow="Каталог"
-      title="Досуг в Крыму"
-    >
-      <MarketplaceFilterBar
-        key={[
-          result.filters.query ?? "",
-          result.filters.locationName ?? "",
-          result.filters.category ?? "",
-          result.filters.radiusKm,
-          result.filters.sort,
-        ].join("|")}
-        kind="attractions"
-        filters={result.filters}
-        total={result.total}
-        categories={categories}
-        locationSuggestions={locationSuggestions}
-      />
-
-      <MarketplaceCatalogMap
-        kind="attractions"
-        items={initialMapItems}
-        resultsCount={result.total}
-        filters={result.filters}
-        syncBoundsToUrl
-        mapItemsEndpoint={mapItemsEndpoint}
-        mapTitle="Карта мест"
+    <>
+      <CatalogScrollRestorer catalogKey="attractions" />
+      <CatalogShell
+        breadcrumbs={[
+          { name: "Главная", path: "/" },
+          { name: "Досуг в Крыму", path: "/attractions" },
+        ]}
+        eyebrow="Каталог"
+        title="Досуг в Крыму"
       >
-        <section className="min-w-0 lg:w-full" id="catalog-results">
-          {result.items.length === 0 ? (
-            shouldShowConnectionEmptyState ? (
-              <CatalogConnectionEmptyState
-                title="Идёт наполнение раздела «Досуг»"
-                description="Здесь появятся развлечения, активности, места для отдыха, прогулок и семейного досуга в городах Крыма. Пока раздел наполняется, вы можете посмотреть жильё и достопримечательности по городам."
-              />
+        <MarketplaceFilterBar
+          key={[
+            result.filters.query ?? "",
+            result.filters.locationName ?? "",
+            result.filters.category ?? "",
+            result.filters.radiusKm,
+            result.filters.sort,
+          ].join("|")}
+          kind="attractions"
+          filters={result.filters}
+          total={result.total}
+          categories={categories}
+          locationSuggestions={locationSuggestions}
+        />
+
+        <MarketplaceCatalogMap
+          kind="attractions"
+          items={initialMapItems}
+          resultsCount={result.total}
+          filters={result.filters}
+          syncBoundsToUrl
+          mapItemsEndpoint={mapItemsEndpoint}
+          mapTitle="Карта мест"
+        >
+          <section className="min-w-0 lg:w-full" id="catalog-results">
+            {result.items.length === 0 ? (
+              shouldShowConnectionEmptyState ? (
+                <CatalogConnectionEmptyState
+                  title="Идёт наполнение раздела «Досуг»"
+                  description="Здесь появятся развлечения, активности, места для отдыха, прогулок и семейного досуга в городах Крыма. Пока раздел наполняется, вы можете посмотреть жильё и достопримечательности по городам."
+                />
+              ) : (
+                <EmptyState
+                  title="Досуг не найден"
+                  description="Попробуйте другой город, увеличьте радиус или очистите поиск."
+                  resetHref="/attractions"
+                />
+              )
             ) : (
-              <EmptyState
-                title="Досуг не найден"
-                description="Попробуйте другой город, увеличьте радиус или очистите поиск."
-                resetHref="/attractions"
-              />
-            )
-          ) : (
-            <div className="space-y-4">
-              {result.items.map((item, index) => (
-                <AttractionCard key={item.id} item={item} eagerImage={index < 2} />
-              ))}
-            </div>
-          )}
-          {pagination}
-        </section>
-      </MarketplaceCatalogMap>
-    </CatalogShell>
+              <div className="space-y-4">
+                {result.items.map((item, index) => (
+                  <AttractionCard key={item.id} item={item} eagerImage={index < 2} />
+                ))}
+              </div>
+            )}
+            {pagination}
+          </section>
+        </MarketplaceCatalogMap>
+      </CatalogShell>
+    </>
   );
 }
 
@@ -1197,73 +1213,76 @@ export function TransferCatalog({
   );
 
   return (
-    <CatalogShell
-      breadcrumbs={[
-        { name: "Главная", path: "/" },
-        { name: "Трансферы по Крыму", path: "/transfers" },
-      ]}
-      eyebrow="Каталог"
-      title="Трансферы по Крыму"
-    >
-      <MarketplaceFilterBar
-        key={[
-          result.filters.query ?? "",
-          result.filters.locationName ?? "",
-          result.filters.transferType ?? "",
-          result.filters.radiusKm,
-          result.filters.minPrice ?? "",
-          result.filters.maxPrice ?? "",
-          result.filters.sort,
-        ].join("|")}
-        kind="transfers"
-        filters={result.filters}
-        total={result.total}
-        transferTypes={transferTypes}
-        locationSuggestions={locationSuggestions}
-      />
-
-      <MarketplaceCatalogMap
-        kind="transfers"
-        items={mapItems ?? result.items}
-        resultsCount={result.total}
-        filters={result.filters}
-        mapTitle="Карта трансферов"
+    <>
+      <CatalogScrollRestorer catalogKey="transfers" />
+      <CatalogShell
+        breadcrumbs={[
+          { name: "Главная", path: "/" },
+          { name: "Трансферы по Крыму", path: "/transfers" },
+        ]}
+        eyebrow="Каталог"
+        title="Трансферы по Крыму"
       >
-        <section className="min-w-0 flex-1 lg:w-full" id="catalog-results">
-          {result.items.length === 0 ? (
-            shouldShowConnectionEmptyState ? (
-              <CatalogConnectionEmptyState
-                title="Идёт подключение трансферов по Крыму"
-                description="Мы подключаем водителей и компании, которые выполняют трансферы из аэропорта, с вокзалов и между городами Крыма. Скоро здесь появятся реальные предложения с маршрутами, ценами и контактами."
-              />
-            ) : (
-              <TransferEmptyCatalogContent />
-            )
-          ) : (
-            <div className="space-y-4">
-              {result.items.map((item, index) => {
-                const showNearbyNote =
-                  item.searchMatchKind === "nearby" &&
-                  (index === 0 || result.items[index - 1]?.searchMatchKind !== "nearby");
+        <MarketplaceFilterBar
+          key={[
+            result.filters.query ?? "",
+            result.filters.locationName ?? "",
+            result.filters.transferType ?? "",
+            result.filters.radiusKm,
+            result.filters.minPrice ?? "",
+            result.filters.maxPrice ?? "",
+            result.filters.sort,
+          ].join("|")}
+          kind="transfers"
+          filters={result.filters}
+          total={result.total}
+          transferTypes={transferTypes}
+          locationSuggestions={locationSuggestions}
+        />
 
-                return (
-                  <Fragment key={item.id}>
-                    {showNearbyNote ? (
-                      <CatalogNearbyContinuationNote
-                        locationName={result.filters.locationName}
-                        radiusKm={result.filters.nearbyRadiusKm}
-                      />
-                    ) : null}
-                    <TransferCard item={item} eagerImage={index < 2} />
-                  </Fragment>
-                );
-              })}
-            </div>
-          )}
-          {pagination}
-        </section>
-      </MarketplaceCatalogMap>
-    </CatalogShell>
+        <MarketplaceCatalogMap
+          kind="transfers"
+          items={mapItems ?? result.items}
+          resultsCount={result.total}
+          filters={result.filters}
+          mapTitle="Карта трансферов"
+        >
+          <section className="min-w-0 flex-1 lg:w-full" id="catalog-results">
+            {result.items.length === 0 ? (
+              shouldShowConnectionEmptyState ? (
+                <CatalogConnectionEmptyState
+                  title="Идёт подключение трансферов по Крыму"
+                  description="Мы подключаем водителей и компании, которые выполняют трансферы из аэропорта, с вокзалов и между городами Крыма. Скоро здесь появятся реальные предложения с маршрутами, ценами и контактами."
+                />
+              ) : (
+                <TransferEmptyCatalogContent />
+              )
+            ) : (
+              <div className="space-y-4">
+                {result.items.map((item, index) => {
+                  const showNearbyNote =
+                    item.searchMatchKind === "nearby" &&
+                    (index === 0 || result.items[index - 1]?.searchMatchKind !== "nearby");
+
+                  return (
+                    <Fragment key={item.id}>
+                      {showNearbyNote ? (
+                        <CatalogNearbyContinuationNote
+                          locationName={result.filters.locationName}
+                          radiusKm={result.filters.nearbyRadiusKm}
+                        />
+                      ) : null}
+                      <TransferCard item={item} eagerImage={index < 2} />
+                    </Fragment>
+                  );
+                })}
+              </div>
+            )}
+            {pagination}
+          </section>
+        </MarketplaceCatalogMap>
+      </CatalogShell>
+    </>
   );
 }
 
@@ -1298,6 +1317,15 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 md:px-6 md:py-8">
+      <CatalogBackLink
+        catalogKey="attractions"
+        fallbackHref={attractionLocationPath}
+        className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-olive/18 bg-white/92 px-4 py-2 text-sm font-medium text-olive/68 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition hover:border-olive/25 hover:bg-cream hover:text-olive"
+      >
+        <span aria-hidden="true">←</span>
+        Назад в каталог
+      </CatalogBackLink>
+
       <nav
         aria-label="Хлебные крошки"
         className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -1665,6 +1693,15 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
   ].filter((value): value is string => Boolean(value));
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 pb-[calc(env(safe-area-inset-bottom,0px)+6rem)] md:px-6 md:py-8 lg:pb-8">
+      <CatalogBackLink
+        catalogKey="transfers"
+        fallbackHref={transferLocationPath}
+        className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-olive/18 bg-white/92 px-4 py-2 text-sm font-medium text-olive/68 shadow-[0_10px_24px_rgba(58,43,35,0.05)] transition hover:border-olive/25 hover:bg-cream hover:text-olive"
+      >
+        <span aria-hidden="true">←</span>
+        Назад в каталог
+      </CatalogBackLink>
+
       <nav
         aria-label="Хлебные крошки"
         className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"

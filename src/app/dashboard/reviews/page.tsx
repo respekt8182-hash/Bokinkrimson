@@ -74,7 +74,7 @@ export default async function DashboardReviewsPage() {
       <div>
         <h1 className="text-2xl text-olive">Отзывы</h1>
         <p className="text-sm text-olive/70">
-          Просматривайте отзывы по объектам, экскурсиям и трансферам. При необходимости отправьте жалобу администратору.
+          Просматривайте отзывы по недвижимости, экскурсиям и трансферам. При необходимости отправьте жалобу администратору.
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export default async function DashboardReviewsPage() {
           <p className="text-xl font-semibold text-olive">{totalReviewsCount}</p>
         </div>
         <div className="rounded-xl bg-cream px-3 py-2">
-          <p className="text-xs text-olive/60">По объектам</p>
+          <p className="text-xs text-olive/60">По недвижимости</p>
           <p className="text-xl font-semibold text-olive">{propertyReviewsCount}</p>
         </div>
         <div className="rounded-xl bg-cream px-3 py-2">
@@ -98,9 +98,9 @@ export default async function DashboardReviewsPage() {
       </div>
 
       <section className="rounded-2xl border border-olive/10 bg-white p-4">
-        <h2 className="text-lg text-olive">Объекты размещения</h2>
+        <h2 className="text-lg text-olive">Недвижимость</h2>
         {properties.length === 0 ? (
-          <p className="mt-3 text-sm text-olive/65">Объекты не найдены.</p>
+          <p className="mt-3 text-sm text-olive/65">Объявления о недвижимости не найдены.</p>
         ) : (
           <div className="mt-3 space-y-2">
             {properties.map((item) => (
@@ -108,7 +108,7 @@ export default async function DashboardReviewsPage() {
                 key={item.id}
                 entityType="property"
                 entityId={item.id}
-                entityName={item.name ?? "Объект без названия"}
+                entityName={item.name ?? "Недвижимость без названия"}
                 reviewsCount={item.reviewsCount}
                 avgRating={Number(item.avgRating)}
               />

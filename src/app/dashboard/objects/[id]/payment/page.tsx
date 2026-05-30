@@ -108,12 +108,12 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
   })}?preview=1`;
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
       <ObjectSectionNav propertyId={property.id} activeSection="payment" />
       <div className="min-w-0">
         <PropertyPaymentPanel
           propertyId={property.id}
-          propertyName={property.name ?? "Объект без названия"}
+          propertyName={property.name ?? "Недвижимость без названия"}
           initialPropertyStatus={property.status}
           initialPendingEditStatus={property.pendingEditStatus}
           initialModerationNotes={property.moderationNotes}

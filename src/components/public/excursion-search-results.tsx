@@ -37,6 +37,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
+import { CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
@@ -2473,6 +2474,7 @@ export function ExcursionSearchResults({
 
   return (
     <div className="mx-auto w-full max-w-[1680px] px-4 pb-24 md:px-6 md:pb-8">
+      <CatalogScrollRestorer catalogKey={catalogDirection} />
       <CatalogFilterShell
         className="-mx-4 md:-mx-6"
         chips={
@@ -3188,6 +3190,7 @@ export function ExcursionSearchResults({
                             ) : null}
                             <ExcursionCard
                               item={item}
+                              catalogKey={catalogDirection}
                               isHighlighted={hoveredPinId === item.id || activePointId === item.id}
                               onMouseEnter={() => {
                                 setActivePointId(null);
@@ -3402,6 +3405,7 @@ export function ExcursionSearchResults({
                     ) : null}
                     <ExcursionCard
                       item={item}
+                      catalogKey={catalogDirection}
                       isHighlighted={hoveredPinId === item.id || activePointId === item.id}
                       onMouseEnter={() => {
                         setActivePointId(null);
@@ -3594,12 +3598,14 @@ function truncateAvailability(summary: string): string {
 
 function ExcursionCard({
   item,
+  catalogKey,
   isHighlighted,
   onMouseEnter,
   onMouseLeave,
   cardRef,
 }: {
   item: PublicExcursionCatalogItem;
+  catalogKey: "excursions" | "tours";
   isHighlighted: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -3627,6 +3633,8 @@ function ExcursionCard({
       {/* Full-card overlay link */}
       <Link
         href={detailsHref}
+        data-catalog-detail-link={catalogKey}
+        data-catalog-item-id={item.id}
         aria-labelledby={titleId}
         aria-label={`Открыть ${item.title}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
@@ -3803,6 +3811,8 @@ function ExcursionCard({
               </div>
               <Link
                 href={detailsHref}
+                data-catalog-detail-link={catalogKey}
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 active:scale-[0.97]"
               >
                 Подробнее
@@ -3841,6 +3851,8 @@ function ExcursionCard({
               </p>
               <Link
                 href={detailsHref}
+                data-catalog-detail-link={catalogKey}
+                data-catalog-item-id={item.id}
                 className="pointer-events-auto mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-5 text-[13px] font-bold text-white shadow-sm transition-all hover:brightness-95 hover:shadow-md active:scale-[0.97]"
               >
                 Подробнее

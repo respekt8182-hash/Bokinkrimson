@@ -1,16 +1,20 @@
 // API route handler for /api/properties/[id]/rooms.
+import { randomUUID } from "node:crypto";
+import { Prisma, type BathroomType } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { areDatabaseColumnsAvailable, db, type DbTransactionClient } from "@/lib/db";
 import { getEditorSession } from "@/lib/editor-access";
 import {
   markPropertyNeedsRemoderationAfterOwnerEdit,
   preparePropertyForPublishedOwnerEdit,
 } from "@/lib/properties";
+import { logDatabaseFallbackOnce } from "@/lib/prisma-errors";
 import { normalizeRoomTitle } from "@/lib/room-title";
 import {
   buildRoomMetaWithFallbackSortOrder,
   compareSerializedRoomsBySortOrder,
   resolveBathroomTypeFromMeta,
+  resolveSerializedRoomSortOrder,
   roomInclude,
   serializeRoom,
   serializeRoomForChessboard,
@@ -36,6 +40,79 @@ const paidOptionFeatureIds = new Set<string>([
   "safe",
   "lockers",
 ]);
+
+function getDatabaseBathroomType(type: BathroomType): string {
+  switch (type) {
+    case "IN_ROOM":
+      return "in_room";
+    case "ON_FLOOR":
+      return "on_floor";
+    case "OUTSIDE":
+      return "outside";
+    default:
+      return type;
+  }
+}
+
+async function createRoomWithoutSortOrderColumn(
+  client: DbTransactionClient,
+  input: {
+    propertyId: string;
+    title: string;
+    beds: number;
+    extraBeds: number;
+    roomsCount: number;
+    areaSqm: number | null;
+    bathroomType: BathroomType;
+    meta: Prisma.InputJsonValue;
+  },
+): Promise<{ id: string }> {
+  logDatabaseFallbackOnce(
+    "room-create-compat",
+    "Room creation is using a legacy insert compatibility path because the database schema is missing sortOrder. Apply the latest Prisma migration when DB owner access is available.",
+  );
+
+  const roomId = `room_${randomUUID().replace(/-/g, "")}`;
+  const now = new Date();
+  const rows = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    INSERT INTO "Room" (
+      "id",
+      "propertyId",
+      "title",
+      "beds",
+      "extraBeds",
+      "roomsCount",
+      "areaSqm",
+      "bathroomType",
+      "meta",
+      "isActive",
+      "createdAt",
+      "updatedAt"
+    )
+    VALUES (
+      ${roomId},
+      ${input.propertyId},
+      ${input.title},
+      ${input.beds},
+      ${input.extraBeds},
+      ${input.roomsCount},
+      ${input.areaSqm === null ? null : new Prisma.Decimal(input.areaSqm)},
+      CAST(${getDatabaseBathroomType(input.bathroomType)} AS "BathroomType"),
+      CAST(${JSON.stringify(input.meta)} AS JSONB),
+      true,
+      ${now},
+      ${now}
+    )
+    RETURNING "id"
+  `);
+
+  const room = rows[0];
+  if (!room) {
+    throw new Error("ROOM_CREATE_COMPAT_INSERT_FAILED");
+  }
+
+  return room;
+}
 
 async function ensurePropertyAccess(
   propertyId: string,
@@ -194,32 +271,48 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   await preparePropertyForPublishedOwnerEdit(db, property.id);
+  const canPersistRoomSortOrder = await areDatabaseColumnsAvailable("Room", ["sortOrder"]);
 
   const created = await db.$transaction(async (tx) => {
-    const maxSortOrder =
-      (
-        await tx.room.aggregate({
-          where: {
-            propertyId: property.id,
-          },
-          _max: { sortOrder: true },
-        })
-      )._max.sortOrder ?? 0;
-
-    const nextSortOrder = maxSortOrder + 1;
-    const room = await tx.room.create({
-      data: {
+    const existingRoomOrderSources = await tx.room.findMany({
+      where: {
         propertyId: property.id,
-        title: normalizedTitle,
-        beds: data.beds,
-        extraBeds: data.extraBeds,
-        roomsCount: data.roomsCount,
-        areaSqm: data.areaSqm,
-        bathroomType: normalizedBathroomType,
-        meta: buildRoomMetaWithFallbackSortOrder(data.meta, nextSortOrder),
-        sortOrder: nextSortOrder,
+      },
+      select: {
+        meta: true,
+        sortOrder: true,
       },
     });
+    const maxSortOrder = existingRoomOrderSources.reduce(
+      (currentMax, room) => Math.max(currentMax, resolveSerializedRoomSortOrder(room)),
+      0,
+    );
+    const nextSortOrder = Math.max(maxSortOrder, existingRoomOrderSources.length) + 1;
+    const roomMeta = buildRoomMetaWithFallbackSortOrder(data.meta, nextSortOrder);
+    const room = canPersistRoomSortOrder
+      ? await tx.room.create({
+          data: {
+            propertyId: property.id,
+            title: normalizedTitle,
+            beds: data.beds,
+            extraBeds: data.extraBeds,
+            roomsCount: data.roomsCount,
+            areaSqm: data.areaSqm,
+            bathroomType: normalizedBathroomType,
+            meta: roomMeta,
+            sortOrder: nextSortOrder,
+          },
+        })
+      : await createRoomWithoutSortOrderColumn(tx, {
+          propertyId: property.id,
+          title: normalizedTitle,
+          beds: data.beds,
+          extraBeds: data.extraBeds,
+          roomsCount: data.roomsCount,
+          areaSqm: data.areaSqm,
+          bathroomType: normalizedBathroomType,
+          meta: roomMeta,
+        });
 
     const enabledObjectAmenitySettings = await tx.objectRoomAmenitySetting.findMany({
       where: {

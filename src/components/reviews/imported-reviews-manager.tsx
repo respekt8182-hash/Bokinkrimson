@@ -111,6 +111,7 @@ type JsonReviewDraft = {
 
 const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
 const reviewPreviewLength = 220;
+const importedManagerPageSize = 10;
 const jsonImportStatusOptions = [
   { value: "ACTIVE", label: "\u0412\u0438\u0434\u0438\u043c\u044b\u0435" },
   { value: "DELETED", label: "\u0421\u043a\u0440\u044b\u0442\u044b\u0435" },
@@ -225,7 +226,7 @@ function statusMeta(status: SerializedReview["status"]): {
 } {
   if (status === "ACTIVE") {
     return {
-      label: "Видимый",
+      label: "Опубликован",
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
   }
@@ -265,6 +266,55 @@ function hasHiddenText(text: string): boolean {
   return text.trim().length > reviewPreviewLength;
 }
 
+function getClientPage<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+
+  return {
+    items: items.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    currentPage,
+    totalPages,
+  };
+}
+
+function ReviewPageControls({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+      >
+        Назад
+      </Button>
+      <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/62">
+        {currentPage} / {totalPages}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+      >
+        Вперёд
+      </Button>
+    </div>
+  );
+}
+
 export function ImportedReviewsManager({
   entityType,
   entityId,
@@ -291,6 +341,9 @@ export function ImportedReviewsManager({
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
   const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(() => new Set());
+  const [jsonDraftPage, setJsonDraftPage] = useState(1);
+  const [queuePage, setQueuePage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
   const [ratingById, setRatingById] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       initialReviews.map((review) => [
@@ -327,6 +380,9 @@ export function ImportedReviewsManager({
     () => orderedItems.filter((review) => review.status !== "PENDING"),
     [orderedItems],
   );
+  const jsonDraftPagination = getClientPage(jsonDrafts, jsonDraftPage, importedManagerPageSize);
+  const queuePagination = getClientPage(queuedItems, queuePage, importedManagerPageSize);
+  const historyPagination = getClientPage(historyItems, historyPage, importedManagerPageSize);
 
   function applyReviewItem(review: SerializedReview) {
     setItems((previous) => mergeById(previous, review));
@@ -354,6 +410,7 @@ export function ImportedReviewsManager({
       ];
 
       setJsonDrafts(parsedImport.items.map((item, index) => createJsonReviewDraft(item, index)));
+      setJsonDraftPage(1);
       setJsonImportWarnings(warnings);
 
       if (parsedImport.items.length === 0) {
@@ -972,14 +1029,19 @@ export function ImportedReviewsManager({
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {jsonDrafts.map((draft, index) => (
+              {jsonDraftPagination.items.map((draft, index) => (
                 <article
                   key={draft.id}
                   className="rounded-2xl border border-olive/10 bg-white p-4 shadow-sm"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-olive">Отзыв #{index + 1}</p>
+                      <p className="text-sm font-semibold text-olive">
+                        Отзыв #
+                        {(jsonDraftPagination.currentPage - 1) * importedManagerPageSize +
+                          index +
+                          1}
+                      </p>
                       <p className="mt-1 text-xs text-olive/58">
                         {draft.sourceName || "Источник не указан"}
                       </p>
@@ -1092,6 +1154,11 @@ export function ImportedReviewsManager({
                   </div>
                 </article>
               ))}
+              <ReviewPageControls
+                currentPage={jsonDraftPagination.currentPage}
+                totalPages={jsonDraftPagination.totalPages}
+                onPageChange={setJsonDraftPage}
+              />
             </div>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1126,7 +1193,7 @@ export function ImportedReviewsManager({
             </div>
           ) : (
             <div className="mt-3 space-y-3">
-              {queuedItems.map((review) => {
+              {queuePagination.items.map((review) => {
                 const meta = statusMeta(review.status);
                 const isEditing = review.id in editDraftById;
                 const processing = processingReviewId === review.id;
@@ -1261,6 +1328,11 @@ export function ImportedReviewsManager({
                   </article>
                 );
               })}
+              <ReviewPageControls
+                currentPage={queuePagination.currentPage}
+                totalPages={queuePagination.totalPages}
+                onPageChange={setQueuePage}
+              />
             </div>
           )}
         </div>
@@ -1392,11 +1464,11 @@ export function ImportedReviewsManager({
           <h3 className="text-base font-semibold text-olive">История добавленных отзывов</h3>
           {historyItems.length === 0 ? (
             <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
-              Видимые, скрытые и удалённые отзывы появятся здесь.
+              Добавленные отзывы появятся здесь.
             </div>
           ) : (
             <div className="mt-3 space-y-3">
-              {historyItems.map((review) => {
+              {historyPagination.items.map((review) => {
                 const meta = statusMeta(review.status);
                 const processing = processingReviewId === review.id;
                 const isEditing = review.id in editDraftById;
@@ -1559,6 +1631,11 @@ export function ImportedReviewsManager({
                   </article>
                 );
               })}
+              <ReviewPageControls
+                currentPage={historyPagination.currentPage}
+                totalPages={historyPagination.totalPages}
+                onPageChange={setHistoryPage}
+              />
             </div>
           )}
         </div>

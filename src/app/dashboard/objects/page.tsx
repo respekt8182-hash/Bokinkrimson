@@ -1,6 +1,8 @@
 // Next.js page for route /dashboard/objects.
 import { PaymentStatus, ReviewStatus } from "@prisma/client";
 import {
+  ArrowRight,
+  Building2,
   CalendarDays,
   CircleCheckBig,
   CreditCard,
@@ -174,19 +176,46 @@ export default async function DashboardObjectsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="flex flex-col items-stretch gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl text-olive sm:text-3xl">Объекты</h1>
+      <div className="rounded-2xl border border-olive/10 bg-cream/65 p-4 sm:p-5">
+        <div className="flex flex-col items-stretch gap-3 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-primary">Размещение объявлений</p>
+            <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">Недвижимость</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-olive/68">
+              Здесь собраны ваши объявления о жилье: черновики, опубликованные карточки, оплата и
+              статистика. Откройте объявление, чтобы заполнить данные и отправить его на публикацию.
+            </p>
+          </div>
+          <CreatePropertyButton />
         </div>
-        <CreatePropertyButton />
       </div>
 
       {items.length === 0 ? (
         <div
           id="objects-list"
-          className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75"
+          className="rounded-2xl border border-dashed border-primary/30 bg-white p-5 text-olive shadow-sm"
         >
-          Нет объектов. Нажмите «Добавить объект».
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <AppIcon icon={Building2} className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-semibold">Пока нет объявлений о недвижимости</p>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-olive/65">
+                  Создайте первое объявление. После этого откроется редактор с шагами: основные
+                  данные, локация, контакты, фото, номера и оплата публикации.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/objects?create=1"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              Начать размещение
+              <AppIcon icon={ArrowRight} className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       ) : (
         <div id="objects-list" className="grid gap-3">
@@ -235,7 +264,7 @@ export default async function DashboardObjectsPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={firstImage.url}
-                          alt={item.name ?? "Объект"}
+                          alt={item.name ?? "Недвижимость"}
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -246,7 +275,7 @@ export default async function DashboardObjectsPage() {
                     </div>
                     <div className="min-w-0 flex-1 py-1">
                       <h2 className="truncate text-lg text-olive sm:text-xl">
-                        {item.name ?? "Новый объект"}
+                        {item.name ?? "Новое объявление"}
                       </h2>
                       <p className="mt-1 text-xs leading-snug text-olive/60">
                         {item.locationName ?? "Локация не выбрана"} •{" "}
@@ -423,7 +452,7 @@ export default async function DashboardObjectsPage() {
                         </Link>
                         <StatsButton
                           propertyId={item.id}
-                          propertyName={item.name ?? "Объект"}
+                          propertyName={item.name ?? "Недвижимость"}
                           className={dashboardStatsActionClass}
                         />
                       </>
@@ -436,7 +465,7 @@ export default async function DashboardObjectsPage() {
                         className={dashboardSecondaryActionClass}
                       >
                         <AppIcon icon={PenLine} className={dashboardActionIconClass} />
-                        Редактирование
+                        Редактировать
                       </Link>
                       <Link
                         href={`/dashboard/objects/${item.id}/payment`}
@@ -447,7 +476,7 @@ export default async function DashboardObjectsPage() {
                       </Link>
                       <DeletePropertyButton
                         propertyId={item.id}
-                        propertyName={item.name ?? "Новый объект"}
+                        propertyName={item.name ?? "Новое объявление"}
                         propertyStatus={item.status}
                         buttonClassName={dashboardDangerActionClass}
                         label="Удалить"
@@ -462,7 +491,7 @@ export default async function DashboardObjectsPage() {
       )}
 
       {publishedCount > 0 ? (
-        <p className="text-xs text-olive/65">Опубликовано объектов: {publishedCount}</p>
+        <p className="text-xs text-olive/65">Опубликовано объявлений: {publishedCount}</p>
       ) : null}
     </div>
   );

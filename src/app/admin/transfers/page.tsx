@@ -2,6 +2,7 @@ import { TransferStatus } from "@prisma/client";
 import { ArrowUpRight, Car } from "lucide-react";
 import Link from "next/link";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import {
   AdminEmptyState,
   AdminPageHeader,
@@ -10,6 +11,7 @@ import {
   adminInputClass,
 } from "@/components/admin/admin-ui";
 import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicTransferPath } from "@/lib/public-marketplace";
@@ -22,7 +24,7 @@ import {
 } from "@/lib/transfers";
 
 type AdminTransfersPageProps = {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; page?: string }>;
 };
 
 const STATUS_LABELS: Record<TransferStatus, string> = {
@@ -43,6 +45,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
   const filters = await searchParams;
   const selectedStatus = filters.status?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   const rows = await db.transfer.findMany({
     orderBy: [{ updatedAt: "desc" }],
@@ -95,11 +98,15 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
     const params = new URLSearchParams();
     const status = overrides.status ?? selectedStatus;
     const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/transfers?${search}` : "/admin/transfers";
   };
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -164,7 +171,7 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {paginatedItems.map((item) => {
             const workflowStatus = getTransferWorkflowStatus(
               item.status,
               item.pendingEditStatus ?? null,
@@ -281,6 +288,11 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="трансферов"
+          />
         </div>
       )}
     </div>

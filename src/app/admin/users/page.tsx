@@ -1,13 +1,20 @@
 // Next.js page for route /admin/users.
 import Link from "next/link";
 import { PasswordResetRequestStatus, Prisma } from "@prisma/client";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import {
   AdminEmptyState,
   AdminNotice,
   AdminPageHeader,
   AdminPanel,
+  adminInputClass,
 } from "@/components/admin/admin-ui";
+import {
+  ADMIN_LIST_PAGE_SIZE,
+  buildAdminPagination,
+  parseAdminPageParam,
+} from "@/lib/admin-pagination";
 import { purgeExpiredDeletedUsers } from "@/lib/admin-entity-lifecycle";
 import { areDatabaseColumnsAvailable, db } from "@/lib/db";
 import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
@@ -28,6 +35,8 @@ type ActivityFilter = "all" | "online" | "recent" | "week" | "inactive" | "never
 type AdminUsersPageProps = {
   searchParams?: Promise<{
     activity?: string | string[];
+    q?: string | string[];
+    page?: string | string[];
   }>;
 };
 
@@ -90,23 +99,48 @@ function formatAbsoluteActivityDate(date: Date | null | undefined): string {
     : "-";
 }
 
-function getActivityFilterHref(filter: ActivityFilter): string {
-  return filter === "all" ? "/admin/users" : `/admin/users?activity=${filter}`;
+function normalizeSearchParam(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
+}
+
+function buildUserSearchWhere(query: string): Prisma.UserWhereInput {
+  if (query.length < 2) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { firstName: { contains: query, mode: "insensitive" } },
+      { lastName: { contains: query, mode: "insensitive" } },
+      { email: { contains: query, mode: "insensitive" } },
+      { phone: { contains: query, mode: "insensitive" } },
+    ],
+  };
 }
 
 export default async function AdminUsersPage({ searchParams }: AdminUsersPageProps) {
   const now = new Date();
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activityFilter = parseActivityFilter(resolvedSearchParams.activity);
+  const query = normalizeSearchParam(resolvedSearchParams.q);
+  const requestedPage = parseAdminPageParam(resolvedSearchParams.page);
   const isUserActivityAvailable = await areDatabaseColumnsAvailable("User", USER_ACTIVITY_COLUMNS);
   await purgeExpiredDeletedUsers(db, now);
 
+  const userWhere: Prisma.UserWhereInput = {
+    AND: [
+      { role: "USER", deletedAt: null },
+      isUserActivityAvailable ? buildActivityWhere(activityFilter, now) : {},
+      buildUserSearchWhere(query),
+    ],
+  };
+  const totalUsers = await db.user.count({ where: userWhere });
+  const totalPages = Math.max(1, Math.ceil(totalUsers / ADMIN_LIST_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
   const users = await db.user.findMany({
-    where: {
-      role: "USER",
-      deletedAt: null,
-      ...(isUserActivityAvailable ? buildActivityWhere(activityFilter, now) : {}),
-    },
+    where: userWhere,
+    skip: (currentPage - 1) * ADMIN_LIST_PAGE_SIZE,
+    take: ADMIN_LIST_PAGE_SIZE,
     orderBy:
       isUserActivityAvailable && activityFilter !== "all"
         ? [{ lastSeenAt: "desc" }, { createdAt: "desc" }]
@@ -162,6 +196,19 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
       },
     },
   });
+  const pagination = buildAdminPagination(users, currentPage, totalUsers);
+
+  const buildUsersHref = (overrides: Record<string, string> = {}): string => {
+    const params = new URLSearchParams();
+    const activity = overrides.activity ?? activityFilter;
+    const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
+    if (activity && activity !== "all") params.set("activity", activity);
+    if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
+    const search = params.toString();
+    return search ? `/admin/users?${search}` : "/admin/users";
+  };
 
   return (
     <div className="space-y-6">
@@ -184,7 +231,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           return (
             <Link
               key={filter.key}
-              href={getActivityFilterHref(filter.key)}
+              href={buildUsersHref({ activity: filter.key })}
               title={filter.description}
               className={`inline-flex items-center rounded-2xl border px-3.5 py-2 text-sm font-semibold transition ${
                 isActive
@@ -197,6 +244,40 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           );
         })}
       </div>
+
+      <AdminPanel title="Поиск пользователей">
+        <form className="grid gap-3 md:grid-cols-[1fr_auto]">
+          {activityFilter !== "all" ? (
+            <input type="hidden" name="activity" value={activityFilter} />
+          ) : null}
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium text-olive">Имя, телефон или email</span>
+            <input
+              type="search"
+              name="q"
+              defaultValue={query}
+              placeholder="Например: Анна"
+              className={adminInputClass}
+            />
+          </label>
+          <div className="flex items-end gap-2">
+            <button
+              type="submit"
+              className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+            >
+              Найти
+            </button>
+            {query ? (
+              <Link
+                href={buildUsersHref({ q: "" })}
+                className="rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
+              >
+                Сбросить
+              </Link>
+            ) : null}
+          </div>
+        </form>
+      </AdminPanel>
 
       {users.length === 0 ? (
         <AdminEmptyState
@@ -390,6 +471,13 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               </AdminPanel>
             );
           })}
+          <div className="xl:col-span-2">
+            <AdminPagination
+              pagination={pagination}
+              hrefForPage={(page) => buildUsersHref({ page: String(page) })}
+              label="пользователей"
+            />
+          </div>
         </div>
       )}
     </div>

@@ -48,6 +48,7 @@ export const ROOM_TYPE_OPTIONS = [
   { value: "DOUBLE", label: "Двухместный (double)" },
   { value: "TWIN", label: "Двухместный (twin)" },
   { value: "TRIPLE", label: "Трёхместный" },
+  { value: "APARTMENT", label: "Квартира" },
   { value: "SHARED", label: "Общий номер / хостел" },
   { value: "CAMPING", label: "Палатка / кемпинг" },
 ] as const;

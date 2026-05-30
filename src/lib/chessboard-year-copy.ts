@@ -18,6 +18,8 @@ export type CopyYearRoomPricesResult = {
   roomsCount: number;
   propertiesCount: number;
   replacedCount: number;
+  skippedRoomsCount: number;
+  skippedPricesCount: number;
   sourceYear: number;
   targetYear: number;
 };
@@ -41,10 +43,24 @@ export class CopyYearRoomPricesError extends Error {
   }
 }
 
+export type AutomaticNextYearRoomPricesResult =
+  | {
+      skipped: true;
+      reason: "OUTSIDE_TRANSFER_WINDOW" | "NO_ACTIVE_ROOMS" | "NO_SOURCE_PRICES";
+      sourceYear: number;
+      targetYear: number;
+      checkedAt: string;
+    }
+  | ({
+      skipped: false;
+      checkedAt: string;
+    } & CopyYearRoomPricesResult);
+
 type CopyYearRoomPricesInput = {
   sourceYear: number;
   targetYear: number;
   replaceExisting: boolean;
+  skipExistingTargetPrices?: boolean;
   propertyId?: string;
   conflictPreviewLimit?: number;
 };
@@ -63,6 +79,7 @@ type RoomPriceCopyRow = {
 };
 
 const createManyChunkSize = 1000;
+const automaticTransferStartMonth = 11;
 
 function getUtcYearStart(year: number): Date {
   return new Date(Date.UTC(year, 0, 1));
@@ -102,10 +119,86 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+function getMoscowYearMonth(now: Date): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(now);
+
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value ?? now.getUTCFullYear()),
+    month: Number(parts.find((part) => part.type === "month")?.value ?? now.getUTCMonth() + 1),
+  };
+}
+
+export function getAutomaticNextYearRoomPriceCopyYears(now = new Date()): {
+  sourceYear: number;
+  targetYear: number;
+} {
+  const { year } = getMoscowYearMonth(now);
+
+  return {
+    sourceYear: year,
+    targetYear: year + 1,
+  };
+}
+
+export function isAutomaticNextYearRoomPriceCopyWindow(now = new Date()): boolean {
+  return getMoscowYearMonth(now).month >= automaticTransferStartMonth;
+}
+
+export async function copyNextYearRoomPricesAutomatically(
+  now = new Date(),
+): Promise<AutomaticNextYearRoomPricesResult> {
+  const { sourceYear, targetYear } = getAutomaticNextYearRoomPriceCopyYears(now);
+  const checkedAt = now.toISOString();
+
+  if (!isAutomaticNextYearRoomPriceCopyWindow(now)) {
+    return {
+      skipped: true,
+      reason: "OUTSIDE_TRANSFER_WINDOW",
+      sourceYear,
+      targetYear,
+      checkedAt,
+    };
+  }
+
+  try {
+    const result = await copyYearRoomPrices({
+      sourceYear,
+      targetYear,
+      replaceExisting: false,
+      skipExistingTargetPrices: true,
+    });
+
+    return {
+      skipped: false,
+      checkedAt,
+      ...result,
+    };
+  } catch (error) {
+    if (error instanceof CopyYearRoomPricesError) {
+      if (error.code === "NO_ACTIVE_ROOMS" || error.code === "NO_SOURCE_PRICES") {
+        return {
+          skipped: true,
+          reason: error.code,
+          sourceYear,
+          targetYear,
+          checkedAt,
+        };
+      }
+    }
+
+    throw error;
+  }
+}
+
 export async function copyYearRoomPrices({
   sourceYear,
   targetYear,
   replaceExisting,
+  skipExistingTargetPrices = false,
   propertyId,
   conflictPreviewLimit = 8,
 }: CopyYearRoomPricesInput): Promise<CopyYearRoomPricesResult> {
@@ -155,7 +248,7 @@ export async function copyYearRoomPrices({
     throw new CopyYearRoomPricesError("NO_ACTIVE_ROOMS");
   }
 
-  const rowsToCreate: RoomPriceCopyRow[] = rooms.flatMap((room) =>
+  let rowsToCreate: RoomPriceCopyRow[] = rooms.flatMap((room) =>
     room.prices.map((price) => {
       const clippedFrom = maxDate(price.dateFrom, sourceStart);
       const clippedTo = minDate(price.dateTo, sourceEnd);
@@ -184,46 +277,67 @@ export async function copyYearRoomPrices({
     dateFrom: { lte: targetEnd },
     dateTo: { gte: targetStart },
   };
+  let skippedRoomsCount = 0;
+  let skippedPricesCount = 0;
 
   if (!replaceExisting) {
-    const conflictsCount = await db.roomPrice.count({
-      where: targetPriceWhere,
-    });
-
-    if (conflictsCount > 0) {
-      const conflictPreview = await db.roomPrice.findMany({
-        where: targetPriceWhere,
-        take: conflictPreviewLimit,
+    if (skipExistingTargetPrices) {
+      const sourceRoomIds = [...new Set(rowsToCreate.map((row) => row.roomId))];
+      const conflictRows = await db.roomPrice.findMany({
+        where: {
+          ...targetPriceWhere,
+          roomId: { in: sourceRoomIds },
+        },
+        distinct: ["roomId"],
         select: {
-          dateFrom: true,
-          dateTo: true,
-          room: {
-            select: {
-              title: true,
-              property: {
-                select: {
-                  id: true,
-                  name: true,
-                  publicId: true,
+          roomId: true,
+        },
+      });
+      const conflictingRoomIds = new Set(conflictRows.map((row) => row.roomId));
+      const rowsBeforeSkipping = rowsToCreate.length;
+      rowsToCreate = rowsToCreate.filter((row) => !conflictingRoomIds.has(row.roomId));
+      skippedRoomsCount = conflictingRoomIds.size;
+      skippedPricesCount = rowsBeforeSkipping - rowsToCreate.length;
+    } else {
+      const conflictsCount = await db.roomPrice.count({
+        where: targetPriceWhere,
+      });
+
+      if (conflictsCount > 0) {
+        const conflictPreview = await db.roomPrice.findMany({
+          where: targetPriceWhere,
+          take: conflictPreviewLimit,
+          select: {
+            dateFrom: true,
+            dateTo: true,
+            room: {
+              select: {
+                title: true,
+                property: {
+                  select: {
+                    id: true,
+                    name: true,
+                    publicId: true,
+                  },
                 },
               },
             },
           },
-        },
-        orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
-      });
+          orderBy: [{ dateFrom: "asc" }, { createdAt: "asc" }],
+        });
 
-      throw new CopyYearRoomPricesError("TARGET_CONFLICTS", {
-        conflictsCount,
-        conflictPreview: conflictPreview.map((price) => ({
-          propertyId: price.room.property.id,
-          propertyName: price.room.property.name,
-          propertyPublicId: price.room.property.publicId,
-          roomTitle: price.room.title,
-          dateFrom: toIsoDate(price.dateFrom),
-          dateTo: toIsoDate(price.dateTo),
-        })),
-      });
+        throw new CopyYearRoomPricesError("TARGET_CONFLICTS", {
+          conflictsCount,
+          conflictPreview: conflictPreview.map((price) => ({
+            propertyId: price.room.property.id,
+            propertyName: price.room.property.name,
+            propertyPublicId: price.room.property.publicId,
+            roomTitle: price.room.title,
+            dateFrom: toIsoDate(price.dateFrom),
+            dateTo: toIsoDate(price.dateTo),
+          })),
+        });
+      }
     }
   }
 
@@ -233,65 +347,68 @@ export async function copyYearRoomPrices({
     "extraBedPrice",
   ]);
 
-  const replacedCount = await db.$transaction(
-    async (tx) => {
-      const deleteResult = replaceExisting
-        ? await tx.roomPrice.deleteMany({
-            where: targetPriceWhere,
-          })
-        : { count: 0 };
+  const replacedCount =
+    rowsToCreate.length === 0 && !replaceExisting
+      ? 0
+      : await db.$transaction(
+          async (tx) => {
+            const deleteResult = replaceExisting
+              ? await tx.roomPrice.deleteMany({
+                  where: targetPriceWhere,
+                })
+              : { count: 0 };
 
-      if (supportsRoomPriceWriteColumns) {
-        for (const rowsChunk of chunkArray(rowsToCreate, createManyChunkSize)) {
-          await tx.roomPrice.createMany({
-            data: rowsChunk.map((row) => ({
-              roomId: row.roomId,
-              dateFrom: row.dateFrom,
-              dateTo: row.dateTo,
-              price: new Prisma.Decimal(row.price),
-              priceType: row.priceType,
-              minGuests: row.minGuests,
-              minNights: row.minNights,
-              extraBedPrice:
-                row.extraBedPrice === null ? null : new Prisma.Decimal(row.extraBedPrice),
-              currency: row.currency,
-            })),
-          });
-        }
-      } else {
-        const now = new Date();
-        for (const row of rowsToCreate) {
-          await tx.$executeRaw(Prisma.sql`
-            INSERT INTO "RoomPrice" (
-              "id",
-              "roomId",
-              "dateFrom",
-              "dateTo",
-              "price",
-              "minGuests",
-              "currency",
-              "createdAt",
-              "updatedAt"
-            )
-            VALUES (
-              ${`room_price_${randomUUID().replace(/-/g, "")}`},
-              ${row.roomId},
-              ${row.dateFrom},
-              ${row.dateTo},
-              ${new Prisma.Decimal(row.price)},
-              ${row.minGuests},
-              ${row.currency},
-              ${now},
-              ${now}
-            )
-          `);
-        }
-      }
+            if (supportsRoomPriceWriteColumns) {
+              for (const rowsChunk of chunkArray(rowsToCreate, createManyChunkSize)) {
+                await tx.roomPrice.createMany({
+                  data: rowsChunk.map((row) => ({
+                    roomId: row.roomId,
+                    dateFrom: row.dateFrom,
+                    dateTo: row.dateTo,
+                    price: new Prisma.Decimal(row.price),
+                    priceType: row.priceType,
+                    minGuests: row.minGuests,
+                    minNights: row.minNights,
+                    extraBedPrice:
+                      row.extraBedPrice === null ? null : new Prisma.Decimal(row.extraBedPrice),
+                    currency: row.currency,
+                  })),
+                });
+              }
+            } else {
+              const now = new Date();
+              for (const row of rowsToCreate) {
+                await tx.$executeRaw(Prisma.sql`
+                  INSERT INTO "RoomPrice" (
+                    "id",
+                    "roomId",
+                    "dateFrom",
+                    "dateTo",
+                    "price",
+                    "minGuests",
+                    "currency",
+                    "createdAt",
+                    "updatedAt"
+                  )
+                  VALUES (
+                    ${`room_price_${randomUUID().replace(/-/g, "")}`},
+                    ${row.roomId},
+                    ${row.dateFrom},
+                    ${row.dateTo},
+                    ${new Prisma.Decimal(row.price)},
+                    ${row.minGuests},
+                    ${row.currency},
+                    ${now},
+                    ${now}
+                  )
+                `);
+              }
+            }
 
-      return deleteResult.count;
-    },
-    { maxWait: 10000, timeout: 120000 },
-  );
+            return deleteResult.count;
+          },
+          { maxWait: 10000, timeout: 120000 },
+        );
 
   const roomsWithSourcePrices = new Set(rowsToCreate.map((row) => row.roomId));
   const propertiesWithSourcePrices = new Set(rowsToCreate.map((row) => row.propertyId));
@@ -301,6 +418,8 @@ export async function copyYearRoomPrices({
     roomsCount: roomsWithSourcePrices.size,
     propertiesCount: propertiesWithSourcePrices.size,
     replacedCount,
+    skippedRoomsCount,
+    skippedPricesCount,
     sourceYear,
     targetYear,
   };

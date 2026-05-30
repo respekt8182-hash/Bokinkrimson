@@ -11,7 +11,10 @@ type ReviewModerationListProps = {
   initialAvgRating: number;
   initialReviewsCount: number;
   title?: string;
+  pageSize?: number;
 };
+
+const defaultModerationReviewsPageSize = 10;
 
 function getStarFillPercent(rating: number, starIndex: number): number {
   const value = rating - (starIndex - 1);
@@ -47,11 +50,14 @@ export function ReviewModerationList({
   initialAvgRating,
   initialReviewsCount,
   title = "Отзывы объекта",
+  pageSize = defaultModerationReviewsPageSize,
 }: ReviewModerationListProps) {
   const [reviews, setReviews] = useState(initialReviews);
   const [avgRating, setAvgRating] = useState(initialAvgRating);
   const [reviewsCount, setReviewsCount] = useState(initialReviewsCount);
-  const [processingById, setProcessingById] = useState<Record<string, "approve" | "reject" | "delete" | null>>({});
+  const [processingById, setProcessingById] = useState<
+    Record<string, "approve" | "reject" | "delete" | null>
+  >({});
   const [categoryById, setCategoryById] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialReviews.map((review) => [review.id, review.reviewCategory ?? ""])),
   );
@@ -59,6 +65,7 @@ export function ReviewModerationList({
     Object.fromEntries(initialReviews.map((review) => [review.id, review.reviewHighlight ?? ""])),
   );
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const orderedReviews = useMemo(
     () =>
       [...reviews].sort((left, right) => {
@@ -70,6 +77,12 @@ export function ReviewModerationList({
         return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
       }),
     [reviews],
+  );
+  const totalPages = Math.max(1, Math.ceil(orderedReviews.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedReviews = orderedReviews.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   async function moderateReview(id: string, action: "approve" | "reject" | "delete") {
@@ -156,7 +169,7 @@ export function ReviewModerationList({
         <p className="mt-2 text-sm text-olive/70">Отзывов пока нет.</p>
       ) : (
         <div className="mt-3 space-y-3">
-          {orderedReviews.map((review) => (
+          {paginatedReviews.map((review) => (
             <article
               key={review.id}
               className={`rounded-xl p-3 ${
@@ -211,7 +224,9 @@ export function ReviewModerationList({
                   <p className="text-xs font-semibold uppercase tracking-wide text-olive/65">
                     Ответ владельца
                   </p>
-                  <p className="mt-1 whitespace-pre-line text-sm text-olive/85">{review.ownerReply}</p>
+                  <p className="mt-1 whitespace-pre-line text-sm text-olive/85">
+                    {review.ownerReply}
+                  </p>
                 </div>
               ) : null}
               <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -265,7 +280,9 @@ export function ReviewModerationList({
                     disabled={(processingById[review.id] ?? null) !== null}
                     onClick={() => void moderateReview(review.id, "approve")}
                   >
-                    {(processingById[review.id] ?? null) === "approve" ? "Одобрение..." : "Одобрить"}
+                    {(processingById[review.id] ?? null) === "approve"
+                      ? "Одобрение..."
+                      : "Одобрить"}
                   </Button>
                 ) : null}
                 {review.status === "ACTIVE" ? (
@@ -285,7 +302,9 @@ export function ReviewModerationList({
                     disabled={(processingById[review.id] ?? null) !== null}
                     onClick={() => void moderateReview(review.id, "reject")}
                   >
-                    {(processingById[review.id] ?? null) === "reject" ? "Отклонение..." : "Отклонить"}
+                    {(processingById[review.id] ?? null) === "reject"
+                      ? "Отклонение..."
+                      : "Отклонить"}
                   </Button>
                 ) : null}
                 {review.status === "DELETED" ? (
@@ -294,7 +313,9 @@ export function ReviewModerationList({
                     disabled={(processingById[review.id] ?? null) !== null}
                     onClick={() => void moderateReview(review.id, "approve")}
                   >
-                    {(processingById[review.id] ?? null) === "approve" ? "Восстановление..." : "Восстановить"}
+                    {(processingById[review.id] ?? null) === "approve"
+                      ? "Восстановление..."
+                      : "Восстановить"}
                   </Button>
                 ) : null}
                 {review.isImported ? (
@@ -309,6 +330,29 @@ export function ReviewModerationList({
               </div>
             </article>
           ))}
+          {totalPages > 1 ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={currentPage === 1}
+                onClick={() => setPage(Math.max(1, currentPage - 1))}
+              >
+                Назад
+              </Button>
+              <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/62">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+              >
+                Вперёд
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
 

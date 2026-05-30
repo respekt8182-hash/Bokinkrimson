@@ -14,6 +14,7 @@ export const roomTypeOptions = [
   { id: "studio", label: "Номер-студия" },
   { id: "penthouse", label: "Пентхаус" },
   { id: "loft", label: "Лофт" },
+  { id: "apartment", label: "Квартира" },
   { id: "apartments", label: "Апартаменты" },
   { id: "dormitory", label: "Общий номер" },
   { id: "dorm_bed", label: "Кровать в общем номере" },
@@ -130,12 +131,14 @@ export const roomNameSuggestionsByType: Record<RoomTypeId, string[]> = {
     "Пентхаус с собственным бассейном",
     "Свое название",
   ],
-  loft: [
-    "Лофт",
-    "Лофт Люкс",
-    "Лофт Делюкс",
-    "Семейный лофт",
-    "Дизайнерский лофт",
+  loft: ["Лофт", "Лофт Люкс", "Лофт Делюкс", "Семейный лофт", "Дизайнерский лофт", "Свое название"],
+  apartment: [
+    "Квартира",
+    "Квартира с 1 спальней",
+    "Квартира с 2 спальнями",
+    "Квартира-студия",
+    "Квартира с балконом",
+    "Квартира с видом на море",
     "Свое название",
   ],
   apartments: [
@@ -304,17 +307,25 @@ export const roomTypeConstraints: Record<RoomTypeId, RoomTypeConstraint> = {
   double_flexible: {
     defaultMainPlaces: 2,
     fixedMainPlaces: 2,
-    allowedBedTypeIds: ["single", "semi_double", "double_king", "double_queen", "double_super_king"],
-    defaultBedSets: [
-      [{ type: "double_queen", count: 1 }],
-      [{ type: "single", count: 2 }],
+    allowedBedTypeIds: [
+      "single",
+      "semi_double",
+      "double_king",
+      "double_queen",
+      "double_super_king",
     ],
+    defaultBedSets: [[{ type: "double_queen", count: 1 }], [{ type: "single", count: 2 }]],
   },
   triple: {
     defaultMainPlaces: 3,
     fixedMainPlaces: 3,
     allowedBedTypeIds: null,
-    defaultBedSets: [[{ type: "double_queen", count: 1 }, { type: "single", count: 1 }]],
+    defaultBedSets: [
+      [
+        { type: "double_queen", count: 1 },
+        { type: "single", count: 1 },
+      ],
+    ],
   },
   quadruple: {
     defaultMainPlaces: 4,
@@ -325,7 +336,12 @@ export const roomTypeConstraints: Record<RoomTypeId, RoomTypeConstraint> = {
   family: {
     defaultMainPlaces: 3,
     allowedBedTypeIds: null,
-    defaultBedSets: [[{ type: "double_queen", count: 1 }, { type: "single", count: 1 }]],
+    defaultBedSets: [
+      [
+        { type: "double_queen", count: 1 },
+        { type: "single", count: 1 },
+      ],
+    ],
   },
   // Premium / specialty — no bed restriction, sensible defaults
   suite: {
@@ -344,6 +360,11 @@ export const roomTypeConstraints: Record<RoomTypeId, RoomTypeConstraint> = {
     defaultBedSets: [[{ type: "double_king", count: 1 }]],
   },
   loft: {
+    defaultMainPlaces: 2,
+    allowedBedTypeIds: null,
+    defaultBedSets: [[{ type: "double_queen", count: 1 }]],
+  },
+  apartment: {
     defaultMainPlaces: 2,
     allowedBedTypeIds: null,
     defaultBedSets: [[{ type: "double_queen", count: 1 }]],
@@ -560,10 +581,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function asStringArray<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-): T[] {
+function asStringArray<T extends string>(value: unknown, allowed: readonly T[]): T[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -648,7 +666,7 @@ export function normalizeRoomMeta(value: unknown): RoomMeta | null {
   const normalizedRoomName =
     typeof value.roomName === "string" && value.roomName.trim()
       ? value.roomName.trim().slice(0, 120)
-      : roomNameSuggestionsByType[roomType][0] ?? defaultRoomMeta.roomName;
+      : (roomNameSuggestionsByType[roomType][0] ?? defaultRoomMeta.roomName);
 
   const normalizedNameInExtranet =
     typeof value.nameInExtranet === "string" && value.nameInExtranet.trim().length > 0
@@ -666,7 +684,12 @@ export function normalizeRoomMeta(value: unknown): RoomMeta | null {
         .filter((item) => item.length > 0)
         .slice(0, 10)
     : [];
-  const bedSets = parsedBedSets.length > 0 ? parsedBedSets : bedConfiguration.length > 0 ? [bedConfiguration] : [];
+  const bedSets =
+    parsedBedSets.length > 0
+      ? parsedBedSets
+      : bedConfiguration.length > 0
+        ? [bedConfiguration]
+        : [];
   const primaryBedConfiguration = bedSets[0] ?? bedConfiguration;
 
   const hasAdditionalPlaces = Boolean(value.hasAdditionalPlaces);
@@ -691,7 +714,9 @@ export function normalizeRoomMeta(value: unknown): RoomMeta | null {
     : [];
 
   const privateBathroomCount =
-    hasPrivateBathroom && typeof value.privateBathroomCount === "number" && Number.isInteger(value.privateBathroomCount)
+    hasPrivateBathroom &&
+    typeof value.privateBathroomCount === "number" &&
+    Number.isInteger(value.privateBathroomCount)
       ? Math.min(10, Math.max(1, value.privateBathroomCount))
       : null;
 

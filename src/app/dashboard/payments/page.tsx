@@ -47,7 +47,7 @@ export default async function DashboardPaymentsPage() {
 
       {properties.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-olive/30 bg-cream p-4 text-sm text-olive/75">
-          У вас пока нет объектов для оплаты.
+          У вас пока нет объявлений о недвижимости для оплаты.
         </div>
       ) : (
         <div className="space-y-3">
@@ -55,7 +55,7 @@ export default async function DashboardPaymentsPage() {
             <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-lg font-semibold text-olive">{item.name ?? "Объект без названия"}</p>
+                  <p className="text-lg font-semibold text-olive">{item.name ?? "Недвижимость без названия"}</p>
                   <p className="text-xs text-olive/65">
                     Статус: {getPropertyWorkflowStatusLabel(item.status, item.moderationNotes, item.pendingEditStatus)} • Обновлено:{" "}
                     {new Date(item.updatedAt).toLocaleString("ru-RU")}

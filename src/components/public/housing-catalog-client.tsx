@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CatalogFilterBar } from "@/components/public/catalog-filter-bar";
+import { CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { PublicHousingResultsWithMap } from "@/components/public/public-housing-results-with-map";
 import { useLoadMore } from "@/hooks/use-load-more";
@@ -505,6 +506,7 @@ export function HousingCatalogClient({
 
   return (
     <>
+      <CatalogScrollRestorer catalogKey="housing" />
       <CatalogFilterBar
         filters={filters}
         onApplyFilters={(next, toast) => void applyFilters(next, toast)}

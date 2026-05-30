@@ -31,6 +31,8 @@ type EditDraft = {
   reviewHighlight: string;
 };
 
+const importedReviewsPageSize = 10;
+
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("ru-RU");
 }
@@ -40,7 +42,7 @@ function getReviewDisplayDate(review: SerializedReview): string {
 }
 
 function statusLabel(status: SerializedReview["status"]): string {
-  if (status === "ACTIVE") return "Видимый";
+  if (status === "ACTIVE") return "Опубликован";
   if (status === "DELETED") return "Скрыт";
   if (status === "DUPLICATE") return "Дубль";
   if (status === "FAILED") return "Ошибка";
@@ -69,11 +71,18 @@ export function ImportedReviewModerationList({
   );
   const [editDraftById, setEditDraftById] = useState<Record<string, EditDraft>>({});
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   const orderedReviews = useMemo(
     () =>
       [...reviews].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
     [reviews],
+  );
+  const totalPages = Math.max(1, Math.ceil(orderedReviews.length / importedReviewsPageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedReviews = orderedReviews.slice(
+    (currentPage - 1) * importedReviewsPageSize,
+    currentPage * importedReviewsPageSize,
   );
 
   function getEditDraft(review: SerializedReview): EditDraft {
@@ -177,7 +186,7 @@ export function ImportedReviewModerationList({
       {error ? (
         <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>
       ) : null}
-      {orderedReviews.map((review) => {
+      {paginatedReviews.map((review) => {
         const draft = getEditDraft(review);
         const isEditing = review.id in editDraftById;
         const processing = (processingById[review.id] ?? null) !== null;
@@ -449,6 +458,29 @@ export function ImportedReviewModerationList({
           </article>
         );
       })}
+      {totalPages > 1 ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={currentPage === 1}
+            onClick={() => setPage(Math.max(1, currentPage - 1))}
+          >
+            Назад
+          </Button>
+          <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/62">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={currentPage === totalPages}
+            onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+          >
+            Вперёд
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

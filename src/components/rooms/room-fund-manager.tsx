@@ -3,6 +3,7 @@
 import {
   Bath,
   BedDouble,
+  CalendarDays,
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
@@ -82,6 +83,20 @@ type RoomCardListItem = {
   room: SerializedRoom;
   cardDetails: RoomCardDetails;
   instanceNumber: number | null;
+};
+
+type CalendarSyncImportSource = {
+  id?: string;
+  label: string;
+  importUrl: string;
+  isEnabled: boolean;
+};
+
+type CalendarSyncResponse = {
+  item?: {
+    importSources?: CalendarSyncImportSource[];
+  };
+  error?: string;
 };
 
 const CUSTOM_ROOM_NAME_VALUE = "__custom__";
@@ -214,6 +229,34 @@ function resolvePrimaryBedUnits(room: SerializedRoom, roomMeta: RoomMeta): numbe
 
 function makeLocalId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeCalendarUrlForCompare(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmed);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+function getCalendarSourceLabel(sourceName: string, importUrl: string): string {
+  const normalizedName = sourceName.trim().replace(/\s+/g, " ");
+  if (normalizedName) {
+    return normalizedName.slice(0, 80);
+  }
+
+  try {
+    return new URL(importUrl).hostname.replace(/^www\./i, "").slice(0, 80) || "Внешний календарь";
+  } catch {
+    return "Внешний календарь";
+  }
 }
 
 function createBedRow(type: BedTypeId = DEFAULT_BED_TYPE, count = 1): BedRow {
@@ -413,6 +456,10 @@ export function RoomFundManager({
   const [sharedBathroomLocations, setSharedBathroomLocations] = useState<BathroomLocationId[]>([]);
   const [sharedToiletLocations, setSharedToiletLocations] = useState<BathroomToiletId[]>([]);
   const [isBathroomSectionEnabled, setIsBathroomSectionEnabled] = useState(false);
+  const [calendarSyncName, setCalendarSyncName] = useState("");
+  const [calendarSyncUrl, setCalendarSyncUrl] = useState("");
+  const [isCalendarSyncOpen, setIsCalendarSyncOpen] = useState(false);
+  const [isSavingCalendarSync, setIsSavingCalendarSync] = useState(false);
 
   const roomNameOptions = useMemo(() => {
     const suggestions = roomNameSuggestionsByType[roomType] ?? [defaultRoomMeta.roomName];
@@ -463,7 +510,6 @@ export function RoomFundManager({
         .filter((configuration) => configuration.length > 0),
     [bedSetSummaries],
   );
-  const hasCapacityMismatch = bedSetSummaries.some((set) => set.hasCapacityMismatch);
   const hasBedsConfigured = bedSetSummaries.some((set) => set.totalBeds > 0);
   const minBedCapacityAcrossSets = useMemo(() => {
     const capacities = bedSetSummaries
@@ -550,90 +596,17 @@ export function RoomFundManager({
     Boolean(editingRoomId) &&
     !isCreatingRoom &&
     !isSaving &&
+    !isSavingCalendarSync &&
     isFloorValid &&
     isAreaSqmValid &&
     isRoomLayoutRoomsCountValid;
-  const checklistItems = useMemo<
-    Array<{ id: RoomEditorSectionId; label: string; done: boolean }>
-  >(() => {
-    const roomName = getRoomNameFromState(selectedRoomName, customRoomName);
-    const roomFloor = toIntOrNull(floorInput);
-    const areaSqm = toFloatOrNull(areaSqmInput);
-    const floorIsValid = roomFloor !== null && roomFloor >= 1 && roomFloor <= 99;
-    const areaSqmIsValid = areaSqm !== null && areaSqm >= 5 && areaSqm <= 5000;
-    const roomsCountIsValid =
-      roomLayoutRoomsCount >= 1 && roomLayoutRoomsCount <= MAX_ROOMS_IN_ROOM;
-    const generalSettingsDone = Boolean(
-      roomType && roomName.length > 0 && floorIsValid && areaSqmIsValid && roomsCountIsValid,
-    );
-    const capacityDone =
-      beds >= 1 &&
-      extraBeds >= 0 &&
-      extraBeds <= maxExtraBedsByTotalGuests &&
-      beds + extraBeds <= MAX_TOTAL_GUESTS;
-    const sleepingDone = bedConfiguration.length > 0 && hasBedsConfigured && !hasCapacityMismatch;
-    const additionalBedsDone = hasAdditionalPlaces
-      ? extraBeds === 0 || selectedAdditionalPlaceTypes.length > 0
-      : extraBeds === 0;
-    const hasAnyBathroomSelected = hasPrivateBathroom || hasSharedBathroom;
-    const privateBathroomDone = hasPrivateBathroom
-      ? privateBathroomLocations.length > 0 &&
-        privateToiletLocations.length > 0 &&
-        privateBathroomCount >= 1
-      : false;
-    const sharedBathroomDone = hasSharedBathroom
-      ? sharedBathroomLocations.length > 0 && sharedToiletLocations.length > 0
-      : false;
-    const bathroomDone =
-      hasAnyBathroomSelected &&
-      (!hasPrivateBathroom || privateBathroomDone) &&
-      (!hasSharedBathroom || sharedBathroomDone);
-    // "Фото" can only be completed after first save because media uploader needs a room id.
-    const photoDone = editingRoom ? editingRoom.mediaStats.imageCount >= 3 : false;
-
-    return [
-      { id: "general", label: "Общие настройки", done: generalSettingsDone },
-      { id: "capacity", label: "Вместимость", done: capacityDone },
-      { id: "beds", label: "Спальные места", done: sleepingDone },
-      { id: "extra", label: "Дополнительные спальные места", done: additionalBedsDone },
-      { id: "bathroom", label: "Ванная", done: bathroomDone },
-      { id: "photo", label: "Фото", done: photoDone },
-    ];
-  }, [
-    bedConfiguration.length,
-    hasBedsConfigured,
-    beds,
-    customRoomName,
-    editingRoom,
-    extraBeds,
-    floorInput,
-    maxExtraBedsByTotalGuests,
-    hasAdditionalPlaces,
-    hasCapacityMismatch,
-    hasPrivateBathroom,
-    hasSharedBathroom,
-    privateBathroomCount,
-    privateBathroomLocations.length,
-    privateToiletLocations.length,
-    roomType,
-    selectedAdditionalPlaceTypes.length,
-    selectedRoomName,
-    sharedBathroomLocations.length,
-    sharedToiletLocations.length,
-    areaSqmInput,
-    roomLayoutRoomsCount,
-  ]);
-  const completedChecklistCount = useMemo(
-    () => checklistItems.filter((item) => item.done).length,
-    [checklistItems],
-  );
-  const editorCompletionPercent =
-    (completedChecklistCount / Math.max(1, checklistItems.length)) * 100;
-  const saveRoomLabel = isSaving
-    ? "Сохранение..."
-    : isCreatingRoom
-      ? "Создание..."
-      : "Сохранить изменения";
+  const saveRoomLabel = isSavingCalendarSync
+    ? "Подключаем календарь..."
+    : isSaving
+      ? "Сохранение..."
+      : isCreatingRoom
+        ? "Создание..."
+        : "Сохранить изменения";
 
   const roomsPerPage = isCompactRoomList ? MOBILE_ROOMS_PAGE_SIZE : DESKTOP_ROOMS_PAGE_SIZE;
   const roomCards = useMemo<RoomCardListItem[]>(() => {
@@ -785,6 +758,9 @@ export function RoomFundManager({
     setSharedBathroomLocations([]);
     setSharedToiletLocations([]);
     setIsBathroomSectionEnabled(false);
+    setCalendarSyncName("");
+    setCalendarSyncUrl("");
+    setIsCalendarSyncOpen(false);
     setError("");
   }, []);
 
@@ -850,6 +826,9 @@ export function RoomFundManager({
       setSharedBathroomLocations(meta.sharedBathroomLocations);
       setSharedToiletLocations(meta.sharedToiletLocations);
       setIsBathroomSectionEnabled(meta.hasPrivateBathroom || meta.hasSharedBathroom);
+      setCalendarSyncName("");
+      setCalendarSyncUrl("");
+      setIsCalendarSyncOpen(false);
       setError("");
       scrollToEditor();
     },
@@ -1122,6 +1101,61 @@ export function RoomFundManager({
     return "ON_FLOOR";
   }
 
+  async function attachCalendarSyncToRoom(roomId: string): Promise<string | null> {
+    const importUrl = calendarSyncUrl.trim();
+    if (!importUrl) {
+      return null;
+    }
+
+    setIsSavingCalendarSync(true);
+
+    try {
+      const syncUrl = `/api/properties/${propertyId}/rooms/${roomId}/calendar-sync`;
+      const currentResponse = await fetch(syncUrl, { cache: "no-store" });
+      const currentBody = (await currentResponse.json()) as CalendarSyncResponse;
+
+      if (!currentResponse.ok) {
+        return currentBody.error ?? "не удалось загрузить текущие синхронизации";
+      }
+
+      const sourceLabel = getCalendarSourceLabel(calendarSyncName, importUrl);
+      const normalizedNextUrl = normalizeCalendarUrlForCompare(importUrl);
+      const existingSources = currentBody.item?.importSources ?? [];
+      const importSources = [
+        ...existingSources.filter(
+          (source) => normalizeCalendarUrlForCompare(source.importUrl) !== normalizedNextUrl,
+        ),
+        {
+          label: sourceLabel,
+          importUrl,
+          isEnabled: true,
+        },
+      ];
+
+      const saveResponse = await fetch(syncUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importSources }),
+      });
+      const saveBody = (await saveResponse.json()) as CalendarSyncResponse;
+
+      if (!saveResponse.ok) {
+        return saveBody.error ?? "не удалось сохранить ссылку календаря";
+      }
+
+      setCalendarSyncName("");
+      setCalendarSyncUrl("");
+      setIsCalendarSyncOpen(false);
+
+      await fetch(`${syncUrl}/run`, { method: "POST" }).catch(() => null);
+      return null;
+    } catch {
+      return "не удалось подключить календарь";
+    } finally {
+      setIsSavingCalendarSync(false);
+    }
+  }
+
   async function saveRoom() {
     setError("");
 
@@ -1290,6 +1324,13 @@ export function RoomFundManager({
       const savedRoom = body.item;
 
       setRooms((prev) => prev.map((item) => (item.id === savedRoom.id ? savedRoom : item)));
+      const calendarSyncError = await attachCalendarSyncToRoom(savedRoom.id);
+      if (calendarSyncError) {
+        setError(`Номер сохранён, но синхронизация не подключилась: ${calendarSyncError}.`);
+        await notifyChanged();
+        return;
+      }
+
       closeEditor();
 
       await notifyChanged();
@@ -1465,7 +1506,7 @@ export function RoomFundManager({
 
           {/* Main content */}
           <div className="p-4 pb-28 sm:p-5 sm:pb-5">
-            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="grid min-w-0 gap-5">
               <div className="min-w-0 space-y-4">
                 {/* General settings */}
                 <div
@@ -2134,6 +2175,59 @@ export function RoomFundManager({
                   ) : null}
                 </div>
 
+                {/* Calendar sync */}
+                <details
+                  open={isCalendarSyncOpen}
+                  onToggle={(event) => setIsCalendarSyncOpen(event.currentTarget.open)}
+                  className="group min-w-0 scroll-mt-32 rounded-2xl border border-primary/16 bg-[linear-gradient(135deg,rgba(240,253,250,0.78),rgba(255,255,255,0.98)_52%,rgba(239,232,222,0.72))] p-3 shadow-sm sm:p-4"
+                >
+                  <summary className="flex cursor-pointer list-none flex-col gap-3 outline-none focus-visible:ring-2 focus-visible:ring-primary/25 sm:flex-row sm:items-start sm:justify-between [&::-webkit-details-marker]:hidden">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/65">
+                        <span className="inline-flex items-center gap-1.5">
+                          <AppIcon icon={CalendarDays} className="h-4 w-4" />
+                          Синхронизация шахматки
+                        </span>
+                      </p>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-olive/68">
+                        Необязательно: добавьте ссылку iCal с внешней площадки. После сохранения
+                        номера календарь подключится к шахматке, а первый импорт запустится сразу.
+                      </p>
+                    </div>
+                    <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-primary/16 bg-white/82 px-3 py-1 text-xs font-semibold text-primary">
+                      Можно заполнить позже
+                      <AppIcon
+                        icon={ChevronDown}
+                        className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
+                      />
+                    </span>
+                  </summary>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(160px,0.7fr)_minmax(0,1.3fr)]">
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="text-sm font-semibold text-olive">Название сайта</span>
+                      <Input
+                        value={calendarSyncName}
+                        onChange={(event) => setCalendarSyncName(event.target.value)}
+                        placeholder="Например, Booking.com"
+                        className="text-base"
+                        disabled={isSaving || isSavingCalendarSync}
+                      />
+                    </label>
+
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="text-sm font-semibold text-olive">Ссылка календаря</span>
+                      <Input
+                        value={calendarSyncUrl}
+                        onChange={(event) => setCalendarSyncUrl(event.target.value)}
+                        placeholder="https://example.ru/calendar/ical/room.ics"
+                        className="font-mono text-sm"
+                        disabled={isSaving || isSavingCalendarSync}
+                      />
+                    </label>
+                  </div>
+                </details>
+
                 {/* Photo */}
                 {editingRoom ? (
                   <details
@@ -2196,45 +2290,6 @@ export function RoomFundManager({
                   </Button>
                 </div>
               </div>
-
-              {/* Checklist sidebar */}
-              <aside className="hidden h-auto w-full rounded-2xl border border-olive/12 bg-cream/40 p-3 sm:block xl:sticky xl:top-20 xl:w-[220px]">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-olive/50">
-                    Чек-лист
-                  </p>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-olive/60">
-                    {completedChecklistCount}/{checklistItems.length}
-                  </span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-olive/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-sage to-primary transition-all duration-500"
-                    style={{ width: `${editorCompletionPercent}%` }}
-                  />
-                </div>
-                <ul className="mt-3 space-y-1">
-                  {checklistItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className={cn(
-                        "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm leading-snug transition",
-                        item.done ? "bg-green-50 text-olive" : "bg-white text-olive",
-                      )}
-                    >
-                      <span>{item.label}</span>
-                      <span
-                        className={cn(
-                          "ml-2 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none",
-                          item.done ? "bg-green-500 text-white" : "bg-olive/10 text-olive/40",
-                        )}
-                      >
-                        {item.done ? "✓" : "·"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </aside>
             </div>
 
             <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 mt-5 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:-mx-5 sm:px-5 sm:hidden">
@@ -2250,9 +2305,6 @@ export function RoomFundManager({
                     Сохраните изменения или закройте форму
                   </p>
                 </div>
-                <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                  {completedChecklistCount}/{checklistItems.length}
-                </span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">

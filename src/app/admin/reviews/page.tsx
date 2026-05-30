@@ -39,7 +39,7 @@ type AdminImportedReviewsPageProps = {
 
 const statusTabs = [
   { id: ReviewStatus.PENDING, label: "На проверке" },
-  { id: ReviewStatus.ACTIVE, label: "Видимые" },
+  { id: ReviewStatus.ACTIVE, label: "Опубликованные" },
   { id: ReviewStatus.DELETED, label: "Скрытые" },
   { id: ReviewStatus.DUPLICATE, label: "Дубли" },
   { id: "ALL", label: "Все" },
@@ -86,7 +86,36 @@ function buildStatusHref(
   return search ? `/admin/reviews?${search}` : "/admin/reviews";
 }
 
-type PickerItemDraft = Omit<ReviewEntityPickerItem, "number">;
+type PickerItemDraft = ReviewEntityPickerItem & {
+  stableSortKey: string;
+};
+
+function getStableReviewEntityNumber(
+  publicId: number | null | undefined,
+  entityType: AdminReviewEntityType,
+  id: string,
+): number {
+  if (publicId && publicId > 0) {
+    return publicId;
+  }
+
+  let hash = 0;
+  for (const character of `${entityType}:${id}`) {
+    hash = (hash * 31 + character.charCodeAt(0)) % 900000;
+  }
+
+  return hash + 100000;
+}
+
+function getStableReviewEntitySortKey(
+  publicId: number | null | undefined,
+  entityType: AdminReviewEntityType,
+  id: string,
+): string {
+  const number = getStableReviewEntityNumber(publicId, entityType, id);
+
+  return `${entityType}:${String(number).padStart(8, "0")}:${id}`;
+}
 
 export default async function AdminImportedReviewsPage({
   searchParams,
@@ -135,6 +164,7 @@ export default async function AdminImportedReviewsPage({
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         select: {
           id: true,
+          publicId: true,
           name: true,
           locationName: true,
           media: {
@@ -160,6 +190,7 @@ export default async function AdminImportedReviewsPage({
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         select: {
           id: true,
+          publicId: true,
           title: true,
           locationName: true,
           offerType: true,
@@ -175,6 +206,7 @@ export default async function AdminImportedReviewsPage({
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         select: {
           id: true,
+          publicId: true,
           title: true,
           locationName: true,
           photoUrls: true,
@@ -192,40 +224,49 @@ export default async function AdminImportedReviewsPage({
       (property): PickerItemDraft => ({
         entityType: "property",
         id: property.id,
+        number: getStableReviewEntityNumber(property.publicId, "property", property.id),
         name: property.name?.trim() || "Объект без названия",
         locationName: property.locationName?.trim() || "Город не указан",
         previewUrl: property.media[0]?.url ?? null,
         badgeLabel: "Объект",
         adminHref: `/admin/objects/${property.id}/external-reviews`,
+        stableSortKey: getStableReviewEntitySortKey(property.publicId, "property", property.id),
       }),
     ),
     ...publishedExcursions.map(
       (excursion): PickerItemDraft => ({
         entityType: "excursion",
         id: excursion.id,
+        number: getStableReviewEntityNumber(excursion.publicId, "excursion", excursion.id),
         name: excursion.title?.trim() || "Программа без названия",
         locationName: excursion.locationName?.trim() || "Город не указан",
         previewUrl: excursion.photoUrls[0] ?? null,
         badgeLabel: excursion.offerType === ExcursionOfferType.TOUR ? "Тур" : "Экскурсия",
         adminHref: `/admin/excursions/${excursion.id}/external-reviews`,
+        stableSortKey: getStableReviewEntitySortKey(excursion.publicId, "excursion", excursion.id),
       }),
     ),
     ...publishedTransfers.map(
       (transfer): PickerItemDraft => ({
         entityType: "transfer",
         id: transfer.id,
+        number: getStableReviewEntityNumber(transfer.publicId, "transfer", transfer.id),
         name: transfer.title?.trim() || "Трансфер без названия",
         locationName: transfer.locationName?.trim() || "Город не указан",
         previewUrl: transfer.photoUrls[0] ?? null,
         badgeLabel: "Трансфер",
         adminHref: `/admin/transfers/${transfer.id}/external-reviews`,
+        stableSortKey: getStableReviewEntitySortKey(transfer.publicId, "transfer", transfer.id),
       }),
     ),
   ];
-  const pickerItems: ReviewEntityPickerItem[] = pickerDrafts.map((item, index) => ({
-    ...item,
-    number: index + 1,
-  }));
+  const pickerItems: ReviewEntityPickerItem[] = pickerDrafts
+    .sort((left, right) => left.stableSortKey.localeCompare(right.stableSortKey))
+    .map((draft) => {
+      const { stableSortKey, ...item } = draft;
+      void stableSortKey;
+      return item;
+    });
   const selectedEntity =
     pickerItems.find(
       (item) => item.entityType === requestedEntityType && item.id === requestedEntityId,
@@ -290,7 +331,7 @@ export default async function AdminImportedReviewsPage({
           schemaAvailable={selectedEntitySchemaAvailable}
           canCreate
           title={`Отзывы: ${selectedEntityTitle}`}
-          description="Загрузите JSON, проверьте распознанные отзывы и управляйте каждым отзывом отдельно. Видимые отзывы сразу попадают в выбранную публичную карточку."
+          description="Загрузите JSON, проверьте распознанные отзывы и управляйте каждым отзывом отдельно. Опубликованные отзывы сразу попадают в выбранную публичную карточку."
         />
       ) : (
         <AdminNotice tone="info">
@@ -298,14 +339,10 @@ export default async function AdminImportedReviewsPage({
         </AdminNotice>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-3">
         <AdminStatCard
           label="На проверке"
           value={importedOverview.countByStatus.get(ReviewStatus.PENDING) ?? 0}
-        />
-        <AdminStatCard
-          label="Видимые"
-          value={importedOverview.countByStatus.get(ReviewStatus.ACTIVE) ?? 0}
         />
         <AdminStatCard
           label="Скрытые"
@@ -315,7 +352,6 @@ export default async function AdminImportedReviewsPage({
           label="Дубли"
           value={importedOverview.countByStatus.get(ReviewStatus.DUPLICATE) ?? 0}
         />
-        <AdminStatCard label="Всего" value={importedOverview.totalCount} />
       </div>
 
       <AdminPanel

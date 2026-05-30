@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExcursionOfferType, ExcursionStatus } from "@prisma/client";
 import { Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminSoftDeleteAction } from "@/components/admin/admin-soft-delete-action";
 import { ListingStatsButton } from "@/components/statistics/listing-stats-button";
@@ -13,6 +14,7 @@ import {
   AdminPillLink,
   adminInputClass,
 } from "@/components/admin/admin-ui";
+import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { purgeExpiredDeletedExcursions } from "@/lib/admin-entity-lifecycle";
 import {
   isExcursionSoftDeleteAvailable,
@@ -32,6 +34,7 @@ type Props = {
     status?: string;
     locationId?: string;
     q?: string;
+    page?: string;
   }>;
 };
 
@@ -56,13 +59,11 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
   const selectedStatus = filters.status?.trim() ?? "";
   const selectedLocationId = filters.locationId?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
+  const requestedPage = parseAdminPageParam(filters.page);
 
   await purgeExpiredDeletedExcursions(db, new Date());
   const [isExcursionVisibilityAvailable, isExcursionSoftDeleteControlsAvailable] =
-    await Promise.all([
-      isExcursionVisibilityControlAvailable(),
-      isExcursionSoftDeleteAvailable(),
-    ]);
+    await Promise.all([isExcursionVisibilityControlAvailable(), isExcursionSoftDeleteAvailable()]);
   const excursionVisibilityUnavailableReason = isExcursionVisibilityAvailable
     ? null
     : "Переключение видимости недоступно, пока база данных не обновлена до миграции публикации.";
@@ -170,12 +171,16 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
     const status = overrides.status ?? selectedStatus;
     const locationId = overrides.locationId ?? selectedLocationId;
     const nextQuery = overrides.q ?? query;
+    const page = overrides.page ?? "";
     if (status) params.set("status", status);
     if (locationId) params.set("locationId", locationId);
     if (nextQuery) params.set("q", nextQuery);
+    if (page && page !== "1") params.set("page", page);
     const search = params.toString();
     return search ? `/admin/excursions?${search}` : "/admin/excursions";
   };
+  const pagination = paginateAdminItems(items, requestedPage);
+  const paginatedItems = pagination.items;
 
   return (
     <div className="space-y-6">
@@ -276,7 +281,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
         />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => {
+          {paginatedItems.map((item) => {
             const isEmptyDraft =
               item.status === ExcursionStatus.DRAFT && isExcursionEmptyDraft(item);
             const cleanupAt = isEmptyDraft ? getEmptyDraftExpiresAt(item.updatedAt) : null;
@@ -332,9 +337,7 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
                 <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-6">
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Владелец</dt>
-                    <dd className="font-medium text-olive">
-                      {item.owner.firstName}
-                    </dd>
+                    <dd className="font-medium text-olive">{item.owner.firstName}</dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Локация</dt>
@@ -344,7 +347,9 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Категория</dt>
-                    <dd className="font-medium text-olive">{item.category?.name ?? "Не указана"}</dd>
+                    <dd className="font-medium text-olive">
+                      {item.category?.name ?? "Не указана"}
+                    </dd>
                   </div>
                   <div className="rounded-2xl bg-cream/80 px-3 py-3">
                     <dt className="text-olive/50">Публикация</dt>
@@ -476,6 +481,11 @@ export default async function AdminExcursionsPage({ searchParams }: Props) {
               </article>
             );
           })}
+          <AdminPagination
+            pagination={pagination}
+            hrefForPage={(page) => buildFilterLink({ page: String(page) })}
+            label="карточек"
+          />
         </div>
       )}
     </div>
