@@ -87,7 +87,7 @@ export default async function AdminObjectRoomCategoriesPage({
     : null;
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
       <ObjectSectionNav
         propertyId={property.id}
         activeSection="room-categories"
