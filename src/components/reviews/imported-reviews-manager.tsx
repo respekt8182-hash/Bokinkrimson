@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowUpDown,
   Check,
   ChevronDown,
   ChevronUp,
@@ -13,6 +14,7 @@ import {
   ListChecks,
   Pencil,
   Plus,
+  Search,
   ShieldCheck,
   Star,
   Trash2,
@@ -37,6 +39,14 @@ import type { SerializedReview } from "@/lib/reviews";
 type EntityType = "property" | "excursion" | "transfer";
 type Mode = "owner" | "admin";
 type ActiveTab = "queue" | "manual" | "json" | "history";
+type ImportedReviewSort =
+  | "created_desc"
+  | "created_asc"
+  | "reviewed_desc"
+  | "reviewed_asc"
+  | "rating_desc"
+  | "rating_asc"
+  | "author_asc";
 
 type ImportedReviewsManagerProps = {
   entityType: EntityType;
@@ -112,6 +122,15 @@ type JsonReviewDraft = {
 const ratingOptions = ["", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1", "0.5"];
 const reviewPreviewLength = 220;
 const importedManagerPageSize = 10;
+const importedReviewSortOptions: Array<{ value: ImportedReviewSort; label: string }> = [
+  { value: "created_desc", label: "Сначала добавленные" },
+  { value: "created_asc", label: "Сначала старые добавления" },
+  { value: "reviewed_desc", label: "Дата отзыва: новые" },
+  { value: "reviewed_asc", label: "Дата отзыва: старые" },
+  { value: "rating_desc", label: "Рейтинг выше" },
+  { value: "rating_asc", label: "Рейтинг ниже" },
+  { value: "author_asc", label: "Автор А-Я" },
+];
 const jsonImportStatusOptions = [
   { value: "ACTIVE", label: "\u0412\u0438\u0434\u0438\u043c\u044b\u0435" },
   { value: "DELETED", label: "\u0421\u043a\u0440\u044b\u0442\u044b\u0435" },
@@ -266,6 +285,77 @@ function hasHiddenText(text: string): boolean {
   return text.trim().length > reviewPreviewLength;
 }
 
+function getReviewTimestamp(value: string | null): number {
+  const timestamp = Date.parse(value ?? "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getReviewSortDate(review: SerializedReview): number {
+  return getReviewTimestamp(review.reviewedAt) || getReviewTimestamp(review.createdAt);
+}
+
+function compareReviewText(left: string | null | undefined, right: string | null | undefined) {
+  return (left?.trim() || "").localeCompare(right?.trim() || "", "ru-RU", {
+    sensitivity: "base",
+  });
+}
+
+function sortImportedReviews(items: SerializedReview[], sort: ImportedReviewSort) {
+  return [...items].sort((left, right) => {
+    const createdTieBreaker =
+      getReviewTimestamp(right.createdAt) - getReviewTimestamp(left.createdAt);
+
+    if (sort === "created_asc") {
+      return getReviewTimestamp(left.createdAt) - getReviewTimestamp(right.createdAt);
+    }
+
+    if (sort === "reviewed_desc") {
+      return getReviewSortDate(right) - getReviewSortDate(left) || createdTieBreaker;
+    }
+
+    if (sort === "reviewed_asc") {
+      return getReviewSortDate(left) - getReviewSortDate(right) || createdTieBreaker;
+    }
+
+    if (sort === "rating_desc") {
+      return right.rating - left.rating || createdTieBreaker;
+    }
+
+    if (sort === "rating_asc") {
+      return left.rating - right.rating || createdTieBreaker;
+    }
+
+    if (sort === "author_asc") {
+      return compareReviewText(left.userName, right.userName) || createdTieBreaker;
+    }
+
+    return createdTieBreaker;
+  });
+}
+
+function getReviewSearchText(review: SerializedReview): string {
+  return [
+    review.userName,
+    review.importedAuthorName,
+    review.externalSourceName,
+    review.guestCity,
+    review.text,
+    review.reviewedAt ? formatDate(review.reviewedAt) : "",
+    review.createdAt ? formatDateTime(review.createdAt) : "",
+    review.rating >= 0.5 ? review.rating.toFixed(1) : "",
+    statusMeta(review.status).label,
+    getReviewCategoryLabel(review.reviewCategory),
+    review.reviewHighlight,
+    ...review.reviewCategoryMatches.flatMap((match) => [
+      getReviewCategoryLabel(match.category),
+      ...match.highlights,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("ru-RU");
+}
+
 function getClientPage<T>(items: T[], page: number, pageSize: number) {
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const currentPage = Math.min(Math.max(page, 1), totalPages);
@@ -344,6 +434,8 @@ export function ImportedReviewsManager({
   const [jsonDraftPage, setJsonDraftPage] = useState(1);
   const [queuePage, setQueuePage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
+  const [reviewSearchQuery, setReviewSearchQuery] = useState("");
+  const [reviewSort, setReviewSort] = useState<ImportedReviewSort>("created_desc");
   const [ratingById, setRatingById] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       initialReviews.map((review) => [
@@ -366,23 +458,43 @@ export function ImportedReviewsManager({
   const canModerateReviews = mode === "admin";
   const createDisabled = !schemaAvailable || !canCreate;
   const entityCopy = getEntityCopy(entityType);
+  const normalizedReviewSearchQuery = reviewSearchQuery.trim().toLocaleLowerCase("ru-RU");
 
-  const orderedItems = useMemo(
-    () =>
-      [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+  const queuedItemsTotal = useMemo(
+    () => items.filter((review) => review.status === "PENDING").length,
     [items],
   );
+  const historyItemsTotal = items.length - queuedItemsTotal;
+  const visibleItems = useMemo(() => {
+    const filteredItems = normalizedReviewSearchQuery
+      ? items.filter((review) => getReviewSearchText(review).includes(normalizedReviewSearchQuery))
+      : items;
+
+    return sortImportedReviews(filteredItems, reviewSort);
+  }, [items, normalizedReviewSearchQuery, reviewSort]);
   const queuedItems = useMemo(
-    () => orderedItems.filter((review) => review.status === "PENDING"),
-    [orderedItems],
+    () => visibleItems.filter((review) => review.status === "PENDING"),
+    [visibleItems],
   );
   const historyItems = useMemo(
-    () => orderedItems.filter((review) => review.status !== "PENDING"),
-    [orderedItems],
+    () => visibleItems.filter((review) => review.status !== "PENDING"),
+    [visibleItems],
   );
   const jsonDraftPagination = getClientPage(jsonDrafts, jsonDraftPage, importedManagerPageSize);
   const queuePagination = getClientPage(queuedItems, queuePage, importedManagerPageSize);
   const historyPagination = getClientPage(historyItems, historyPage, importedManagerPageSize);
+
+  function updateReviewSearchQuery(value: string) {
+    setReviewSearchQuery(value);
+    setQueuePage(1);
+    setHistoryPage(1);
+  }
+
+  function updateReviewSort(value: ImportedReviewSort) {
+    setReviewSort(value);
+    setQueuePage(1);
+    setHistoryPage(1);
+  }
 
   function applyReviewItem(review: SerializedReview) {
     setItems((previous) => mergeById(previous, review));
@@ -774,6 +886,68 @@ export function ImportedReviewsManager({
     );
   }
 
+  function renderReviewListControls(totalCount: number, visibleCount: number) {
+    if (totalCount === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-3 rounded-2xl border border-olive/10 bg-[#fcfbf7] p-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
+          <label className="grid gap-1.5 text-sm font-semibold text-olive">
+            Поиск по отзывам
+            <div className="relative">
+              <AppIcon
+                icon={Search}
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-olive/38"
+              />
+              <Input
+                value={reviewSearchQuery}
+                onChange={(event) => updateReviewSearchQuery(event.target.value)}
+                placeholder="Автор, город, источник или текст"
+                className="pl-9 pr-10"
+              />
+              {reviewSearchQuery ? (
+                <button
+                  type="button"
+                  aria-label="Очистить поиск"
+                  onClick={() => updateReviewSearchQuery("")}
+                  className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-olive/46 transition hover:bg-olive/8 hover:text-olive"
+                >
+                  <AppIcon icon={X} className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold text-olive">
+            Сортировка
+            <div className="relative">
+              <AppIcon
+                icon={ArrowUpDown}
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-olive/38"
+              />
+              <select
+                value={reviewSort}
+                onChange={(event) => updateReviewSort(event.target.value as ImportedReviewSort)}
+                className="h-11 w-full rounded-xl border border-olive/12 bg-white py-2 pl-9 pr-3 text-sm text-olive outline-none transition focus:border-terra focus:ring-2 focus:ring-terra/20"
+              >
+                {importedReviewSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </label>
+        </div>
+        <p className="mt-2 text-xs font-medium text-olive/58">
+          Показано {visibleCount} из {totalCount}
+          {normalizedReviewSearchQuery ? ` · запрос: ${reviewSearchQuery.trim()}` : ""}
+        </p>
+      </div>
+    );
+  }
+
   function renderEditableReview(review: SerializedReview) {
     const draft = getDraft(review);
     const isEditing = review.id in editDraftById;
@@ -896,7 +1070,7 @@ export function ImportedReviewsManager({
           <p className="mt-2 max-w-3xl text-sm leading-6 text-olive/68">{description}</p>
         </div>
         <span className="inline-flex self-start rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-xs font-semibold text-primary">
-          {queuedItems.length} на модерации
+          {queuedItemsTotal} на модерации
         </span>
       </div>
 
@@ -1187,9 +1361,14 @@ export function ImportedReviewsManager({
       {activeTab === "queue" ? (
         <div className="mt-6">
           <h3 className="text-base font-semibold text-olive">Отзывы на модерации</h3>
-          {queuedItems.length === 0 ? (
+          {renderReviewListControls(queuedItemsTotal, queuedItems.length)}
+          {queuedItemsTotal === 0 ? (
             <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
               Сейчас нет отзывов на модерации.
+            </div>
+          ) : queuedItems.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
+              По текущему поиску отзывов на модерации не найдено.
             </div>
           ) : (
             <div className="mt-3 space-y-3">
@@ -1462,9 +1641,14 @@ export function ImportedReviewsManager({
       {activeTab === "history" ? (
         <div className="mt-6">
           <h3 className="text-base font-semibold text-olive">История добавленных отзывов</h3>
-          {historyItems.length === 0 ? (
+          {renderReviewListControls(historyItemsTotal, historyItems.length)}
+          {historyItemsTotal === 0 ? (
             <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
               Добавленные отзывы появятся здесь.
+            </div>
+          ) : historyItems.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-dashed border-olive/16 bg-white p-5 text-sm text-olive/62">
+              По текущему поиску добавленных отзывов не найдено.
             </div>
           ) : (
             <div className="mt-3 space-y-3">
