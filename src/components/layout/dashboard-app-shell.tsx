@@ -144,6 +144,10 @@ function shouldShowDashboardBottomNav(pathname: string) {
   );
 }
 
+function shouldUseWideDashboardFrame(pathname: string) {
+  return /^\/dashboard\/objects\/[^/?#]+\/room-categories(?:[/?#]|$)/.test(pathname);
+}
+
 function Icon({ name, className }: { name: IconName; className?: string }) {
   const iconByName: Record<IconName, LucideIcon> = {
     home: House,
@@ -198,6 +202,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
 
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
+  const useWideFrame = shouldUseWideDashboardFrame(pathname);
   const displayName = formatPublicPersonName(user, "Пользователь");
 
   function closeDrawer() {
@@ -418,7 +423,8 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
       <div className="pt-16">
         <div
           className={cn(
-            "mx-auto w-full max-w-6xl px-4 py-5 md:px-6",
+            "mx-auto w-full px-4 py-5 md:px-6",
+            useWideFrame ? "max-w-[1380px]" : "max-w-6xl",
             showBottomNav ? "pb-[calc(env(safe-area-inset-bottom,0px)+6.75rem)] lg:pb-5" : "",
           )}
         >

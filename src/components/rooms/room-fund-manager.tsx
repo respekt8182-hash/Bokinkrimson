@@ -2457,7 +2457,7 @@ export function RoomFundManager({
                       openRoomCard(room);
                     }
                   }}
-                  className="group relative min-h-[180px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 sm:min-h-[180px] sm:max-w-[480px]"
+                  className="group relative min-h-[180px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 sm:min-h-[180px]"
                 >
                   <div
                     className="absolute right-3 top-3 z-20"

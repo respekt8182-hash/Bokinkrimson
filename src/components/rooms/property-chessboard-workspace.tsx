@@ -17,6 +17,7 @@ import {
   type LucideIcon,
   Plus,
   RefreshCw,
+  CloudUpload,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -132,6 +133,28 @@ type PriceFormState = {
   minNightsInput: string;
   extraBedPriceInput: string;
   editingPriceId: string | null;
+};
+
+type PriceImportPeriodTemplate = {
+  dateFrom: string;
+  dateTo: string;
+};
+
+type PriceImportEntryDraft = {
+  room: SerializedChessboardRoom;
+  dateFrom: string;
+  dateTo: string;
+  price: number;
+  currency: string;
+};
+
+type PriceImportEntry = PriceImportEntryDraft & {
+  existingPriceId: string | null;
+};
+
+type PriceImportNormalizationResult = {
+  entries: PriceImportEntry[];
+  skippedNonPerRoomCount: number;
 };
 
 type DuplicatePricesFormState = {
@@ -753,6 +776,553 @@ function readResponseError(body: unknown, fallback: string): string {
   return fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readField(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function readStringField(record: Record<string, unknown>, keys: string[]): string | null {
+  const value = readField(record, keys);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function readArrayField(record: Record<string, unknown>, keys: string[]): unknown[] | null {
+  const value = readField(record, keys);
+  return Array.isArray(value) ? value : null;
+}
+
+function parseIntegerLike(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return null;
+}
+
+function readIntegerField(record: Record<string, unknown>, keys: string[]): number | null {
+  return parseIntegerLike(readField(record, keys));
+}
+
+function normalizeImportText(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+}
+
+function normalizeRoomImportTitle(value: string): string {
+  return normalizeImportText(value)
+    .replace(/[«»"']/g, "")
+    .replace(/[.,;:()[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseImportYear(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value >= 2000 && value <= 2100 ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (/^\d{4}$/.test(trimmed)) {
+    const year = Number.parseInt(trimmed, 10);
+    return year >= 2000 && year <= 2100 ? year : null;
+  }
+  if (/^\d{2}$/.test(trimmed)) {
+    return 2000 + Number.parseInt(trimmed, 10);
+  }
+  return null;
+}
+
+function parseImportDate(value: unknown, fallbackYear: number | null): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/\.$/, "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return parseIsoDate(normalized) ? normalized : null;
+  }
+
+  const match = normalized.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2}|\d{4}))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const day = Number.parseInt(match[1] ?? "", 10);
+  const month = Number.parseInt(match[2] ?? "", 10);
+  const parsedYear = match[3] ? parseImportYear(match[3]) : fallbackYear;
+  if (!parsedYear) {
+    return null;
+  }
+
+  const iso = `${parsedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return parseIsoDate(iso) ? iso : null;
+}
+
+function parseImportDateRangeText(
+  value: string,
+  fallbackYear: number | null,
+): PriceImportPeriodTemplate | null {
+  const datePattern = String.raw`(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)`;
+  const match = value
+    .trim()
+    .match(new RegExp(String.raw`^\s*${datePattern}\s*[-–—]\s*${datePattern}\s*$`));
+  if (!match) {
+    return null;
+  }
+
+  const dateFrom = parseImportDate(match[1], fallbackYear);
+  const dateTo = parseImportDate(match[2], fallbackYear);
+  return dateFrom && dateTo ? { dateFrom, dateTo } : null;
+}
+
+function readImportPeriodTemplate(
+  record: Record<string, unknown>,
+  fallbackYear: number | null,
+): PriceImportPeriodTemplate | null {
+  const dateFrom = parseImportDate(
+    readField(record, ["dateFrom", "from", "start", "startDate", "dateStart"]),
+    fallbackYear,
+  );
+  const dateTo = parseImportDate(
+    readField(record, ["dateTo", "to", "end", "endDate", "dateEnd", "until"]),
+    fallbackYear,
+  );
+
+  if (dateFrom && dateTo) {
+    return { dateFrom, dateTo };
+  }
+
+  const rangeText = readStringField(record, [
+    "period",
+    "range",
+    "dateRange",
+    "dates",
+    "label",
+  ]);
+  return rangeText ? parseImportDateRangeText(rangeText, fallbackYear) : null;
+}
+
+function hasImportPeriodFields(record: Record<string, unknown>): boolean {
+  return Boolean(
+    readField(record, ["dateFrom", "from", "start", "startDate", "dateStart"]) !== undefined ||
+      readField(record, ["dateTo", "to", "end", "endDate", "dateEnd", "until"]) !== undefined ||
+      readStringField(record, ["period", "range", "dateRange", "dates", "label"]),
+  );
+}
+
+function buildImportPeriodTemplates(
+  root: Record<string, unknown>,
+  fallbackYear: number | null,
+): PriceImportPeriodTemplate[] {
+  const rawPeriods = readArrayField(root, ["periods", "columns", "dateRanges", "ranges"]);
+  if (!rawPeriods) {
+    return [];
+  }
+
+  return rawPeriods.map((value, index) => {
+    const template =
+      typeof value === "string"
+        ? parseImportDateRangeText(value, fallbackYear)
+        : isRecord(value)
+          ? readImportPeriodTemplate(value, fallbackYear)
+          : null;
+
+    if (!template) {
+      throw new Error(`Проверьте период №${index + 1}: укажите даты начала и окончания`);
+    }
+    return template;
+  });
+}
+
+function readImportPriceField(
+  record: Record<string, unknown>,
+): { found: boolean; value: unknown } {
+  const keys = ["price", "amount", "value", "nightPrice", "pricePerNight"];
+  for (const key of keys) {
+    if (key in record) {
+      return { found: true, value: record[key] };
+    }
+  }
+  return { found: false, value: undefined };
+}
+
+function parseImportPrice(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return Number.NaN;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || /^[-–—]+$/.test(trimmed)) {
+    return null;
+  }
+
+  let numericText = trimmed.replace(/\s+/g, "").replace(/[^\d.,-]/g, "");
+  if (numericText.length === 0) {
+    return Number.NaN;
+  }
+
+  if (/^-?\d{1,3}([.,]\d{3})+$/.test(numericText)) {
+    numericText = numericText.replace(/[.,]/g, "");
+  } else if (numericText.includes(",") && !numericText.includes(".")) {
+    numericText = numericText.replace(",", ".");
+  } else if (numericText.includes(",") && numericText.includes(".")) {
+    numericText = numericText.replace(/,/g, "");
+  }
+
+  return Number(numericText);
+}
+
+function normalizeImportCurrency(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toUpperCase()
+    : "RUB";
+}
+
+function isPerRoomImportPriceType(value: string | null): boolean {
+  if (!value) {
+    return true;
+  }
+
+  const normalized = normalizeImportText(value);
+  if (
+    normalized.includes("per_person") ||
+    normalized.includes("per person") ||
+    normalized.includes("за человека") ||
+    normalized.includes("чел") ||
+    normalized.includes("доп") ||
+    normalized.includes("extra")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function resolvePriceImportRoom(
+  record: Record<string, unknown>,
+  orderedRooms: SerializedChessboardRoom[],
+): SerializedChessboardRoom {
+  const roomId = readStringField(record, ["roomId", "id"]);
+  if (roomId) {
+    const room = orderedRooms.find((item) => item.id === roomId);
+    if (room) {
+      return room;
+    }
+  }
+
+  const explicitRoomIndex = readIntegerField(record, [
+    "roomIndex",
+    "rowIndex",
+    "roomNumber",
+    "number",
+    "position",
+    "order",
+  ]);
+  if (explicitRoomIndex !== null) {
+    const room = orderedRooms[explicitRoomIndex - 1];
+    if (!room) {
+      throw new Error(`Номер с позицией ${explicitRoomIndex} не найден в текущей шахматке`);
+    }
+    return room;
+  }
+
+  const roomTitle = readStringField(record, ["roomTitle", "roomName", "title", "name", "room"]);
+  if (roomTitle) {
+    const normalizedTitle = normalizeRoomImportTitle(roomTitle);
+    const exactMatches = orderedRooms.filter(
+      (room) => normalizeRoomImportTitle(room.title) === normalizedTitle,
+    );
+    if (exactMatches.length === 1 && exactMatches[0]) {
+      return exactMatches[0];
+    }
+    if (exactMatches.length > 1) {
+      throw new Error(`Название номера «${roomTitle}» встречается в шахматке несколько раз`);
+    }
+
+    const looseMatches =
+      normalizedTitle.length >= 4
+        ? orderedRooms.filter((room) => {
+            const normalizedRoomTitle = normalizeRoomImportTitle(room.title);
+            return (
+              normalizedRoomTitle.includes(normalizedTitle) ||
+              normalizedTitle.includes(normalizedRoomTitle)
+            );
+          })
+        : [];
+    if (looseMatches.length === 1 && looseMatches[0]) {
+      return looseMatches[0];
+    }
+  }
+
+  const numericRoomValue = parseIntegerLike(readField(record, ["room"]));
+  if (numericRoomValue !== null) {
+    const room = orderedRooms[numericRoomValue - 1];
+    if (room) {
+      return room;
+    }
+  }
+
+  throw new Error(
+    roomTitle
+      ? `Номер «${roomTitle}» не найден в текущей шахматке`
+      : "Укажите roomIndex, roomId или roomTitle для каждой строки цен",
+  );
+}
+
+function isoDateRangesOverlap(
+  leftFrom: string,
+  leftTo: string,
+  rightFrom: string,
+  rightTo: string,
+): boolean {
+  return compareIsoDates(leftFrom, rightTo) <= 0 && compareIsoDates(rightFrom, leftTo) <= 0;
+}
+
+function assertNoImportRoomOverlaps(entries: PriceImportEntryDraft[]) {
+  const byRoomId = new Map<string, PriceImportEntryDraft[]>();
+
+  for (const entry of entries) {
+    const roomEntries = byRoomId.get(entry.room.id) ?? [];
+    roomEntries.push(entry);
+    byRoomId.set(entry.room.id, roomEntries);
+  }
+
+  for (const roomEntries of byRoomId.values()) {
+    const sortedEntries = [...roomEntries].sort((left, right) => {
+      const fromCompare = compareIsoDates(left.dateFrom, right.dateFrom);
+      return fromCompare !== 0 ? fromCompare : compareIsoDates(left.dateTo, right.dateTo);
+    });
+
+    for (let index = 1; index < sortedEntries.length; index += 1) {
+      const previous = sortedEntries[index - 1];
+      const current = sortedEntries[index];
+      if (!previous || !current) {
+        continue;
+      }
+
+      if (isoDateRangesOverlap(previous.dateFrom, previous.dateTo, current.dateFrom, current.dateTo)) {
+        throw new Error(
+          `${current.room.title}: периоды ${formatDateRangeLabel(
+            previous.dateFrom,
+            previous.dateTo,
+          )} и ${formatDateRangeLabel(current.dateFrom, current.dateTo)} пересекаются в JSON`,
+        );
+      }
+    }
+  }
+}
+
+function attachExistingPriceActions(entries: PriceImportEntryDraft[]): PriceImportEntry[] {
+  return entries.map((entry) => {
+    const exactExistingPrice =
+      entry.room.prices.find(
+        (price) => price.dateFrom === entry.dateFrom && price.dateTo === entry.dateTo,
+      ) ?? null;
+    const overlappingPrice =
+      entry.room.prices.find(
+        (price) =>
+          price.id !== exactExistingPrice?.id &&
+          isoDateRangesOverlap(entry.dateFrom, entry.dateTo, price.dateFrom, price.dateTo),
+      ) ?? null;
+
+    if (overlappingPrice) {
+      throw new Error(
+        `${entry.room.title}, ${formatDateRangeLabel(
+          entry.dateFrom,
+          entry.dateTo,
+        )}: пересекается с существующей ценой ${formatDateRangeLabel(
+          overlappingPrice.dateFrom,
+          overlappingPrice.dateTo,
+        )}`,
+      );
+    }
+
+    return {
+      ...entry,
+      existingPriceId: exactExistingPrice?.id ?? null,
+    };
+  });
+}
+
+function normalizePriceImportPayload(
+  payload: unknown,
+  orderedRooms: SerializedChessboardRoom[],
+): PriceImportNormalizationResult {
+  if (orderedRooms.length === 0) {
+    throw new Error("В текущей шахматке нет номеров для импорта цен");
+  }
+
+  const rootRecord = isRecord(payload) ? payload : null;
+  const rootYear = rootRecord
+    ? parseImportYear(readField(rootRecord, ["year", "seasonYear"]))
+    : null;
+  const rootCurrency = rootRecord
+    ? normalizeImportCurrency(readField(rootRecord, ["currency"]))
+    : "RUB";
+  const rootPeriodTemplates = rootRecord ? buildImportPeriodTemplates(rootRecord, rootYear) : [];
+  const sourceRows = Array.isArray(payload)
+    ? payload
+    : rootRecord
+      ? readArrayField(rootRecord, ["rooms", "rows", "items", "tariffs", "prices"])
+      : null;
+
+  if (!sourceRows || sourceRows.length === 0) {
+    throw new Error("JSON должен содержать массив rooms с периодами цен");
+  }
+
+  const entries: PriceImportEntryDraft[] = [];
+  let skippedNonPerRoomCount = 0;
+
+  function appendEntry(roomRecord: Record<string, unknown>, periodRecord: Record<string, unknown>) {
+    const inheritedPriceType = readStringField(roomRecord, [
+      "priceType",
+      "rentType",
+      "pricingType",
+      "priceUnit",
+      "unit",
+    ]);
+    const periodPriceType =
+      readStringField(periodRecord, [
+        "priceType",
+        "rentType",
+        "pricingType",
+        "priceUnit",
+        "unit",
+      ]) ?? inheritedPriceType;
+
+    if (!isPerRoomImportPriceType(periodPriceType)) {
+      skippedNonPerRoomCount += 1;
+      return;
+    }
+
+    const room = resolvePriceImportRoom(roomRecord, orderedRooms);
+    const period = readImportPeriodTemplate(periodRecord, rootYear);
+    if (!period) {
+      throw new Error(`${room.title}: укажите dateFrom/dateTo или period для каждой цены`);
+    }
+
+    if (compareIsoDates(period.dateTo, period.dateFrom) < 0) {
+      throw new Error(
+        `${room.title}: дата окончания ${period.dateTo} раньше даты начала ${period.dateFrom}`,
+      );
+    }
+
+    const priceField = readImportPriceField(periodRecord);
+    if (!priceField.found) {
+      throw new Error(`${room.title}, ${formatDateRangeLabel(period.dateFrom, period.dateTo)}: нет цены`);
+    }
+
+    const price = parseImportPrice(priceField.value);
+    if (price === null) {
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error(
+        `${room.title}, ${formatDateRangeLabel(
+          period.dateFrom,
+          period.dateTo,
+        )}: укажите цену больше 0`,
+      );
+    }
+
+    entries.push({
+      room,
+      dateFrom: period.dateFrom,
+      dateTo: period.dateTo,
+      price,
+      currency:
+        readField(periodRecord, ["currency"]) === undefined
+          ? rootCurrency
+          : normalizeImportCurrency(readField(periodRecord, ["currency"])),
+    });
+  }
+
+  for (const row of sourceRows) {
+    if (!isRecord(row)) {
+      throw new Error("Каждая строка rooms должна быть объектом");
+    }
+
+    const nestedPeriods = readArrayField(row, ["periods", "pricePeriods", "tariffs", "ranges"]);
+    const nestedPrices = readArrayField(row, ["prices"]);
+    const canUseMatrixPrices =
+      !nestedPeriods &&
+      nestedPrices !== null &&
+      rootPeriodTemplates.length > 0 &&
+      nestedPrices.every((item) => !isRecord(item) || !hasImportPeriodFields(item));
+
+    if (canUseMatrixPrices && nestedPrices) {
+      nestedPrices.forEach((priceValue, index) => {
+        const periodTemplate = rootPeriodTemplates[index];
+        if (!periodTemplate) {
+          return;
+        }
+
+        appendEntry(row, {
+          ...periodTemplate,
+          ...(isRecord(priceValue) ? priceValue : { price: priceValue }),
+        });
+      });
+      continue;
+    }
+
+    const periodRows = nestedPeriods ?? nestedPrices;
+    if (periodRows) {
+      for (const periodRow of periodRows) {
+        if (!isRecord(periodRow)) {
+          throw new Error("Каждый период цены должен быть объектом");
+        }
+        appendEntry(row, periodRow);
+      }
+      continue;
+    }
+
+    appendEntry(row, row);
+  }
+
+  if (entries.length === 0) {
+    throw new Error(
+      skippedNonPerRoomCount > 0
+        ? "В JSON нет строк с ценой «за номер»"
+        : "В JSON не найдено цен для импорта",
+    );
+  }
+
+  assertNoImportRoomOverlaps(entries);
+
+  return {
+    entries: attachExistingPriceActions(entries),
+    skippedNonPerRoomCount,
+  };
+}
+
 const ruNumberFormat = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
 function formatPeopleFromLabel(value: number): string {
@@ -1081,6 +1651,7 @@ export function PropertyChessboardWorkspace({
   const [isSavingOccupancyAction, setIsSavingOccupancyAction] = useState(false);
   const [isDuplicatingPrices, setIsDuplicatingPrices] = useState(false);
   const [isCopyingYearPrices, setIsCopyingYearPrices] = useState(false);
+  const [isImportingPrices, setIsImportingPrices] = useState(false);
   const [isLoadingCalendarSync, setIsLoadingCalendarSync] = useState(false);
   const [isSavingCalendarSync, setIsSavingCalendarSync] = useState(false);
   const [isRunningCalendarSync, setIsRunningCalendarSync] = useState(false);
@@ -1097,6 +1668,7 @@ export function PropertyChessboardWorkspace({
   const [newCalendarSyncSourceName, setNewCalendarSyncSourceName] = useState("");
   const [newCalendarSyncSourceUrl, setNewCalendarSyncSourceUrl] = useState("");
   const objectMenuRef = useRef<HTMLDivElement | null>(null);
+  const priceImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
   const dragSelectionRef = useRef<DragSelectionState | null>(null);
   const dragAutoScrollPointerRef = useRef<DragPointer | null>(null);
@@ -1681,6 +2253,58 @@ export function PropertyChessboardWorkspace({
   const roomLookupById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
 
   const canManageCalendar = selectedPropertyId !== null && rooms.length > 0;
+  const hasOpenImportBlockingDialog =
+    isBookingModalOpen ||
+    isCalendarSyncModalOpen ||
+    isCopyYearPricesModalOpen ||
+    isDuplicatePricesModalOpen ||
+    isOccupancyActionsOpen ||
+    isPriceModalOpen;
+
+  const openPriceImportFilePicker = useCallback(() => {
+    if (isImportingPrices || hasOpenImportBlockingDialog) {
+      return;
+    }
+
+    if (!selectedPropertyId) {
+      setMessageError("Выберите объект для импорта цен");
+      setMessageSuccess("");
+      return;
+    }
+
+    if (rooms.length === 0) {
+      setMessageError("В объекте пока нет активных номеров для импорта цен");
+      setMessageSuccess("");
+      return;
+    }
+
+    setBoardMode("prices");
+    setMessageError("");
+    setMessageSuccess("");
+    priceImportFileInputRef.current?.click();
+  }, [hasOpenImportBlockingDialog, isImportingPrices, rooms.length, selectedPropertyId]);
+
+  useEffect(() => {
+    function handlePriceImportShortcut(event: KeyboardEvent) {
+      const isShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        (event.code === "KeyS" || event.key.toLowerCase() === "s");
+
+      if (!isShortcut) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      openPriceImportFilePicker();
+    }
+
+    window.addEventListener("keydown", handlePriceImportShortcut);
+    return () => {
+      window.removeEventListener("keydown", handlePriceImportShortcut);
+    };
+  }, [openPriceImportFilePicker]);
 
   useEffect(() => {
     setMobileBoardRoomPage((prev) => Math.min(prev, Math.max(0, mobileBoardRoomPageCount - 1)));
@@ -2856,6 +3480,114 @@ export function PropertyChessboardWorkspace({
     }
   }
 
+  async function importPricesFromFile(file: File) {
+    if (!selectedPropertyId || isImportingPrices) {
+      return;
+    }
+
+    setIsImportingPrices(true);
+    setMessageError("");
+    setMessageSuccess("");
+
+    try {
+      const text = await file.text();
+      let payload: unknown;
+
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        setMessageError("Файл должен быть корректным JSON");
+        return;
+      }
+
+      const importResult = normalizePriceImportPayload(payload, orderedRooms);
+      setMessageSuccess(`Импортируем цены: ${importResult.entries.length} периодов...`);
+
+      const results = await Promise.all(
+        importResult.entries.map(async (entry) => {
+          const requestUrl = entry.existingPriceId
+            ? `/api/properties/${selectedPropertyId}/rooms/${entry.room.id}/prices/${entry.existingPriceId}`
+            : `/api/properties/${selectedPropertyId}/rooms/${entry.room.id}/prices`;
+          const response = await fetch(requestUrl, {
+            method: entry.existingPriceId ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dateFrom: entry.dateFrom,
+              dateTo: entry.dateTo,
+              price: entry.price,
+              priceType: "PER_ROOM",
+              minGuests: null,
+              minNights: null,
+              extraBedPrice: null,
+              currency: entry.currency,
+            }),
+          });
+
+          let body: unknown = {};
+          try {
+            body = await response.json();
+          } catch {
+            body = {};
+          }
+
+          return {
+            ok: response.ok,
+            action: entry.existingPriceId ? "updated" : "created",
+            roomTitle: entry.room.title,
+            periodLabel: formatDateRangeLabel(entry.dateFrom, entry.dateTo),
+            error: readResponseError(body, "Не удалось импортировать период цены"),
+          };
+        }),
+      );
+
+      await refreshRooms();
+
+      const failures = results.filter((result) => !result.ok);
+      const createdCount = results.filter(
+        (result) => result.ok && result.action === "created",
+      ).length;
+      const updatedCount = results.filter(
+        (result) => result.ok && result.action === "updated",
+      ).length;
+      const minDateFrom = importResult.entries
+        .map((entry) => entry.dateFrom)
+        .reduce((min, value) => minIsoDate(min, value));
+      const maxDateTo = importResult.entries
+        .map((entry) => entry.dateTo)
+        .reduce((max, value) => maxIsoDate(max, value));
+
+      applyBoardPeriodRange(minDateFrom, maxDateTo);
+
+      if (failures.length > 0) {
+        const failurePreview = failures
+          .slice(0, 4)
+          .map((failure) => `${failure.roomTitle}, ${failure.periodLabel}: ${failure.error}`)
+          .join("; ");
+        setMessageError(`Часть цен не импортирована: ${failurePreview}`);
+        setMessageSuccess(
+          createdCount > 0 || updatedCount > 0
+            ? `Успешно: создано ${createdCount}, обновлено ${updatedCount}`
+            : "",
+        );
+        return;
+      }
+
+      const skippedText =
+        importResult.skippedNonPerRoomCount > 0
+          ? ` Пропущено не «за номер»: ${importResult.skippedNonPerRoomCount}.`
+          : "";
+      setMessageError("");
+      setMessageSuccess(
+        `Цены импортированы: создано ${createdCount}, обновлено ${updatedCount}.${skippedText}`,
+      );
+    } catch (error) {
+      setMessageSuccess("");
+      setMessageError(error instanceof Error ? error.message : "Не удалось импортировать цены");
+    } finally {
+      setIsImportingPrices(false);
+    }
+  }
+
   async function duplicatePricePeriods() {
     if (!selectedPropertyId || !duplicatePricesForm) {
       return;
@@ -3149,6 +3881,19 @@ export function PropertyChessboardWorkspace({
 
   return (
     <div className="chessboard-workspace space-y-2.5">
+      <input
+        ref={priceImportFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0] ?? null;
+          event.currentTarget.value = "";
+          if (file) {
+            void importPricesFromFile(file);
+          }
+        }}
+      />
       <section className="space-y-2.5">
         <div className="rounded-xl border border-olive/10 bg-white/95 p-2.5 shadow-[0_10px_26px_-24px_rgba(58,43,35,0.4)] md:p-3 [@media(orientation:landscape)_and_(max-height:560px)]:rounded-lg [@media(orientation:landscape)_and_(max-height:560px)]:p-1.5">
           {/* Row 1: Object selector + mode toggle */}
@@ -3384,6 +4129,15 @@ export function PropertyChessboardWorkspace({
                   >
                     <AppIcon icon={Copy} className="h-3.5 w-3.5" />
                     Перенести год
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(compactToolbarButtonClass, "shrink-0 gap-1.5")}
+                    onClick={openPriceImportFilePicker}
+                    disabled={!canManageCalendar || isImportingPrices}
+                  >
+                    <AppIcon icon={CloudUpload} className="h-3.5 w-3.5" />
+                    {isImportingPrices ? "Импорт..." : "Импорт JSON"}
                   </button>
                   <button
                     type="button"
