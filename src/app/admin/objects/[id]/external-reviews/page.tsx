@@ -68,61 +68,65 @@ export default async function AdminObjectExternalReviewsPage({
 
   return (
     <div className="space-y-5">
-      <ObjectSectionNav
-        propertyId={property.id}
-        activeSection="external-reviews"
-        basePath="/admin/objects"
-        backHref={`/admin/objects/${property.id}`}
-        backLabel="Быстрая админ-правка"
-        includePayment={false}
-        showChessboardTab
-      />
+      <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+        <ObjectSectionNav
+          propertyId={property.id}
+          activeSection="external-reviews"
+          basePath="/admin/objects"
+          backHref={`/admin/objects/${property.id}`}
+          backLabel="Быстрая админ-правка"
+          includePayment={false}
+          showChessboardTab
+        />
 
-      <div className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
-        <div className="h-1.5 bg-gradient-to-r from-primary/70 via-sage to-terra/70" />
-        <div className="p-5 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
-                <AppIcon icon={MessageSquareText} className="h-6 w-6" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-olive/40">
-                  Админ-панель · ID объекта: {property.publicId ?? displayPropertyNumber}
-                </p>
-                <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">
-                  Подгруженные отзывы
-                </h1>
-                <p className="mt-1 text-sm text-olive/62">
-                  {property.name?.trim() || "Объект без названия"} · владелец{" "}
-                  {property.owner.firstName}
-                  {property.owner.phone ? `, ${property.owner.phone}` : ""}
-                </p>
+        <div className="min-w-0 space-y-5">
+          <div className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
+            <div className="h-1.5 bg-gradient-to-r from-primary/70 via-sage to-terra/70" />
+            <div className="p-5 sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3.5">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                    <AppIcon icon={MessageSquareText} className="h-6 w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-olive/40">
+                      Админ-панель · ID объекта: {property.publicId ?? displayPropertyNumber}
+                    </p>
+                    <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">
+                      Подгруженные отзывы
+                    </h1>
+                    <p className="mt-1 text-sm text-olive/62">
+                      {property.name?.trim() || "Объект без названия"} · владелец{" "}
+                      {property.owner.firstName}
+                      {property.owner.phone ? `, ${property.owner.phone}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/admin/objects/${property.id}`}
+                  className="inline-flex items-center justify-center rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
+                >
+                  К карточке
+                </Link>
               </div>
             </div>
-            <Link
-              href={`/admin/objects/${property.id}`}
-              className="inline-flex items-center justify-center rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
-            >
-              К карточке
-            </Link>
           </div>
+
+          {!canCreateImportedReviews ? <AdminNotice>{createDisabledReason}</AdminNotice> : null}
+
+          <ImportedReviewsManager
+            entityType="property"
+            entityId={property.id}
+            initialReviews={importedReviews}
+            mode="admin"
+            schemaAvailable={schemaAvailable}
+            canCreate={canCreateImportedReviews}
+            createDisabledReason={createDisabledReason}
+            title="Подгруженные отзывы"
+            description="Администратор может добавить внешний отзыв по объекту. Видимый отзыв сразу публикуется и остаётся доступным для правки в разделе подгруженных отзывов."
+          />
         </div>
       </div>
-
-      {!canCreateImportedReviews ? <AdminNotice>{createDisabledReason}</AdminNotice> : null}
-
-      <ImportedReviewsManager
-        entityType="property"
-        entityId={property.id}
-        initialReviews={importedReviews}
-        mode="admin"
-        schemaAvailable={schemaAvailable}
-        canCreate={canCreateImportedReviews}
-        createDisabledReason={createDisabledReason}
-        title="Подгруженные отзывы"
-        description="Администратор может добавить внешний отзыв по объекту. Видимый отзыв сразу публикуется и остаётся доступным для правки в разделе подгруженных отзывов."
-      />
     </div>
   );
 }

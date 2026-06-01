@@ -9,10 +9,7 @@ import {
   getAdminPropertyPendingEditLabel,
 } from "@/lib/admin-status";
 import { db } from "@/lib/db";
-import {
-  getPropertyDisplayNumberFromOrderedIds,
-  serializeProperty,
-} from "@/lib/properties";
+import { getPropertyDisplayNumberFromOrderedIds, serializeProperty } from "@/lib/properties";
 
 type AdminObjectRulesPageProps = {
   params: Promise<{ id: string }>;
@@ -74,7 +71,9 @@ export default async function AdminObjectRulesPage({ params }: AdminObjectRulesP
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-olive/10 bg-white p-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-olive/45">Админский редактор объекта</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-olive/45">
+            Админский редактор объекта
+          </p>
           <h1 className="mt-1 text-2xl font-semibold text-olive">
             {property.name ?? "Объект без названия"}
           </h1>
@@ -123,22 +122,24 @@ export default async function AdminObjectRulesPage({ params }: AdminObjectRulesP
         </div>
       </div>
 
-      <ObjectSectionNav
-        propertyId={property.id}
-        activeSection="rules"
-        basePath="/admin/objects"
-        backHref={`/admin/objects/${property.id}`}
-        backLabel="Быстрая админ-правка"
-        includePayment={false}
-        showChessboardTab
-      />
-
-      <div className="min-w-0">
-        <ObjectRulesPage
-          initialProperty={serializeProperty(property)}
-          displayPropertyNumber={displayPropertyNumber}
+      <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+        <ObjectSectionNav
+          propertyId={property.id}
+          activeSection="rules"
           basePath="/admin/objects"
+          backHref={`/admin/objects/${property.id}`}
+          backLabel="Быстрая админ-правка"
+          includePayment={false}
+          showChessboardTab
         />
+
+        <div className="min-w-0">
+          <ObjectRulesPage
+            initialProperty={serializeProperty(property)}
+            displayPropertyNumber={displayPropertyNumber}
+            basePath="/admin/objects"
+          />
+        </div>
       </div>
     </div>
   );

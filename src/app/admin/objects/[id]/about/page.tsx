@@ -13,10 +13,7 @@ import {
   getAdminPropertyPendingEditLabel,
 } from "@/lib/admin-status";
 import { db } from "@/lib/db";
-import {
-  getPropertyDisplayNumberFromOrderedIds,
-  serializeProperty,
-} from "@/lib/properties";
+import { getPropertyDisplayNumberFromOrderedIds, serializeProperty } from "@/lib/properties";
 
 type AdminObjectAboutPageProps = {
   params: Promise<{ id: string }>;
@@ -188,23 +185,25 @@ export default async function AdminObjectAboutPage({
         </div>
       </div>
 
-      <ObjectSectionNav
-        propertyId={property.id}
-        activeSection="about"
-        basePath="/admin/objects"
-        backHref={`/admin/objects/${property.id}`}
-        backLabel="Быстрая админ-правка"
-        includePayment={false}
-        showChessboardTab
-      />
-
-      <div className="min-w-0">
-        <ObjectAboutPage
-          initialProperty={serializeProperty(property)}
-          displayPropertyNumber={displayPropertyNumber}
-          initialBlock={initialBlock}
+      <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+        <ObjectSectionNav
+          propertyId={property.id}
+          activeSection="about"
           basePath="/admin/objects"
+          backHref={`/admin/objects/${property.id}`}
+          backLabel="Быстрая админ-правка"
+          includePayment={false}
+          showChessboardTab
         />
+
+        <div className="min-w-0">
+          <ObjectAboutPage
+            initialProperty={serializeProperty(property)}
+            displayPropertyNumber={displayPropertyNumber}
+            initialBlock={initialBlock}
+            basePath="/admin/objects"
+          />
+        </div>
       </div>
     </div>
   );
