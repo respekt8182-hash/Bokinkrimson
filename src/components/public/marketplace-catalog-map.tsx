@@ -1279,12 +1279,15 @@ export function MarketplaceCatalogMap({
   const mapBoundsQueryRef = useRef<string | null>(currentBoundsParam);
   const suppressBoundsSyncUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
+  const [mapInteractionBoundsParam, setMapInteractionBoundsParam] = useState<string | null>(null);
   const currentBounds = useMemo(
     () => parseMapBoundsFilter(currentBoundsParam),
     [currentBoundsParam],
   );
+  const isCurrentBoundsFromMapInteraction =
+    currentBoundsParam !== null && currentBoundsParam === mapInteractionBoundsParam;
   const initialMapViewport = useMemo<YandexMapViewport | null>(() => {
-    if (currentBounds) {
+    if (currentBounds && !isCurrentBoundsFromMapInteraction) {
       return { bounds: currentBounds };
     }
 
@@ -1295,16 +1298,28 @@ export function MarketplaceCatalogMap({
     );
 
     return radiusBounds ? { bounds: radiusBounds } : null;
-  }, [currentBounds, filters.centerLat, filters.centerLng, filters.radiusKm]);
+  }, [
+    currentBounds,
+    filters.centerLat,
+    filters.centerLng,
+    filters.radiusKm,
+    isCurrentBoundsFromMapInteraction,
+  ]);
   const initialMapViewportKey = useMemo(
     () =>
       buildViewportKey({
-        boundsParam: currentBoundsParam,
+        boundsParam: isCurrentBoundsFromMapInteraction ? null : currentBoundsParam,
         centerLat: filters.centerLat,
         centerLng: filters.centerLng,
         radiusKm: filters.radiusKm,
       }),
-    [currentBoundsParam, filters.centerLat, filters.centerLng, filters.radiusKm],
+    [
+      currentBoundsParam,
+      filters.centerLat,
+      filters.centerLng,
+      filters.radiusKm,
+      isCurrentBoundsFromMapInteraction,
+    ],
   );
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
@@ -1518,6 +1533,9 @@ export function MarketplaceCatalogMap({
         return;
       }
 
+      setMapInteractionBoundsParam((current) =>
+        current === normalizedBounds ? current : normalizedBounds,
+      );
       const lastRequestedBounds = lastRequestedBoundsRef.current;
 
       if (normalizedBounds === lastRequestedBounds) {
