@@ -21,6 +21,7 @@ import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import { CatalogBackLink, CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
+import { AttractionCatalogClient } from "@/components/public/attraction-catalog-client";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
@@ -1088,6 +1089,26 @@ function TransferCard({
 }
 
 export function AttractionCatalog({
+  result,
+  mapItems,
+  categories,
+  locationSuggestions,
+  activeBounds = null,
+  catalogActiveTotal,
+}: AttractionCatalogProps) {
+  return (
+    <AttractionCatalogClient
+      result={result}
+      mapItems={mapItems}
+      categories={categories}
+      locationSuggestions={locationSuggestions}
+      activeBounds={activeBounds}
+      catalogActiveTotal={catalogActiveTotal}
+    />
+  );
+}
+
+export function LegacyAttractionCatalog({
   result,
   mapItems,
   categories,

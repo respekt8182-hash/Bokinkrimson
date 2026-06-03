@@ -18,8 +18,10 @@ import {
 } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import type {
+  YandexMapMarkerCategory,
   YandexMapPoint,
   YandexMapRadiusCircle,
+  YandexMapViewport,
 } from "@/components/maps/yandex-map-multi-viewer";
 import { AppIcon } from "@/components/ui/app-icon";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
@@ -56,7 +58,10 @@ type MarketplaceCatalogMapProps = {
   filters: MarketplaceCatalogMapFilters;
   mapTitle: string;
   syncBoundsToUrl?: boolean;
+  activeBoundsParam?: string | null;
+  isLoading?: boolean;
   mapItemsEndpoint?: string | null;
+  onBoundsQueryChange?: (bounds: string | null) => void;
   children: ReactNode;
 };
 
@@ -90,6 +95,7 @@ const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
 const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
 const MAP_BOUNDS_UPDATE_DELAY_MS = 1200;
 const MAP_BOUNDS_PRECISION = 4;
+const MAP_RADIUS_VIEWPORT_PADDING = 1.18;
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
@@ -154,6 +160,63 @@ function parseMapBoundsFilter(value: string | null): [[number, number], [number,
   ];
 }
 
+function buildRadiusViewportBounds(
+  latitude: number | null,
+  longitude: number | null,
+  radiusKm: number | null,
+): [[number, number], [number, number]] | null {
+  if (
+    latitude === null ||
+    longitude === null ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    radiusKm === null ||
+    !Number.isFinite(radiusKm) ||
+    radiusKm <= 0
+  ) {
+    return null;
+  }
+
+  const paddedRadiusKm = radiusKm * MAP_RADIUS_VIEWPORT_PADDING;
+  const latitudeDelta = paddedRadiusKm / 111.32;
+  const longitudeScale = Math.cos((latitude * Math.PI) / 180);
+  const longitudeDelta = paddedRadiusKm / (111.32 * Math.max(0.2, Math.abs(longitudeScale)));
+
+  return [
+    [clamp(latitude - latitudeDelta, -90, 90), clamp(longitude - longitudeDelta, -180, 180)],
+    [clamp(latitude + latitudeDelta, -90, 90), clamp(longitude + longitudeDelta, -180, 180)],
+  ];
+}
+
+function buildViewportKey(input: {
+  boundsParam: string | null;
+  centerLat: number | null;
+  centerLng: number | null;
+  radiusKm: number;
+}): string | null {
+  if (input.boundsParam) {
+    return `bounds:${input.boundsParam}`;
+  }
+
+  if (
+    input.centerLat !== null &&
+    input.centerLng !== null &&
+    Number.isFinite(input.centerLat) &&
+    Number.isFinite(input.centerLng) &&
+    Number.isFinite(input.radiusKm) &&
+    input.radiusKm > 0
+  ) {
+    return [
+      "radius",
+      input.centerLat.toFixed(5),
+      input.centerLng.toFixed(5),
+      Math.round(input.radiusKm * 10) / 10,
+    ].join(":");
+  }
+
+  return null;
+}
+
 function isPointInsideViewportBounds(
   item: { latitude: number | null; longitude: number | null },
   bounds: [[number, number], [number, number]] | null,
@@ -184,6 +247,23 @@ function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): Mobile
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
     ["preview", snaps.preview],
   )[0];
+}
+
+function MapLoadingDotsPill({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "catalog-map-loading-pill pointer-events-none absolute left-1/2 top-4 z-[80] -translate-x-1/2",
+        className,
+      )}
+      role="status"
+      aria-label="Обновляем карту"
+    >
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+      <span className="catalog-map-loading-dot" aria-hidden="true" />
+    </div>
+  );
 }
 
 function getCatalogMapItemElement(
@@ -268,6 +348,500 @@ function getTransferVehicleLabel(item: PublicTransferCatalogItem): string {
   return value || "Трансфер";
 }
 
+const cp1252ByteByChar: Record<string, number> = {
+  "\u20ac": 0x80,
+  "\u201a": 0x82,
+  "\u0192": 0x83,
+  "\u201e": 0x84,
+  "\u2026": 0x85,
+  "\u2020": 0x86,
+  "\u2021": 0x87,
+  "\u02c6": 0x88,
+  "\u2030": 0x89,
+  "\u0160": 0x8a,
+  "\u2039": 0x8b,
+  "\u0152": 0x8c,
+  "\u017d": 0x8e,
+  "\u2018": 0x91,
+  "\u2019": 0x92,
+  "\u201c": 0x93,
+  "\u201d": 0x94,
+  "\u2022": 0x95,
+  "\u2013": 0x96,
+  "\u2014": 0x97,
+  "\u02dc": 0x98,
+  "\u2122": 0x99,
+  "\u0161": 0x9a,
+  "\u203a": 0x9b,
+  "\u0153": 0x9c,
+  "\u017e": 0x9e,
+  "\u0178": 0x9f,
+};
+
+const utf8TextDecoder =
+  typeof TextDecoder === "undefined" ? null : new TextDecoder("utf-8", { fatal: false });
+
+type AttractionMarkerCategoryRule = {
+  category: YandexMapMarkerCategory;
+  keywords: string[];
+};
+
+const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
+  {
+    category: "entertainment",
+    keywords: [
+      "delfin",
+      "akvarium",
+      "aquarium",
+      "zoopark",
+      "safari",
+      "taygan",
+      "akvapark",
+      "krokodil",
+      "teatr",
+      "theater",
+      "circus",
+      "attrakcion",
+      "family",
+      "\u0434\u0435\u043b\u044c\u0444\u0438\u043d",
+      "\u0430\u043a\u0432\u0430\u0440\u0438",
+      "\u0437\u043e\u043e",
+      "\u0441\u0430\u0444\u0430\u0440\u0438",
+      "\u0430\u043a\u0432\u0430\u043f\u0430\u0440\u043a",
+      "\u0442\u0435\u0430\u0442\u0440",
+      "\u0446\u0438\u0440\u043a",
+      "\u0430\u0442\u0442\u0440\u0430\u043a\u0446",
+      "\u0441\u0435\u043c\u0435\u0439",
+    ],
+  },
+  {
+    category: "viewpoint",
+    keywords: [
+      "smotrov",
+      "vidov",
+      "besedka",
+      "obzorn",
+      "\u0441\u043c\u043e\u0442\u0440\u043e\u0432",
+      "\u0432\u0438\u0434\u043e\u0432",
+      "\u0431\u0435\u0441\u0435\u0434",
+      "\u043e\u0431\u0437\u043e\u0440\u043d",
+    ],
+  },
+  {
+    category: "cave",
+    keywords: [
+      "peshcher",
+      "mramornaya",
+      "krasnaya",
+      "eminne",
+      "bair",
+      "kolodets",
+      "shaht",
+      "\u043f\u0435\u0449\u0435\u0440",
+      "\u043a\u043e\u043b\u043e\u0434\u0435\u0446",
+      "\u0448\u0430\u0445\u0442",
+    ],
+  },
+  {
+    category: "beach",
+    keywords: [
+      "plyazh",
+      "pljazh",
+      "beach",
+      "naberezhn",
+      "kupalen",
+      "kupaln",
+      "\u043f\u043b\u044f\u0436",
+      "\u043d\u0430\u0431\u0435\u0440\u0435\u0436",
+      "\u043a\u0443\u043f\u0430\u043b\u044c\u043d",
+    ],
+  },
+  {
+    category: "water",
+    keywords: [
+      "vodopad",
+      "buhta",
+      "bukhta",
+      "ozero",
+      "vanna",
+      "more",
+      "laguna",
+      "liman",
+      "istochnik",
+      "rodnik",
+      "\u0432\u043e\u0434\u043e\u043f\u0430\u0434",
+      "\u0431\u0443\u0445\u0442",
+      "\u043e\u0437\u0435\u0440",
+      "\u043c\u043e\u0440\u0435",
+      "\u043b\u0430\u0433\u0443\u043d",
+      "\u043b\u0438\u043c\u0430\u043d",
+      "\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a",
+      "\u0440\u043e\u0434\u043d\u0438\u043a",
+    ],
+  },
+  {
+    category: "route",
+    keywords: [
+      "tropa",
+      "marshrut",
+      "trail",
+      "ekotropa",
+      "botkinskaya",
+      "shtangeevskaya",
+      "\u0442\u0440\u043e\u043f",
+      "\u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+      "\u044d\u043a\u043e\u0442\u0440\u043e\u043f",
+    ],
+  },
+  {
+    category: "lighthouse",
+    keywords: ["mayak", "lighthouse", "\u043c\u0430\u044f\u043a"],
+  },
+  {
+    category: "winery",
+    keywords: [
+      "vinodel",
+      "vino",
+      "winery",
+      "vinn",
+      "\u0432\u0438\u043d\u043e\u0434\u0435\u043b",
+      "\u0432\u0438\u043d\u043d",
+    ],
+  },
+  {
+    category: "religion",
+    keywords: [
+      "hram",
+      "sobor",
+      "tserkov",
+      "cerkov",
+      "monastyr",
+      "mechet",
+      "kenassa",
+      "surb",
+      "svyato",
+      "ioanna",
+      "predtechi",
+      "usypalnitsa",
+      "\u0445\u0440\u0430\u043c",
+      "\u0441\u043e\u0431\u043e\u0440",
+      "\u0446\u0435\u0440\u043a\u043e\u0432",
+      "\u043c\u043e\u043d\u0430\u0441\u0442\u044b\u0440",
+      "\u043c\u0435\u0447\u0435\u0442",
+      "\u043a\u0435\u043d\u0430\u0441",
+    ],
+  },
+  {
+    category: "memorial",
+    keywords: [
+      "pamyatnik",
+      "memorial",
+      "monument",
+      "obelisk",
+      "sapun",
+      "malahov",
+      "\u043f\u0430\u043c\u044f\u0442\u043d\u0438\u043a",
+      "\u043c\u0435\u043c\u043e\u0440\u0438\u0430\u043b",
+      "\u043e\u0431\u0435\u043b\u0438\u0441\u043a",
+      "\u0441\u0430\u043f\u0443\u043d",
+      "\u043c\u0430\u043b\u0430\u0445\u043e\u0432",
+    ],
+  },
+  {
+    category: "fortress",
+    keywords: [
+      "krepost",
+      "kale",
+      "bashnya",
+      "batareya",
+      "kurgan",
+      "gorodishche",
+      "fort",
+      "hersones",
+      "mangup",
+      "chufut",
+      "genuez",
+      "neapol",
+      "skifskiy",
+      "\u043a\u0440\u0435\u043f\u043e\u0441\u0442",
+      "\u0431\u0430\u0448\u043d",
+      "\u0431\u0430\u0442\u0430\u0440\u0435",
+      "\u043a\u0443\u0440\u0433\u0430\u043d",
+      "\u0433\u043e\u0440\u043e\u0434\u0438\u0449",
+    ],
+  },
+  {
+    category: "palace",
+    keywords: [
+      "dvorets",
+      "dvorec",
+      "dvorts",
+      "palace",
+      "zamok",
+      "usadba",
+      "villa",
+      "haraks",
+      "dyulber",
+      "kichkine",
+      "mellas",
+      "livadiyskiy",
+      "vorontsovskiy",
+      "hanskij",
+      "\u0434\u0432\u043e\u0440\u0435\u0446",
+      "\u0434\u0432\u043e\u0440\u0446",
+      "\u0437\u0430\u043c\u043e\u043a",
+      "\u0443\u0441\u0430\u0434\u044c\u0431",
+      "\u0432\u0438\u043b\u043b",
+    ],
+  },
+  {
+    category: "museum",
+    keywords: [
+      "muzey",
+      "muzej",
+      "museum",
+      "galere",
+      "panoram",
+      "dioram",
+      "vystavo",
+      "\u043c\u0443\u0437\u0435",
+      "\u0433\u0430\u043b\u0435\u0440",
+      "\u043f\u0430\u043d\u043e\u0440\u0430\u043c",
+      "\u0434\u0438\u043e\u0440\u0430\u043c",
+      "\u0432\u044b\u0441\u0442\u0430\u0432",
+    ],
+  },
+  {
+    category: "park",
+    keywords: [
+      "park",
+      "sad",
+      "botanich",
+      "skver",
+      "\u043f\u0430\u0440\u043a",
+      "\u0441\u0430\u0434",
+      "\u0431\u043e\u0442\u0430\u043d\u0438\u0447",
+      "\u0441\u043a\u0432\u0435\u0440",
+    ],
+  },
+  {
+    category: "nature",
+    keywords: [
+      "gora",
+      "mountain",
+      "skala",
+      "kaya",
+      "mys",
+      "kanon",
+      "yayla",
+      "dolina",
+      "les",
+      "roshcha",
+      "demerdzhi",
+      "chatyr",
+      "ay-petri",
+      "ai-petri",
+      "tarhankut",
+      "fiolent",
+      "zapoved",
+      "urochishche",
+      "balka",
+      "prirod",
+      "vulkan",
+      "karer",
+      "ostrov",
+      "\u0433\u043e\u0440\u0430",
+      "\u0433\u043e\u0440\u044b",
+      "\u0441\u043a\u0430\u043b",
+      "\u043c\u044b\u0441",
+      "\u043a\u0430\u043d\u044c\u043e\u043d",
+      "\u044f\u0439\u043b",
+      "\u0434\u043e\u043b\u0438\u043d",
+      "\u043b\u0435\u0441",
+      "\u0440\u043e\u0449",
+      "\u0437\u0430\u043f\u043e\u0432\u0435\u0434",
+      "\u0443\u0440\u043e\u0447\u0438\u0449",
+      "\u043f\u0440\u0438\u0440\u043e\u0434",
+      "\u0432\u0443\u043b\u043a\u0430\u043d",
+      "\u043a\u0430\u0440\u044c\u0435\u0440",
+      "\u043e\u0441\u0442\u0440\u043e\u0432",
+    ],
+  },
+];
+
+const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
+  {
+    category: "beach",
+    keywords: ["\u043f\u043b\u044f\u0436", "\u043d\u0430\u0431\u0435\u0440\u0435\u0436"],
+  },
+  {
+    category: "museum",
+    keywords: ["\u043c\u0443\u0437\u0435", "\u0432\u044b\u0441\u0442\u0430\u0432"],
+  },
+  {
+    category: "entertainment",
+    keywords: ["\u0441\u0435\u043c\u0435\u0439"],
+  },
+  {
+    category: "viewpoint",
+    keywords: [
+      "\u0433\u043e\u0440\u044b \u0438 \u0441\u043c\u043e\u0442\u0440\u043e\u0432",
+      "\u0441\u043c\u043e\u0442\u0440\u043e\u0432",
+      "\u0432\u0438\u0434\u044b",
+    ],
+  },
+  {
+    category: "lighthouse",
+    keywords: ["\u043c\u0430\u044f\u043a"],
+  },
+  {
+    category: "winery",
+    keywords: ["\u0432\u0438\u043d\u043e\u0434\u0435\u043b", "\u0432\u0438\u043d\u043d"],
+  },
+  {
+    category: "religion",
+    keywords: ["\u0445\u0440\u0430\u043c", "\u0441\u0432\u044f\u0442\u044b\u043d"],
+  },
+  {
+    category: "fortress",
+    keywords: [
+      "\u043a\u0440\u0435\u043f\u043e\u0441\u0442",
+      "\u0434\u0440\u0435\u0432\u043d\u043e\u0441\u0442",
+    ],
+  },
+  {
+    category: "park",
+    keywords: [
+      "\u043f\u0430\u0440\u043a\u0438 \u0438 \u0441\u0430\u0434",
+      "\u043f\u0430\u0440\u043a\u0438 \u0438 \u0441\u0435\u043c\u0435\u0439",
+      "\u043f\u0430\u0440\u043a\u0438 \u0438 \u0434\u0432\u043e\u0440\u0446",
+    ],
+  },
+  {
+    category: "palace",
+    keywords: [
+      "\u0434\u0432\u043e\u0440\u0446\u044b \u0438 \u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442",
+      "\u0434\u0432\u043e\u0440\u0446\u044b \u0438 \u043f\u0430\u0440\u043a",
+      "\u0434\u0432\u043e\u0440\u0446",
+    ],
+  },
+  {
+    category: "cave",
+    keywords: ["\u043f\u0435\u0449\u0435\u0440"],
+  },
+  {
+    category: "water",
+    keywords: ["\u0432\u043e\u0434\u043e\u043f\u0430\u0434", "\u043e\u0437\u0435\u0440"],
+  },
+  {
+    category: "route",
+    keywords: [
+      "\u043c\u0430\u0440\u0448\u0440\u0443\u0442\u044b \u0438 \u0442\u0440\u043e\u043f\u044b",
+    ],
+  },
+  {
+    category: "memorial",
+    keywords: [
+      "\u043c\u0435\u043c\u043e\u0440\u0438\u0430\u043b",
+      "\u0430\u0440\u0445\u0435\u043e\u043b\u043e\u0433",
+    ],
+  },
+  {
+    category: "nature",
+    keywords: [
+      "\u043f\u0440\u0438\u0440\u043e\u0434",
+      "\u0437\u0430\u043f\u043e\u0432\u0435\u0434",
+    ],
+  },
+];
+
+function repairMojibake(value: string): string {
+  if (!/[\u00c2\u00c3\u00d0\u00d1]/.test(value) || !utf8TextDecoder) {
+    return value;
+  }
+
+  const bytes: number[] = [];
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    const mappedByte = cp1252ByteByChar[char];
+
+    if (mappedByte !== undefined) {
+      bytes.push(mappedByte);
+      continue;
+    }
+
+    if (code <= 0xff) {
+      bytes.push(code);
+      continue;
+    }
+
+    return value;
+  }
+
+  const decoded = utf8TextDecoder.decode(new Uint8Array(bytes));
+  return decoded && !decoded.includes("\ufffd") ? decoded : value;
+}
+
+function normalizeMarkerSearchText(value: string | null | undefined): string {
+  const repaired = repairMojibake(value ?? "");
+  return repaired
+    .toLowerCase()
+    .replaceAll("\u0451", "\u0435")
+    .replace(/[^a-z0-9\u0430-\u044f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildAttractionMarkerSearchText(values: Array<string | null | undefined>): string {
+  return values
+    .flatMap((value) => {
+      const normalized = normalizeMarkerSearchText(value);
+      const rawNormalized = (value ?? "").toLowerCase();
+      return normalized === rawNormalized ? [normalized] : [rawNormalized, normalized];
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getAttractionMarkerIdentitySearchText(
+  item: PublicAttractionCatalogItem | PublicAttractionMapItem,
+): string {
+  return buildAttractionMarkerSearchText([item.id, item.path, item.title, ...item.tags]);
+}
+
+function getAttractionMarkerCategorySearchText(
+  item: PublicAttractionCatalogItem | PublicAttractionMapItem,
+): string {
+  return buildAttractionMarkerSearchText([item.category]);
+}
+
+function findAttractionMarkerCategory(
+  text: string,
+  rules: AttractionMarkerCategoryRule[],
+): YandexMapMarkerCategory | null {
+  const match = rules.find((rule) => rule.keywords.some((keyword) => text.includes(keyword)));
+  return match?.category ?? null;
+}
+
+function resolveAttractionMarkerCategory(
+  item: PublicAttractionCatalogItem | PublicAttractionMapItem,
+): YandexMapMarkerCategory {
+  const identityCategory = findAttractionMarkerCategory(
+    getAttractionMarkerIdentitySearchText(item),
+    attractionMarkerIdentityCategoryRules,
+  );
+  if (identityCategory) {
+    return identityCategory;
+  }
+
+  const fallbackCategory = findAttractionMarkerCategory(
+    getAttractionMarkerCategorySearchText(item),
+    attractionMarkerCategoryFallbackRules,
+  );
+
+  return fallbackCategory ?? "landmark";
+}
+
 function buildMapPoint(
   kind: MarketplaceCatalogMapKind,
   item: MarketplaceCatalogMapItem & { latitude: number; longitude: number },
@@ -287,16 +861,20 @@ function buildMapPoint(
     };
   }
 
+  const attraction = item as PublicAttractionCatalogItem | PublicAttractionMapItem;
+
   return {
-    id: item.id,
-    title: item.title,
+    id: attraction.id,
+    title: attraction.title,
     latitude: item.latitude,
     longitude: item.longitude,
     priceLabel: null,
-    previewImageUrl: item.coverImageUrl,
+    previewImageUrl: attraction.coverImageUrl,
     rating: null,
     reviewsCount: 0,
     balloonVariant: "title-only",
+    markerCategory: resolveAttractionMarkerCategory(attraction),
+    markerCategoryLabel: attraction.category ?? attraction.tags[0] ?? null,
   };
 }
 
@@ -675,13 +1253,19 @@ export function MarketplaceCatalogMap({
   filters,
   mapTitle,
   syncBoundsToUrl = true,
+  activeBoundsParam,
+  isLoading = false,
   mapItemsEndpoint = null,
+  onBoundsQueryChange,
   children,
 }: MarketplaceCatalogMapProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentBoundsParam = searchParams.get("bounds")?.trim() || null;
+  const currentBoundsParam =
+    activeBoundsParam !== undefined
+      ? activeBoundsParam?.trim() || null
+      : searchParams.get("bounds")?.trim() || null;
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
@@ -689,7 +1273,6 @@ export function MarketplaceCatalogMap({
   const mobileDragHandledRef = useRef(false);
   const mobileResultsScrollTopRef = useRef(0);
   const mobileChromeProgressRef = useRef(0);
-  const boundsBootstrapHandledRef = useRef(false);
   const boundsUpdateTimerRef = useRef<number | null>(null);
   const lastRequestedBoundsRef = useRef<string | null>(currentBoundsParam);
   const hasMapInteractionRef = useRef(false);
@@ -699,6 +1282,29 @@ export function MarketplaceCatalogMap({
   const currentBounds = useMemo(
     () => parseMapBoundsFilter(currentBoundsParam),
     [currentBoundsParam],
+  );
+  const initialMapViewport = useMemo<YandexMapViewport | null>(() => {
+    if (currentBounds) {
+      return { bounds: currentBounds };
+    }
+
+    const radiusBounds = buildRadiusViewportBounds(
+      filters.centerLat,
+      filters.centerLng,
+      filters.radiusKm,
+    );
+
+    return radiusBounds ? { bounds: radiusBounds } : null;
+  }, [currentBounds, filters.centerLat, filters.centerLng, filters.radiusKm]);
+  const initialMapViewportKey = useMemo(
+    () =>
+      buildViewportKey({
+        boundsParam: currentBoundsParam,
+        centerLat: filters.centerLat,
+        centerLng: filters.centerLng,
+        radiusKm: filters.radiusKm,
+      }),
+    [currentBoundsParam, filters.centerLat, filters.centerLng, filters.radiusKm],
   );
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
@@ -903,10 +1509,6 @@ export function MarketplaceCatalogMap({
         });
       }
 
-      if (!syncBoundsToUrl) {
-        return;
-      }
-
       if (shouldSuppressBoundsSync) {
         return;
       }
@@ -917,12 +1519,6 @@ export function MarketplaceCatalogMap({
       }
 
       const lastRequestedBounds = lastRequestedBoundsRef.current;
-
-      if (!boundsBootstrapHandledRef.current && !lastRequestedBounds) {
-        boundsBootstrapHandledRef.current = true;
-        return;
-      }
-      boundsBootstrapHandledRef.current = true;
 
       if (normalizedBounds === lastRequestedBounds) {
         return;
@@ -937,6 +1533,12 @@ export function MarketplaceCatalogMap({
         boundsUpdateTimerRef.current = null;
         const nextParams = new URLSearchParams(window.location.search);
         const liveBounds = nextParams.get("bounds")?.trim() || null;
+
+        onBoundsQueryChange?.(normalizedBounds);
+
+        if (!syncBoundsToUrl) {
+          return;
+        }
 
         if (liveBounds === normalizedBounds) {
           return;
@@ -956,7 +1558,7 @@ export function MarketplaceCatalogMap({
         });
       }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [currentBoundsParam, pathname, router, syncBoundsToUrl],
+    [currentBoundsParam, onBoundsQueryChange, pathname, router, syncBoundsToUrl],
   );
 
   const markMapInteraction = useCallback(() => {
@@ -1208,7 +1810,6 @@ export function MarketplaceCatalogMap({
     lastRequestedBoundsRef.current = currentBoundsParam;
     mapBoundsQueryRef.current = currentBoundsParam;
     if (!currentBoundsParam) {
-      boundsBootstrapHandledRef.current = false;
       hasMapInteractionRef.current = false;
     }
   }, [currentBoundsParam]);
@@ -1354,6 +1955,8 @@ export function MarketplaceCatalogMap({
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}
                 onBoundsChange={handleMapBoundsChange}
+                initialViewport={initialMapViewport}
+                viewportKey={initialMapViewportKey ?? undefined}
                 radiusCircle={radiusCircle}
                 controls={[]}
                 showBalloons={false}
@@ -1362,6 +1965,8 @@ export function MarketplaceCatalogMap({
                 className="h-full w-full"
               />
             </div>
+
+            {isLoading ? <MapLoadingDotsPill className="top-3" /> : null}
 
             {activePopupItem && mobileSheetSnap !== "expanded" ? (
               <div
@@ -1440,6 +2045,8 @@ export function MarketplaceCatalogMap({
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
               onBoundsChange={handleMapBoundsChange}
+              initialViewport={initialMapViewport}
+              viewportKey={initialMapViewportKey ?? undefined}
               radiusCircle={radiusCircle}
               controls={[]}
               fitPointsOnChange="never"
@@ -1486,12 +2093,15 @@ export function MarketplaceCatalogMap({
               onPointClick={handlePointClick}
               onPointHoverChange={setHoveredPointId}
               onBoundsChange={handleMapBoundsChange}
+              initialViewport={initialMapViewport}
+              viewportKey={initialMapViewportKey ?? undefined}
               radiusCircle={radiusCircle}
               showBalloons={false}
               frameless
               fitPointsOnChange="never"
               className="h-full w-full"
             />
+            {isLoading ? <MapLoadingDotsPill /> : null}
             <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
               <button
                 type="button"
@@ -1562,6 +2172,8 @@ export function MarketplaceCatalogMap({
                   onPointClick={handlePointClick}
                   onPointHoverChange={setHoveredPointId}
                   onBoundsChange={handleMapBoundsChange}
+                  initialViewport={initialMapViewport}
+                  viewportKey={initialMapViewportKey ?? undefined}
                   radiusCircle={radiusCircle}
                   controls={["zoomControl"]}
                   showBalloons={false}
@@ -1592,6 +2204,7 @@ export function MarketplaceCatalogMap({
                     />
                   </div>
                 ) : null}
+                {isLoading ? <MapLoadingDotsPill /> : null}
               </div>
             ) : null}
           </section>
@@ -1619,6 +2232,8 @@ export function MarketplaceCatalogMap({
                 onPointClick={handlePointClick}
                 onPointHoverChange={setHoveredPointId}
                 onBoundsChange={handleMapBoundsChange}
+                initialViewport={initialMapViewport}
+                viewportKey={initialMapViewportKey ?? undefined}
                 radiusCircle={radiusCircle}
                 controls={["zoomControl"]}
                 showBalloons={false}
@@ -1627,6 +2242,8 @@ export function MarketplaceCatalogMap({
                 className="h-full min-h-[100dvh] w-full"
               />
             </div>
+
+            {isLoading ? <MapLoadingDotsPill className="top-5" /> : null}
 
             <div className="pointer-events-none absolute right-3 top-3 z-30 sm:right-5 sm:top-5">
               <button

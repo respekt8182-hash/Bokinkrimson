@@ -2,6 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+export type YandexMapMarkerCategory =
+  | "museum"
+  | "viewpoint"
+  | "palace"
+  | "fortress"
+  | "religion"
+  | "nature"
+  | "cave"
+  | "beach"
+  | "water"
+  | "park"
+  | "route"
+  | "entertainment"
+  | "winery"
+  | "lighthouse"
+  | "memorial"
+  | "landmark";
+
 export type YandexMapPoint = {
   id: string;
   title: string;
@@ -14,6 +32,8 @@ export type YandexMapPoint = {
   balloonVariant?: "details" | "title-only";
   isViewed?: boolean;
   showPriceAtLowZoom?: boolean;
+  markerCategory?: YandexMapMarkerCategory | null;
+  markerCategoryLabel?: string | null;
 };
 
 export type YandexMapViewport = {
@@ -112,6 +132,24 @@ type DotLayouts = {
   active: unknown;
 };
 
+type CategoryLayouts = Record<
+  YandexMapMarkerCategory,
+  {
+    default: unknown;
+    viewed: unknown;
+    hover: unknown;
+    active: unknown;
+  }
+>;
+
+type CategoryMarkerDefinition = {
+  color: string;
+  icon: string;
+  label: string;
+};
+
+type MarkerVisualKind = "price" | "category" | "dot";
+
 type BalloonContentLayouts = {
   details: unknown;
   titleOnly: unknown;
@@ -129,9 +167,17 @@ const PRICE_MARKER_HEIGHT = 28;
 const PRICE_MARKER_TAIL_HEIGHT = 7;
 const PRICE_MARKER_HORIZONTAL_PADDING = 22;
 const DOT_MARKER_SIZE = 14;
+const CATEGORY_MARKER_MIN_ZOOM = 12;
+const CATEGORY_MARKER_SIZE = 34;
+const CATEGORY_MARKER_TAIL_SIZE = 10;
+const CATEGORY_MARKER_TOTAL_HEIGHT = CATEGORY_MARKER_SIZE + 7;
 const BALLOON_CLOSE_DELAY_MS = 180;
 const PRICE_BALLOON_GAP_PX = 6;
 const DOT_BALLOON_OFFSET: [number, number] = [0, -12];
+const CATEGORY_BALLOON_OFFSET: [number, number] = [
+  0,
+  -(CATEGORY_MARKER_TOTAL_HEIGHT + PRICE_BALLOON_GAP_PX),
+];
 const HOVER_CLEAR_DELAY_MS = 80;
 const MARKER_Z_INDEX_DEFAULT = 1000;
 const MARKER_Z_INDEX_HOVER = 1_000_000;
@@ -195,6 +241,144 @@ function createDotLayout(ymaps: YandexApi, outerStyle: string, innerStyle: strin
   );
 }
 
+const categoryMarkerDefinitions: Record<YandexMapMarkerCategory, CategoryMarkerDefinition> = {
+  museum: {
+    color: "#4f46e5",
+    icon: '<path d="M3 21l18 0"/><path d="M3 10l18 0"/><path d="M5 6l7 -3l7 3"/><path d="M4 10l0 11"/><path d="M20 10l0 11"/><path d="M8 14l0 3"/><path d="M12 14l0 3"/><path d="M16 14l0 3"/>',
+    label: "\u041c\u0443\u0437\u0435\u0438",
+  },
+  viewpoint: {
+    color: "#d97706",
+    icon: '<path d="M4 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M14 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M16.346 9.17l-.729 -1.261c-.16 -.248 -1.056 -.203 -1.117 .091l-.177 1.38"/><path d="M19.761 14.813l-2.84 -5.133c-.189 -.31 -.592 -.68 -1.421 -.68c-.828 0 -1.5 .448 -1.5 1v6"/><path d="M7.654 9.17l.729 -1.261c.16 -.249 1.056 -.203 1.117 .091l.177 1.38"/><path d="M4.239 14.813l2.84 -5.133c.189 -.31 .592 -.68 1.421 -.68c.828 0 1.5 .448 1.5 1v6"/><path d="M10 12h4v2h-4l0 -2"/>',
+    label: "\u0421\u043c\u043e\u0442\u0440\u043e\u0432\u044b\u0435",
+  },
+  palace: {
+    color: "#b45309",
+    icon: '<path d="M15 19v-2a3 3 0 0 0 -6 0v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-14h4v3h3v-3h4v3h3v-3h4v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1"/><path d="M3 11l18 0"/>',
+    label: "\u0414\u0432\u043e\u0440\u0446\u044b",
+  },
+  fortress: {
+    color: "#475569",
+    icon: '<path d="M7 21h1a1 1 0 0 0 1 -1v-1a3 3 0 0 1 6 0m3 2h1a1 1 0 0 0 1 -1v-15l-3 -2l-3 2v6h-4v-6l-3 -2l-3 2v15a1 1 0 0 0 1 1h2m8 -2v1a1 1 0 0 0 1 1h2"/><path d="M7 7v.01"/><path d="M7 10v.01"/><path d="M7 13v.01"/><path d="M17 7v.01"/><path d="M17 10v.01"/><path d="M17 13v.01"/>',
+    label: "\u041a\u0440\u0435\u043f\u043e\u0441\u0442\u0438",
+  },
+  religion: {
+    color: "#7c3aed",
+    icon: '<path d="M3 21l18 0"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/><path d="M10 5l4 0"/><path d="M12 3l0 5"/><path d="M6 21v-7m-2 2l8 -8l8 8m-2 -2v7"/>',
+    label: "\u0425\u0440\u0430\u043c\u044b",
+  },
+  nature: {
+    color: "#15803d",
+    icon: '<path d="M3 20h18l-6.921 -14.612a2.3 2.3 0 0 0 -4.158 0l-6.921 14.612"/><path d="M7.5 11l2 2.5l2.5 -2.5l2 3l2.5 -2"/>',
+    label: "\u0413\u043e\u0440\u044b \u0438 \u043f\u0440\u0438\u0440\u043e\u0434\u0430",
+  },
+  cave: {
+    color: "#6b7280",
+    icon: '<path d="M3 21l18 0"/><path d="M4 21v-15a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v15"/><path d="M9 21v-8a3 3 0 0 1 6 0v8"/>',
+    label: "\u041f\u0435\u0449\u0435\u0440\u044b",
+  },
+  beach: {
+    color: "#0ea5e9",
+    icon: '<path d="M17.553 16.75a7.5 7.5 0 0 0 -10.606 0"/><path d="M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196"/><path d="M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196"/><path d="M15 9l-3 5.196"/><path d="M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25"/>',
+    label: "\u041f\u043b\u044f\u0436\u0438 \u0438 \u043d\u0430\u0431\u0435\u0440\u0435\u0436\u043d\u044b\u0435",
+  },
+  water: {
+    color: "#0284c7",
+    icon: '<path d="M3 7c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 17c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 12c3 -2 6 -2 9 0s6 2 9 0"/>',
+    label: "\u0412\u043e\u0434\u0430 \u0438 \u0432\u043e\u0434\u043e\u043f\u0430\u0434\u044b",
+  },
+  park: {
+    color: "#047857",
+    icon: '<path d="M16 5l3 3l-2 1l4 4l-3 1l4 4h-9"/><path d="M15 21l0 -3"/><path d="M8 13l-2 -2"/><path d="M8 12l2 -2"/><path d="M8 21v-13"/><path d="M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005"/>',
+    label: "\u041f\u0430\u0440\u043a\u0438",
+  },
+  route: {
+    color: "#ea580c",
+    icon: '<path d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4"/><path d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/>',
+    label: "\u041c\u0430\u0440\u0448\u0440\u0443\u0442\u044b",
+  },
+  entertainment: {
+    color: "#db2777",
+    icon: '<path d="M15 5l0 2"/><path d="M15 11l0 2"/><path d="M15 17l0 2"/><path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2"/>',
+    label: "\u0421\u0435\u043c\u0435\u0439\u043d\u044b\u0439 \u043e\u0442\u0434\u044b\u0445",
+  },
+  winery: {
+    color: "#be123c",
+    icon: '<path d="M8 21h8"/><path d="M12 16v5"/><path d="M17 5l1 6c0 3.012 -2.686 5 -6 5s-6 -1.988 -6 -5l1 -6"/><path d="M7 5a5 2 0 1 0 10 0a5 2 0 1 0 -10 0"/>',
+    label: "\u0412\u0438\u043d\u043e\u0434\u0435\u043b\u044c\u043d\u0438",
+  },
+  lighthouse: {
+    color: "#ca8a04",
+    icon: '<path d="M12 3l2 3l2 15h-8l2 -15l2 -3"/><path d="M8 9l8 0"/><path d="M3 11l2 -2l-2 -2"/><path d="M21 11l-2 -2l2 -2"/>',
+    label: "\u041c\u0430\u044f\u043a\u0438",
+  },
+  memorial: {
+    color: "#64748b",
+    icon: '<path d="M8 18l2 -13l2 -2l2 2l2 13"/><path d="M5 21v-3h14v3"/><path d="M3 21l18 0"/>',
+    label: "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438 \u043c\u0435\u043c\u043e\u0440\u0438\u0430\u043b\u044b",
+  },
+  landmark: {
+    color: "#0f766e",
+    icon: '<path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0"/>',
+    label: "\u0414\u043e\u0441\u0442\u043e\u043f\u0440\u0438\u043c\u0435\u0447\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
+  },
+};
+
+function createCategoryMarkerLayout(
+  ymaps: YandexApi,
+  definition: CategoryMarkerDefinition,
+  state: "default" | "viewed" | "hover" | "active",
+): unknown {
+  const safeLabel = escapeHtml(definition.label);
+  const isStrong = state === "hover" || state === "active";
+  const isViewed = state === "viewed";
+  const background = isStrong ? "#202124" : isViewed ? "#e1e4ea" : "#ffffff";
+  const borderColor = isStrong ? "#202124" : isViewed ? "#cfd6dc" : definition.color;
+  const iconColor = isStrong ? "#ffffff" : isViewed ? "#64707d" : definition.color;
+  const shadow = isStrong
+    ? "0 2px 5px rgba(0,0,0,0.28),0 9px 22px rgba(0,0,0,0.22)"
+    : isViewed
+      ? "0 1px 2px rgba(0,0,0,0.12),0 5px 14px rgba(0,0,0,0.08)"
+      : "0 2px 4px rgba(0,0,0,0.18),0 8px 20px rgba(0,0,0,0.14)";
+  const markerStyle =
+    `position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;` +
+    `width:${CATEGORY_MARKER_SIZE}px;height:${CATEGORY_MARKER_SIZE}px;border-radius:50%;` +
+    `background:${background};border:2px solid ${borderColor};color:${iconColor};box-sizing:border-box;` +
+    `box-shadow:${shadow};transition:background .12s ease,color .12s ease,border-color .12s ease,box-shadow .12s ease;`;
+  const tailStyle =
+    `position:absolute;left:50%;bottom:-5px;width:${CATEGORY_MARKER_TAIL_SIZE}px;height:${CATEGORY_MARKER_TAIL_SIZE}px;` +
+    `margin-left:-${CATEGORY_MARKER_TAIL_SIZE / 2}px;transform:rotate(45deg);background:${background};` +
+    `border-right:2px solid ${borderColor};border-bottom:2px solid ${borderColor};border-radius:2px;` +
+    `box-shadow:2px 2px 3px rgba(0,0,0,0.08);box-sizing:border-box;z-index:0;` +
+    `transition:background .12s ease,border-color .12s ease;`;
+
+  return ymaps.templateLayoutFactory.createClass(
+    `<span style="${markerStyle}" role="img" aria-label="${safeLabel}" title="${safeLabel}">
+      <span style="${tailStyle}"></span>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="position:relative;z-index:1;display:block;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${definition.icon}</svg>
+    </span>`,
+  );
+}
+
+function createCategoryLayouts(ymaps: YandexApi): CategoryLayouts {
+  const result = {} as CategoryLayouts;
+
+  (
+    Object.entries(categoryMarkerDefinitions) as Array<
+      [YandexMapMarkerCategory, CategoryMarkerDefinition]
+    >
+  ).forEach(([category, definition]) => {
+    result[category] = {
+      default: createCategoryMarkerLayout(ymaps, definition, "default"),
+      viewed: createCategoryMarkerLayout(ymaps, definition, "viewed"),
+      hover: createCategoryMarkerLayout(ymaps, definition, "hover"),
+      active: createCategoryMarkerLayout(ymaps, definition, "active"),
+    };
+  });
+
+  return result;
+}
+
 function createBalloonContentLayout(ymaps: YandexApi): unknown {
   const fontFamily = "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;";
 
@@ -224,6 +408,7 @@ function createTitleOnlyBalloonContentLayout(ymaps: YandexApi): unknown {
   return ymaps.templateLayoutFactory.createClass(`<div style="pointer-events:none;">
     <div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
       <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">$[properties.balloonTitle]</div>
+      <div style="${fontFamily}display:$[properties.balloonCategoryDisplay];margin-top:4px;font-size:12px;line-height:1.2;font-weight:600;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">$[properties.balloonCategoryLabel]</div>
     </div>
   </div>`);
 }
@@ -255,11 +440,18 @@ function buildBalloonContentFallbackHtml(input: {
   </div>`;
 }
 
-function buildTitleOnlyBalloonContentFallbackHtml(input: { title: string }): string {
+function buildTitleOnlyBalloonContentFallbackHtml(input: {
+  title: string;
+  categoryLabel: string;
+}): string {
   const fontFamily = "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;";
+  const categoryHtml = input.categoryLabel
+    ? `<div style="${fontFamily}margin-top:4px;font-size:12px;line-height:1.2;font-weight:600;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.categoryLabel}</div>`
+    : "";
 
   return `<div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
     <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.title}</div>
+    ${categoryHtml}
   </div>`;
 }
 
@@ -275,6 +467,17 @@ function escapeHtml(value: string): string {
 function resolvePreviewImageUrl(value: string | null | undefined): string {
   const trimmed = typeof value === "string" ? value.trim() : "";
   return trimmed.length > 0 ? trimmed : FALLBACK_PREVIEW_IMAGE_URL;
+}
+
+function resolveMarkerCategoryLabel(point: YandexMapPoint): string {
+  const explicitLabel =
+    typeof point.markerCategoryLabel === "string" ? point.markerCategoryLabel.trim() : "";
+  if (explicitLabel.length > 0) {
+    return explicitLabel;
+  }
+
+  const category = hasPointMarkerCategory(point) ? point.markerCategory : "landmark";
+  return categoryMarkerDefinitions[category]?.label ?? categoryMarkerDefinitions.landmark.label;
 }
 
 function formatReviewsCount(value: number): string {
@@ -357,6 +560,52 @@ function shouldShowPricePlacemark(input: {
     input.point.isViewed === true ||
     input.point.showPriceAtLowZoom === true
   );
+}
+
+function hasPointMarkerCategory(point: YandexMapPoint): point is YandexMapPoint & {
+  markerCategory: YandexMapMarkerCategory;
+} {
+  return Boolean(point.markerCategory && categoryMarkerDefinitions[point.markerCategory]);
+}
+
+function shouldShowCategoryPlacemark(input: {
+  point: YandexMapPoint;
+  activePointId: string | null;
+  zoom: number;
+}): boolean {
+  if (!hasPointMarkerCategory(input.point) || hasPointPriceLabel(input.point)) {
+    return false;
+  }
+
+  return input.zoom >= CATEGORY_MARKER_MIN_ZOOM || input.point.id === input.activePointId;
+}
+
+function getMarkerVisualKind(input: {
+  point: YandexMapPoint;
+  activePointId: string | null;
+  zoom: number;
+}): MarkerVisualKind {
+  if (
+    shouldShowPricePlacemark({
+      point: input.point,
+      activePointId: input.activePointId,
+      zoom: input.zoom,
+    })
+  ) {
+    return "price";
+  }
+
+  if (
+    shouldShowCategoryPlacemark({
+      point: input.point,
+      activePointId: input.activePointId,
+      zoom: input.zoom,
+    })
+  ) {
+    return "category";
+  }
+
+  return "dot";
 }
 
 function getMarkerDensityZoomBucket(zoom: number): number {
@@ -472,11 +721,7 @@ function isProtectedDensityPoint(
   activePointId: string | null,
   hoveredPointId: string | null,
 ): boolean {
-  return (
-    point.id === activePointId ||
-    point.id === hoveredPointId ||
-    point.isViewed === true
-  );
+  return point.id === activePointId || point.id === hoveredPointId || point.isViewed === true;
 }
 
 function pickDensityRepresentative(
@@ -510,10 +755,7 @@ function markFeaturedLowZoomPricePoints(
   const occupiedPriceCells = new Set<string>();
 
   points.forEach((point) => {
-    if (
-      !hasPointPriceLabel(point) ||
-      (point.id !== activePointId && point.isViewed !== true)
-    ) {
+    if (!hasPointPriceLabel(point) || (point.id !== activePointId && point.isViewed !== true)) {
       return;
     }
 
@@ -627,9 +869,13 @@ function buildDensityLimitedPoints(input: {
 function shouldUsePriceSizeForOverlap(point: YandexMapPoint, zoom: number): boolean {
   return (
     hasPointPriceLabel(point) &&
-    (zoom >= PRICE_MARKER_MIN_ZOOM ||
-      point.isViewed === true ||
-      point.showPriceAtLowZoom === true)
+    (zoom >= PRICE_MARKER_MIN_ZOOM || point.isViewed === true || point.showPriceAtLowZoom === true)
+  );
+}
+
+function shouldUseCategorySizeForOverlap(point: YandexMapPoint, zoom: number): boolean {
+  return (
+    hasPointMarkerCategory(point) && !hasPointPriceLabel(point) && zoom >= CATEGORY_MARKER_MIN_ZOOM
   );
 }
 
@@ -649,6 +895,18 @@ function getMarkerOverlapBounds(
       left: x - width / 2 - MARKER_OVERLAP_PADDING_PX,
       right: x + width / 2 + MARKER_OVERLAP_PADDING_PX,
       top: y - height - MARKER_OVERLAP_PADDING_PX,
+      bottom: y + MARKER_OVERLAP_PADDING_PX,
+    };
+  }
+
+  if (shouldUseCategorySizeForOverlap(point, zoom)) {
+    const halfWidth = CATEGORY_MARKER_SIZE / 2 + MARKER_OVERLAP_PADDING_PX;
+
+    return {
+      index,
+      left: x - halfWidth,
+      right: x + halfWidth,
+      top: y - CATEGORY_MARKER_TOTAL_HEIGHT - MARKER_OVERLAP_PADDING_PX,
       bottom: y + MARKER_OVERLAP_PADDING_PX,
     };
   }
@@ -825,7 +1083,7 @@ function buildPricePlacemarkOptions(input: {
 }
 
 function buildBalloonPlacemarkOptions(input: {
-  isPricePlacemark: boolean;
+  markerKind: MarkerVisualKind;
   balloonContentLayout: unknown;
 }): Record<string, unknown> {
   return {
@@ -837,14 +1095,20 @@ function buildBalloonPlacemarkOptions(input: {
     hideIconOnBalloonOpen: false,
     balloonAutoPan: false,
     balloonPanelMaxMapArea: 0,
-    balloonOffset: getBalloonOffset(input.isPricePlacemark),
+    balloonOffset: getBalloonOffset(input.markerKind),
   };
 }
 
-function getBalloonOffset(isPricePlacemark: boolean): [number, number] {
-  return isPricePlacemark
-    ? [0, -(PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT + PRICE_BALLOON_GAP_PX)]
-    : DOT_BALLOON_OFFSET;
+function getBalloonOffset(markerKind: MarkerVisualKind): [number, number] {
+  if (markerKind === "price") {
+    return [0, -(PRICE_MARKER_HEIGHT + PRICE_MARKER_TAIL_HEIGHT + PRICE_BALLOON_GAP_PX)];
+  }
+
+  if (markerKind === "category") {
+    return CATEGORY_BALLOON_OFFSET;
+  }
+
+  return DOT_BALLOON_OFFSET;
 }
 
 function buildDotPlacemarkOptions(input: {
@@ -887,6 +1151,47 @@ function buildDotPlacemarkOptions(input: {
   };
 }
 
+function buildCategoryPlacemarkOptions(input: {
+  point: YandexMapPoint;
+  activePointId: string | null;
+  hoveredPointId: string | null;
+  baseZIndex: number;
+  layouts: CategoryLayouts;
+}): Record<string, unknown> {
+  const isActive = input.point.id === input.activePointId;
+  const isHovered = input.point.id === input.hoveredPointId && !isActive;
+  const isViewed = input.point.isViewed === true && !isActive && !isHovered;
+  const halfWidth = CATEGORY_MARKER_SIZE / 2;
+  const category = hasPointMarkerCategory(input.point) ? input.point.markerCategory : "landmark";
+  const layouts = input.layouts[category] ?? input.layouts.landmark;
+  const zIndex = getMarkerZIndex({ isActive, isHovered, baseZIndex: input.baseZIndex });
+
+  return {
+    ...buildMarkerLayerOptions(zIndex),
+    iconLayout: "default#imageWithContent",
+    iconImageHref: TRANSPARENT_PIXEL,
+    iconImageSize: [1, 1],
+    iconImageOffset: [0, 0],
+    iconContentLayout: isActive
+      ? layouts.active
+      : isHovered
+        ? layouts.hover
+        : isViewed
+          ? layouts.viewed
+          : layouts.default,
+    iconContentOffset: [-halfWidth, -CATEGORY_MARKER_TOTAL_HEIGHT],
+    iconContentSize: [CATEGORY_MARKER_SIZE, CATEGORY_MARKER_TOTAL_HEIGHT],
+    iconShape: {
+      type: "Rectangle",
+      coordinates: [
+        [-halfWidth, -CATEGORY_MARKER_TOTAL_HEIGHT],
+        [halfWidth, 0],
+      ],
+    },
+    cursor: "pointer",
+  };
+}
+
 function buildMarkerVisualOptions(input: {
   point: YandexMapPoint;
   activePointId: string | null;
@@ -895,20 +1200,31 @@ function buildMarkerVisualOptions(input: {
   baseZIndex: number;
   priceLayouts: PriceLayouts;
   dotLayouts: DotLayouts;
+  categoryLayouts: CategoryLayouts;
 }): Record<string, unknown> {
-  if (
-    shouldShowPricePlacemark({
-      point: input.point,
-      activePointId: input.activePointId,
-      zoom: input.zoom,
-    })
-  ) {
+  const markerKind = getMarkerVisualKind({
+    point: input.point,
+    activePointId: input.activePointId,
+    zoom: input.zoom,
+  });
+
+  if (markerKind === "price") {
     return buildPricePlacemarkOptions({
       point: input.point,
       activePointId: input.activePointId,
       hoveredPointId: input.hoveredPointId,
       baseZIndex: input.baseZIndex,
       layouts: input.priceLayouts,
+    });
+  }
+
+  if (markerKind === "category") {
+    return buildCategoryPlacemarkOptions({
+      point: input.point,
+      activePointId: input.activePointId,
+      hoveredPointId: input.hoveredPointId,
+      baseZIndex: input.baseZIndex,
+      layouts: input.categoryLayouts,
     });
   }
 
@@ -1022,6 +1338,7 @@ export function YandexMapMultiViewer({
   const markerBaseZIndexByPointIdRef = useRef<Map<string, number>>(new Map());
   const priceLayoutsRef = useRef<PriceLayouts | null>(null);
   const dotLayoutsRef = useRef<DotLayouts | null>(null);
+  const categoryLayoutsRef = useRef<CategoryLayouts | null>(null);
   const balloonContentLayoutsRef = useRef<BalloonContentLayouts | null>(null);
   const closeBalloonTimerByPointIdRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -1237,7 +1554,8 @@ export function YandexMapMultiViewer({
   const updateMarkerStyles = useCallback(() => {
     const priceLayouts = priceLayoutsRef.current;
     const dotLayouts = dotLayoutsRef.current;
-    if (!priceLayouts || !dotLayouts) {
+    const categoryLayouts = categoryLayoutsRef.current;
+    if (!priceLayouts || !dotLayouts || !categoryLayouts) {
       return;
     }
 
@@ -1247,7 +1565,7 @@ export function YandexMapMultiViewer({
         return;
       }
 
-      const isPricePlacemark = shouldShowPricePlacemark({
+      const markerKind = getMarkerVisualKind({
         point,
         activePointId,
         zoom: mapZoom,
@@ -1260,10 +1578,11 @@ export function YandexMapMultiViewer({
         baseZIndex: markerBaseZIndexByPointId.get(point.id) ?? MARKER_Z_INDEX_DEFAULT,
         priceLayouts,
         dotLayouts,
+        categoryLayouts,
       });
 
       if (showBalloonsRef.current) {
-        visualOptions.balloonOffset = getBalloonOffset(isPricePlacemark);
+        visualOptions.balloonOffset = getBalloonOffset(markerKind);
       }
 
       applyPlacemarkOptions(placemark, visualOptions);
@@ -1365,6 +1684,7 @@ export function YandexMapMultiViewer({
               `${dotInnerBaseStyle}background:#ffffff;border-color:#ffffff;`,
             ),
           };
+          categoryLayoutsRef.current = createCategoryLayouts(readyYmaps);
           balloonContentLayoutsRef.current = {
             details: createBalloonContentLayout(readyYmaps),
             titleOnly: createTitleOnlyBalloonContentLayout(readyYmaps),
@@ -1429,6 +1749,7 @@ export function YandexMapMultiViewer({
       lastCenteredActiveRef.current = null;
       priceLayoutsRef.current = null;
       dotLayoutsRef.current = null;
+      categoryLayoutsRef.current = null;
       balloonContentLayoutsRef.current = null;
       mapZoomRef.current = DEFAULT_ZOOM;
     };
@@ -1439,6 +1760,7 @@ export function YandexMapMultiViewer({
     const ymaps = getYandexApi();
     const priceLayouts = priceLayoutsRef.current;
     const dotLayouts = dotLayoutsRef.current;
+    const categoryLayouts = categoryLayoutsRef.current;
     const balloonContentLayouts = balloonContentLayoutsRef.current;
 
     if (
@@ -1446,6 +1768,7 @@ export function YandexMapMultiViewer({
       !ymaps ||
       !priceLayouts ||
       !dotLayouts ||
+      !categoryLayouts ||
       !balloonContentLayouts ||
       !mapCreatedRef.current
     ) {
@@ -1461,7 +1784,7 @@ export function YandexMapMultiViewer({
 
     displayPoints.forEach((point) => {
       const hasPriceLabel = hasPointPriceLabel(point);
-      const isPricePlacemark = shouldShowPricePlacemark({
+      const markerKind = getMarkerVisualKind({
         point,
         activePointId: currentActivePointId,
         zoom: currentZoom,
@@ -1481,13 +1804,14 @@ export function YandexMapMultiViewer({
       const safeImageUrl = escapeHtml(resolvePreviewImageUrl(point.previewImageUrl));
       const safeRatingLabel = escapeHtml(rating !== null ? rating.toFixed(1) : "—");
       const safeReviewsLabel = escapeHtml(formatReviewsCount(reviewsCount));
+      const safeCategoryLabel = escapeHtml(resolveMarkerCategoryLabel(point));
       const isTitleOnlyBalloon = point.balloonVariant === "title-only";
       const balloonContentLayout = isTitleOnlyBalloon
         ? balloonContentLayouts.titleOnly
         : balloonContentLayouts.details;
       const balloonOptions = showBalloonsRef.current
         ? buildBalloonPlacemarkOptions({
-            isPricePlacemark,
+            markerKind,
             balloonContentLayout,
           })
         : {
@@ -1495,7 +1819,10 @@ export function YandexMapMultiViewer({
             openEmptyBalloon: false,
           };
       const balloonFallbackHtml = isTitleOnlyBalloon
-        ? buildTitleOnlyBalloonContentFallbackHtml({ title: safeTitle })
+        ? buildTitleOnlyBalloonContentFallbackHtml({
+            title: safeTitle,
+            categoryLabel: safeCategoryLabel,
+          })
         : buildBalloonContentFallbackHtml({
             title: safeTitle,
             imageUrl: safeImageUrl,
@@ -1511,10 +1838,13 @@ export function YandexMapMultiViewer({
           balloonContentBody: balloonFallbackHtml,
           iconContent: hasPriceLabel ? point.priceLabel : "",
           balloonTitle: safeTitle,
+          balloonCategoryLabel: safeCategoryLabel,
+          balloonCategoryDisplay: safeCategoryLabel ? "block" : "none",
           balloonPriceLabel: safePriceLabel,
           balloonImageUrl: safeImageUrl,
           balloonRatingLabel: safeRatingLabel,
           balloonReviewsLabel: safeReviewsLabel,
+          hintContent: safeCategoryLabel ? `${safeTitle} - ${safeCategoryLabel}` : safeTitle,
         },
         {
           ...buildMarkerVisualOptions({
@@ -1526,6 +1856,7 @@ export function YandexMapMultiViewer({
               markerBaseZIndexByPointIdRef.current.get(point.id) ?? MARKER_Z_INDEX_DEFAULT,
             priceLayouts,
             dotLayouts,
+            categoryLayouts,
           }),
           ...balloonOptions,
         },

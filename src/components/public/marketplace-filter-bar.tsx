@@ -28,6 +28,7 @@ type MarketplaceFilterBarProps =
       total: number;
       categories: string[];
       locationSuggestions: PublicMarketplaceLocationSuggestion[];
+      onNavigate?: (href: string) => void;
     }
   | {
       kind: "transfers";
@@ -35,6 +36,7 @@ type MarketplaceFilterBarProps =
       total: number;
       transferTypes: string[];
       locationSuggestions: PublicMarketplaceLocationSuggestion[];
+      onNavigate?: (href: string) => void;
     };
 
 type PanelKey = "search" | "location" | "entity" | "price" | "sort";
@@ -418,6 +420,7 @@ function OptionPill({
 export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
   const router = useRouter();
   const { kind, filters, total } = props;
+  const onNavigate = props.onNavigate;
   const basePath = kind === "attractions" ? "/attractions" : "/transfers";
   const isTransfer = kind === "transfers";
   const entityOptions = isTransfer ? props.transferTypes : props.categories;
@@ -512,6 +515,18 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
     [basePath, entity, isTransfer, location, maxPrice, minPrice, query, radiusKm, sort],
   );
 
+  const navigateTo = useCallback(
+    (href: string) => {
+      if (onNavigate) {
+        onNavigate(href);
+        return;
+      }
+
+      router.push(href);
+    },
+    [onNavigate, router],
+  );
+
   const applyFilters = useCallback(
     (patch?: FilterPatch) => {
       const nextLocation = normalizeText(patch?.location ?? location);
@@ -530,10 +545,10 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
           },
         );
       }
-      router.push(buildPath(patch));
+      navigateTo(buildPath(patch));
       setOpenPanel(null);
     },
-    [buildPath, kind, location, locationSuggestions, router],
+    [buildPath, kind, location, locationSuggestions, navigateTo],
   );
 
   const resetAllFilters = useCallback(() => {
@@ -545,8 +560,8 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
     setMaxPrice("");
     setSort("");
     setOpenPanel(null);
-    router.push(basePath);
-  }, [basePath, router]);
+    navigateTo(basePath);
+  }, [basePath, navigateTo]);
 
   const togglePanel = useCallback((panel: PanelKey) => {
     setOpenPanel((current) => (current === panel ? null : panel));

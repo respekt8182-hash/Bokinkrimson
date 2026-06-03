@@ -897,7 +897,38 @@ function containsQuery(query: string, candidates: Array<string | null | undefine
     return true;
   }
 
-  return candidates.some((candidate) => normalizeText(candidate).includes(normalizedQuery));
+  const haystack = candidates.map((candidate) => normalizeText(candidate)).join(" ");
+  if (haystack.includes(normalizedQuery)) {
+    return true;
+  }
+
+  const tokens = normalizedQuery.split(" ").filter((token) => token.length >= 2);
+  return tokens.length > 0 && tokens.every((token) => haystack.includes(token));
+}
+
+function getQueryTokenCoverageScore(
+  query: string,
+  candidates: Array<string | null | undefined>,
+): number {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const haystack = candidates.map((candidate) => normalizeText(candidate)).join(" ");
+  if (haystack.includes(normalizedQuery)) {
+    return 1;
+  }
+
+  const tokens = normalizedQuery.split(" ").filter((token) => token.length >= 2);
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const matchedCount = tokens.filter((token) => haystack.includes(token)).length;
+  const coverage = matchedCount / tokens.length;
+
+  return coverage === 1 ? 0.85 : coverage >= 0.67 ? 0.45 : 0;
 }
 
 export type StaticAttractionCatalogQuery = {
@@ -1025,34 +1056,41 @@ export async function getStaticAttractionCatalog(
         return null;
       }
 
-      if (
-        !isPointInsideBounds(
-          point?.latitude ?? null,
-          point?.longitude ?? null,
-          bounds,
-        )
-      ) {
+      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, bounds)) {
         return null;
       }
 
       const searchScore = searchScores.get(item.id) ?? 0;
+      const searchTokenCount = normalizeText(searchQuery)
+        .split(" ")
+        .filter((token) => token.length >= 2).length;
+      const hasFuzzySearchMatch = searchScore > (searchTokenCount >= 2 ? 0.24 : 0);
+      const searchCandidates = [
+        item.title,
+        item.h1,
+        item.category,
+        item.locationName,
+        item.districtName,
+        item.address,
+        item.shortDescription,
+        item.description,
+        ...item.tags,
+        ...item.locationAliases,
+        ...item.searchKeywords,
+        ...item.nearby,
+        ...item.sections.flatMap((section) => [
+          section.title,
+          ...section.body,
+          ...(section.list ?? []),
+        ]),
+        ...item.faq.flatMap((faq) => [faq.question, faq.answer]),
+      ];
+      const queryTokenCoverageScore = getQueryTokenCoverageScore(searchQuery, searchCandidates);
       if (
         searchQuery &&
-        searchScore <= 0 &&
-        !containsQuery(searchQuery, [
-          item.title,
-          item.h1,
-          item.category,
-          item.locationName,
-          item.districtName,
-          item.address,
-          item.shortDescription,
-          item.description,
-          ...item.tags,
-          ...item.locationAliases,
-          ...item.searchKeywords,
-          ...item.nearby,
-        ])
+        !hasFuzzySearchMatch &&
+        queryTokenCoverageScore <= 0 &&
+        !containsQuery(searchQuery, searchCandidates)
       ) {
         return null;
       }
@@ -1068,7 +1106,8 @@ export async function getStaticAttractionCatalog(
         ])
           ? 24
           : 0;
-      const relevance = searchScore * 70 + distanceScore + locationAliasScore;
+      const relevance =
+        searchScore * 70 + queryTokenCoverageScore * 45 + distanceScore + locationAliasScore;
 
       return { item, distanceKm, relevance };
     })

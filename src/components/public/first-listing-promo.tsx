@@ -4,7 +4,7 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
 
 type FirstListingPromoProps = {
-  kind: "housing" | "excursions" | "transfers";
+  kind: "housing" | "excursions" | "transfers" | "attractions";
   className?: string;
 };
 
@@ -22,11 +22,17 @@ export function FirstListingPromo({ kind, className }: FirstListingPromoProps) {
             description:
               "Добавьте трансфер в каталог Крым Вокруг бесплатно до 1 мая 2027 и получайте обращения напрямую.",
           }
-        : {
-            title: "Станьте первым, кто разместит экскурсию или тур",
-            description:
-              "Добавьте программу в каталог Крым Вокруг бесплатно до 1 мая 2027 и получайте обращения напрямую.",
-          };
+        : kind === "attractions"
+          ? {
+              title: "Станьте первым, кто разместит место досуга",
+              description:
+                "Добавьте активность, парк, музей или маршрут в каталог Крым Вокруг и получайте обращения напрямую.",
+            }
+          : {
+              title: "Станьте первым, кто разместит экскурсию или тур",
+              description:
+                "Добавьте программу в каталог Крым Вокруг бесплатно до 1 мая 2027 и получайте обращения напрямую.",
+            };
 
   return (
     <section

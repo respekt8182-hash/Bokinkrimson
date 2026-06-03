@@ -60,6 +60,8 @@ const directionLabels = {
 
 type Direction = keyof typeof directionLabels;
 
+const DEFAULT_ATTRACTION_CITY_RADIUS_KM = 10;
+
 type MobileSearchStep = "location" | "date" | "guests" | "review";
 
 type DateRangeState = {
@@ -888,7 +890,10 @@ function buildCityHref(input: {
   }
 
   if (input.direction === "attractions") {
-    return `${attractionsHubPath}?${new URLSearchParams({ location: input.locationName }).toString()}`;
+    return `${attractionsHubPath}?${new URLSearchParams({
+      location: input.locationName,
+      radiusKm: String(DEFAULT_ATTRACTION_CITY_RADIUS_KM),
+    }).toString()}`;
   }
 
   if (input.direction === "transfers") {
