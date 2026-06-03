@@ -991,7 +991,7 @@ export async function getStaticAttractionCatalog(
   const pageSize = parsePageSize(query.pageSize, query.allowLargePageSize === true);
   const searchQuery = query.query?.trim() ?? "";
   const bounds = query.bounds ?? null;
-  const locationQuery = bounds ? "" : (query.location?.trim() ?? "");
+  const locationQuery = query.location?.trim() ?? "";
   const category = query.category?.trim() ?? "";
   const radiusKm = parseRadiusKm(query.radiusKm);
   const sort = parseSort(query.sort);

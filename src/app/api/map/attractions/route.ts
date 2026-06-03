@@ -16,10 +16,11 @@ function parseSort(value: string | null): PublicAttractionCatalogQuery["sort"] |
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const bounds = parseBoundsParam(searchParams.get("bounds"));
+  const location = searchParams.get("location")?.trim() || undefined;
+  const bounds = location ? null : parseBoundsParam(searchParams.get("bounds"));
   const result = await getPublicAttractionMapItems({
     query: searchParams.get("q") ?? searchParams.get("query") ?? undefined,
-    location: searchParams.get("location") ?? undefined,
+    location,
     category: searchParams.get("category") ?? undefined,
     bounds,
     radiusKm: parseRadiusKm(searchParams.get("radiusKm")),

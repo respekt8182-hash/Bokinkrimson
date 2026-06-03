@@ -125,6 +125,20 @@ function getParamsFromResult(
   };
 }
 
+function hasStrictLocationRadiusScope(result: PublicAttractionCatalogResult): boolean {
+  const { centerLat, centerLng, locationName, radiusKm } = result.filters;
+
+  return (
+    Boolean(locationName) &&
+    centerLat !== null &&
+    centerLng !== null &&
+    Number.isFinite(centerLat) &&
+    Number.isFinite(centerLng) &&
+    Number.isFinite(radiusKm) &&
+    radiusKm > 0
+  );
+}
+
 function buildApiRequestPath(href: string, page: number, bounds?: string | null): string {
   const url = new URL(href, window.location.origin);
   const params = new URLSearchParams(url.search);
@@ -504,8 +518,9 @@ export function AttractionCatalogClient({
   activeBounds = null,
   catalogActiveTotal,
 }: AttractionCatalogClientProps) {
+  const initialBounds = hasStrictLocationRadiusScope(initialResult) ? null : activeBounds;
   const [result, setResult] = useState(initialResult);
-  const [bounds, setBounds] = useState(activeBounds);
+  const [bounds, setBounds] = useState(initialBounds);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
@@ -513,7 +528,7 @@ export function AttractionCatalogClient({
   const resultRef = useRef(initialResult);
   const requestSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const boundsRef = useRef(activeBounds);
+  const boundsRef = useRef(initialBounds);
 
   useEffect(() => {
     resultRef.current = result;
@@ -540,19 +555,39 @@ export function AttractionCatalogClient({
 
   const shouldShowConnectionEmptyState = catalogActiveTotal === 0;
   const hasMore = result.page < result.totalPages;
-  const currentParams = useMemo(() => getParamsFromResult(result, bounds), [bounds, result]);
+  const hasLocationRadiusScope = hasStrictLocationRadiusScope(result);
+  const effectiveBounds = hasLocationRadiusScope ? null : bounds;
+  const currentParams = useMemo(
+    () => getParamsFromResult(result, effectiveBounds),
+    [effectiveBounds, result],
+  );
   const mapItemsEndpoint = useMemo(() => {
-    const hasBounds = Boolean(bounds);
-
     return buildCatalogPath("/api/map/attractions", {
       ...currentParams,
-      location: hasBounds ? null : currentParams.location,
-      radiusKm: hasBounds ? null : currentParams.radiusKm,
-      bounds: hasBounds ? bounds : null,
+      bounds: effectiveBounds,
     });
-  }, [bounds, currentParams]);
+  }, [currentParams, effectiveBounds]);
   const initialMapItems = mapItems ?? result.items.map(toAttractionMapItem);
   const foundLabel = formatRuCount(result.total, "место", "места", "мест");
+
+  useEffect(() => {
+    if (!hasLocationRadiusScope) {
+      return;
+    }
+
+    const urlHasBounds = new URLSearchParams(window.location.search).has("bounds");
+    if (bounds === null && !urlHasBounds) {
+      return;
+    }
+
+    setBounds(null);
+    boundsRef.current = null;
+    window.history.replaceState(
+      {},
+      "",
+      buildCatalogPath("/attractions", getParamsFromResult(resultRef.current, null)),
+    );
+  }, [bounds, hasLocationRadiusScope]);
 
   const runRequest = useCallback(
     async (
@@ -636,6 +671,10 @@ export function AttractionCatalogClient({
 
   const handleBoundsChange = useCallback(
     (nextBounds: string | null) => {
+      if (hasLocationRadiusScope) {
+        return;
+      }
+
       if ((nextBounds ?? null) === (boundsRef.current ?? null)) {
         return;
       }
@@ -646,7 +685,7 @@ export function AttractionCatalogClient({
         preserveFiltersForBounds: Boolean(nextBounds),
       });
     },
-    [runRequest],
+    [hasLocationRadiusScope, runRequest],
   );
 
   const handleLoadMore = useCallback(async () => {
@@ -720,7 +759,7 @@ export function AttractionCatalogClient({
           resultsCount={result.total}
           filters={result.filters}
           syncBoundsToUrl={false}
-          activeBoundsParam={bounds}
+          activeBoundsParam={effectiveBounds}
           isLoading={isRefreshing}
           mapItemsEndpoint={mapItemsEndpoint}
           mapTitle="Карта мест"

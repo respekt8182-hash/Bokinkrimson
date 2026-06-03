@@ -27,12 +27,13 @@ function parseSort(value: string | null): PublicAttractionCatalogQuery["sort"] |
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const pageSize = parsePageSize(searchParams.get("pageSize") ?? searchParams.get("page_size"));
-  const bounds = parseBoundsParam(searchParams.get("bounds"));
+  const location = searchParams.get("location")?.trim() || undefined;
+  const bounds = location ? null : parseBoundsParam(searchParams.get("bounds"));
   const result = await getPublicAttractionCatalog({
     page: parsePage(searchParams.get("page")),
     pageSize,
     query: searchParams.get("q") ?? searchParams.get("query") ?? undefined,
-    location: searchParams.get("location") ?? undefined,
+    location,
     category: searchParams.get("category") ?? undefined,
     bounds,
     radiusKm: parseRadiusKm(searchParams.get("radiusKm")) ?? 20,

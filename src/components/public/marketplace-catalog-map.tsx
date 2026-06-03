@@ -1286,6 +1286,14 @@ export function MarketplaceCatalogMap({
   );
   const isCurrentBoundsFromMapInteraction =
     currentBoundsParam !== null && currentBoundsParam === mapInteractionBoundsParam;
+  const hasStrictAttractionRadiusScope =
+    kind === "attractions" &&
+    filters.centerLat !== null &&
+    filters.centerLng !== null &&
+    Number.isFinite(filters.centerLat) &&
+    Number.isFinite(filters.centerLng) &&
+    Number.isFinite(filters.radiusKm) &&
+    filters.radiusKm > 0;
   const initialMapViewport = useMemo<YandexMapViewport | null>(() => {
     if (currentBounds && !isCurrentBoundsFromMapInteraction) {
       return { bounds: currentBounds };
@@ -1403,11 +1411,24 @@ export function MarketplaceCatalogMap({
             return false;
           }
 
+          if (
+            hasStrictAttractionRadiusScope &&
+            haversineKm(centerLat!, centerLng!, item.latitude, item.longitude) > radiusKm!
+          ) {
+            return false;
+          }
+
           if (!isPointInsideViewportBounds(item, pointFilterBounds)) {
             return false;
           }
 
-          if (!pointFilterBounds && !currentBounds && hasRadiusCenter && radiusKm !== null) {
+          if (
+            !hasStrictAttractionRadiusScope &&
+            !pointFilterBounds &&
+            !currentBounds &&
+            hasRadiusCenter &&
+            radiusKm !== null
+          ) {
             return haversineKm(centerLat!, centerLng!, item.latitude, item.longitude) <= radiusKm;
           }
 
@@ -1423,6 +1444,7 @@ export function MarketplaceCatalogMap({
     filters.centerLat,
     filters.centerLng,
     filters.radiusKm,
+    hasStrictAttractionRadiusScope,
     kind,
     currentBounds,
     pointFilterBounds,
@@ -1505,6 +1527,16 @@ export function MarketplaceCatalogMap({
   const handleMapBoundsChange = useCallback(
     (bounds: [[number, number], [number, number]] | null) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (hasStrictAttractionRadiusScope) {
+        mapBoundsQueryRef.current = null;
+        lastRequestedBoundsRef.current = null;
+        if (boundsUpdateTimerRef.current !== null) {
+          window.clearTimeout(boundsUpdateTimerRef.current);
+          boundsUpdateTimerRef.current = null;
+        }
+        return;
+      }
+
       const shouldSuppressBoundsSync = Date.now() <= suppressBoundsSyncUntilRef.current;
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
@@ -1562,7 +1594,7 @@ export function MarketplaceCatalogMap({
         });
       }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [onBoundsQueryChange, pathname, router, syncBoundsToUrl],
+    [hasStrictAttractionRadiusScope, onBoundsQueryChange, pathname, router, syncBoundsToUrl],
   );
 
   const markMapInteraction = useCallback(() => {

@@ -28,8 +28,9 @@ function pick(value: string | string[] | undefined): string {
 
 export default async function AttractionsPage({ searchParams }: AttractionsPageProps) {
   const params = await searchParams;
+  const location = pick(params.location);
   const boundsParam = pick(params.bounds);
-  const bounds = parseBoundsParam(boundsParam);
+  const bounds = location ? null : parseBoundsParam(boundsParam);
   const radiusKm = Number.parseFloat(pick(params.radiusKm) || "20");
   const page = Number.parseInt(pick(params.page) || "1", 10);
   const sortRaw = pick(params.sort);
@@ -40,7 +41,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
 
   const catalogQuery = {
     query: pick(params.q) || pick(params.query),
-    location: pick(params.location),
+    location,
     category: pick(params.category),
     radiusKm: Number.isFinite(radiusKm) ? radiusKm : undefined,
     sort,
@@ -61,7 +62,7 @@ export default async function AttractionsPage({ searchParams }: AttractionsPageP
       result={result}
       categories={directory.attractionCategories}
       locationSuggestions={directory.attractionLocationSuggestions}
-      activeBounds={boundsParam || null}
+      activeBounds={location ? null : boundsParam || null}
       catalogActiveTotal={directory.attractionTotal}
     />
   );
