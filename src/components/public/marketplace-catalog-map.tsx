@@ -1280,12 +1280,14 @@ export function MarketplaceCatalogMap({
   const suppressBoundsSyncUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
   const [mapInteractionBoundsParam, setMapInteractionBoundsParam] = useState<string | null>(null);
+  const [hasMapViewportInteraction, setHasMapViewportInteraction] = useState(false);
   const currentBounds = useMemo(
     () => parseMapBoundsFilter(currentBoundsParam),
     [currentBoundsParam],
   );
   const isCurrentBoundsFromMapInteraction =
-    currentBoundsParam !== null && currentBoundsParam === mapInteractionBoundsParam;
+    currentBoundsParam !== null &&
+    (hasMapViewportInteraction || currentBoundsParam === mapInteractionBoundsParam);
   const hasStrictAttractionRadiusScope =
     kind === "attractions" &&
     filters.centerLat !== null &&
@@ -1599,6 +1601,7 @@ export function MarketplaceCatalogMap({
 
   const markMapInteraction = useCallback(() => {
     hasMapInteractionRef.current = true;
+    setHasMapViewportInteraction((current) => (current ? current : true));
   }, []);
 
   const handleMapWheelCapture = useCallback(() => {
