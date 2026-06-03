@@ -1329,17 +1329,7 @@ export function MarketplaceCatalogMap({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null);
-  const [mapViewportBoundsState, setMapViewportBoundsState] = useState<{
-    sourceBoundsParam: string | null;
-    bounds: [[number, number], [number, number]] | null;
-  }>(() => ({
-    sourceBoundsParam: currentBoundsParam,
-    bounds: currentBounds,
-  }));
-  const mapViewportBounds =
-    mapViewportBoundsState.sourceBoundsParam === currentBoundsParam
-      ? mapViewportBoundsState.bounds
-      : currentBounds;
+  const pointFilterBounds = isCurrentBoundsFromMapInteraction ? null : currentBounds;
   const [loadedMapItemsState, setLoadedMapItemsState] = useState<{
     endpoint: string;
     items: MarketplaceCatalogMapItem[];
@@ -1413,11 +1403,11 @@ export function MarketplaceCatalogMap({
             return false;
           }
 
-          if (!isPointInsideViewportBounds(item, mapViewportBounds ?? currentBounds)) {
+          if (!isPointInsideViewportBounds(item, pointFilterBounds)) {
             return false;
           }
 
-          if (!mapViewportBounds && !currentBounds && hasRadiusCenter && radiusKm !== null) {
+          if (!pointFilterBounds && !currentBounds && hasRadiusCenter && radiusKm !== null) {
             return haversineKm(centerLat!, centerLng!, item.latitude, item.longitude) <= radiusKm;
           }
 
@@ -1435,7 +1425,7 @@ export function MarketplaceCatalogMap({
     filters.radiusKm,
     kind,
     currentBounds,
-    mapViewportBounds,
+    pointFilterBounds,
     resolvedItems,
     viewedPointIds,
   ]);
@@ -1518,10 +1508,6 @@ export function MarketplaceCatalogMap({
       const shouldSuppressBoundsSync = Date.now() <= suppressBoundsSyncUntilRef.current;
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
-        setMapViewportBoundsState({
-          sourceBoundsParam: currentBoundsParam,
-          bounds,
-        });
       }
 
       if (shouldSuppressBoundsSync) {
@@ -1533,9 +1519,6 @@ export function MarketplaceCatalogMap({
         return;
       }
 
-      setMapInteractionBoundsParam((current) =>
-        current === normalizedBounds ? current : normalizedBounds,
-      );
       const lastRequestedBounds = lastRequestedBoundsRef.current;
 
       if (normalizedBounds === lastRequestedBounds) {
@@ -1552,6 +1535,9 @@ export function MarketplaceCatalogMap({
         const nextParams = new URLSearchParams(window.location.search);
         const liveBounds = nextParams.get("bounds")?.trim() || null;
 
+        setMapInteractionBoundsParam((current) =>
+          current === normalizedBounds ? current : normalizedBounds,
+        );
         onBoundsQueryChange?.(normalizedBounds);
 
         if (!syncBoundsToUrl) {
@@ -1576,7 +1562,7 @@ export function MarketplaceCatalogMap({
         });
       }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [currentBoundsParam, onBoundsQueryChange, pathname, router, syncBoundsToUrl],
+    [onBoundsQueryChange, pathname, router, syncBoundsToUrl],
   );
 
   const markMapInteraction = useCallback(() => {
