@@ -3,6 +3,7 @@
 
 import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import dynamic from "next/dynamic";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   type CSSProperties,
   Fragment,
@@ -17,10 +18,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/cn";
-import type {
-  YandexMapPoint,
-  YandexMapViewport,
-} from "@/components/maps/yandex-map-multi-viewer";
+import type { YandexMapPoint, YandexMapViewport } from "@/components/maps/yandex-map-multi-viewer";
 import { AppIcon } from "@/components/ui/app-icon";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import {
@@ -31,6 +29,14 @@ import { PublicPropertySearchCard } from "@/components/public/public-property-se
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
 import { NEARBY_CATALOG_RADIUS_KM } from "@/lib/catalog-radius";
+import {
+  buildCatalogMapViewportScope,
+  markCatalogMapItemViewed,
+  readCatalogMapViewedItems,
+  readCatalogMapViewport,
+  writeCatalogMapViewport,
+} from "@/lib/catalog-map-memory";
+import { fetchWithRetry } from "@/lib/client-retry-fetch";
 import { fetchLocationCenter } from "@/lib/location-center-client";
 import { normalizeRoomPriceType, type RoomPriceCalculationType } from "@/lib/pricing";
 import type { PublicCatalogItem } from "@/lib/public-properties";
@@ -368,6 +374,9 @@ export function PublicHousingResultsWithMap({
   onWishlistToggle,
   onMapBoundsFilterChange,
 }: PublicHousingResultsWithMapProps) {
+  const pathname = usePathname() ?? "/";
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -389,6 +398,10 @@ export function PublicHousingResultsWithMap({
     const normalizedLocation = selectedLocation.trim().toLocaleLowerCase("ru-RU");
     return normalizedLocation ? `housing-location:${normalizedLocation}` : "";
   }, [selectedLocation]);
+  const mapViewportStorageScope = useMemo(
+    () => buildCatalogMapViewportScope(pathname, searchParamsString),
+    [pathname, searchParamsString],
+  );
   const stayParams = useMemo(() => {
     const params = new URLSearchParams(mapQuery);
     return {
@@ -426,7 +439,12 @@ export function PublicHousingResultsWithMap({
   >(null);
   const [mapBoundsQuery, setMapBoundsQuery] = useState<string | null>(null);
   const [initialViewport, setInitialViewport] = useState<YandexMapViewport | null>(null);
-  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() =>
+    readCatalogMapViewedItems("housing"),
+  );
+  const [storedMapViewport, setStoredMapViewport] = useState<YandexMapViewport | null>(() =>
+    readCatalogMapViewport("housing", mapViewportStorageScope),
+  );
 
   const closeMapFully = useCallback(() => {
     setIsMapExpanded(false);
@@ -541,6 +559,10 @@ export function PublicHousingResultsWithMap({
 
   const activePopupItem = activePointId ? (mapPointById.get(activePointId) ?? null) : null;
   const highlightedMapPointId = hoveredPointId ?? hoveredCardId;
+  const resolvedInitialViewport = storedMapViewport ?? initialViewport;
+  const resolvedInitialViewportKey = storedMapViewport
+    ? `housing-memory:${mapViewportStorageScope}`
+    : initialViewportKey;
   const isCatalogLoading = loadingInitial;
   const mapLoadingPillVisible =
     isCatalogLoading || (hasMapInteractionRef.current && mapState.status === "loading");
@@ -584,6 +606,24 @@ export function PublicHousingResultsWithMap({
   }, []);
 
   useEffect(() => {
+    setStoredMapViewport(readCatalogMapViewport("housing", mapViewportStorageScope));
+  }, [mapViewportStorageScope]);
+
+  useEffect(() => {
+    const refreshViewedItems = () => {
+      setViewedPointIds(readCatalogMapViewedItems("housing"));
+    };
+
+    window.addEventListener("pageshow", refreshViewedItems);
+    window.addEventListener("focus", refreshViewedItems);
+
+    return () => {
+      window.removeEventListener("pageshow", refreshViewedItems);
+      window.removeEventListener("focus", refreshViewedItems);
+    };
+  }, []);
+
+  useEffect(() => {
     setIsMapActivated((current) => {
       if (mapPlacement === null) {
         return current;
@@ -602,7 +642,6 @@ export function PublicHousingResultsWithMap({
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPointId(null);
-    setViewedPointIds(new Set());
     setMapState(createInitialMapState());
     mapBoundsQueryRef.current = null;
     setMapViewportBounds(null);
@@ -672,9 +711,11 @@ export function PublicHousingResultsWithMap({
       }));
 
       try {
-        const response = await fetch(`/api/map/accommodations?${requestQuery}`, {
+        const response = await fetchWithRetry(`/api/map/accommodations?${requestQuery}`, {
           signal: controller.signal,
-          cache: "no-store",
+          retries: 2,
+          retryDelayMs: 450,
+          timeoutMs: 9_000,
         });
 
         if (!response.ok) {
@@ -862,17 +903,17 @@ export function PublicHousingResultsWithMap({
 
   const markPointViewed = useCallback((pointId: string) => {
     setViewedPointIds((prev) => {
-      if (prev.has(pointId)) {
+      const next = markCatalogMapItemViewed("housing", pointId);
+      if (prev.has(pointId) && prev.size === next.size) {
         return prev;
       }
 
-      const next = new Set(prev);
-      next.add(pointId);
       return next;
     });
   }, []);
 
   function handleMapPointClick(pointId: string) {
+    hasMapInteractionRef.current = true;
     suppressBoundsRefreshUntilRef.current = Date.now() + 900;
     setActivePointId(pointId);
     setHoveredCardId(null);
@@ -884,16 +925,16 @@ export function PublicHousingResultsWithMap({
     }
   }
 
-  const handleMapPointHoverChange = useCallback(
-    (pointId: string | null) => {
-      setHoveredPointId(pointId);
-    },
-    [],
-  );
+  const handleMapPointHoverChange = useCallback((pointId: string | null) => {
+    setHoveredPointId(pointId);
+  }, []);
 
   const handleMapBoundsChange = useCallback(
-    (bounds: [[number, number], [number, number]] | null) => {
+    (bounds: [[number, number], [number, number]] | null, viewport?: YandexMapViewport) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (hasMapInteractionRef.current && bounds) {
+        writeCatalogMapViewport("housing", mapViewportStorageScope, viewport ?? { bounds });
+      }
       const shouldSuppressBoundsRefresh = Date.now() <= suppressBoundsRefreshUntilRef.current;
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
@@ -914,7 +955,7 @@ export function PublicHousingResultsWithMap({
 
       onMapBoundsFilterChange?.(normalizedBounds);
     },
-    [onMapBoundsFilterChange],
+    [mapViewportStorageScope, onMapBoundsFilterChange],
   );
 
   const handleMapWheelCapture = useCallback(() => {
@@ -1213,123 +1254,123 @@ export function PublicHousingResultsWithMap({
       <section className="space-y-4">
         {mapPlacement === "mobile" ? (
           isMapActivated ? (
-          <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
-            <div
-              className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
-              style={{
-                height: mobileStageHeight
-                  ? `${mobileStageHeight}px`
-                  : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
-              }}
-            >
+            <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
               <div
-                className="absolute inset-0"
-                onPointerDownCapture={handleMobileMapPointerDown}
-                onWheelCapture={handleMapWheelCapture}
+                className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
+                style={{
+                  height: mobileStageHeight
+                    ? `${mobileStageHeight}px`
+                    : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
+                }}
               >
-                <YandexMapMultiViewer
-                  points={mapViewerPoints}
-                  activePointId={activePointId}
-                  hoveredPointId={highlightedMapPointId}
-                  onPointClick={handleMapPointClick}
-                  onPointHoverChange={handleMapPointHoverChange}
-                  onBoundsChange={handleMapBoundsChange}
-                  initialViewport={initialViewport}
-                  viewportKey={initialViewportKey}
-                  controls={[]}
-                  showBalloons={false}
-                  frameless
-                  fitPointsOnChange="never"
-                  className="h-full w-full"
-                />
-              </div>
-
-              {mapLoadingPillVisible ? <MapLoadingDotsPill className="top-3" /> : null}
-
-              {activePopupItem && mobileSheetSnap !== "expanded" ? (
                 <div
-                  className="pointer-events-none absolute inset-x-3 z-30 flex justify-center transition-[bottom] duration-200 ease-out"
-                  style={{ bottom: `${mobilePopupBottom}px` }}
+                  className="absolute inset-0"
+                  onPointerDownCapture={handleMobileMapPointerDown}
+                  onWheelCapture={handleMapWheelCapture}
                 >
-                  <MapPropertyPopupCard
-                    key={activePopupItem.id}
-                    item={activePopupItem}
-                    onClose={() => setActivePointId(null)}
-                    variant="compact"
-                    className="pointer-events-auto w-full max-w-[500px]"
+                  <YandexMapMultiViewer
+                    points={mapViewerPoints}
+                    activePointId={activePointId}
+                    hoveredPointId={highlightedMapPointId}
+                    onPointClick={handleMapPointClick}
+                    onPointHoverChange={handleMapPointHoverChange}
+                    onBoundsChange={handleMapBoundsChange}
+                    initialViewport={resolvedInitialViewport}
+                    viewportKey={resolvedInitialViewportKey}
+                    controls={[]}
+                    showBalloons={false}
+                    frameless
+                    fitPointsOnChange="never"
+                    className="h-full w-full"
                   />
                 </div>
-              ) : null}
 
-              <div
-                className={cn(
-                  "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
-                  mobileSheetDragRef.current
-                    ? "transition-none"
-                    : "transition-transform duration-300 ease-out",
-                )}
-                style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
-              >
-                <div className={cn("md:hidden", isMobileSheetExpanded && "hidden")}>
-                  <button
-                    type="button"
-                    onClick={handleMobileSheetClick}
-                    onPointerDown={handleMobileSheetPointerDown}
-                    onPointerMove={handleMobileSheetPointerMove}
-                    onPointerUp={handleMobileSheetPointerUp}
-                    onPointerCancel={handleMobileSheetPointerCancel}
-                    className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
-                    aria-expanded={mobileSheetSnap !== "collapsed"}
-                    aria-controls="catalog-results"
+                {mapLoadingPillVisible ? <MapLoadingDotsPill className="top-3" /> : null}
+
+                {activePopupItem && mobileSheetSnap !== "expanded" ? (
+                  <div
+                    className="pointer-events-none absolute inset-x-3 z-30 flex justify-center transition-[bottom] duration-200 ease-out"
+                    style={{ bottom: `${mobilePopupBottom}px` }}
                   >
-                    <span
-                      className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
-                      aria-hidden="true"
+                    <MapPropertyPopupCard
+                      key={activePopupItem.id}
+                      item={activePopupItem}
+                      onClose={() => setActivePointId(null)}
+                      variant="compact"
+                      className="pointer-events-auto w-full max-w-[500px]"
                     />
-                    <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
-                      {mobileStatusContent}
-                      <AppIcon
-                        icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
-                        className="h-4 w-4 text-olive/48"
-                      />
-                    </span>
-                  </button>
-                </div>
+                  </div>
+                ) : null}
+
                 <div
-                  ref={mobileResultsScrollRef}
-                  onScroll={handleMobileResultsScroll}
                   className={cn(
-                    "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
-                    isMobileSheetExpanded
-                      ? "h-full pt-0"
-                      : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
-                    mobileSheetSnap === "collapsed"
-                      ? "pointer-events-none opacity-0"
-                      : "opacity-100",
+                    "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
+                    mobileSheetDragRef.current
+                      ? "transition-none"
+                      : "transition-transform duration-300 ease-out",
                   )}
+                  style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
                 >
-                  {isMobileSheetExpanded ? (
-                    <>
-                      <div className="-mx-4">{mobileSheetHandle}</div>
-                      <div className="pt-4">{resultsSection}</div>
-                    </>
-                  ) : (
-                    resultsSection
-                  )}
+                  <div className={cn("md:hidden", isMobileSheetExpanded && "hidden")}>
+                    <button
+                      type="button"
+                      onClick={handleMobileSheetClick}
+                      onPointerDown={handleMobileSheetPointerDown}
+                      onPointerMove={handleMobileSheetPointerMove}
+                      onPointerUp={handleMobileSheetPointerUp}
+                      onPointerCancel={handleMobileSheetPointerCancel}
+                      className="flex h-[76px] w-full touch-none cursor-grab flex-col items-center gap-2 rounded-t-[26px] px-2 pb-3 pt-2 text-center text-olive active:cursor-grabbing"
+                      aria-expanded={mobileSheetSnap !== "collapsed"}
+                      aria-controls="catalog-results"
+                    >
+                      <span
+                        className="h-1 w-16 rounded-full bg-white/70 shadow-[0_1px_5px_rgba(255,255,255,0.72)] ring-1 ring-white/80"
+                        aria-hidden="true"
+                      />
+                      <span className="relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/55 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(255,255,255,0.48)_52%,rgba(255,255,255,0.72))] px-4 py-2 text-sm font-semibold shadow-[0_18px_36px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-12px_24px_rgba(255,255,255,0.18)] ring-1 ring-white/72 backdrop-blur-xl">
+                        {mobileStatusContent}
+                        <AppIcon
+                          icon={mobileSheetSnap === "expanded" ? ChevronDown : ChevronUp}
+                          className="h-4 w-4 text-olive/48"
+                        />
+                      </span>
+                    </button>
+                  </div>
+                  <div
+                    ref={mobileResultsScrollRef}
+                    onScroll={handleMobileResultsScroll}
+                    className={cn(
+                      "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
+                      isMobileSheetExpanded
+                        ? "h-full pt-0"
+                        : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
+                      mobileSheetSnap === "collapsed"
+                        ? "pointer-events-none opacity-0"
+                        : "opacity-100",
+                    )}
+                  >
+                    {isMobileSheetExpanded ? (
+                      <>
+                        <div className="-mx-4">{mobileSheetHandle}</div>
+                        <div className="pt-4">{resultsSection}</div>
+                      </>
+                    ) : (
+                      resultsSection
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            {shouldShowMobileMapButton ? (
-              <button
-                type="button"
-                onClick={openMobileMapInSearch}
-                className="float-map-btn md:hidden"
-                aria-label="Показать карту"
-              >
-                Карта
-              </button>
-            ) : null}
-          </section>
+              {shouldShowMobileMapButton ? (
+                <button
+                  type="button"
+                  onClick={openMobileMapInSearch}
+                  className="float-map-btn md:hidden"
+                  aria-label="Показать карту"
+                >
+                  Карта
+                </button>
+              ) : null}
+            </section>
           ) : (
             <section className="space-y-4 md:hidden">
               {resultsSection}
@@ -1366,8 +1407,8 @@ export function PublicHousingResultsWithMap({
                       onPointClick={handleMapPointClick}
                       onPointHoverChange={handleMapPointHoverChange}
                       onBoundsChange={handleMapBoundsChange}
-                      initialViewport={initialViewport}
-                      viewportKey={initialViewportKey}
+                      initialViewport={resolvedInitialViewport}
+                      viewportKey={resolvedInitialViewportKey}
                       showBalloons={false}
                       frameless
                       fitPointsOnChange="never"
@@ -1408,8 +1449,8 @@ export function PublicHousingResultsWithMap({
                           onPointClick={handleMapPointClick}
                           onPointHoverChange={handleMapPointHoverChange}
                           onBoundsChange={handleMapBoundsChange}
-                          initialViewport={initialViewport}
-                          viewportKey={initialViewportKey}
+                          initialViewport={resolvedInitialViewport}
+                          viewportKey={resolvedInitialViewportKey}
                           controls={["zoomControl"]}
                           showBalloons={false}
                           frameless
@@ -1472,8 +1513,8 @@ export function PublicHousingResultsWithMap({
                 onPointClick={handleMapPointClick}
                 onPointHoverChange={handleMapPointHoverChange}
                 onBoundsChange={handleMapBoundsChange}
-                initialViewport={initialViewport}
-                viewportKey={initialViewportKey}
+                initialViewport={resolvedInitialViewport}
+                viewportKey={resolvedInitialViewportKey}
                 controls={["zoomControl"]}
                 showBalloons={false}
                 frameless

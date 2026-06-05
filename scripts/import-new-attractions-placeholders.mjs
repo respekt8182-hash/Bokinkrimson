@@ -148,6 +148,10 @@ function cleanText(value) {
     .trim();
 }
 
+function cleanGuideTitle(value) {
+  return cleanText(value).replace(/: путеводитель.+$/i, "");
+}
+
 function toParagraphs(value) {
   const cleaned = cleanText(value);
   if (!cleaned) {
@@ -758,7 +762,8 @@ function parseAttraction(blockInfo, existingSlugIds, usedIds) {
   const seoTitle = extractField(markdown, "SEO Title");
   const metaDescription = extractField(markdown, "Meta Description");
   const h1 = extractField(markdown, "H1") || sourceTitle;
-  const title = cleanText(h1 || sourceTitle).replace(/: путеводитель.+$/i, "");
+  const cleanH1 = cleanGuideTitle(h1 || sourceTitle);
+  const title = cleanH1;
   const slug = normalizeSlug(extractField(markdown, "URL / slug"), title);
   const sections = buildSections(markdown);
   const practicalSection = sections.find((section) => section.title === "Практическая информация");
@@ -799,11 +804,11 @@ function parseAttraction(blockInfo, existingSlugIds, usedIds) {
     item: {
       title,
       slug,
-      h1: cleanText(h1 || title),
+      h1: cleanH1,
       seoTitle: seoTitle || `${title} — достопримечательность Крыма`,
       metaDescription: metaDescription || shortDescription,
       category,
-      tags: uniqueStrings([category, locationName, ...buildSearchKeywords(markdown, title, h1).slice(2, 8)]),
+      tags: uniqueStrings([category, locationName, ...buildSearchKeywords(markdown, title, cleanH1).slice(2, 8)]),
       locationName,
       locationAliases: uniqueStrings([locationName, ...(nearby.slice(0, 4) ?? [])]),
       districtName: facts.find((fact) => /^район$/i.test(fact.label))?.value ?? null,
@@ -828,7 +833,7 @@ function parseAttraction(blockInfo, existingSlugIds, usedIds) {
       sections: sections.filter((section) => section.title !== "Краткое описание"),
       nearby,
       faq: extractFaq(markdown),
-      searchKeywords: buildSearchKeywords(markdown, title, h1),
+      searchKeywords: buildSearchKeywords(markdown, title, cleanH1),
       status: "HIDDEN",
       isPublishedVisible: false,
       createdByLogin: "code",

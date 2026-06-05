@@ -64,6 +64,7 @@ export function MapExcursionPopupCard({
 
   const ownerName = formatPublicPersonName(item.owner, "?");
   const ownerInitials = getPublicPersonInitial(item.owner);
+  const catalogKey = item.offerType === "TOUR" ? "tours" : "excursions";
 
   if (variant === "compact") {
     return (
@@ -76,6 +77,8 @@ export function MapExcursionPopupCard({
       >
         <Link
           href={detailsHref}
+          data-catalog-detail-link={catalogKey}
+          data-catalog-item-id={item.id}
           aria-label={`Открыть карточку ${item.title}`}
           className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
         />
@@ -229,6 +232,8 @@ export function MapExcursionPopupCard({
 
         <Link
           href={detailsHref}
+          data-catalog-detail-link={catalogKey}
+          data-catalog-item-id={item.id}
           className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-terra px-4 text-sm font-semibold text-white transition hover:bg-terra/88"
         >
           Подробнее

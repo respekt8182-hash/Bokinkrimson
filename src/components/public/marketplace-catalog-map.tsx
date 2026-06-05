@@ -26,6 +26,14 @@ import type {
 import { AppIcon } from "@/components/ui/app-icon";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
+import {
+  buildCatalogMapViewportScope,
+  markCatalogMapItemViewed,
+  readCatalogMapViewedItems,
+  readCatalogMapViewport,
+  writeCatalogMapViewport,
+} from "@/lib/catalog-map-memory";
+import { fetchWithRetry } from "@/lib/client-retry-fetch";
 import { cn } from "@/lib/cn";
 import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
 import {
@@ -266,6 +274,19 @@ function MapLoadingDotsPill({ className }: { className?: string }) {
   );
 }
 
+function MapNetworkNotice({ message, className }: { message: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-3 bottom-3 z-[80] rounded-2xl bg-white/94 px-3 py-2 text-xs font-medium text-amber-700 shadow-sm ring-1 ring-black/5",
+        className,
+      )}
+    >
+      {message}
+    </div>
+  );
+}
+
 function getCatalogMapItemElement(
   target: EventTarget | null,
   boundary: HTMLElement,
@@ -386,6 +407,74 @@ type AttractionMarkerCategoryRule = {
   keywords: string[];
 };
 
+const attractionMarkerPrimaryCategoryRules: AttractionMarkerCategoryRule[] = [
+  {
+    category: "beach",
+    keywords: ["пляжи и купание", "пляжи и набережные", "природа и пляжи"],
+  },
+  {
+    category: "sea",
+    keywords: ["море бухты мысы и маяки", "маяки и виды"],
+  },
+  {
+    category: "mountain",
+    keywords: ["горы скалы и пещеры", "горы и смотровые", "пещеры", "природа и маршруты"],
+  },
+  {
+    category: "water",
+    keywords: ["водопады озера и водоемы", "природа и водопады", "природа и озера", "водопады"],
+  },
+  {
+    category: "reserve",
+    keywords: ["заповедники урочища и природные парки", "природа и заповедники"],
+  },
+  {
+    category: "history",
+    keywords: [
+      "история археология и военные объекты",
+      "история и мемориалы",
+      "история и археология",
+      "крепости",
+      "крепости и древности",
+      "пещерные города",
+      "пещерные города и монастыри",
+    ],
+  },
+  {
+    category: "religion",
+    keywords: ["храмы монастыри и религия", "храмы и исторические места", "храмы и святыни"],
+  },
+  {
+    category: "palace",
+    keywords: ["дворцы дачи и архитектура", "дворцы и архитектура", "дворцы и парки"],
+  },
+  {
+    category: "culture",
+    keywords: ["музеи культура и памятники", "музеи и выставки", "музеи"],
+  },
+  {
+    category: "city",
+    keywords: [
+      "городские прогулки парки и инфраструктура",
+      "парки и сады",
+      "парки и дворцы",
+      "инженерные объекты",
+    ],
+  },
+  {
+    category: "entertainment",
+    keywords: ["развлечения и семейный отдых", "семейный отдых", "досуг и места отдыха"],
+  },
+  {
+    category: "winery",
+    keywords: ["винодельни гастро и производства", "винодельни"],
+  },
+  {
+    category: "route",
+    keywords: ["смотровые и маршруты", "маршруты и тропы"],
+  },
+];
+
 const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
   {
     category: "entertainment",
@@ -415,7 +504,7 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "viewpoint",
+    category: "route",
     keywords: [
       "smotrov",
       "vidov",
@@ -428,7 +517,7 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "cave",
+    category: "mountain",
     keywords: [
       "peshcher",
       "mramornaya",
@@ -448,35 +537,51 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
       "plyazh",
       "pljazh",
       "beach",
-      "naberezhn",
       "kupalen",
       "kupaln",
       "\u043f\u043b\u044f\u0436",
-      "\u043d\u0430\u0431\u0435\u0440\u0435\u0436",
       "\u043a\u0443\u043f\u0430\u043b\u044c\u043d",
+    ],
+  },
+  {
+    category: "sea",
+    keywords: [
+      "buhta",
+      "bukhta",
+      "mys",
+      "mayak",
+      "more",
+      "kosa",
+      "lighthouse",
+      "\u0431\u0443\u0445\u0442",
+      "\u043c\u044b\u0441",
+      "\u043c\u0430\u044f\u043a",
+      "\u043c\u043e\u0440\u0435",
+      "\u043a\u043e\u0441\u0430",
     ],
   },
   {
     category: "water",
     keywords: [
       "vodopad",
-      "buhta",
-      "bukhta",
       "ozero",
+      "vodohran",
+      "vodohranilishche",
       "vanna",
-      "more",
       "laguna",
       "liman",
       "istochnik",
       "rodnik",
+      "gryaz",
       "\u0432\u043e\u0434\u043e\u043f\u0430\u0434",
-      "\u0431\u0443\u0445\u0442",
       "\u043e\u0437\u0435\u0440",
-      "\u043c\u043e\u0440\u0435",
+      "\u0432\u043e\u0434\u043e\u0445\u0440\u0430\u043d",
       "\u043b\u0430\u0433\u0443\u043d",
       "\u043b\u0438\u043c\u0430\u043d",
       "\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a",
       "\u0440\u043e\u0434\u043d\u0438\u043a",
+      "\u0432\u0430\u043d\u043d",
+      "\u0433\u0440\u044f\u0437",
     ],
   },
   {
@@ -492,10 +597,6 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
       "\u043c\u0430\u0440\u0448\u0440\u0443\u0442",
       "\u044d\u043a\u043e\u0442\u0440\u043e\u043f",
     ],
-  },
-  {
-    category: "lighthouse",
-    keywords: ["mayak", "lighthouse", "\u043c\u0430\u044f\u043a"],
   },
   {
     category: "winery",
@@ -532,7 +633,7 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "memorial",
+    category: "history",
     keywords: [
       "pamyatnik",
       "memorial",
@@ -548,7 +649,7 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "fortress",
+    category: "history",
     keywords: [
       "krepost",
       "kale",
@@ -595,7 +696,7 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "museum",
+    category: "culture",
     keywords: [
       "muzey",
       "muzej",
@@ -612,20 +713,41 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "park",
+    category: "city",
     keywords: [
       "park",
       "sad",
       "botanich",
       "skver",
+      "naberezhn",
+      "bulvar",
+      "ploshchad",
       "\u043f\u0430\u0440\u043a",
       "\u0441\u0430\u0434",
       "\u0431\u043e\u0442\u0430\u043d\u0438\u0447",
       "\u0441\u043a\u0432\u0435\u0440",
+      "\u043d\u0430\u0431\u0435\u0440\u0435\u0436",
+      "\u0431\u0443\u043b\u044c\u0432\u0430\u0440",
+      "\u043f\u043b\u043e\u0449\u0430\u0434",
     ],
   },
   {
-    category: "nature",
+    category: "reserve",
+    keywords: [
+      "zapoved",
+      "urochishche",
+      "roshcha",
+      "les",
+      "zakaznik",
+      "\u0437\u0430\u043f\u043e\u0432\u0435\u0434",
+      "\u0443\u0440\u043e\u0447\u0438\u0449",
+      "\u0440\u043e\u0449",
+      "\u043b\u0435\u0441",
+      "\u0437\u0430\u043a\u0430\u0437\u043d\u0438\u043a",
+    ],
+  },
+  {
+    category: "mountain",
     keywords: [
       "gora",
       "mountain",
@@ -643,8 +765,6 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
       "ai-petri",
       "tarhankut",
       "fiolent",
-      "zapoved",
-      "urochishche",
       "balka",
       "prirod",
       "vulkan",
@@ -657,10 +777,6 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
       "\u043a\u0430\u043d\u044c\u043e\u043d",
       "\u044f\u0439\u043b",
       "\u0434\u043e\u043b\u0438\u043d",
-      "\u043b\u0435\u0441",
-      "\u0440\u043e\u0449",
-      "\u0437\u0430\u043f\u043e\u0432\u0435\u0434",
-      "\u0443\u0440\u043e\u0447\u0438\u0449",
       "\u043f\u0440\u0438\u0440\u043e\u0434",
       "\u0432\u0443\u043b\u043a\u0430\u043d",
       "\u043a\u0430\u0440\u044c\u0435\u0440",
@@ -672,10 +788,10 @@ const attractionMarkerIdentityCategoryRules: AttractionMarkerCategoryRule[] = [
 const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
   {
     category: "beach",
-    keywords: ["\u043f\u043b\u044f\u0436", "\u043d\u0430\u0431\u0435\u0440\u0435\u0436"],
+    keywords: ["\u043f\u043b\u044f\u0436"],
   },
   {
-    category: "museum",
+    category: "culture",
     keywords: ["\u043c\u0443\u0437\u0435", "\u0432\u044b\u0441\u0442\u0430\u0432"],
   },
   {
@@ -683,7 +799,7 @@ const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
     keywords: ["\u0441\u0435\u043c\u0435\u0439"],
   },
   {
-    category: "viewpoint",
+    category: "route",
     keywords: [
       "\u0433\u043e\u0440\u044b \u0438 \u0441\u043c\u043e\u0442\u0440\u043e\u0432",
       "\u0441\u043c\u043e\u0442\u0440\u043e\u0432",
@@ -691,8 +807,13 @@ const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "lighthouse",
-    keywords: ["\u043c\u0430\u044f\u043a"],
+    category: "sea",
+    keywords: [
+      "\u043c\u043e\u0440\u0435",
+      "\u0431\u0443\u0445\u0442",
+      "\u043c\u044b\u0441",
+      "\u043c\u0430\u044f\u043a",
+    ],
   },
   {
     category: "winery",
@@ -703,14 +824,14 @@ const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
     keywords: ["\u0445\u0440\u0430\u043c", "\u0441\u0432\u044f\u0442\u044b\u043d"],
   },
   {
-    category: "fortress",
+    category: "history",
     keywords: [
       "\u043a\u0440\u0435\u043f\u043e\u0441\u0442",
       "\u0434\u0440\u0435\u0432\u043d\u043e\u0441\u0442",
     ],
   },
   {
-    category: "park",
+    category: "city",
     keywords: [
       "\u043f\u0430\u0440\u043a\u0438 \u0438 \u0441\u0430\u0434",
       "\u043f\u0430\u0440\u043a\u0438 \u0438 \u0441\u0435\u043c\u0435\u0439",
@@ -726,7 +847,7 @@ const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "cave",
+    category: "mountain",
     keywords: ["\u043f\u0435\u0449\u0435\u0440"],
   },
   {
@@ -740,17 +861,22 @@ const attractionMarkerCategoryFallbackRules: AttractionMarkerCategoryRule[] = [
     ],
   },
   {
-    category: "memorial",
+    category: "history",
     keywords: [
       "\u043c\u0435\u043c\u043e\u0440\u0438\u0430\u043b",
       "\u0430\u0440\u0445\u0435\u043e\u043b\u043e\u0433",
     ],
   },
   {
-    category: "nature",
+    category: "reserve",
+    keywords: ["\u0437\u0430\u043f\u043e\u0432\u0435\u0434"],
+  },
+  {
+    category: "mountain",
     keywords: [
       "\u043f\u0440\u0438\u0440\u043e\u0434",
-      "\u0437\u0430\u043f\u043e\u0432\u0435\u0434",
+      "\u0433\u043e\u0440",
+      "\u0441\u043a\u0430\u043b",
     ],
   },
 ];
@@ -826,6 +952,14 @@ function findAttractionMarkerCategory(
 function resolveAttractionMarkerCategory(
   item: PublicAttractionCatalogItem | PublicAttractionMapItem,
 ): YandexMapMarkerCategory {
+  const primaryCategory = findAttractionMarkerCategory(
+    getAttractionMarkerCategorySearchText(item),
+    attractionMarkerPrimaryCategoryRules,
+  );
+  if (primaryCategory) {
+    return primaryCategory;
+  }
+
   const identityCategory = findAttractionMarkerCategory(
     getAttractionMarkerIdentitySearchText(item),
     attractionMarkerIdentityCategoryRules,
@@ -954,6 +1088,8 @@ function AttractionMapPopupCard({
       >
         <Link
           href={item.path}
+          data-catalog-detail-link="attractions"
+          data-catalog-item-id={item.id}
           aria-label={`Открыть карточку ${item.title}`}
           className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
         />
@@ -1062,6 +1198,8 @@ function AttractionMapPopupCard({
 
         <Link
           href={item.path}
+          data-catalog-detail-link="attractions"
+          data-catalog-item-id={item.id}
           className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-terra px-4 text-sm font-semibold text-white transition hover:bg-terra/88"
         >
           Подробнее
@@ -1105,6 +1243,8 @@ function TransferMapPopupCard({
       >
         <Link
           href={item.path}
+          data-catalog-detail-link="transfers"
+          data-catalog-item-id={item.id}
           aria-label={`Открыть карточку ${item.title}`}
           className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
         />
@@ -1237,6 +1377,8 @@ function TransferMapPopupCard({
 
         <Link
           href={item.path}
+          data-catalog-detail-link="transfers"
+          data-catalog-item-id={item.id}
           className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-terra px-4 text-sm font-semibold text-white transition hover:bg-terra/88"
         >
           Подробнее
@@ -1262,6 +1404,7 @@ export function MarketplaceCatalogMap({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const currentBoundsParam =
     activeBoundsParam !== undefined
       ? activeBoundsParam?.trim() || null
@@ -1279,6 +1422,13 @@ export function MarketplaceCatalogMap({
   const mapBoundsQueryRef = useRef<string | null>(currentBoundsParam);
   const suppressBoundsSyncUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
+  const mapViewportStorageScope = useMemo(
+    () => buildCatalogMapViewportScope(pathname, searchParamsString),
+    [pathname, searchParamsString],
+  );
+  const [storedMapViewport, setStoredMapViewport] = useState<YandexMapViewport | null>(() =>
+    readCatalogMapViewport(kind, mapViewportStorageScope),
+  );
   const [mapInteractionBoundsParam, setMapInteractionBoundsParam] = useState<string | null>(null);
   const [hasMapViewportInteraction, setHasMapViewportInteraction] = useState(false);
   const currentBounds = useMemo(
@@ -1301,6 +1451,10 @@ export function MarketplaceCatalogMap({
       return { bounds: currentBounds };
     }
 
+    if (storedMapViewport) {
+      return storedMapViewport;
+    }
+
     const radiusBounds = buildRadiusViewportBounds(
       filters.centerLat,
       filters.centerLng,
@@ -1314,23 +1468,34 @@ export function MarketplaceCatalogMap({
     filters.centerLng,
     filters.radiusKm,
     isCurrentBoundsFromMapInteraction,
+    storedMapViewport,
   ]);
-  const initialMapViewportKey = useMemo(
-    () =>
-      buildViewportKey({
-        boundsParam: isCurrentBoundsFromMapInteraction ? null : currentBoundsParam,
-        centerLat: filters.centerLat,
-        centerLng: filters.centerLng,
-        radiusKm: filters.radiusKm,
-      }),
-    [
-      currentBoundsParam,
-      filters.centerLat,
-      filters.centerLng,
-      filters.radiusKm,
-      isCurrentBoundsFromMapInteraction,
-    ],
-  );
+  const initialMapViewportKey = useMemo(() => {
+    if (currentBounds && !isCurrentBoundsFromMapInteraction && currentBoundsParam) {
+      return `bounds:${currentBoundsParam}`;
+    }
+
+    if (storedMapViewport) {
+      return `memory:${kind}:${mapViewportStorageScope}`;
+    }
+
+    return buildViewportKey({
+      boundsParam: isCurrentBoundsFromMapInteraction ? null : currentBoundsParam,
+      centerLat: filters.centerLat,
+      centerLng: filters.centerLng,
+      radiusKm: filters.radiusKm,
+    });
+  }, [
+    currentBounds,
+    currentBoundsParam,
+    filters.centerLat,
+    filters.centerLng,
+    filters.radiusKm,
+    isCurrentBoundsFromMapInteraction,
+    kind,
+    mapViewportStorageScope,
+    storedMapViewport,
+  ]);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
   const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
@@ -1344,8 +1509,30 @@ export function MarketplaceCatalogMap({
     endpoint: string;
     items: MarketplaceCatalogMapItem[];
   } | null>(null);
-  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
+  const [mapItemsErrorMessage, setMapItemsErrorMessage] = useState("");
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() =>
+    readCatalogMapViewedItems(kind),
+  );
   useBodyScrollLock(mapExpanded);
+
+  useEffect(() => {
+    setStoredMapViewport(readCatalogMapViewport(kind, mapViewportStorageScope));
+  }, [kind, mapViewportStorageScope]);
+
+  useEffect(() => {
+    const refreshViewedItems = () => {
+      setViewedPointIds(readCatalogMapViewedItems(kind));
+    };
+
+    refreshViewedItems();
+    window.addEventListener("pageshow", refreshViewedItems);
+    window.addEventListener("focus", refreshViewedItems);
+
+    return () => {
+      window.removeEventListener("pageshow", refreshViewedItems);
+      window.removeEventListener("focus", refreshViewedItems);
+    };
+  }, [kind]);
 
   useEffect(() => {
     const endpoint = mapItemsEndpoint ?? "";
@@ -1354,23 +1541,41 @@ export function MarketplaceCatalogMap({
     }
 
     let isDisposed = false;
+    const controller = new AbortController();
 
     async function loadMapItems() {
+      setMapItemsErrorMessage("");
+
       try {
-        const response = await fetch(endpoint, {
+        const response = await fetchWithRetry(endpoint, {
           headers: { Accept: "application/json" },
+          signal: controller.signal,
+          retries: 2,
+          retryDelayMs: 450,
+          timeoutMs: 9_000,
         });
 
         if (!response.ok) {
-          return;
+          throw new Error("map_items_fetch_failed");
         }
 
-        const payload = (await response.json()) as { items?: MarketplaceCatalogMapItem[] };
-        if (!isDisposed && Array.isArray(payload.items)) {
-          setLoadedMapItemsState({ endpoint, items: payload.items });
+        const payload = (await response.json()) as {
+          items?: MarketplaceCatalogMapItem[];
+          map_points?: MarketplaceCatalogMapItem[];
+        };
+        const nextItems = Array.isArray(payload.items)
+          ? payload.items
+          : Array.isArray(payload.map_points)
+            ? payload.map_points
+            : null;
+
+        if (!isDisposed && nextItems) {
+          setLoadedMapItemsState({ endpoint, items: nextItems });
         }
       } catch {
-        // The current page items remain usable if the expanded map payload fails.
+        if (!isDisposed && !controller.signal.aborted) {
+          setMapItemsErrorMessage("Не удалось загрузить все точки карты. Показана текущая выдача.");
+        }
       }
     }
 
@@ -1378,6 +1583,7 @@ export function MarketplaceCatalogMap({
 
     return () => {
       isDisposed = true;
+      controller.abort();
     };
   }, [mapItemsEndpoint]);
 
@@ -1475,6 +1681,9 @@ export function MarketplaceCatalogMap({
     "вариантов",
   );
   const mapPointCountLabel = formatRuCount(mapPoints.length, "точка", "точки", "точек");
+  const mapNetworkNotice = mapItemsErrorMessage ? (
+    <MapNetworkNotice message={mapItemsErrorMessage} />
+  ) : null;
 
   const mobileSheetSnaps = useMemo<MobileSheetSnaps>(() => {
     const height = mobileStageHeight || 640;
@@ -1527,8 +1736,12 @@ export function MarketplaceCatalogMap({
   }, []);
 
   const handleMapBoundsChange = useCallback(
-    (bounds: [[number, number], [number, number]] | null) => {
+    (bounds: [[number, number], [number, number]] | null, viewport?: YandexMapViewport) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (hasMapInteractionRef.current && bounds) {
+        writeCatalogMapViewport(kind, mapViewportStorageScope, viewport ?? { bounds });
+      }
+
       if (hasStrictAttractionRadiusScope) {
         mapBoundsQueryRef.current = null;
         lastRequestedBoundsRef.current = null;
@@ -1596,7 +1809,15 @@ export function MarketplaceCatalogMap({
         });
       }, MAP_BOUNDS_UPDATE_DELAY_MS);
     },
-    [hasStrictAttractionRadiusScope, onBoundsQueryChange, pathname, router, syncBoundsToUrl],
+    [
+      hasStrictAttractionRadiusScope,
+      kind,
+      mapViewportStorageScope,
+      onBoundsQueryChange,
+      pathname,
+      router,
+      syncBoundsToUrl,
+    ],
   );
 
   const markMapInteraction = useCallback(() => {
@@ -1726,14 +1947,14 @@ export function MarketplaceCatalogMap({
 
   const handlePointClick = useCallback(
     (pointId: string) => {
+      markMapInteraction();
       suppressBoundsSyncUntilRef.current = Date.now() + 900;
       setViewedPointIds((prev) => {
-        if (prev.has(pointId)) {
+        const next = markCatalogMapItemViewed(kind, pointId);
+        if (prev.has(pointId) && prev.size === next.size) {
           return prev;
         }
 
-        const next = new Set(prev);
-        next.add(pointId);
         return next;
       });
       setActivePointId(pointId);
@@ -1744,7 +1965,7 @@ export function MarketplaceCatalogMap({
         snapMobileSheet("collapsed");
       }
     },
-    [mapPlacement, snapMobileSheet],
+    [kind, mapPlacement, markMapInteraction, snapMobileSheet],
   );
 
   const openMobileMapInSearch = useCallback(() => {
@@ -2006,6 +2227,7 @@ export function MarketplaceCatalogMap({
             </div>
 
             {isLoading ? <MapLoadingDotsPill className="top-3" /> : null}
+            {mapNetworkNotice}
 
             {activePopupItem && mobileSheetSnap !== "expanded" ? (
               <div
@@ -2141,6 +2363,7 @@ export function MarketplaceCatalogMap({
               className="h-full w-full"
             />
             {isLoading ? <MapLoadingDotsPill /> : null}
+            {mapNetworkNotice}
             <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
               <button
                 type="button"
@@ -2244,6 +2467,7 @@ export function MarketplaceCatalogMap({
                   </div>
                 ) : null}
                 {isLoading ? <MapLoadingDotsPill /> : null}
+                {mapNetworkNotice}
               </div>
             ) : null}
           </section>
@@ -2283,6 +2507,7 @@ export function MarketplaceCatalogMap({
             </div>
 
             {isLoading ? <MapLoadingDotsPill className="top-5" /> : null}
+            {mapNetworkNotice}
 
             <div className="pointer-events-none absolute right-3 top-3 z-30 sm:right-5 sm:top-5">
               <button

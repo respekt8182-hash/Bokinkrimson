@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type MouseEvent, type ReactNode, useCallback, useEffect, useMemo } from "react";
+import { markCatalogMapItemViewed } from "@/lib/catalog-map-memory";
 
 export type CatalogMemoryKey = "housing" | "excursions" | "tours" | "attractions" | "transfers";
 
@@ -181,11 +182,16 @@ export function CatalogScrollRestorer({ catalogKey }: { catalogKey: CatalogMemor
       }
 
       const linkCatalogKey = link.dataset.catalogDetailLink as CatalogMemoryKey | undefined;
+      const itemId = link.dataset.catalogItemId ?? null;
+      if (itemId) {
+        markCatalogMapItemViewed(linkCatalogKey ?? catalogKey, itemId);
+      }
+
       saveCatalogState(
         linkCatalogKey ?? catalogKey,
         currentUrl,
         link.href,
-        link.dataset.catalogItemId ?? null,
+        itemId,
       );
     };
 

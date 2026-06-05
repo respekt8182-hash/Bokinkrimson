@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CatalogMapViewMarker } from "@/components/public/catalog-map-view-marker";
 import { AttractionDetails } from "@/components/public/marketplace-catalogs";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
@@ -112,6 +113,7 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
   return (
     <>
       <JsonLd data={jsonLdItems} />
+      <CatalogMapViewMarker catalogKey="attractions" itemId={item.id} />
       <AttractionDetails item={item} />
       <section className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 md:px-6">
         <div id="nearby-housing">

@@ -34,7 +34,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import { CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
@@ -53,6 +53,14 @@ import { UnifiedCalendarContent } from "@/components/ui/unified-calendar-content
 import { UnifiedGuestsEditor } from "@/components/ui/unified-guests-editor";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
+import {
+  buildCatalogMapViewportScope,
+  markCatalogMapItemViewed,
+  readCatalogMapViewedItems,
+  readCatalogMapViewport,
+  writeCatalogMapViewport,
+} from "@/lib/catalog-map-memory";
+import { fetchWithRetry } from "@/lib/client-retry-fetch";
 import { cn } from "@/lib/cn";
 import { formatPublicPersonName, getPublicPersonInitial } from "@/lib/public-display-name";
 import {
@@ -845,6 +853,9 @@ export function ExcursionSearchResults({
   catalogActiveTotal,
 }: ExcursionSearchResultsProps) {
   const router = useRouter();
+  const pathname = usePathname() ?? "/";
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const isMobileViewport = useIsMobileViewport();
 
   // ── Filter state (mirrors URL params, user edits locally then submits) ──────
@@ -914,6 +925,11 @@ export function ExcursionSearchResults({
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
   const mapBoundsBootstrapHandledRef = useRef(false);
+  const hasMapInteractionRef = useRef(false);
+  const mapViewportStorageScope = useMemo(
+    () => buildCatalogMapViewportScope(pathname, searchParamsString),
+    [pathname, searchParamsString],
+  );
   const [mapExpanded, setMapExpanded] = useState(false);
   const [isMobileMapCollapsed, setIsMobileMapCollapsed] = useState(false);
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
@@ -923,13 +939,18 @@ export function ExcursionSearchResults({
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
-  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() => new Set());
+  const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() =>
+    readCatalogMapViewedItems(catalogDirection),
+  );
   const [mapItems, setMapItems] = useState<PublicExcursionCatalogItem[]>(items);
   const [mapViewportBounds, setMapViewportBounds] = useState<
     [[number, number], [number, number]] | null
   >(null);
   const [mapBoundsQuery, setMapBoundsQuery] = useState<string | null>(null);
   const [initialViewport, setInitialViewport] = useState<YandexMapViewport | null>(null);
+  const [storedMapViewport, setStoredMapViewport] = useState<YandexMapViewport | null>(() =>
+    readCatalogMapViewport(catalogDirection, mapViewportStorageScope),
+  );
   const [isMapPointsLoading, setIsMapPointsLoading] = useState(false);
   const [mapPointsError, setMapPointsError] = useState("");
   const [isBoundsRefreshing, setIsBoundsRefreshing] = useState(false);
@@ -937,6 +958,10 @@ export function ExcursionSearchResults({
     const normalizedLocation = (filters.locationName ?? "").trim().toLocaleLowerCase("ru-RU");
     return normalizedLocation ? `excursion-location:${normalizedLocation}` : "";
   }, [filters.locationName]);
+  const resolvedInitialViewport = storedMapViewport ?? initialViewport;
+  const resolvedInitialViewportKey = storedMapViewport
+    ? `memory:${catalogDirection}:${mapViewportStorageScope}`
+    : initialViewportKey;
   useBodyScrollLock(mapExpanded);
 
   // ── Card refs for scroll-to-card on pin hover ────────────────────────────────
@@ -992,7 +1017,6 @@ export function ExcursionSearchResults({
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
-    setViewedPointIds(new Set());
     setIsMobileMapCollapsed(false);
     setMobileSheetSnap("preview");
     setMobileSheetTop(null);
@@ -1004,6 +1028,7 @@ export function ExcursionSearchResults({
     mapBoundsFilterRef.current = null;
     mapBoundsQueryRef.current = null;
     mapBoundsBootstrapHandledRef.current = false;
+    hasMapInteractionRef.current = false;
     setMapViewportBounds(null);
     setMapBoundsQuery(null);
     if (mapBoundsRefreshTimerRef.current !== null) {
@@ -1013,6 +1038,25 @@ export function ExcursionSearchResults({
     mapBoundsAbortControllerRef.current?.abort();
     cardRefsMap.current.clear();
   }, [items, pagination.page, pagination.total, pagination.totalPages]);
+
+  useEffect(() => {
+    setStoredMapViewport(readCatalogMapViewport(catalogDirection, mapViewportStorageScope));
+  }, [catalogDirection, mapViewportStorageScope]);
+
+  useEffect(() => {
+    const refreshViewedItems = () => {
+      setViewedPointIds(readCatalogMapViewedItems(catalogDirection));
+    };
+
+    refreshViewedItems();
+    window.addEventListener("pageshow", refreshViewedItems);
+    window.addEventListener("focus", refreshViewedItems);
+
+    return () => {
+      window.removeEventListener("pageshow", refreshViewedItems);
+      window.removeEventListener("focus", refreshViewedItems);
+    };
+  }, [catalogDirection]);
 
   useEffect(() => {
     const normalizedLocation = (filters.locationName ?? "").trim();
@@ -1518,9 +1562,11 @@ export function ExcursionSearchResults({
 
     const fetchMapItems = async () => {
       try {
-        const response = await fetch(`/api/map/excursions?${mapQuery}`, {
+        const response = await fetchWithRetry(`/api/map/excursions?${mapQuery}`, {
           signal: controller.signal,
-          cache: "no-store",
+          retries: 2,
+          retryDelayMs: 450,
+          timeoutMs: 9_000,
         });
 
         if (!response.ok) {
@@ -1666,10 +1712,20 @@ export function ExcursionSearchResults({
     const node = cardRefsMap.current.get(pointId);
     node?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
+  const markMapInteraction = useCallback(() => {
+    hasMapInteractionRef.current = true;
+  }, []);
+  const handleMapWheelCapture = useCallback(() => {
+    markMapInteraction();
+  }, [markMapInteraction]);
 
   const handleMapBoundsFilterChange = useCallback(
-    (bounds: [[number, number], [number, number]] | null) => {
+    (bounds: [[number, number], [number, number]] | null, viewport?: YandexMapViewport) => {
       const normalizedBounds = formatMapBoundsFilter(bounds);
+      if (hasMapInteractionRef.current && bounds) {
+        writeCatalogMapViewport(catalogDirection, mapViewportStorageScope, viewport ?? { bounds });
+      }
+
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
         setMapViewportBounds(bounds);
@@ -1713,9 +1769,11 @@ export function ExcursionSearchResults({
           bounds: normalizedBounds,
         });
 
-        fetch(`/api/search/excursions?${params.toString()}`, {
+        fetchWithRetry(`/api/search/excursions?${params.toString()}`, {
           signal: controller.signal,
-          cache: "no-store",
+          retries: 2,
+          retryDelayMs: 450,
+          timeoutMs: 9_000,
         })
           .then(async (response) => {
             if (!response.ok) {
@@ -1756,19 +1814,19 @@ export function ExcursionSearchResults({
           });
       }, MAP_BOUNDS_REFRESH_DELAY_MS);
     },
-    [filters],
+    [catalogDirection, filters, mapViewportStorageScope],
   );
 
   // ── Navigation on pin click ──────────────────────────────────────────────────
   const handleMapPointClick = useCallback(
     (pointId: string) => {
+      markMapInteraction();
       setViewedPointIds((prev) => {
-        if (prev.has(pointId)) {
+        const next = markCatalogMapItemViewed(catalogDirection, pointId);
+        if (prev.has(pointId) && prev.size === next.size) {
           return prev;
         }
 
-        const next = new Set(prev);
-        next.add(pointId);
         return next;
       });
       setActivePointId(pointId);
@@ -1777,7 +1835,7 @@ export function ExcursionSearchResults({
         focusCardById(pointId);
       }
     },
-    [focusCardById, mapExpanded],
+    [catalogDirection, focusCardById, mapExpanded, markMapInteraction],
   );
 
   // ── Load more ─────────────────────────────────────────────────────────────────
@@ -1892,13 +1950,13 @@ export function ExcursionSearchResults({
   );
 
   function handleCatalogMobileMapPointClick(pointId: string) {
+    markMapInteraction();
     setViewedPointIds((prev) => {
-      if (prev.has(pointId)) {
+      const next = markCatalogMapItemViewed(catalogDirection, pointId);
+      if (prev.has(pointId) && prev.size === next.size) {
         return prev;
       }
 
-      const next = new Set(prev);
-      next.add(pointId);
       return next;
     });
     setActivePointId(pointId);
@@ -1915,6 +1973,8 @@ export function ExcursionSearchResults({
   }
 
   function handleCatalogMobileMapPointerDown() {
+    markMapInteraction();
+
     if (mapPlacement !== "mobile") {
       setActivePointId(null);
       setHoveredCardId(null);
@@ -3079,6 +3139,7 @@ export function ExcursionSearchResults({
             <div
               className="absolute inset-0"
               onPointerDownCapture={handleCatalogMobileMapPointerDown}
+              onWheelCapture={handleMapWheelCapture}
             >
               <YandexMapMultiViewer
                 points={mapPoints}
@@ -3087,8 +3148,8 @@ export function ExcursionSearchResults({
                 onPointClick={handleCatalogMobileMapPointClick}
                 onPointHoverChange={handlePinHover}
                 onBoundsChange={handleMapBoundsFilterChange}
-                initialViewport={initialViewport}
-                viewportKey={initialViewportKey}
+                initialViewport={resolvedInitialViewport}
+                viewportKey={resolvedInitialViewportKey}
                 radiusCircle={radiusCircle}
                 controls={[]}
                 showBalloons={false}
@@ -3263,8 +3324,8 @@ export function ExcursionSearchResults({
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
               onBoundsChange={handleMapBoundsFilterChange}
-              initialViewport={initialViewport}
-              viewportKey={initialViewportKey}
+              initialViewport={resolvedInitialViewport}
+              viewportKey={resolvedInitialViewportKey}
               radiusCircle={radiusCircle}
               controls={[]}
               fitPointsOnChange="never"
@@ -3299,7 +3360,11 @@ export function ExcursionSearchResults({
               <p className="text-xs text-olive/65">{mapStatsLabel}</p>
             </div>
           </div>
-          <div className="relative h-[320px] overflow-hidden">
+          <div
+            className="relative h-[320px] overflow-hidden"
+            onPointerDownCapture={markMapInteraction}
+            onWheelCapture={handleMapWheelCapture}
+          >
             <YandexMapMultiViewer
               points={mapPoints}
               activePointId={activePointId}
@@ -3307,8 +3372,8 @@ export function ExcursionSearchResults({
               onPointClick={handleMapPointClick}
               onPointHoverChange={handlePinHover}
               onBoundsChange={handleMapBoundsFilterChange}
-              initialViewport={initialViewport}
-              viewportKey={initialViewportKey}
+              initialViewport={resolvedInitialViewport}
+              viewportKey={resolvedInitialViewportKey}
               radiusCircle={radiusCircle}
               showBalloons={false}
               frameless
@@ -3470,7 +3535,11 @@ export function ExcursionSearchResults({
             </div>
 
             {mapPlacement === "desktop" ? (
-              <div className="absolute inset-0">
+              <div
+                className="absolute inset-0"
+                onPointerDownCapture={markMapInteraction}
+                onWheelCapture={handleMapWheelCapture}
+              >
                 <YandexMapMultiViewer
                   points={mapPoints}
                   activePointId={activePointId}
@@ -3478,8 +3547,8 @@ export function ExcursionSearchResults({
                   onPointClick={handleMapPointClick}
                   onPointHoverChange={handlePinHover}
                   onBoundsChange={handleMapBoundsFilterChange}
-                  initialViewport={initialViewport}
-                  viewportKey={initialViewportKey}
+                  initialViewport={resolvedInitialViewport}
+                  viewportKey={resolvedInitialViewportKey}
                   radiusCircle={radiusCircle}
                   controls={["zoomControl"]}
                   showBalloons={false}
@@ -3527,7 +3596,11 @@ export function ExcursionSearchResults({
           aria-label={mapTitle}
         >
           <section className="relative h-full w-full overflow-hidden">
-            <div className="absolute inset-0">
+            <div
+              className="absolute inset-0"
+              onPointerDownCapture={markMapInteraction}
+              onWheelCapture={handleMapWheelCapture}
+            >
               <YandexMapMultiViewer
                 points={mapPoints}
                 activePointId={activePointId}
@@ -3537,8 +3610,8 @@ export function ExcursionSearchResults({
                 }}
                 onPointHoverChange={handlePinHover}
                 onBoundsChange={handleMapBoundsFilterChange}
-                initialViewport={initialViewport}
-                viewportKey={initialViewportKey}
+                initialViewport={resolvedInitialViewport}
+                viewportKey={resolvedInitialViewportKey}
                 radiusCircle={radiusCircle}
                 controls={["zoomControl"]}
                 showBalloons={false}

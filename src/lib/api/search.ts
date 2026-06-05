@@ -1,5 +1,6 @@
 // Client-side helpers for building housing search requests, URLs, and normalized responses.
 import type { PublicCatalogItem } from "@/lib/public-properties";
+import { fetchWithRetry } from "@/lib/client-retry-fetch";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { buildHousingCatalogPath } from "@/lib/seo/routes";
 import { buildDateRangeParam } from "@/lib/seo/url-normalize";
@@ -93,9 +94,12 @@ export async function fetchAccommodationSearch(
     return cached.response;
   }
 
-  const response = await fetch(`/api/search/accommodations?${query}`, {
+  const response = await fetchWithRetry(`/api/search/accommodations?${query}`, {
     method: "GET",
     signal,
+    retries: 2,
+    retryDelayMs: 400,
+    timeoutMs: 9_000,
   });
 
   if (!response.ok) {

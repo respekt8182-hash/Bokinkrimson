@@ -19,6 +19,7 @@ import { cn } from "@/lib/cn";
 import type { SerializedPayment } from "@/lib/payments";
 import type { PlacementPriceResult } from "@/lib/placement-pricing";
 import { getPlacementPromoPrice } from "@/lib/placement-promo";
+import { getSafeHttpsUrl } from "@/lib/safe-urls";
 import { EXCURSION_PUBLICATION_FEE_RUB, TOUR_PUBLICATION_FEE_RUB } from "@/lib/site-tariffs";
 
 type ExcursionOfferTypeValue = "EXCURSION" | "TOUR";
@@ -173,6 +174,7 @@ export function ExcursionPaymentPanel({
     [pendingEditStatus, status],
   );
   const latestPayment = payments[0] ?? null;
+  const latestPaymentConfirmationUrl = getSafeHttpsUrl(latestPayment?.confirmationUrl);
   const hasPaid = payments.some((item) => item.status === "SUCCEEDED");
   const hasOpenPayment = isOpenPayment(latestPayment);
   const onlinePaymentPending = hasOpenPayment && latestPayment?.provider === "YOOKASSA";
@@ -380,8 +382,9 @@ export function ExcursionPaymentPanel({
         return;
       }
 
-      if (body.redirectUrl) {
-        window.location.href = body.redirectUrl;
+      const safeRedirectUrl = getSafeHttpsUrl(body.redirectUrl);
+      if (safeRedirectUrl) {
+        window.location.href = safeRedirectUrl;
         return;
       }
 
@@ -749,9 +752,9 @@ export function ExcursionPaymentPanel({
                 <p className="mt-0.5 text-xs text-sky-700/75">
                   После оплаты статус обновится автоматически.
                 </p>
-                {latestPayment.confirmationUrl ? (
+                {latestPaymentConfirmationUrl ? (
                   <a
-                    href={latestPayment.confirmationUrl}
+                    href={latestPaymentConfirmationUrl}
                     className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
                   >
                     Продолжить оплату

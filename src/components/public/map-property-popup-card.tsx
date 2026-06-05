@@ -87,6 +87,8 @@ export function MapPropertyPopupCard({
       >
         <Link
           href={detailsHref}
+          data-catalog-detail-link="housing"
+          data-catalog-item-id={item.id}
           aria-label={`Открыть карточку ${item.title}`}
           className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
         />
@@ -177,6 +179,8 @@ export function MapPropertyPopupCard({
     >
       <Link
         href={detailsHref}
+        data-catalog-detail-link="housing"
+        data-catalog-item-id={item.id}
         aria-label={`Открыть карточку ${item.title}`}
         className="absolute inset-0 z-0 rounded-[22px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2"
       />

@@ -28,12 +28,34 @@ const uploadLimiter = createRateLimiter({
   maxRequests: 30,
 });
 
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api-maps.yandex.ru https://*.maps.yandex.net https://mc.yandex.ru https://yastatic.net",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://api-maps.yandex.ru https://*.maps.yandex.net https://*.yandex.ru https://*.yandex.net https://mc.yandex.ru",
+  "frame-src 'self' https://*.yandex.ru https://*.yandex.net https://yookassa.ru https://*.yookassa.ru https://yoomoney.ru https://*.yoomoney.ru",
+  "media-src 'self' blob: https:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  ...(process.env.NODE_ENV === "production" ? ["upgrade-insecure-requests"] : []),
+].join("; ");
+
 const securityHeaders = {
+  "Content-Security-Policy": contentSecurityPolicy,
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Cross-Origin-Opener-Policy": "same-origin",
+  ...(process.env.NODE_ENV === "production"
+    ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload" }
+    : {}),
 };
 
 function applySecurityHeaders(response: NextResponse): NextResponse {
@@ -254,10 +276,7 @@ export async function proxy(request: NextRequest) {
       return rateLimitResponse;
     }
 
-    if (
-      mutatingMethods.has(requestMethod) &&
-      !isSameOrigin(request)
-    ) {
+    if (mutatingMethods.has(requestMethod) && !isSameOrigin(request)) {
       return applySecurityHeaders(
         NextResponse.json({ error: "CSRF check failed: invalid origin" }, { status: 403 }),
       );

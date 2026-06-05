@@ -3,21 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type YandexMapMarkerCategory =
-  | "museum"
-  | "viewpoint"
-  | "palace"
-  | "fortress"
-  | "religion"
-  | "nature"
-  | "cave"
   | "beach"
+  | "sea"
+  | "mountain"
   | "water"
-  | "park"
-  | "route"
+  | "reserve"
+  | "history"
+  | "religion"
+  | "palace"
+  | "culture"
+  | "city"
   | "entertainment"
   | "winery"
-  | "lighthouse"
-  | "memorial"
+  | "route"
   | "landmark";
 
 export type YandexMapPoint = {
@@ -53,7 +51,10 @@ type YandexMapMultiViewerProps = {
   hoveredPointId?: string | null;
   onPointClick?: (pointId: string) => void;
   onPointHoverChange?: (pointId: string | null) => void;
-  onBoundsChange?: (bounds: [[number, number], [number, number]] | null) => void;
+  onBoundsChange?: (
+    bounds: [[number, number], [number, number]] | null,
+    viewport?: YandexMapViewport,
+  ) => void;
   className?: string;
   initialViewport?: YandexMapViewport | null;
   viewportKey?: string;
@@ -67,6 +68,7 @@ type YandexMapMultiViewerProps = {
 type YandexMapInstance = {
   destroy: () => void;
   getZoom: () => number;
+  getCenter: () => [number, number] | null;
   getBounds: () => [[number, number], [number, number]] | null;
   setCenter: (center: [number, number], zoom?: number, options?: unknown) => void;
   setBounds: (bounds: [[number, number], [number, number]], options?: unknown) => void;
@@ -189,6 +191,7 @@ const MARKER_FAIR_ROTATION_MIN_POINTS = 3;
 const MARKER_FAIR_ROTATION_DAY_MS = 24 * 60 * 60 * 1000;
 const MARKER_DENSITY_MIN_TOTAL_POINTS = 90;
 const MARKER_DENSITY_FULL_DETAIL_MIN_ZOOM = 13;
+const YANDEX_SCRIPT_TIMEOUT_MS = 12_000;
 
 let scriptPromise: Promise<void> | null = null;
 
@@ -216,13 +219,35 @@ function loadYandexScript(apiKey: string): Promise<void> {
       return;
     }
 
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      lang: "ru_RU",
+    });
     const script = document.createElement("script");
-    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${apiKey}&lang=ru_RU`;
+    let timeout: number | null = null;
+    script.src = `https://api-maps.yandex.ru/2.1/?${params.toString()}`;
     script.async = true;
     script.defer = true;
     script.dataset.yandexMaps = "true";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load script"));
+    script.onload = () => {
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+      }
+      resolve();
+    };
+    script.onerror = () => {
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+      }
+      scriptPromise = null;
+      script.remove();
+      reject(new Error("Failed to load script"));
+    };
+    timeout = window.setTimeout(() => {
+      scriptPromise = null;
+      script.remove();
+      reject(new Error("Map script timed out"));
+    }, YANDEX_SCRIPT_TIMEOUT_MS);
     document.head.appendChild(script);
   });
 
@@ -242,85 +267,82 @@ function createDotLayout(ymaps: YandexApi, outerStyle: string, innerStyle: strin
 }
 
 const categoryMarkerDefinitions: Record<YandexMapMarkerCategory, CategoryMarkerDefinition> = {
-  museum: {
-    color: "#4f46e5",
-    icon: '<path d="M3 21l18 0"/><path d="M3 10l18 0"/><path d="M5 6l7 -3l7 3"/><path d="M4 10l0 11"/><path d="M20 10l0 11"/><path d="M8 14l0 3"/><path d="M12 14l0 3"/><path d="M16 14l0 3"/>',
-    label: "\u041c\u0443\u0437\u0435\u0438",
+  beach: {
+    color: "#38bdf8",
+    icon: '<path d="M17.553 16.75a7.5 7.5 0 0 0 -10.606 0"/><path d="M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196"/><path d="M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196"/><path d="M15 9l-3 5.196"/><path d="M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25"/>',
+    label: "\u041f\u043b\u044f\u0436\u0438 \u0438 \u043a\u0443\u043f\u0430\u043d\u0438\u0435",
   },
-  viewpoint: {
-    color: "#d97706",
-    icon: '<path d="M4 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M14 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M16.346 9.17l-.729 -1.261c-.16 -.248 -1.056 -.203 -1.117 .091l-.177 1.38"/><path d="M19.761 14.813l-2.84 -5.133c-.189 -.31 -.592 -.68 -1.421 -.68c-.828 0 -1.5 .448 -1.5 1v6"/><path d="M7.654 9.17l.729 -1.261c.16 -.249 1.056 -.203 1.117 .091l.177 1.38"/><path d="M4.239 14.813l2.84 -5.133c.189 -.31 .592 -.68 1.421 -.68c.828 0 1.5 .448 1.5 1v6"/><path d="M10 12h4v2h-4l0 -2"/>',
-    label: "\u0421\u043c\u043e\u0442\u0440\u043e\u0432\u044b\u0435",
+  sea: {
+    color: "#2563eb",
+    icon: '<path d="M3 7c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 17c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 12c3 -2 6 -2 9 0s6 2 9 0"/>',
+    label:
+      "\u041c\u043e\u0440\u0435, \u0431\u0443\u0445\u0442\u044b \u0438 \u043c\u044b\u0441\u044b",
   },
-  palace: {
-    color: "#b45309",
-    icon: '<path d="M15 19v-2a3 3 0 0 0 -6 0v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-14h4v3h3v-3h4v3h3v-3h4v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1"/><path d="M3 11l18 0"/>',
-    label: "\u0414\u0432\u043e\u0440\u0446\u044b",
+  mountain: {
+    color: "#92400e",
+    icon: '<path d="M3 20h18l-6.921 -14.612a2.3 2.3 0 0 0 -4.158 0l-6.921 14.612"/><path d="M7.5 11l2 2.5l2.5 -2.5l2 3l2.5 -2"/>',
+    label:
+      "\u0413\u043e\u0440\u044b, \u0441\u043a\u0430\u043b\u044b \u0438 \u043f\u0435\u0449\u0435\u0440\u044b",
   },
-  fortress: {
+  water: {
+    color: "#0891b2",
+    icon: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1 -11.31 0z"/><path d="M8.5 14a3.5 3.5 0 0 0 7 0"/>',
+    label:
+      "\u0412\u043e\u0434\u043e\u043f\u0430\u0434\u044b, \u043e\u0437\u0435\u0440\u0430 \u0438 \u0432\u043e\u0434\u043e\u0435\u043c\u044b",
+  },
+  reserve: {
+    color: "#16a34a",
+    icon: '<path d="M16 5l3 3l-2 1l4 4l-3 1l4 4h-9"/><path d="M15 21l0 -3"/><path d="M8 13l-2 -2"/><path d="M8 12l2 -2"/><path d="M8 21v-13"/><path d="M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005"/>',
+    label:
+      "\u0417\u0430\u043f\u043e\u0432\u0435\u0434\u043d\u0438\u043a\u0438 \u0438 \u0443\u0440\u043e\u0447\u0438\u0449\u0430",
+  },
+  history: {
     color: "#475569",
     icon: '<path d="M7 21h1a1 1 0 0 0 1 -1v-1a3 3 0 0 1 6 0m3 2h1a1 1 0 0 0 1 -1v-15l-3 -2l-3 2v6h-4v-6l-3 -2l-3 2v15a1 1 0 0 0 1 1h2m8 -2v1a1 1 0 0 0 1 1h2"/><path d="M7 7v.01"/><path d="M7 10v.01"/><path d="M7 13v.01"/><path d="M17 7v.01"/><path d="M17 10v.01"/><path d="M17 13v.01"/>',
-    label: "\u041a\u0440\u0435\u043f\u043e\u0441\u0442\u0438",
+    label:
+      "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438 \u0430\u0440\u0445\u0435\u043e\u043b\u043e\u0433\u0438\u044f",
   },
   religion: {
     color: "#7c3aed",
     icon: '<path d="M3 21l18 0"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/><path d="M10 5l4 0"/><path d="M12 3l0 5"/><path d="M6 21v-7m-2 2l8 -8l8 8m-2 -2v7"/>',
-    label: "\u0425\u0440\u0430\u043c\u044b",
+    label: "\u0425\u0440\u0430\u043c\u044b \u0438 \u0440\u0435\u043b\u0438\u0433\u0438\u044f",
   },
-  nature: {
-    color: "#15803d",
-    icon: '<path d="M3 20h18l-6.921 -14.612a2.3 2.3 0 0 0 -4.158 0l-6.921 14.612"/><path d="M7.5 11l2 2.5l2.5 -2.5l2 3l2.5 -2"/>',
-    label: "\u0413\u043e\u0440\u044b \u0438 \u043f\u0440\u0438\u0440\u043e\u0434\u0430",
+  palace: {
+    color: "#d97706",
+    icon: '<path d="M15 19v-2a3 3 0 0 0 -6 0v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-14h4v3h3v-3h4v3h3v-3h4v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1"/><path d="M3 11l18 0"/>',
+    label: "\u0414\u0432\u043e\u0440\u0446\u044b \u0438 \u0434\u0430\u0447\u0438",
   },
-  cave: {
-    color: "#6b7280",
-    icon: '<path d="M3 21l18 0"/><path d="M4 21v-15a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v15"/><path d="M9 21v-8a3 3 0 0 1 6 0v8"/>',
-    label: "\u041f\u0435\u0449\u0435\u0440\u044b",
+  culture: {
+    color: "#dc2626",
+    icon: '<path d="M3 21l18 0"/><path d="M3 10l18 0"/><path d="M5 6l7 -3l7 3"/><path d="M4 10l0 11"/><path d="M20 10l0 11"/><path d="M8 14l0 3"/><path d="M12 14l0 3"/><path d="M16 14l0 3"/>',
+    label: "\u041c\u0443\u0437\u0435\u0438 \u0438 \u043a\u0443\u043b\u044c\u0442\u0443\u0440\u0430",
   },
-  beach: {
-    color: "#0ea5e9",
-    icon: '<path d="M17.553 16.75a7.5 7.5 0 0 0 -10.606 0"/><path d="M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196"/><path d="M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196"/><path d="M15 9l-3 5.196"/><path d="M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25"/>',
-    label: "\u041f\u043b\u044f\u0436\u0438 \u0438 \u043d\u0430\u0431\u0435\u0440\u0435\u0436\u043d\u044b\u0435",
-  },
-  water: {
-    color: "#0284c7",
-    icon: '<path d="M3 7c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 17c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 12c3 -2 6 -2 9 0s6 2 9 0"/>',
-    label: "\u0412\u043e\u0434\u0430 \u0438 \u0432\u043e\u0434\u043e\u043f\u0430\u0434\u044b",
-  },
-  park: {
-    color: "#047857",
-    icon: '<path d="M16 5l3 3l-2 1l4 4l-3 1l4 4h-9"/><path d="M15 21l0 -3"/><path d="M8 13l-2 -2"/><path d="M8 12l2 -2"/><path d="M8 21v-13"/><path d="M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005"/>',
-    label: "\u041f\u0430\u0440\u043a\u0438",
-  },
-  route: {
-    color: "#ea580c",
-    icon: '<path d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4"/><path d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/>',
-    label: "\u041c\u0430\u0440\u0448\u0440\u0443\u0442\u044b",
+  city: {
+    color: "#65a30d",
+    icon: '<path d="M13 4a2 2 0 1 0 -4 0a2 2 0 0 0 4 0"/><path d="M10 7l-1 5l-3 3"/><path d="M11 12l4 2l1 5"/><path d="M9 12h4"/><path d="M3 21h18"/>',
+    label: "\u041f\u0440\u043e\u0433\u0443\u043b\u043a\u0438 \u0438 \u043f\u0430\u0440\u043a\u0438",
   },
   entertainment: {
-    color: "#db2777",
+    color: "#ec4899",
     icon: '<path d="M15 5l0 2"/><path d="M15 11l0 2"/><path d="M15 17l0 2"/><path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2"/>',
     label: "\u0421\u0435\u043c\u0435\u0439\u043d\u044b\u0439 \u043e\u0442\u0434\u044b\u0445",
   },
   winery: {
-    color: "#be123c",
+    color: "#991b1b",
     icon: '<path d="M8 21h8"/><path d="M12 16v5"/><path d="M17 5l1 6c0 3.012 -2.686 5 -6 5s-6 -1.988 -6 -5l1 -6"/><path d="M7 5a5 2 0 1 0 10 0a5 2 0 1 0 -10 0"/>',
     label: "\u0412\u0438\u043d\u043e\u0434\u0435\u043b\u044c\u043d\u0438",
   },
-  lighthouse: {
-    color: "#ca8a04",
-    icon: '<path d="M12 3l2 3l2 15h-8l2 -15l2 -3"/><path d="M8 9l8 0"/><path d="M3 11l2 -2l-2 -2"/><path d="M21 11l-2 -2l2 -2"/>',
-    label: "\u041c\u0430\u044f\u043a\u0438",
-  },
-  memorial: {
-    color: "#64748b",
-    icon: '<path d="M8 18l2 -13l2 -2l2 2l2 13"/><path d="M5 21v-3h14v3"/><path d="M3 21l18 0"/>',
-    label: "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438 \u043c\u0435\u043c\u043e\u0440\u0438\u0430\u043b\u044b",
+  route: {
+    color: "#111827",
+    icon: '<path d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4"/><path d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/>',
+    label:
+      "\u0421\u043c\u043e\u0442\u0440\u043e\u0432\u044b\u0435 \u0438 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u044b",
   },
   landmark: {
     color: "#0f766e",
     icon: '<path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0"/>',
-    label: "\u0414\u043e\u0441\u0442\u043e\u043f\u0440\u0438\u043c\u0435\u0447\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
+    label:
+      "\u0414\u043e\u0441\u0442\u043e\u043f\u0440\u0438\u043c\u0435\u0447\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
   },
 };
 
@@ -539,6 +561,39 @@ function normalizeMapBounds(value: unknown): [[number, number], [number, number]
     [south, west],
     [north, east],
   ];
+}
+
+function normalizeMapCenter(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) {
+    return null;
+  }
+
+  const latitude = Number(value[0]);
+  const longitude = Number(value[1]);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return null;
+  }
+
+  return [latitude, longitude];
+}
+
+function getMapViewport(
+  map: YandexMapInstance,
+  bounds?: [[number, number], [number, number]] | null,
+  zoom?: number,
+): YandexMapViewport {
+  return {
+    bounds: bounds ?? normalizeMapBounds(map.getBounds()) ?? undefined,
+    center: normalizeMapCenter(map.getCenter()) ?? undefined,
+    zoom: Number.isFinite(zoom) ? zoom : getMapZoom(map),
+  };
 }
 
 function hasPointPriceLabel(point: YandexMapPoint): boolean {
@@ -1258,17 +1313,17 @@ function closePlacemarkBalloon(placemark: YandexPlacemarkInstance): void {
 }
 
 function applyViewport(map: YandexMapInstance, viewport?: YandexMapViewport | null) {
+  if (viewport?.center) {
+    map.setCenter(viewport.center, viewport.zoom ?? DEFAULT_ZOOM, { duration: 220 });
+    return;
+  }
+
   if (viewport?.bounds) {
     map.setBounds(viewport.bounds, {
       checkZoomRange: true,
       zoomMargin: 44,
       duration: 220,
     });
-    return;
-  }
-
-  if (viewport?.center) {
-    map.setCenter(viewport.center, viewport.zoom ?? DEFAULT_ZOOM, { duration: 220 });
     return;
   }
 
@@ -1324,6 +1379,7 @@ export function YandexMapMultiViewer({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<YandexMapInstance | null>(null);
   const placemarkByIdRef = useRef<Map<string, YandexPlacemarkInstance>>(new Map());
+  const displayPointsRef = useRef<YandexMapPoint[]>([]);
   const mapCreatedRef = useRef(false);
   const pointsSignatureRef = useRef("");
   const appliedViewportKeyRef = useRef<string | null>(null);
@@ -1351,6 +1407,7 @@ export function YandexMapMultiViewer({
   const [error, setError] = useState("");
   const [mapReadyVersion, setMapReadyVersion] = useState(0);
   const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
+  const [scriptRetryNonce, setScriptRetryNonce] = useState(0);
   const [fairRotationSeed] = useState(() => getMarkerFairRotationSeed());
   const controlsSignature = useMemo(
     () => (controls ?? ["zoomControl", "fullscreenControl"]).join("|"),
@@ -1387,11 +1444,32 @@ export function YandexMapMultiViewer({
       buildDensityLimitedPoints({
         points: normalizedPoints,
         zoom: markerDensityZoom,
-        activePointId,
+        activePointId: null,
         hoveredPointId: null,
         fairRotationSeed,
       }),
-    [activePointId, fairRotationSeed, markerDensityZoom, normalizedPoints],
+    [fairRotationSeed, markerDensityZoom, normalizedPoints],
+  );
+  const displayPointsRenderSignature = useMemo(
+    () =>
+      displayPoints
+        .map((point) =>
+          [
+            point.id,
+            point.latitude.toFixed(5),
+            point.longitude.toFixed(5),
+            point.title,
+            point.priceLabel ?? "",
+            point.previewImageUrl ?? "",
+            point.rating ?? "",
+            point.reviewsCount ?? "",
+            point.balloonVariant ?? "",
+            point.markerCategory ?? "",
+            point.markerCategoryLabel ?? "",
+          ].join("\u001f"),
+        )
+        .join("\u001e"),
+    [displayPoints],
   );
 
   const pointById = useMemo(
@@ -1402,6 +1480,10 @@ export function YandexMapMultiViewer({
     () => buildMarkerBaseZIndexByPointId(displayPoints, mapZoom, fairRotationSeed),
     [displayPoints, fairRotationSeed, mapZoom],
   );
+
+  useEffect(() => {
+    displayPointsRef.current = displayPoints;
+  }, [displayPoints]);
 
   useEffect(() => {
     markerBaseZIndexByPointIdRef.current = markerBaseZIndexByPointId;
@@ -1432,7 +1514,8 @@ export function YandexMapMultiViewer({
   }, [mapZoom]);
 
   const reportCurrentBounds = useCallback((map: YandexMapInstance) => {
-    boundsChangeHandlerRef.current?.(normalizeMapBounds(map.getBounds()));
+    const bounds = normalizeMapBounds(map.getBounds());
+    boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds));
   }, []);
 
   const clearBalloonCloseTimer = useCallback((pointId: string) => {
@@ -1706,7 +1789,8 @@ export function YandexMapMultiViewer({
             setMapZoom((currentZoom) =>
               Math.abs(currentZoom - nextZoom) < 0.05 ? currentZoom : nextZoom,
             );
-            boundsChangeHandlerRef.current?.(eventBounds ?? normalizeMapBounds(map.getBounds()));
+            const bounds = eventBounds ?? normalizeMapBounds(map.getBounds());
+            boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds, nextZoom));
           });
 
           map.events.add("click", (event) => {
@@ -1753,7 +1837,14 @@ export function YandexMapMultiViewer({
       balloonContentLayoutsRef.current = null;
       mapZoomRef.current = DEFAULT_ZOOM;
     };
-  }, [apiKey, clearHoverClearTimer, closeAllBalloons, controlsSignature, reportCurrentBounds]);
+  }, [
+    apiKey,
+    clearHoverClearTimer,
+    closeAllBalloons,
+    controlsSignature,
+    reportCurrentBounds,
+    scriptRetryNonce,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1778,11 +1869,12 @@ export function YandexMapMultiViewer({
     closeAllBalloons();
     removePlacemarksFromMap();
 
+    const currentDisplayPoints = displayPointsRef.current;
     const currentActivePointId = activePointIdRef.current;
     const currentHoveredPointId = hoveredPointIdRef.current;
     const currentZoom = mapZoomRef.current;
 
-    displayPoints.forEach((point) => {
+    currentDisplayPoints.forEach((point) => {
       const hasPriceLabel = hasPointPriceLabel(point);
       const markerKind = getMarkerVisualKind({
         point,
@@ -1956,7 +2048,7 @@ export function YandexMapMultiViewer({
   }, [
     closeAllBalloons,
     closeBalloonForPoint,
-    displayPoints,
+    displayPointsRenderSignature,
     fitPointsOnChange,
     handlePlacemarkMouseEnter,
     handlePlacemarkMouseLeave,
@@ -2063,7 +2155,21 @@ export function YandexMapMultiViewer({
         ref={containerRef}
         className={`${frameless ? "overflow-hidden bg-cream/45" : "overflow-hidden rounded-xl border border-olive/16 bg-cream/45"} ${className}`}
       />
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="mt-1 font-semibold text-amber-900 underline-offset-2 hover:underline"
+            onClick={() => {
+              setError("");
+              setScriptRetryNonce((value) => value + 1);
+            }}
+          >
+            Повторить загрузку карты
+          </button>
+        </div>
+      ) : null}
       <style jsx global>{`
         .yandex-map-multi-viewer .ymaps-2-1-79-balloon__layout,
         .yandex-map-multi-viewer .ymaps-2-1-79-balloon__content {
