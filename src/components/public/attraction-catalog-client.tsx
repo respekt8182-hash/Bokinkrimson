@@ -49,6 +49,7 @@ type CatalogParams = Record<string, string | null | undefined>;
 
 const PAGE_SIZE = 30;
 const REQUEST_CACHE_TTL_MS = 45_000;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
 const responseCache = new Map<
   string,
   { expiresAt: number; response: PublicAttractionCatalogResult }
@@ -446,7 +447,7 @@ function SkeletonCard() {
 function CatalogLoadingInlineLabel() {
   return (
     <>
-      <span>Ищем лучшие варианты досуга</span>
+      <span>Ищем лучшие достопримечательности</span>
       <span className="catalog-loading-inline-dots text-terra" aria-hidden="true">
         <span />
         <span />
@@ -528,6 +529,8 @@ export function AttractionCatalogClient({
   const resultRef = useRef(initialResult);
   const requestSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const boundsRefreshTimerRef = useRef<number | null>(null);
+  const pendingBoundsRef = useRef<string | null>(null);
   const boundsRef = useRef(initialBounds);
 
   useEffect(() => {
@@ -540,6 +543,9 @@ export function AttractionCatalogClient({
 
   useEffect(() => {
     return () => {
+      if (boundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(boundsRefreshTimerRef.current);
+      }
       abortControllerRef.current?.abort();
     };
   }, []);
@@ -568,6 +574,7 @@ export function AttractionCatalogClient({
     });
   }, [currentParams, effectiveBounds]);
   const initialMapItems = mapItems ?? result.items.map(toAttractionMapItem);
+  const shouldShowRefreshSkeleton = isRefreshing;
   const foundLabel = formatRuCount(result.total, "место", "места", "мест");
 
   useEffect(() => {
@@ -596,12 +603,21 @@ export function AttractionCatalogClient({
         historyMode?: "push" | "replace" | "none";
         bounds?: string | null;
         preserveFiltersForBounds?: boolean;
+        preserveCurrentResults?: boolean;
       },
     ) => {
       const nextBounds = options?.bounds ?? null;
+      const preserveCurrentResults = options?.preserveCurrentResults === true;
       const previousResult = resultRef.current;
       const previousBounds = boundsRef.current;
 
+      if (boundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(boundsRefreshTimerRef.current);
+        boundsRefreshTimerRef.current = null;
+      }
+      if (!preserveCurrentResults) {
+        pendingBoundsRef.current = null;
+      }
       abortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       const requestId = requestSeqRef.current;
@@ -675,15 +691,53 @@ export function AttractionCatalogClient({
         return;
       }
 
-      if ((nextBounds ?? null) === (boundsRef.current ?? null)) {
+      const normalizedBounds = nextBounds?.trim() || null;
+      if (
+        normalizedBounds === (boundsRef.current ?? null) ||
+        normalizedBounds === pendingBoundsRef.current
+      ) {
         return;
       }
 
-      void runRequest(getPageHrefFromWindow(), {
-        historyMode: "replace",
-        bounds: nextBounds,
-        preserveFiltersForBounds: Boolean(nextBounds),
-      });
+      pendingBoundsRef.current = normalizedBounds;
+
+      if (boundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(boundsRefreshTimerRef.current);
+        boundsRefreshTimerRef.current = null;
+      }
+
+      abortControllerRef.current?.abort();
+      requestSeqRef.current += 1;
+
+      setIsRefreshing(true);
+      setError("");
+
+      if (!normalizedBounds) {
+        pendingBoundsRef.current = null;
+        boundsRef.current = null;
+        setBounds(null);
+        setIsRefreshing(false);
+        return;
+      }
+
+      boundsRefreshTimerRef.current = window.setTimeout(() => {
+        boundsRefreshTimerRef.current = null;
+        const requestPromise = runRequest(getPageHrefFromWindow(), {
+          historyMode: "replace",
+          bounds: normalizedBounds,
+          preserveFiltersForBounds: true,
+          preserveCurrentResults: true,
+        });
+        const scheduledRequestId = requestSeqRef.current;
+        void requestPromise.finally(() => {
+          if (
+            scheduledRequestId === requestSeqRef.current &&
+            pendingBoundsRef.current === normalizedBounds
+          ) {
+            pendingBoundsRef.current = null;
+          }
+        });
+      }, MAP_BOUNDS_REFRESH_DELAY_MS);
     },
     [hasLocationRadiusScope, runRequest],
   );
@@ -762,6 +816,7 @@ export function AttractionCatalogClient({
           activeBoundsParam={effectiveBounds}
           isLoading={isRefreshing}
           mapItemsEndpoint={mapItemsEndpoint}
+          boundsQueryChangeDelayMs={0}
           mapTitle="Карта мест"
           onBoundsQueryChange={handleBoundsChange}
         >
@@ -782,7 +837,7 @@ export function AttractionCatalogClient({
               </div>
             ) : null}
 
-            {isRefreshing ? (
+            {shouldShowRefreshSkeleton ? (
               <div className="space-y-4">
                 {Array.from({ length: 4 }, (_, index) => (
                   <SkeletonCard key={`attraction-skeleton-${index}`} />

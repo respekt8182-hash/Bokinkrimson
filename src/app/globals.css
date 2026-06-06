@@ -2216,11 +2216,17 @@ button:focus-visible > .field-adornment-icon {
 @media (min-width: 1024px) {
   .catalog-layout:has(.catalog-map-sticky) {
     min-height: calc(100dvh + var(--catalog-map-sticky-top, 256px) + 84px);
+    overflow-anchor: none;
   }
 
   .catalog-map-sticky {
     top: var(--catalog-map-sticky-top, 256px);
     height: calc(100dvh - 120px);
+    overflow-anchor: none;
+  }
+
+  .catalog-layout:has(.catalog-map-sticky) #catalog-results {
+    overflow-anchor: none;
   }
 }
 

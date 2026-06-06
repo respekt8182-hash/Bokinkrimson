@@ -204,6 +204,7 @@ export function HousingCatalogClient({
   const [locationLabel, setLocationLabel] = useState(initialLocationLabel);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [mapBoundsFilter, setMapBoundsFilter] = useState<string | null>(null);
+  const [isMapBoundsRefreshing, setIsMapBoundsRefreshing] = useState(false);
   const requestSeqRef = useRef(0);
   const mapBoundsFilterRef = useRef<string | null>(null);
   const pendingMapBoundsFilterRef = useRef<string | null>(null);
@@ -276,12 +277,14 @@ export function HousingCatalogClient({
       filterAbortControllerRef.current?.abort();
       requestSeqRef.current += 1;
       setIsRefreshing(true);
+      setIsMapBoundsRefreshing(Boolean(normalizedBounds));
 
       if (!normalizedBounds) {
         mapBoundsFilterRef.current = null;
         pendingMapBoundsFilterRef.current = null;
         setMapBoundsFilter(null);
         setIsRefreshing(false);
+        setIsMapBoundsRefreshing(false);
         return;
       }
 
@@ -313,6 +316,7 @@ export function HousingCatalogClient({
             if (requestId === requestSeqRef.current) {
               pendingMapBoundsFilterRef.current = null;
               setIsRefreshing(false);
+              setIsMapBoundsRefreshing(false);
             }
           });
       }, MAP_BOUNDS_REFRESH_DELAY_MS);
@@ -350,6 +354,7 @@ export function HousingCatalogClient({
 
       setFilters(normalizedFilters);
       setIsRefreshing(true);
+      setIsMapBoundsRefreshing(false);
       mapBoundsFilterRef.current = null;
       pendingMapBoundsFilterRef.current = null;
       setMapBoundsFilter(null);
@@ -528,7 +533,8 @@ export function HousingCatalogClient({
             searchGuests={Number.parseInt(filters.guests, 10) || 2}
             hasMore={hasMore}
             loadingMore={loadingMore}
-            loadingInitial={isRefreshing}
+            loadingInitial={isRefreshing && !isMapBoundsRefreshing}
+            mapBoundsRefreshing={isMapBoundsRefreshing}
             totalCount={total}
             emptyContent={emptyCatalogContent}
             newItemIds={newItemIds}

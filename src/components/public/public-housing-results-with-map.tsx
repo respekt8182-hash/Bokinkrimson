@@ -55,6 +55,7 @@ type PublicHousingResultsWithMapProps = {
   hasMore: boolean;
   loadingMore: boolean;
   loadingInitial?: boolean;
+  mapBoundsRefreshing?: boolean;
   totalCount?: number;
   emptyContent?: ReactNode;
   newItemIds?: string[];
@@ -367,6 +368,7 @@ export function PublicHousingResultsWithMap({
   hasMore,
   loadingMore,
   loadingInitial = false,
+  mapBoundsRefreshing = false,
   totalCount,
   emptyContent = null,
   newItemIds = [],
@@ -563,9 +565,10 @@ export function PublicHousingResultsWithMap({
   const resolvedInitialViewportKey = storedMapViewport
     ? `housing-memory:${mapViewportStorageScope}`
     : initialViewportKey;
-  const isCatalogLoading = loadingInitial;
+  const isCatalogLoading = loadingInitial || mapBoundsRefreshing;
+  const isResultsRefreshing = isCatalogLoading;
   const mapLoadingPillVisible =
-    isCatalogLoading || (hasMapInteractionRef.current && mapState.status === "loading");
+    isResultsRefreshing || (hasMapInteractionRef.current && mapState.status === "loading");
   const foundCount = totalCount ?? items.length;
   const foundCountLabel = formatRuCount(
     foundCount,
@@ -1107,7 +1110,7 @@ export function PublicHousingResultsWithMap({
     mobileSheetSnap === "expanded" &&
     resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
   const isMobileSheetExpanded = mobileSheetSnap === "expanded";
-  const mobileStatusContent = isCatalogLoading ? (
+  const mobileStatusContent = isResultsRefreshing ? (
     <CatalogLoadingInlineLabel />
   ) : (
     <>Найдено {foundCountLabel}</>
@@ -1139,7 +1142,11 @@ export function PublicHousingResultsWithMap({
   );
 
   const resultsSection = (
-    <section id="catalog-results" aria-busy={isCatalogLoading || loadingMore} className="space-y-4">
+    <section
+      id="catalog-results"
+      aria-busy={isResultsRefreshing || loadingMore}
+      className="space-y-4"
+    >
       <div
         className={cn(
           "grid gap-4 transition-all duration-300",
@@ -1217,7 +1224,7 @@ export function PublicHousingResultsWithMap({
               })}
       </div>
 
-      {!isCatalogLoading && loadingMore ? (
+      {!isResultsRefreshing && loadingMore ? (
         <div
           className={cn(
             "grid gap-4",
@@ -1230,7 +1237,7 @@ export function PublicHousingResultsWithMap({
         </div>
       ) : null}
 
-      {!isCatalogLoading && hasMore ? (
+      {!isResultsRefreshing && hasMore ? (
         <div className="pt-1">
           <button
             type="button"

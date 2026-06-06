@@ -69,6 +69,7 @@ type MarketplaceCatalogMapProps = {
   activeBoundsParam?: string | null;
   isLoading?: boolean;
   mapItemsEndpoint?: string | null;
+  boundsQueryChangeDelayMs?: number;
   onBoundsQueryChange?: (bounds: string | null) => void;
   children: ReactNode;
 };
@@ -1398,6 +1399,7 @@ export function MarketplaceCatalogMap({
   activeBoundsParam,
   isLoading = false,
   mapItemsEndpoint = null,
+  boundsQueryChangeDelayMs = MAP_BOUNDS_UPDATE_DELAY_MS,
   onBoundsQueryChange,
   children,
 }: MarketplaceCatalogMapProps) {
@@ -1774,18 +1776,28 @@ export function MarketplaceCatalogMap({
 
       if (boundsUpdateTimerRef.current !== null) {
         window.clearTimeout(boundsUpdateTimerRef.current);
+        boundsUpdateTimerRef.current = null;
       }
       lastRequestedBoundsRef.current = normalizedBounds;
+
+      const publishBoundsChange = () => {
+        setMapInteractionBoundsParam((current) =>
+          current === normalizedBounds ? current : normalizedBounds,
+        );
+        onBoundsQueryChange?.(normalizedBounds);
+      };
+
+      if (!syncBoundsToUrl && boundsQueryChangeDelayMs <= 0) {
+        publishBoundsChange();
+        return;
+      }
 
       boundsUpdateTimerRef.current = window.setTimeout(() => {
         boundsUpdateTimerRef.current = null;
         const nextParams = new URLSearchParams(window.location.search);
         const liveBounds = nextParams.get("bounds")?.trim() || null;
 
-        setMapInteractionBoundsParam((current) =>
-          current === normalizedBounds ? current : normalizedBounds,
-        );
-        onBoundsQueryChange?.(normalizedBounds);
+        publishBoundsChange();
 
         if (!syncBoundsToUrl) {
           return;
@@ -1811,6 +1823,7 @@ export function MarketplaceCatalogMap({
     },
     [
       hasStrictAttractionRadiusScope,
+      boundsQueryChangeDelayMs,
       kind,
       mapViewportStorageScope,
       onBoundsQueryChange,
