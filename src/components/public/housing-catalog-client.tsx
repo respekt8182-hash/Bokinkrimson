@@ -211,10 +211,13 @@ export function HousingCatalogClient({
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
   const filterAbortControllerRef = useRef<AbortController | null>(null);
+  const ignoreMapBoundsUntilRef = useRef(0);
 
   const {
     items,
     total,
+    page,
+    totalPages,
     hasMore,
     loading: loadingMore,
     error: loadMoreError,
@@ -259,6 +262,10 @@ export function HousingCatalogClient({
 
   const handleMapBoundsFilterChange = useCallback(
     (nextBounds: string | null) => {
+      if (Date.now() <= ignoreMapBoundsUntilRef.current) {
+        return;
+      }
+
       const normalizedBounds = nextBounds?.trim() || null;
       if (
         normalizedBounds === mapBoundsFilterRef.current ||
@@ -275,6 +282,8 @@ export function HousingCatalogClient({
       }
       mapBoundsAbortControllerRef.current?.abort();
       filterAbortControllerRef.current?.abort();
+      pendingMapBoundsFilterRef.current = null;
+      ignoreMapBoundsUntilRef.current = Date.now() + 2200;
       requestSeqRef.current += 1;
       setIsRefreshing(true);
       setIsMapBoundsRefreshing(Boolean(normalizedBounds));
@@ -438,6 +447,65 @@ export function HousingCatalogClient({
     setNewItemIds(response.items.map((item) => item.id));
   }, [loadMore]);
 
+  const handlePageChange = useCallback(
+    async (nextPage: number) => {
+      const safePage = Math.min(Math.max(1, Math.floor(nextPage)), totalPages);
+      if (safePage === page || isRefreshing || loadingMore) {
+        return;
+      }
+
+      if (mapBoundsRefreshTimerRef.current) {
+        window.clearTimeout(mapBoundsRefreshTimerRef.current);
+        mapBoundsRefreshTimerRef.current = null;
+      }
+      mapBoundsAbortControllerRef.current?.abort();
+      filterAbortControllerRef.current?.abort();
+      requestSeqRef.current += 1;
+      const requestId = requestSeqRef.current;
+      const controller = new AbortController();
+      filterAbortControllerRef.current = controller;
+
+      setIsRefreshing(true);
+      setIsMapBoundsRefreshing(false);
+
+      try {
+        const nextResponse = await fetchAccommodationSearch(
+          filters,
+          safePage,
+          PAGE_SIZE,
+          controller.signal,
+          mapBoundsFilterRef.current,
+        );
+        if (requestId !== requestSeqRef.current || controller.signal.aborted) {
+          return;
+        }
+
+        replaceAll(nextResponse);
+        setNewItemIds(nextResponse.items.map((item) => item.id));
+        window.history.pushState({}, "", buildHousingCatalogUrl(filters, nextResponse.page, true));
+        window.requestAnimationFrame(() => {
+          document.getElementById("catalog-results")?.scrollIntoView({
+            block: "start",
+            behavior: "smooth",
+          });
+        });
+      } catch {
+        if (!controller.signal.aborted && requestId === requestSeqRef.current) {
+          pushToast("error", "Не удалось открыть страницу каталога");
+        }
+      } finally {
+        if (filterAbortControllerRef.current === controller) {
+          filterAbortControllerRef.current = null;
+        }
+
+        if (requestId === requestSeqRef.current) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [filters, isRefreshing, loadingMore, page, pushToast, replaceAll, totalPages],
+  );
+
   const resetFilters = useCallback(async () => {
     await applyFilters(
       {
@@ -523,7 +591,7 @@ export function HousingCatalogClient({
         initialPopularSuggestions={initialPopularLocationSuggestions}
       />
 
-      <div className="mx-auto w-full max-w-[1680px] px-4 py-6 pb-28 md:px-6 md:py-8 md:pb-8 lg:pb-8">
+      <div className="mx-auto w-full max-w-[1680px] px-4 py-6 pb-28 md:px-6 md:py-8 md:pb-8 lg:max-w-none lg:px-0 lg:pb-8">
         <div className="space-y-3">
           <PublicHousingResultsWithMap
             items={items}
@@ -533,12 +601,15 @@ export function HousingCatalogClient({
             searchGuests={Number.parseInt(filters.guests, 10) || 2}
             hasMore={hasMore}
             loadingMore={loadingMore}
+            page={page}
+            totalPages={totalPages}
             loadingInitial={isRefreshing && !isMapBoundsRefreshing}
             mapBoundsRefreshing={isMapBoundsRefreshing}
             totalCount={total}
             emptyContent={emptyCatalogContent}
             newItemIds={newItemIds}
             onLoadMore={handleLoadMore}
+            onPageChange={handlePageChange}
             onWishlistToggle={handleWishlistToggle}
             onMapBoundsFilterChange={handleMapBoundsFilterChange}
           />

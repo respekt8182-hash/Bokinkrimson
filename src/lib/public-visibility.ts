@@ -1,5 +1,9 @@
 import { ExcursionStatus, PropertyStatus, TransferStatus, type Prisma } from "@prisma/client";
 
+function shouldExcludeDemoContentFromPublicCatalog(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 export function buildPublishedPropertyVisibilityWhere(): Prisma.PropertyWhereInput {
   return {
     status: PropertyStatus.PUBLISHED,
@@ -17,6 +21,10 @@ export function buildPublicCatalogPropertyVisibilityWhere(
   _now = new Date(),
 ): Prisma.PropertyWhereInput {
   void _now;
+
+  if (!shouldExcludeDemoContentFromPublicCatalog()) {
+    return buildPublishedPropertyVisibilityWhere();
+  }
 
   return {
     AND: [
@@ -46,6 +54,10 @@ export function buildPublishedExcursionVisibilityWhere(): Prisma.ExcursionWhereI
 }
 
 export function buildPublicCatalogExcursionVisibilityWhere(): Prisma.ExcursionWhereInput {
+  if (!shouldExcludeDemoContentFromPublicCatalog()) {
+    return buildPublishedExcursionVisibilityWhere();
+  }
+
   return {
     AND: [
       buildPublishedExcursionVisibilityWhere(),

@@ -1,6 +1,9 @@
 ﻿"use client";
 
+import { Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppIcon } from "@/components/ui/app-icon";
+import { cn } from "@/lib/cn";
 
 export type YandexMapMarkerCategory =
   | "beach"
@@ -61,6 +64,8 @@ type YandexMapMultiViewerProps = {
   fitPointsOnChange?: "always" | "initial" | "never";
   radiusCircle?: YandexMapRadiusCircle | null;
   controls?: string[];
+  customZoomControls?: boolean;
+  customZoomControlsClassName?: string;
   showBalloons?: boolean;
   frameless?: boolean;
 };
@@ -159,6 +164,8 @@ type BalloonContentLayouts = {
 
 const DEFAULT_CENTER: [number, number] = [44.9482, 34.1003];
 const DEFAULT_ZOOM = 8;
+const CUSTOM_ZOOM_MIN = 3;
+const CUSTOM_ZOOM_MAX = 19;
 const SINGLE_POINT_ZOOM = 13;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const FALLBACK_PREVIEW_IMAGE_URL = "/crimea-map-preview.svg";
@@ -531,6 +538,10 @@ function estimatePriceMarkerWidth(label: string): number {
 function getMapZoom(map: YandexMapInstance): number {
   const zoom = map.getZoom();
   return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function normalizeMapBounds(value: unknown): [[number, number], [number, number]] | null {
@@ -1372,6 +1383,8 @@ export function YandexMapMultiViewer({
   fitPointsOnChange = "always",
   radiusCircle = null,
   controls,
+  customZoomControls = false,
+  customZoomControlsClassName,
   showBalloons = true,
   frameless = false,
 }: YandexMapMultiViewerProps) {
@@ -1390,6 +1403,7 @@ export function YandexMapMultiViewer({
   const clickHandlerRef = useRef(onPointClick);
   const hoverHandlerRef = useRef(onPointHoverChange);
   const boundsChangeHandlerRef = useRef(onBoundsChange);
+  const suppressResizeBoundsUntilRef = useRef(0);
   const showBalloonsRef = useRef(showBalloons);
   const markerBaseZIndexByPointIdRef = useRef<Map<string, number>>(new Map());
   const priceLayoutsRef = useRef<PriceLayouts | null>(null);
@@ -1683,6 +1697,17 @@ export function YandexMapMultiViewer({
     placemarkByIdRef.current.clear();
   }, []);
 
+  const changeMapZoom = useCallback((direction: 1 | -1) => {
+    const map = mapRef.current;
+    if (!map || !mapCreatedRef.current) {
+      return;
+    }
+
+    const nextZoom = clampNumber(getMapZoom(map) + direction, CUSTOM_ZOOM_MIN, CUSTOM_ZOOM_MAX);
+    const center = normalizeMapCenter(map.getCenter()) ?? DEFAULT_CENTER;
+    map.setCenter(center, nextZoom, { duration: 180 });
+  }, []);
+
   useEffect(() => {
     if (!apiKey || !containerRef.current) {
       return;
@@ -1789,6 +1814,9 @@ export function YandexMapMultiViewer({
             setMapZoom((currentZoom) =>
               Math.abs(currentZoom - nextZoom) < 0.05 ? currentZoom : nextZoom,
             );
+            if (Date.now() <= suppressResizeBoundsUntilRef.current) {
+              return;
+            }
             const bounds = eventBounds ?? normalizeMapBounds(map.getBounds());
             boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds, nextZoom));
           });
@@ -2105,6 +2133,7 @@ export function YandexMapMultiViewer({
     }
 
     const observer = new ResizeObserver(() => {
+      suppressResizeBoundsUntilRef.current = Date.now() + 350;
       mapRef.current?.container.fitToViewport();
     });
 
@@ -2150,11 +2179,37 @@ export function YandexMapMultiViewer({
   }
 
   return (
-    <div className="yandex-map-multi-viewer h-full w-full space-y-2">
+    <div className="yandex-map-multi-viewer relative h-full w-full space-y-2">
       <div
         ref={containerRef}
         className={`${frameless ? "overflow-hidden bg-cream/45" : "overflow-hidden rounded-xl border border-olive/16 bg-cream/45"} ${className}`}
       />
+      {customZoomControls ? (
+        <div
+          className={cn(
+            "pointer-events-auto absolute bottom-4 right-4 z-[70] flex w-12 flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] ring-1 ring-black/5",
+            customZoomControlsClassName,
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => changeMapZoom(1)}
+            className="flex h-12 w-12 items-center justify-center text-[#202124] transition hover:bg-slate-50 active:bg-slate-100"
+            aria-label="Увеличить карту"
+          >
+            <AppIcon icon={Plus} className="h-5 w-5 text-[#202124]" />
+          </button>
+          <span className="mx-2 h-px bg-slate-200" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => changeMapZoom(-1)}
+            className="flex h-12 w-12 items-center justify-center text-[#202124] transition hover:bg-slate-50 active:bg-slate-100"
+            aria-label="Уменьшить карту"
+          >
+            <AppIcon icon={Minus} className="h-5 w-5 text-[#202124]" />
+          </button>
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <p>{error}</p>

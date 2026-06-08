@@ -52,6 +52,7 @@ next-env.d.ts
 # local tooling
 /.claude/
 /.vscode/
+/.local/
 dev-server.log
 tmp-*.png
 
@@ -61,6 +62,8 @@ tmp-*.png
 /*.log
 /*.out
 /*.err
+/property-photo-batches/
+/property-photo-batches-processed/
 
 # imported attraction source archive
 /Dosto premet krym/

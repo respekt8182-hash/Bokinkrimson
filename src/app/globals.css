@@ -2208,6 +2208,40 @@ button:focus-visible > .field-adornment-icon {
   align-items: start;
 }
 
+.housing-catalog-layout {
+  align-items: stretch;
+}
+
+.marketplace-attraction-catalog-layout {
+  align-items: stretch;
+}
+
+.catalog-map-surface .yandex-map-multi-viewer {
+  height: 100%;
+}
+
+.catalog-map-surface [class*="-map-copyrights-promo"],
+.catalog-map-surface [class*="-gotoymaps"],
+.catalog-map-surface [class*="-gototech"] {
+  display: none !important;
+}
+
+.catalog-map-surface [class*="-copyright__wrap"],
+.catalog-map-surface [class*="-copyright__content-cell"],
+.catalog-map-surface [class*="-copyright__link"] {
+  opacity: 0.74;
+}
+
+.catalog-map-sticky[data-map-yandex-chrome="compact"] .catalog-map-surface [class*="-copyright"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.16s ease;
+}
+
+.catalog-map-sticky[data-map-yandex-chrome="full"] .catalog-map-surface [class*="-copyright"] {
+  transition: opacity 0.16s ease;
+}
+
 .map-column {
   border-radius: 20px;
   overflow: hidden;
@@ -2215,14 +2249,24 @@ button:focus-visible > .field-adornment-icon {
 
 @media (min-width: 1024px) {
   .catalog-layout:has(.catalog-map-sticky) {
-    min-height: calc(100dvh + var(--catalog-map-sticky-top, 256px) + 84px);
+    min-height: calc(100dvh + var(--catalog-map-sticky-top, 96px) + 84px);
     overflow-anchor: none;
   }
 
   .catalog-map-sticky {
-    top: var(--catalog-map-sticky-top, 256px);
-    height: calc(100dvh - 120px);
+    top: var(--catalog-map-sticky-top, 96px);
+    height: calc(100dvh - var(--catalog-map-sticky-top, 96px));
     overflow-anchor: none;
+  }
+
+  .housing-catalog-map {
+    --catalog-map-sticky-top: 96px;
+    height: calc(100dvh - var(--catalog-map-visible-top, var(--catalog-map-sticky-top, 96px)));
+  }
+
+  .marketplace-attraction-catalog-map {
+    --catalog-map-sticky-top: 96px;
+    height: calc(100dvh - var(--catalog-map-visible-top, var(--catalog-map-sticky-top, 96px)));
   }
 
   .catalog-layout:has(.catalog-map-sticky) #catalog-results {

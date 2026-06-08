@@ -22,6 +22,7 @@ import {
 } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { AppIcon } from "@/components/ui/app-icon";
+import { CatalogPagination } from "@/components/public/catalog-pagination";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
@@ -226,7 +227,9 @@ function CatalogShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8">{children}</div>
+      <div className="mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8 lg:max-w-none lg:px-0">
+        {children}
+      </div>
     </main>
   );
 }
@@ -448,7 +451,7 @@ function CatalogLoadingInlineLabel() {
   return (
     <>
       <span>Ищем лучшие достопримечательности</span>
-      <span className="catalog-loading-inline-dots text-terra" aria-hidden="true">
+      <span className="catalog-loading-inline-dots ml-1.5 text-terra" aria-hidden="true">
         <span />
         <span />
         <span />
@@ -523,7 +526,6 @@ export function AttractionCatalogClient({
   const [result, setResult] = useState(initialResult);
   const [bounds, setBounds] = useState(initialBounds);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [newItemIds, setNewItemIds] = useState<string[]>([]);
   const resultRef = useRef(initialResult);
@@ -532,6 +534,7 @@ export function AttractionCatalogClient({
   const boundsRefreshTimerRef = useRef<number | null>(null);
   const pendingBoundsRef = useRef<string | null>(null);
   const boundsRef = useRef(initialBounds);
+  const ignoreBoundsUntilRef = useRef(0);
 
   useEffect(() => {
     resultRef.current = result;
@@ -560,7 +563,6 @@ export function AttractionCatalogClient({
   }, [newItemIds]);
 
   const shouldShowConnectionEmptyState = catalogActiveTotal === 0;
-  const hasMore = result.page < result.totalPages;
   const hasLocationRadiusScope = hasStrictLocationRadiusScope(result);
   const effectiveBounds = hasLocationRadiusScope ? null : bounds;
   const currentParams = useMemo(
@@ -691,6 +693,10 @@ export function AttractionCatalogClient({
         return;
       }
 
+      if (Date.now() <= ignoreBoundsUntilRef.current) {
+        return;
+      }
+
       const normalizedBounds = nextBounds?.trim() || null;
       if (
         normalizedBounds === (boundsRef.current ?? null) ||
@@ -707,6 +713,8 @@ export function AttractionCatalogClient({
       }
 
       abortControllerRef.current?.abort();
+      pendingBoundsRef.current = null;
+      ignoreBoundsUntilRef.current = Date.now() + 2200;
       requestSeqRef.current += 1;
 
       setIsRefreshing(true);
@@ -742,38 +750,70 @@ export function AttractionCatalogClient({
     [hasLocationRadiusScope, runRequest],
   );
 
-  const handleLoadMore = useCallback(async () => {
-    if (loadingMore || isRefreshing || !hasMore) {
-      return;
-    }
+  const handlePageChange = useCallback(
+    async (nextPage: number) => {
+      const safePage = Math.min(Math.max(1, Math.floor(nextPage)), resultRef.current.totalPages);
+      if (safePage === resultRef.current.page || isRefreshing) {
+        return;
+      }
 
-    setLoadingMore(true);
-    setError("");
+      if (boundsRefreshTimerRef.current !== null) {
+        window.clearTimeout(boundsRefreshTimerRef.current);
+        boundsRefreshTimerRef.current = null;
+      }
+      abortControllerRef.current?.abort();
+      requestSeqRef.current += 1;
+      const requestId = requestSeqRef.current;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    try {
-      const nextPage = resultRef.current.page + 1;
-      const response = await fetchAttractionCatalog(
-        getPageHrefFromWindow(),
-        nextPage,
-        undefined,
-        boundsRef.current,
-      );
-      const merged = boundsRef.current
-        ? mergeBoundsResultFilters(response, resultRef.current, boundsRef.current)
-        : response;
-      const nextItems = merged.items;
+      setIsRefreshing(true);
+      setError("");
 
-      setResult((current) => ({
-        ...merged,
-        items: [...current.items, ...nextItems],
-      }));
-      setNewItemIds(nextItems.map((item) => item.id));
-    } catch {
-      setError("Не удалось загрузить следующую страницу досуга");
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [hasMore, isRefreshing, loadingMore]);
+      try {
+        const response = await fetchAttractionCatalog(
+          getPageHrefFromWindow(),
+          safePage,
+          controller.signal,
+          boundsRef.current,
+        );
+        if (requestId !== requestSeqRef.current || controller.signal.aborted) {
+          return;
+        }
+
+        const merged = boundsRef.current
+          ? mergeBoundsResultFilters(response, resultRef.current, boundsRef.current)
+          : response;
+        const nextHref = buildCatalogPath("/attractions", {
+          ...getParamsFromResult(merged, boundsRef.current),
+          page: merged.page > 1 ? String(merged.page) : "",
+        });
+
+        setResult(merged);
+        setNewItemIds(merged.items.map((item) => item.id));
+        window.history.pushState({}, "", nextHref);
+        window.requestAnimationFrame(() => {
+          document.getElementById("catalog-results")?.scrollIntoView({
+            block: "start",
+            behavior: "smooth",
+          });
+        });
+      } catch {
+        if (!controller.signal.aborted && requestId === requestSeqRef.current) {
+          setError("Не удалось открыть страницу каталога досуга");
+        }
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+
+        if (requestId === requestSeqRef.current) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [isRefreshing],
+  );
 
   useEffect(() => {
     const handlePopState = () => {
@@ -823,7 +863,7 @@ export function AttractionCatalogClient({
           <section
             className="min-w-0 lg:w-full"
             id="catalog-results"
-            aria-busy={isRefreshing || loadingMore}
+            aria-busy={isRefreshing}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-olive/70">
@@ -875,29 +915,12 @@ export function AttractionCatalogClient({
               </div>
             )}
 
-            {!isRefreshing && loadingMore ? (
-              <div className="mt-4 space-y-4">
-                {Array.from({ length: 3 }, (_, index) => (
-                  <SkeletonCard key={`attraction-load-more-skeleton-${index}`} />
-                ))}
-              </div>
-            ) : null}
-
-            {!isRefreshing && hasMore ? (
-              <div className="pt-4">
-                <button
-                  type="button"
-                  onClick={() => void handleLoadMore()}
-                  disabled={loadingMore}
-                  className={cn(
-                    "load-more-btn inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
-                    loadingMore && "loading",
-                  )}
-                >
-                  {loadingMore ? <span className="spinner" aria-hidden="true" /> : null}
-                  {loadingMore ? "Загружаем..." : "Показать ещё"}
-                </button>
-              </div>
+            {!isRefreshing && result.totalPages > 1 ? (
+              <CatalogPagination
+                page={result.page}
+                totalPages={result.totalPages}
+                onPageChange={(nextPage) => void handlePageChange(nextPage)}
+              />
             ) : null}
           </section>
         </MarketplaceCatalogMap>

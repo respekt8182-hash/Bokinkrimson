@@ -1,7 +1,7 @@
 // UI component for public housing results with map in the public module.
 "use client";
 
-import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -25,6 +25,7 @@ import {
   MapPropertyPopupCard,
   type MapPopupPropertyItem,
 } from "@/components/public/map-property-popup-card";
+import { CatalogPagination } from "@/components/public/catalog-pagination";
 import { PublicPropertySearchCard } from "@/components/public/public-property-search-card";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useCatalogMapPlacement } from "@/hooks/use-catalog-map-placement";
@@ -54,12 +55,15 @@ type PublicHousingResultsWithMapProps = {
   searchGuests?: number | null;
   hasMore: boolean;
   loadingMore: boolean;
+  page?: number;
+  totalPages?: number;
   loadingInitial?: boolean;
   mapBoundsRefreshing?: boolean;
   totalCount?: number;
   emptyContent?: ReactNode;
   newItemIds?: string[];
   onLoadMore?: () => void;
+  onPageChange?: (page: number) => void;
   onWishlistToggle?: (isFavorite: boolean) => void;
   onMapBoundsFilterChange?: (bounds: string | null) => void;
 };
@@ -367,12 +371,15 @@ export function PublicHousingResultsWithMap({
   searchGuests = null,
   hasMore,
   loadingMore,
+  page = 1,
+  totalPages = 1,
   loadingInitial = false,
   mapBoundsRefreshing = false,
   totalCount,
   emptyContent = null,
   newItemIds = [],
   onLoadMore,
+  onPageChange,
   onWishlistToggle,
   onMapBoundsFilterChange,
 }: PublicHousingResultsWithMapProps) {
@@ -380,6 +387,7 @@ export function PublicHousingResultsWithMap({
   const searchParams = useSearchParams();
   const searchParamsString = searchParams.toString();
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const desktopMapShellRef = useRef<HTMLElement | null>(null);
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
@@ -565,8 +573,9 @@ export function PublicHousingResultsWithMap({
   const resolvedInitialViewportKey = storedMapViewport
     ? `housing-memory:${mapViewportStorageScope}`
     : initialViewportKey;
-  const isCatalogLoading = loadingInitial || mapBoundsRefreshing;
-  const isResultsRefreshing = isCatalogLoading;
+  const isResultsRefreshing = loadingInitial || mapBoundsRefreshing;
+  const isCatalogLoading = isResultsRefreshing;
+  const hasCatalogPagination = totalPages > 1 && Boolean(onPageChange);
   const mapLoadingPillVisible =
     isResultsRefreshing || (hasMapInteractionRef.current && mapState.status === "loading");
   const foundCount = totalCount ?? items.length;
@@ -879,6 +888,53 @@ export function PublicHousingResultsWithMap({
       window.removeEventListener("resize", updateHeight);
       window.removeEventListener("orientationchange", updateHeight);
       window.removeEventListener("scroll", updateHeight);
+    };
+  }, [mapPlacement]);
+
+  useLayoutEffect(() => {
+    if (mapPlacement !== "desktop") {
+      return;
+    }
+
+    let frame = 0;
+
+    const updateDesktopMapHeight = () => {
+      frame = 0;
+      const mapShell = desktopMapShellRef.current;
+      if (!mapShell) {
+        return;
+      }
+
+      const viewportHeight = window.innerHeight || 0;
+      const top = Math.round(Math.max(0, mapShell.getBoundingClientRect().top));
+      const nextTop = clamp(top, 96, Math.max(96, viewportHeight - 320));
+      mapShell.style.setProperty("--catalog-map-visible-top", `${nextTop}px`);
+      mapShell.dataset.mapYandexChrome = nextTop <= 120 ? "full" : "compact";
+    };
+
+    const scheduleUpdate = () => {
+      if (frame !== 0) {
+        return;
+      }
+
+      frame = window.requestAnimationFrame(updateDesktopMapHeight);
+    };
+
+    updateDesktopMapHeight();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("orientationchange", scheduleUpdate);
+
+    const settleTimer = window.setTimeout(updateDesktopMapHeight, 240);
+
+    return () => {
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("orientationchange", scheduleUpdate);
     };
   }, [mapPlacement]);
 
@@ -1237,7 +1293,14 @@ export function PublicHousingResultsWithMap({
         </div>
       ) : null}
 
-      {!isResultsRefreshing && hasMore ? (
+      {!isResultsRefreshing && hasCatalogPagination && onPageChange ? (
+        <CatalogPagination
+          page={page}
+          totalPages={totalPages}
+          disabled={loadingMore}
+          onPageChange={onPageChange}
+        />
+      ) : !isResultsRefreshing && hasMore ? (
         <div className="pt-1">
           <button
             type="button"
@@ -1416,6 +1479,8 @@ export function PublicHousingResultsWithMap({
                       onBoundsChange={handleMapBoundsChange}
                       initialViewport={resolvedInitialViewport}
                       viewportKey={resolvedInitialViewportKey}
+                      controls={[]}
+                      customZoomControls
                       showBalloons={false}
                       frameless
                       fitPointsOnChange="never"
@@ -1437,11 +1502,17 @@ export function PublicHousingResultsWithMap({
               </section>
             ) : null}
 
-            <div className="catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]">
-              {resultsSection}
+            <div className="catalog-layout housing-catalog-layout grid gap-0 lg:grid-cols-[minmax(600px,47.5vw)_minmax(0,1fr)]">
+              <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">
+                {resultsSection}
+              </div>
 
-              <aside className="catalog-map-sticky hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[520px]">
-                <section className="relative h-full overflow-hidden bg-[#e7eef3]">
+                <aside
+                  ref={desktopMapShellRef}
+                  data-map-yandex-chrome="compact"
+                  className="catalog-map-sticky housing-catalog-map hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px]"
+                >
+                <section className="catalog-map-surface relative h-full overflow-hidden bg-[#e7eef3]">
                   {mapPlacement === "desktop" ? (
                     <>
                       <div
@@ -1458,7 +1529,8 @@ export function PublicHousingResultsWithMap({
                           onBoundsChange={handleMapBoundsChange}
                           initialViewport={resolvedInitialViewport}
                           viewportKey={resolvedInitialViewportKey}
-                          controls={["zoomControl"]}
+                          controls={[]}
+                          customZoomControls
                           showBalloons={false}
                           frameless
                           fitPointsOnChange="never"
@@ -1466,14 +1538,14 @@ export function PublicHousingResultsWithMap({
                         />
                       </div>
 
-                      <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
+                      <div className="pointer-events-none absolute left-4 top-4 z-30 flex items-start justify-start">
                         <button
                           type="button"
                           onClick={openMapFully}
-                          className="pointer-events-auto inline-flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                          className="pointer-events-auto inline-flex h-11 items-center gap-3 rounded-xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-black/5 transition hover:bg-white/96"
                           aria-label="Раскрыть карту полностью"
                         >
-                          <AppIcon icon={ExternalLink} className="h-5 w-5" />
+                          <AppIcon icon={Maximize2} className="h-5 w-5" />
                           Раскрыть карту
                         </button>
                       </div>
@@ -1522,7 +1594,8 @@ export function PublicHousingResultsWithMap({
                 onBoundsChange={handleMapBoundsChange}
                 initialViewport={resolvedInitialViewport}
                 viewportKey={resolvedInitialViewportKey}
-                controls={["zoomControl"]}
+                controls={[]}
+                customZoomControls
                 showBalloons={false}
                 frameless
                 fitPointsOnChange="never"

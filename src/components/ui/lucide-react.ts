@@ -15,6 +15,7 @@ import {
   IconArrowRight,
   IconArrowsUpDown,
   IconArrowUpRight,
+  IconArrowsMaximize,
   IconBabyCarriage,
   IconBath,
   IconBeach,
@@ -90,6 +91,7 @@ import {
   IconMessageCircle,
   IconMessageDots,
   IconMessages,
+  IconMinus,
   IconMoon,
   IconMountain,
   IconParkingCircle,
@@ -166,6 +168,7 @@ export const ArrowDown = asLucideIcon(IconArrowDown);
 export const ArrowRight = asLucideIcon(IconArrowRight);
 export const ArrowUpDown = asLucideIcon(IconArrowsUpDown);
 export const ArrowUpRight = asLucideIcon(IconArrowUpRight);
+export const Maximize2 = asLucideIcon(IconArrowsMaximize);
 export const AudioLines = asLucideIcon(IconSpeakerphone);
 export const Baby = asLucideIcon(IconBabyCarriage);
 export const BadgeCheck = asLucideIcon(IconRosetteDiscountCheck);
@@ -250,6 +253,7 @@ export const MessageCircleMore = asLucideIcon(IconMessageDots);
 export const MessageSquare = asLucideIcon(IconMessage2);
 export const MessageSquareText = asLucideIcon(IconMessage2);
 export const MessagesSquare = asLucideIcon(IconMessages);
+export const Minus = asLucideIcon(IconMinus);
 export const Monitor = asLucideIcon(IconDeviceDesktop);
 export const Moon = asLucideIcon(IconMoon);
 export const Mountain = asLucideIcon(IconMountain);

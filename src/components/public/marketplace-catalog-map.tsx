@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -1412,6 +1412,7 @@ export function MarketplaceCatalogMap({
       ? activeBoundsParam?.trim() || null
       : searchParams.get("bounds")?.trim() || null;
   const mobileStageRef = useRef<HTMLDivElement | null>(null);
+  const desktopMapShellRef = useRef<HTMLElement | null>(null);
   const mobileResultsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSheetDragRef = useRef<MobileSheetDragState | null>(null);
   const mobileSheetTopRef = useRef<number | null>(null);
@@ -1424,6 +1425,7 @@ export function MarketplaceCatalogMap({
   const mapBoundsQueryRef = useRef<string | null>(currentBoundsParam);
   const suppressBoundsSyncUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
+  const isAttractionsCatalog = kind === "attractions";
   const mapViewportStorageScope = useMemo(
     () => buildCatalogMapViewportScope(pathname, searchParamsString),
     [pathname, searchParamsString],
@@ -2147,6 +2149,53 @@ export function MarketplaceCatalogMap({
     };
   }, [mapPlacement]);
 
+  useLayoutEffect(() => {
+    if (!isAttractionsCatalog || mapPlacement !== "desktop") {
+      return;
+    }
+
+    let frame = 0;
+
+    const updateDesktopMapHeight = () => {
+      frame = 0;
+      const mapShell = desktopMapShellRef.current;
+      if (!mapShell) {
+        return;
+      }
+
+      const viewportHeight = window.innerHeight || 0;
+      const top = Math.round(Math.max(0, mapShell.getBoundingClientRect().top));
+      const nextTop = clamp(top, 96, Math.max(96, viewportHeight - 320));
+      mapShell.style.setProperty("--catalog-map-visible-top", `${nextTop}px`);
+      mapShell.dataset.mapYandexChrome = nextTop <= 120 ? "full" : "compact";
+    };
+
+    const scheduleUpdate = () => {
+      if (frame !== 0) {
+        return;
+      }
+
+      frame = window.requestAnimationFrame(updateDesktopMapHeight);
+    };
+
+    updateDesktopMapHeight();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("orientationchange", scheduleUpdate);
+
+    const settleTimer = window.setTimeout(updateDesktopMapHeight, 240);
+
+    return () => {
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("orientationchange", scheduleUpdate);
+    };
+  }, [isAttractionsCatalog, mapPlacement]);
+
   function handleMobileResultsScroll(event: ReactUIEvent<HTMLDivElement>) {
     const currentScrollTop = event.currentTarget.scrollTop;
     const previousScrollTop = mobileResultsScrollTopRef.current;
@@ -2348,7 +2397,12 @@ export function MarketplaceCatalogMap({
       ) : null}
 
       {mapPlacement === "tablet" ? (
-        <section className="mb-4 hidden overflow-hidden bg-[#e7eef3] md:block lg:hidden">
+        <section
+          className={cn(
+            "mb-4 hidden overflow-hidden bg-[#e7eef3] md:block lg:hidden",
+            isAttractionsCatalog && "catalog-map-surface",
+          )}
+        >
           <div className="hidden">
             <div>
               <p className="text-sm font-semibold text-olive">{mapTitle}</p>
@@ -2370,6 +2424,8 @@ export function MarketplaceCatalogMap({
               initialViewport={initialMapViewport}
               viewportKey={initialMapViewportKey ?? undefined}
               radiusCircle={radiusCircle}
+              controls={isAttractionsCatalog ? [] : undefined}
+              customZoomControls={isAttractionsCatalog}
               showBalloons={false}
               frameless
               fitPointsOnChange="never"
@@ -2377,14 +2433,25 @@ export function MarketplaceCatalogMap({
             />
             {isLoading ? <MapLoadingDotsPill /> : null}
             {mapNetworkNotice}
-            <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
+            <div
+              className={cn(
+                "pointer-events-none absolute top-3 z-30 flex items-start",
+                isAttractionsCatalog ? "left-4 top-4 justify-start" : "right-3 justify-end",
+              )}
+            >
               <button
                 type="button"
                 onClick={openMapFully}
-                className="pointer-events-auto inline-flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                className={cn(
+                  "pointer-events-auto inline-flex items-center gap-3 bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96",
+                  isAttractionsCatalog ? "h-11 rounded-xl" : "h-12 rounded-2xl",
+                )}
                 aria-label="Раскрыть карту полностью"
               >
-                <AppIcon icon={ExternalLink} className="h-5 w-5" />
+                <AppIcon
+                  icon={isAttractionsCatalog ? Maximize2 : ExternalLink}
+                  className="h-5 w-5"
+                />
                 Раскрыть карту
               </button>
             </div>
@@ -2398,7 +2465,9 @@ export function MarketplaceCatalogMap({
         className={cn(
           mapPlacement === "mobile"
             ? "hidden"
-            : "catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]",
+            : isAttractionsCatalog
+              ? "catalog-layout marketplace-attraction-catalog-layout grid gap-0 lg:grid-cols-[minmax(600px,47.5vw)_minmax(0,1fr)]"
+              : "catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]",
         )}
       >
         {mapPlacement === "mobile" ? (
@@ -2423,10 +2492,28 @@ export function MarketplaceCatalogMap({
             </button>
           </div>
         ) : null}
-        {children}
+        {isAttractionsCatalog ? (
+          <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">{children}</div>
+        ) : (
+          children
+        )}
 
-        <aside className="catalog-map-sticky map-column hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[520px]">
-          <section className="relative h-full overflow-hidden bg-[#e7eef3]">
+        <aside
+          ref={isAttractionsCatalog ? desktopMapShellRef : undefined}
+          data-map-yandex-chrome={isAttractionsCatalog ? "compact" : undefined}
+          className={cn(
+            "catalog-map-sticky hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px]",
+            isAttractionsCatalog
+              ? "marketplace-attraction-catalog-map"
+              : "map-column lg:h-[calc(100dvh-120px)] lg:min-h-[520px]",
+          )}
+        >
+          <section
+            className={cn(
+              "relative h-full overflow-hidden bg-[#e7eef3]",
+              isAttractionsCatalog && "catalog-map-surface",
+            )}
+          >
             <div className="hidden">
               <div>
                 <p className="text-sm font-semibold text-olive">{mapTitle}</p>
@@ -2450,21 +2537,33 @@ export function MarketplaceCatalogMap({
                   initialViewport={initialMapViewport}
                   viewportKey={initialMapViewportKey ?? undefined}
                   radiusCircle={radiusCircle}
-                  controls={["zoomControl"]}
+                  controls={isAttractionsCatalog ? [] : ["zoomControl"]}
+                  customZoomControls={isAttractionsCatalog}
                   showBalloons={false}
                   frameless
                   fitPointsOnChange="never"
                   className="h-full w-full"
                 />
 
-                <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
+                <div
+                  className={cn(
+                    "pointer-events-none absolute top-3 z-30 flex items-start",
+                    isAttractionsCatalog ? "left-4 top-4 justify-start" : "right-3 justify-end",
+                  )}
+                >
                   <button
                     type="button"
                     onClick={openMapFully}
-                    className="pointer-events-auto inline-flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                    className={cn(
+                      "pointer-events-auto inline-flex items-center gap-3 bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96",
+                      isAttractionsCatalog ? "h-11 rounded-xl" : "h-12 rounded-2xl",
+                    )}
                     aria-label="Раскрыть карту полностью"
                   >
-                    <AppIcon icon={ExternalLink} className="h-5 w-5" />
+                    <AppIcon
+                      icon={isAttractionsCatalog ? Maximize2 : ExternalLink}
+                      className="h-5 w-5"
+                    />
                     Раскрыть карту
                   </button>
                 </div>
@@ -2495,7 +2594,12 @@ export function MarketplaceCatalogMap({
           aria-modal="true"
           aria-label={mapTitle}
         >
-          <section className="relative h-full w-full overflow-hidden">
+          <section
+            className={cn(
+              "relative h-full w-full overflow-hidden",
+              isAttractionsCatalog && "catalog-map-surface",
+            )}
+          >
             <div
               className="absolute inset-0"
               onPointerDownCapture={markMapInteraction}
@@ -2511,7 +2615,8 @@ export function MarketplaceCatalogMap({
                 initialViewport={initialMapViewport}
                 viewportKey={initialMapViewportKey ?? undefined}
                 radiusCircle={radiusCircle}
-                controls={["zoomControl"]}
+                controls={isAttractionsCatalog ? [] : ["zoomControl"]}
+                customZoomControls={isAttractionsCatalog}
                 showBalloons={false}
                 frameless
                 fitPointsOnChange="never"
