@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, Yeseva_One } from "next/font/google";
 import Script from "next/script";
+import { Suspense } from "react";
 import { RootShell } from "@/components/layout/root-shell";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -153,9 +154,11 @@ export default function RootLayout({
             </clipPath>
           </defs>
         </svg>
-        <RootShell header={<SiteHeader />} footer={<SiteFooter />}>
-          {children}
-        </RootShell>
+        <Suspense fallback={null}>
+          <RootShell header={<SiteHeader />} footer={<SiteFooter />}>
+            {children}
+          </RootShell>
+        </Suspense>
       </body>
     </html>
   );
