@@ -7,8 +7,6 @@ import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import type { SearchApiResponse, SearchFilters, SearchResponse } from "@/types/catalog";
 
 const DEFAULT_PAGE_SIZE = 30;
-const SEARCH_RESPONSE_CACHE_TTL_MS = 45_000;
-const searchResponseCache = new Map<string, { expiresAt: number; response: SearchResponse }>();
 
 function appendIfNotEmpty(params: URLSearchParams, key: string, value: string) {
   const normalized = value.trim();
@@ -16,6 +14,15 @@ function appendIfNotEmpty(params: URLSearchParams, key: string, value: string) {
     return;
   }
   params.set(key, normalized);
+}
+
+function appendListIfNotEmpty(params: URLSearchParams, key: string, values: readonly string[]) {
+  const normalized = values.map((value) => value.trim()).filter(Boolean);
+  if (normalized.length === 0) {
+    return;
+  }
+
+  params.set(key, Array.from(new Set(normalized)).join(","));
 }
 
 function parseItems(value: unknown): PublicCatalogItem[] {
@@ -57,6 +64,15 @@ export function buildAccommodationSearchParams(
   if (filters.hasReviews) params.set("hasReviews", "1");
   if (filters.familyFriendly) params.set("familyFriendly", "1");
   if (filters.petsAllowed) params.set("petsAllowed", "1");
+  if (filters.nearSea) params.set("nearSea", "1");
+  if (filters.hasPool) params.set("hasPool", "1");
+  if (filters.hasKitchen) params.set("hasKitchen", "1");
+  if (filters.hasAirConditioner) params.set("hasAirConditioner", "1");
+  if (filters.hasParking) params.set("hasParking", "1");
+  if (filters.smokingForbidden) params.set("smokingForbidden", "1");
+  if (filters.quietHours) params.set("quietHours", "1");
+  appendListIfNotEmpty(params, "amenityIds", filters.amenityIds);
+  appendListIfNotEmpty(params, "roomFeatureIds", filters.roomFeatureIds);
   appendIfNotEmpty(params, "bounds", bounds ?? "");
 
   return params;
@@ -88,14 +104,10 @@ export async function fetchAccommodationSearch(
   bounds?: string | null,
 ): Promise<SearchResponse> {
   const query = buildAccommodationSearchParams(filters, page, pageSize, bounds).toString();
-  const cached = searchResponseCache.get(query);
-
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.response;
-  }
 
   const response = await fetchWithRetry(`/api/search/accommodations?${query}`, {
     method: "GET",
+    cache: "no-store",
     signal,
     retries: 2,
     retryDelayMs: 400,
@@ -107,12 +119,7 @@ export async function fetchAccommodationSearch(
   }
 
   const payload = (await response.json()) as SearchApiResponse;
-  const normalizedResponse = toSearchResponse(payload);
-  searchResponseCache.set(query, {
-    response: normalizedResponse,
-    expiresAt: Date.now() + SEARCH_RESPONSE_CACHE_TTL_MS,
-  });
-  return normalizedResponse;
+  return toSearchResponse(payload);
 }
 
 export function buildHousingCatalogUrl(
@@ -154,6 +161,19 @@ export function buildHousingCatalogUrl(
   if (filters.hasReviews) entries.push(["hasReviews", "1"]);
   if (filters.familyFriendly) entries.push(["familyFriendly", "1"]);
   if (filters.petsAllowed) entries.push(["petsAllowed", "1"]);
+  if (filters.nearSea) entries.push(["nearSea", "1"]);
+  if (filters.hasPool) entries.push(["hasPool", "1"]);
+  if (filters.hasKitchen) entries.push(["hasKitchen", "1"]);
+  if (filters.hasAirConditioner) entries.push(["hasAirConditioner", "1"]);
+  if (filters.hasParking) entries.push(["hasParking", "1"]);
+  if (filters.smokingForbidden) entries.push(["smokingForbidden", "1"]);
+  if (filters.quietHours) entries.push(["quietHours", "1"]);
+  if (filters.amenityIds.length > 0) {
+    entries.push(["amenityIds", Array.from(new Set(filters.amenityIds)).join(",")]);
+  }
+  if (filters.roomFeatureIds.length > 0) {
+    entries.push(["roomFeatureIds", Array.from(new Set(filters.roomFeatureIds)).join(",")]);
+  }
   if (keepPageParam && page > 1) entries.push(["page", String(page)]);
 
   return buildCanonicalPath(basePath, entries, [
@@ -174,6 +194,15 @@ export function buildHousingCatalogUrl(
     "hasReviews",
     "familyFriendly",
     "petsAllowed",
+    "nearSea",
+    "hasPool",
+    "hasKitchen",
+    "hasAirConditioner",
+    "hasParking",
+    "smokingForbidden",
+    "quietHours",
+    "amenityIds",
+    "roomFeatureIds",
     "page",
   ]);
 }
@@ -197,5 +226,14 @@ export function buildHousingMapQuery(filters: SearchFilters): string {
   if (filters.hasReviews) params.set("hasReviews", "1");
   if (filters.familyFriendly) params.set("familyFriendly", "1");
   if (filters.petsAllowed) params.set("petsAllowed", "1");
+  if (filters.nearSea) params.set("nearSea", "1");
+  if (filters.hasPool) params.set("hasPool", "1");
+  if (filters.hasKitchen) params.set("hasKitchen", "1");
+  if (filters.hasAirConditioner) params.set("hasAirConditioner", "1");
+  if (filters.hasParking) params.set("hasParking", "1");
+  if (filters.smokingForbidden) params.set("smokingForbidden", "1");
+  if (filters.quietHours) params.set("quietHours", "1");
+  appendListIfNotEmpty(params, "amenityIds", filters.amenityIds);
+  appendListIfNotEmpty(params, "roomFeatureIds", filters.roomFeatureIds);
   return params.toString();
 }

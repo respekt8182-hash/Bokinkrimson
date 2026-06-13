@@ -9,6 +9,9 @@ type HousingLocationPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function resolveHousingLocation(locationParam: string) {
   const directory = await getLocationDirectoryItems();
 

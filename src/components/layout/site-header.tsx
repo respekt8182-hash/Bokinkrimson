@@ -37,8 +37,8 @@ export async function SiteHeader() {
   return (
     <>
       {session?.role === "USER" ? <UserActivityTracker /> : null}
-      <header className="sticky top-0 z-50 border-b border-olive/10 bg-cream/92 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 md:px-6 md:py-4">
+      <header className="site-header sticky top-0 z-50 border-b border-olive/10 bg-cream/92 backdrop-blur lg:border-b-0 lg:bg-transparent lg:px-4 lg:pt-4">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 md:px-6 md:py-4 lg:rounded-2xl lg:border lg:border-white/70 lg:bg-white/82 lg:shadow-[0_20px_52px_-34px_rgba(58,43,35,0.5)] lg:ring-1 lg:ring-olive/8 lg:backdrop-blur-xl">
           <SiteHeaderBackButton />
           <Link
             href="/"

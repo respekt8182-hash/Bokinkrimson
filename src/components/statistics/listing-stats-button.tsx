@@ -29,6 +29,7 @@ type PeriodSummary = {
 
 type ChartPoint = {
   date: string;
+  label?: string;
   views: number;
   actions: number;
 };
@@ -181,6 +182,10 @@ function formatChartDate(value: string): string {
   );
 }
 
+function formatChartLabel(point: ChartPoint): string {
+  return point.label ?? formatChartDate(point.date);
+}
+
 function buildEndpoint(endpoint: string, period: PeriodKey): string {
   const separator = endpoint.includes("?") ? "&" : "?";
   return `${endpoint}${separator}${new URLSearchParams({ period }).toString()}`;
@@ -217,6 +222,8 @@ function ActivityChart({ points }: { points: ChartPoint[] }) {
     chartPoints
       .map((point, index) => `${index === 0 ? "M" : "L"} ${getX(index).toFixed(1)} ${getY(point[field]).toFixed(1)}`)
       .join(" ");
+  const shouldShowLabel = (index: number) =>
+    chartPoints.length <= 8 || index === 0 || index === chartPoints.length - 1 || index % 5 === 0;
 
   return (
     <section className="rounded-xl border border-olive/10 bg-white p-4">
@@ -282,7 +289,7 @@ function ActivityChart({ points }: { points: ChartPoint[] }) {
             <g key={point.date}>
               <circle cx={getX(index)} cy={getY(point.views)} r={3.5} fill="#0f766e" />
               <circle cx={getX(index)} cy={getY(point.actions)} r={3.5} fill="#a76549" />
-              {(index === 0 || index === chartPoints.length - 1 || index % 5 === 0) && (
+              {shouldShowLabel(index) && (
                 <text
                   x={getX(index)}
                   y={height - 14}
@@ -290,7 +297,7 @@ function ActivityChart({ points }: { points: ChartPoint[] }) {
                   fontSize={10}
                   fill="#8e7c70"
                 >
-                  {formatChartDate(point.date)}
+                  {formatChartLabel(point)}
                 </text>
               )}
             </g>
@@ -546,6 +553,19 @@ function MonthlyJournal({
   );
 }
 
+function getChartPointsForPeriod(data: StatsData): ChartPoint[] {
+  if (data.selectedPeriod.key !== "last6Months") {
+    return data.selectedPeriod.chart;
+  }
+
+  return data.months.map((month) => ({
+    date: `${month.month}-01`,
+    label: month.label.replace(/\s+\d{4}$/u, ""),
+    views: month.views,
+    actions: month.actions,
+  }));
+}
+
 function StatsModal({
   endpoint,
   entityName,
@@ -650,6 +670,7 @@ function StatsModal({
 
   const selected = data?.selectedPeriod;
   const empty = data ? !hasAnyData(data) : false;
+  const chartPoints = data ? getChartPointsForPeriod(data) : [];
 
   return (
     <div
@@ -856,7 +877,7 @@ function StatsModal({
               ) : null}
 
               <BreakdownPanel data={data} />
-              <ActivityChart points={selected.chart} />
+              <ActivityChart points={chartPoints} />
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.55fr)]">
                 <MonthlyJournal

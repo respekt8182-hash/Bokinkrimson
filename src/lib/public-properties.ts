@@ -5,6 +5,7 @@ import {
   Prisma,
   PropertyStatus,
   ReviewStatus,
+  SmokingPolicy,
 } from "@prisma/client";
 import { cache } from "react";
 import {
@@ -91,6 +92,15 @@ export type PublicCatalogQuery = {
   hasReviews?: boolean;
   familyFriendly?: boolean;
   petsAllowed?: boolean;
+  nearSea?: boolean;
+  hasPool?: boolean;
+  hasKitchen?: boolean;
+  hasAirConditioner?: boolean;
+  hasParking?: boolean;
+  smokingForbidden?: boolean;
+  quietHours?: boolean;
+  amenityIds?: string[];
+  roomFeatureIds?: string[];
   sort?: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
   bounds?: MapBounds | null;
   page?: number;
@@ -198,6 +208,15 @@ export type PublicCatalogResult = {
     hasReviews: boolean;
     familyFriendly: boolean;
     petsAllowed: boolean;
+    nearSea: boolean;
+    hasPool: boolean;
+    hasKitchen: boolean;
+    hasAirConditioner: boolean;
+    hasParking: boolean;
+    smokingForbidden: boolean;
+    quietHours: boolean;
+    amenityIds: string[];
+    roomFeatureIds: string[];
     sort: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
     nearbyRadiusKm: number | null;
   };
@@ -847,8 +866,22 @@ export function resolvePublicCatalogDisplayState(property: {
   checkInFrom: string | null;
   childrenAllowed: boolean | null;
   petsPolicy: PetsPolicy | null;
+  smokingPolicy?: SmokingPolicy | null;
+  quietHoursEnabled?: boolean | null;
+  parkingInfo?: string | null;
+  mealOptions?: string | null;
   starRating: number | null;
   media: Array<{ url: string; type: MediaType }>;
+  amenities?: Array<{
+    amenityId?: string;
+    amenity?: { id: string; name: string; category?: string | null };
+  }>;
+  customAmenities?: Array<{ name: string }>;
+  roomAmenitySettings?: Array<{
+    featureId?: string;
+    enabled?: boolean;
+    feature?: { id?: string; name: string; category?: string | null };
+  }>;
   rooms: Array<{
     id: string;
     title: string;
@@ -856,6 +889,11 @@ export function resolvePublicCatalogDisplayState(property: {
     extraBeds: number;
     roomsCount?: number | null;
     areaSqm: Prisma.Decimal | number | null;
+    features?: Array<{
+      featureId?: string;
+      feature?: { id?: string; name: string; category?: string | null };
+    }>;
+    customFeatures?: Array<{ name: string }>;
     prices: Array<{
       dateFrom: Date;
       dateTo: Date;
@@ -885,7 +923,7 @@ export function resolvePublicCatalogDisplayState(property: {
         areaSqm: room.areaSqm,
         prices:
           livePricesByRoomId.get(room.id) ??
-          room.prices.map((price) => ({
+      room.prices.map((price) => ({
             dateFrom: price.dateFrom,
             dateTo: price.dateTo,
             price: price.price,
@@ -918,6 +956,25 @@ export function resolvePublicCatalogDisplayState(property: {
         })),
       }));
 
+  const amenityIds = snapshot
+    ? snapshot.amenities.map((amenity) => amenity.id)
+    : (property.amenities ?? [])
+        .map((item) => item.amenityId ?? item.amenity?.id)
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
+  const roomFeatureIds = snapshot
+    ? snapshot.rooms.flatMap((room) => room.featureIds)
+    : [
+        ...(property.roomAmenitySettings ?? [])
+          .filter((setting) => setting.enabled !== false)
+          .map((setting) => setting.featureId ?? setting.feature?.id)
+          .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+        ...property.rooms.flatMap((room) =>
+          (room.features ?? [])
+            .map((item) => item.featureId ?? item.feature?.id)
+            .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+        ),
+      ];
+
   return {
     snapshot,
     name: snapshot?.property.name ?? property.name,
@@ -940,7 +997,14 @@ export function resolvePublicCatalogDisplayState(property: {
     checkInFrom: snapshot?.property.checkInFrom ?? property.checkInFrom,
     childrenAllowed: snapshot?.property.childrenAllowed ?? property.childrenAllowed,
     petsPolicy: snapshot?.property.petsPolicy ?? property.petsPolicy,
+    smokingPolicy: snapshot?.property.smokingPolicy ?? property.smokingPolicy ?? null,
+    quietHoursEnabled:
+      snapshot?.property.quietHoursEnabled ?? property.quietHoursEnabled ?? null,
+    parkingInfo: snapshot?.property.parkingInfo ?? property.parkingInfo ?? null,
+    mealOptions: snapshot?.property.mealOptions ?? property.mealOptions ?? null,
     starRating: snapshot?.property.starRating ?? property.starRating ?? 0,
+    amenityIds: Array.from(new Set(amenityIds)),
+    roomFeatureIds: Array.from(new Set(roomFeatureIds)),
     imageUrls: (snapshot ? snapshot.media : property.media)
       .filter((media) => media.type === MediaType.IMAGE)
       .map((media) => media.url)
@@ -1514,6 +1578,94 @@ function parseCatalogSort(
   }
 }
 
+const seaAmenityIds = new Set(["beach_access"]);
+const poolAmenityIds = new Set(["pool"]);
+const poolRoomFeatureIds = new Set(["pool"]);
+const kitchenAmenityIds = new Set(["shared_kitchen"]);
+const kitchenRoomFeatureIds = new Set([
+  "private_kitchen",
+  "kitchenette",
+  "shared_kitchen",
+]);
+const airConditionerRoomFeatureIds = new Set(["air_conditioner"]);
+const parkingAmenityIds = new Set(["parking"]);
+
+function normalizeCatalogList(values: readonly string[] | undefined): string[] {
+  if (!values) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+  );
+}
+
+function hasAnyCatalogId(values: readonly string[], ids: ReadonlySet<string>): boolean {
+  return values.some((value) => ids.has(value));
+}
+
+function hasAllCatalogIds(values: readonly string[], requestedIds: readonly string[]): boolean {
+  if (requestedIds.length === 0) {
+    return true;
+  }
+
+  const available = new Set(values);
+  return requestedIds.every((id) => available.has(id));
+}
+
+function matchesCatalogAmenityFilters(
+  displayState: ReturnType<typeof resolvePublicCatalogDisplayState>,
+  input: {
+    nearSea: boolean;
+    hasPool: boolean;
+    hasKitchen: boolean;
+    hasAirConditioner: boolean;
+    hasParking: boolean;
+    smokingForbidden: boolean;
+    quietHours: boolean;
+    amenityIds: string[];
+    roomFeatureIds: string[];
+  },
+): boolean {
+  const hasSeaData =
+    Boolean(displayState.seaDistance?.trim()) ||
+    hasAnyCatalogId(displayState.amenityIds, seaAmenityIds);
+  const hasPoolData =
+    hasAnyCatalogId(displayState.amenityIds, poolAmenityIds) ||
+    hasAnyCatalogId(displayState.roomFeatureIds, poolRoomFeatureIds);
+  const hasKitchenData =
+    hasAnyCatalogId(displayState.amenityIds, kitchenAmenityIds) ||
+    hasAnyCatalogId(displayState.roomFeatureIds, kitchenRoomFeatureIds) ||
+    Boolean(displayState.mealOptions?.includes("shared_kitchen"));
+  const hasAirConditionerData = hasAnyCatalogId(
+    displayState.roomFeatureIds,
+    airConditionerRoomFeatureIds,
+  );
+  const hasParkingData =
+    hasAnyCatalogId(displayState.amenityIds, parkingAmenityIds) ||
+    Boolean(displayState.parkingInfo?.trim());
+
+  if (input.nearSea && !hasSeaData) return false;
+  if (input.hasPool && !hasPoolData) return false;
+  if (input.hasKitchen && !hasKitchenData) return false;
+  if (input.hasAirConditioner && !hasAirConditionerData) return false;
+  if (input.hasParking && !hasParkingData) return false;
+  if (input.smokingForbidden && displayState.smokingPolicy !== SmokingPolicy.FORBIDDEN) {
+    return false;
+  }
+  if (input.quietHours && displayState.quietHoursEnabled !== true) {
+    return false;
+  }
+  if (!hasAllCatalogIds(displayState.amenityIds, input.amenityIds)) {
+    return false;
+  }
+  if (!hasAllCatalogIds(displayState.roomFeatureIds, input.roomFeatureIds)) {
+    return false;
+  }
+
+  return true;
+}
+
 function buildEmptyPublicCatalogResult(input: {
   pageSize: number;
   resolvedLocation: ResolvedLocation | null;
@@ -1526,6 +1678,15 @@ function buildEmptyPublicCatalogResult(input: {
   hasReviews: boolean;
   familyFriendly: boolean;
   petsAllowed: boolean;
+  nearSea: boolean;
+  hasPool: boolean;
+  hasKitchen: boolean;
+  hasAirConditioner: boolean;
+  hasParking: boolean;
+  smokingForbidden: boolean;
+  quietHours: boolean;
+  amenityIds: string[];
+  roomFeatureIds: string[];
   sort: "relevance" | "price_asc" | "price_desc" | "rating_desc" | "popular_desc";
   hasLocationSearchScope: boolean;
 }): PublicCatalogResult {
@@ -1547,6 +1708,15 @@ function buildEmptyPublicCatalogResult(input: {
       hasReviews: input.hasReviews,
       familyFriendly: input.familyFriendly,
       petsAllowed: input.petsAllowed,
+      nearSea: input.nearSea,
+      hasPool: input.hasPool,
+      hasKitchen: input.hasKitchen,
+      hasAirConditioner: input.hasAirConditioner,
+      hasParking: input.hasParking,
+      smokingForbidden: input.smokingForbidden,
+      quietHours: input.quietHours,
+      amenityIds: input.amenityIds,
+      roomFeatureIds: input.roomFeatureIds,
       sort: input.sort,
       nearbyRadiusKm: input.hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
     },
@@ -1586,6 +1756,15 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
   const hasReviews = query.hasReviews === true;
   const familyFriendly = query.familyFriendly === true;
   const petsAllowed = query.petsAllowed === true;
+  const nearSea = query.nearSea === true;
+  const hasPool = query.hasPool === true;
+  const hasKitchen = query.hasKitchen === true;
+  const hasAirConditioner = query.hasAirConditioner === true;
+  const hasParking = query.hasParking === true;
+  const smokingForbidden = query.smokingForbidden === true;
+  const quietHours = query.quietHours === true;
+  const amenityIds = normalizeCatalogList(query.amenityIds);
+  const roomFeatureIds = normalizeCatalogList(query.roomFeatureIds);
   const bounds = query.bounds ?? null;
   const hasMapBounds = bounds !== null;
   const locationFilterId = hasMapBounds ? undefined : query.locationId;
@@ -1658,6 +1837,10 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         checkInFrom: true,
         childrenAllowed: true,
         petsPolicy: true,
+        smokingPolicy: true,
+        quietHoursEnabled: true,
+        parkingInfo: true,
+        mealOptions: true,
         starRating: true,
         phone: true,
         phone2: true,
@@ -1688,6 +1871,20 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             type: true,
           },
         },
+        amenities: {
+          select: {
+            amenityId: true,
+          },
+        },
+        roomAmenitySettings: {
+          where: {
+            enabled: true,
+          },
+          select: {
+            featureId: true,
+            enabled: true,
+          },
+        },
         rooms: {
           where: { isActive: true },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -1698,6 +1895,11 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             extraBeds: true,
             roomsCount: true,
             areaSqm: true,
+            features: {
+              select: {
+                featureId: true,
+              },
+            },
             prices: catalogRoomPriceArgs,
           },
         },
@@ -1733,6 +1935,15 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         guests: guestsCount,
         minPrice,
         maxPrice,
+        nearSea,
+        hasPool,
+        hasKitchen,
+        hasAirConditioner,
+        hasParking,
+        smokingForbidden,
+        quietHours,
+        amenityIds,
+        roomFeatureIds,
         sort,
         bounds,
       });
@@ -1865,6 +2076,21 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             !([PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED] as PetsPolicy[]).includes(
               displayState.petsPolicy ?? PetsPolicy.FORBIDDEN,
             )
+          ) {
+            return null;
+          }
+          if (
+            !matchesCatalogAmenityFilters(displayState, {
+              nearSea,
+              hasPool,
+              hasKitchen,
+              hasAirConditioner,
+              hasParking,
+              smokingForbidden,
+              quietHours,
+              amenityIds,
+              roomFeatureIds,
+            })
           ) {
             return null;
           }
@@ -2315,6 +2541,15 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           hasReviews,
           familyFriendly,
           petsAllowed,
+          nearSea,
+          hasPool,
+          hasKitchen,
+          hasAirConditioner,
+          hasParking,
+          smokingForbidden,
+          quietHours,
+          amenityIds,
+          roomFeatureIds,
           sort,
           nearbyRadiusKm: hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
         },
@@ -2333,6 +2568,15 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         hasReviews,
         familyFriendly,
         petsAllowed,
+        nearSea,
+        hasPool,
+        hasKitchen,
+        hasAirConditioner,
+        hasParking,
+        smokingForbidden,
+        quietHours,
+        amenityIds,
+        roomFeatureIds,
         sort,
         hasLocationSearchScope,
       }),

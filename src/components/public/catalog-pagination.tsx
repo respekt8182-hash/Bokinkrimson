@@ -47,7 +47,10 @@ export function CatalogPagination({
 
   return (
     <nav
-      className={cn("flex flex-wrap items-center justify-center gap-2 pt-5", className)}
+      className={cn(
+        "flex flex-wrap items-center justify-center gap-2 pt-5 max-md:pb-[calc(env(safe-area-inset-bottom,0px)+10.5rem)]",
+        className,
+      )}
       aria-label="Страницы каталога"
     >
       {items.map((item, index) =>

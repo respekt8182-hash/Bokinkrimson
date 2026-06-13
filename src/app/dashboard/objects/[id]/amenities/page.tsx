@@ -5,10 +5,7 @@ import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { RoomAmenitiesManager } from "@/components/rooms/room-amenities-manager";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  getPropertyWorkflowStatusLabel,
-  getPropertyDisplayNumberFromOrderedIds,
-} from "@/lib/properties";
+import { getPropertyDisplayNumberFromOrderedIds } from "@/lib/properties";
 
 type DashboardObjectAmenitiesPageProps = {
   params: Promise<{ id: string }>;
@@ -54,28 +51,34 @@ export default async function DashboardObjectAmenitiesPage({
     ) ?? 1;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+    <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
       <ObjectSectionNav propertyId={property.id} activeSection="amenities" />
 
       <div className="min-w-0 space-y-5">
-        <div className="rounded-2xl bg-cream p-4">
+        <div className="rounded-[22px] border border-olive/10 bg-white/95 p-5 shadow-[0_22px_58px_rgba(58,43,35,0.08)] ring-1 ring-white/70 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-olive/60">
-                ID объекта: {displayPropertyNumber}
+              <h1 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                Удобства объекта
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/64">
+                Выберите удобства, которые действительно доступны вашим гостям. Не отмечайте то,
+                чего нет на объекте.
               </p>
-              <h1 className="text-3xl text-olive">Удобства в номерах</h1>
-              <p className="mt-1 text-sm text-olive/55">
-                Что есть в номерах вашего объекта
-              </p>
+              <div className="mt-5 flex items-center gap-4">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
+                  <div className="h-full w-[80%] rounded-full bg-primary" />
+                </div>
+                <span className="text-xs font-semibold text-olive/55">~80%</span>
+              </div>
             </div>
-            <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold uppercase text-olive">
-              {getPropertyWorkflowStatusLabel(property.status, property.moderationNotes, property.pendingEditStatus)}
+            <span className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64">
+              Объект #{displayPropertyNumber}
             </span>
           </div>
         </div>
 
-        <div className="rounded-xl bg-emerald-50 px-4 py-3 text-[13px] leading-relaxed text-olive/70">
+        <div className="rounded-[18px] border border-primary/12 bg-foam px-4 py-3 text-[13px] leading-relaxed text-olive/70">
           Выберите удобства, которые есть в номерах вашего объекта. Гости фильтруют жильё по удобствам — чем больше отметите, тем легче вас найти.
         </div>
 

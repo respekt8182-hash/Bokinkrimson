@@ -399,16 +399,19 @@ export function PropertyPaymentPanel({
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-[22px] border border-olive/10 bg-white shadow-[0_22px_58px_rgba(58,43,35,0.08)] ring-1 ring-white/70">
         {/* Header */}
-        <div className="border-b border-olive/8 bg-cream/60 px-5 py-4">
+        <div className="border-b border-olive/8 bg-white px-5 py-5 sm:px-7 sm:py-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-olive">
-                {amountDue <= 0 ? "Публикация размещения" : "Оплата размещения"}
+              <h1 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                Проверка и публикация объекта
               </h1>
-              <p className="mt-0.5 text-sm text-olive/55">Последний шаг перед публикацией</p>
-              <p className="mt-0.5 text-xs text-olive/45">
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/64">
+                Проверьте все данные перед отправкой на модерацию. После публикации карточка станет
+                доступна гостям.
+              </p>
+              <p className="mt-2 text-xs text-olive/45">
                 <span className="font-medium text-olive/60">{propertyName}</span>
               </p>
             </div>
@@ -418,6 +421,12 @@ export function PropertyPaymentPanel({
               <span className={`h-1.5 w-1.5 rounded-full ${sm.dot}`} />
               {sm.label}
             </span>
+          </div>
+          <div className="mt-5 flex items-center gap-4">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
+              <div className="h-full w-full rounded-full bg-primary" />
+            </div>
+            <span className="text-xs font-semibold text-olive/55">100%</span>
           </div>
 
           {/* Readiness hint */}

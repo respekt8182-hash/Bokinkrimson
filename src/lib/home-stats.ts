@@ -8,24 +8,33 @@ import {
 import {
   buildPublicCatalogExcursionVisibilityWhere,
   buildPublicCatalogPropertyVisibilityWhere,
+  buildPublishedTransferVisibilityWhere,
 } from "@/lib/public-visibility";
 import { getStaticAttractions } from "@/lib/static-attractions";
 
 export type HomeStats = {
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
+  publishedTransfersCount: number | null;
   publishedAttractionsCount: number;
 };
 
 const getCachedHomeStats = unstable_cache(
   async (): Promise<HomeStats> => {
-    const [publishedPropertiesCount, publishedExcursionsCount, publishedAttractions] =
-      await Promise.all([
+    const [
+      publishedPropertiesCount,
+      publishedExcursionsCount,
+      publishedTransfersCount,
+      publishedAttractions,
+    ] = await Promise.all([
       db.property.count({
         where: buildPublicCatalogPropertyVisibilityWhere(),
       }),
       db.excursion.count({
         where: buildPublicCatalogExcursionVisibilityWhere(),
+      }),
+      db.transfer.count({
+        where: buildPublishedTransferVisibilityWhere(),
       }),
       getStaticAttractions(),
     ]);
@@ -33,6 +42,7 @@ const getCachedHomeStats = unstable_cache(
     return {
       publishedPropertiesCount,
       publishedExcursionsCount,
+      publishedTransfersCount,
       publishedAttractionsCount: publishedAttractions.length,
     };
   },
@@ -52,6 +62,7 @@ export async function getHomeStats(): Promise<HomeStats> {
     return {
       publishedPropertiesCount: null,
       publishedExcursionsCount: null,
+      publishedTransfersCount: null,
       publishedAttractionsCount: (await getStaticAttractions()).length,
     };
   }
@@ -71,6 +82,7 @@ export async function getHomeStats(): Promise<HomeStats> {
     return {
       publishedPropertiesCount: null,
       publishedExcursionsCount: null,
+      publishedTransfersCount: null,
       publishedAttractionsCount: (await getStaticAttractions()).length,
     };
   }

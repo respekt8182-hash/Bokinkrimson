@@ -63,28 +63,38 @@ export default async function DashboardObjectRoomCategoriesPage({
   const isCreateRequested = filters.create === "1";
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+    <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
       <ObjectSectionNav propertyId={property.id} activeSection="room-categories" />
 
       <div className="min-w-0 space-y-5">
-        <div className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
-          <div className="h-1.5 bg-gradient-to-r from-terra/70 via-sage to-primary/70" />
-
-          <div className="p-5 sm:p-6">
+        <div className="overflow-hidden rounded-[22px] border border-olive/10 bg-white/95 shadow-[0_22px_58px_rgba(58,43,35,0.08)] ring-1 ring-white/70">
+          <div className="p-5 sm:p-7">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 items-start gap-3.5">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sage/30 to-terra/15 text-olive shadow-inner">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner">
                   <AppIcon icon={BedDouble} className="h-6 w-6" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-olive/40">
-                    ID объекта: {displayPropertyNumber}
+                  <h1 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                    Создание объекта · Шаг 4. Номера
+                  </h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/64">
+                    Добавьте один или несколько номеров. Чем подробнее информация, тем
+                    выше доверие гостей.
                   </p>
-                  <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">Номера</h1>
+                  <div className="mt-5 flex items-center gap-4">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
+                      <div className="h-full w-[60%] rounded-full bg-primary" />
+                    </div>
+                    <span className="text-xs font-semibold text-olive/55">~60%</span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                <span className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64">
+                  Объект #{displayPropertyNumber}
+                </span>
                 <Link
                   href={`/dashboard/objects/${property.id}/external-reviews`}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/15 active:scale-95"
@@ -95,10 +105,10 @@ export default async function DashboardObjectRoomCategoriesPage({
                 {!isCreateRequested ? (
                   <Link
                     href={`/dashboard/objects/${property.id}/room-categories?create=1#room-category-form`}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-sage px-4 py-2.5 text-sm font-semibold text-midnight shadow-sm transition hover:bg-sage/85 active:scale-95"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 active:scale-95"
                   >
                     <AppIcon icon={Plus} className="h-4 w-4" />
-                    Создать номер
+                    Добавить номер
                   </Link>
                 ) : null}
               </div>

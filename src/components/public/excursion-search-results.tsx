@@ -10,6 +10,7 @@ import {
   ExternalLink,
   LoaderCircle,
   Map as MapIcon,
+  Maximize2,
   MapPin,
   Route,
   Search,
@@ -248,6 +249,8 @@ function buildSearchUrl(direction: "excursions" | "tours", params: Record<string
     "people",
     "format",
     "durationBucket",
+    "language",
+    "difficulty",
     "minPrice",
     "maxPrice",
     "radiusKm",
@@ -383,6 +386,22 @@ const durationOptions = [
   { value: "more_6h", label: "Более 6 часов" },
 ] as const;
 
+const difficultyOptions = [
+  { value: "easy", label: "Лёгкая" },
+  { value: "medium", label: "Средняя" },
+  { value: "hard", label: "Сложная" },
+] as const;
+
+const languageLabels: Record<string, string> = {
+  ru: "Русский",
+  en: "Английский",
+  de: "Немецкий",
+  fr: "Французский",
+  es: "Испанский",
+  it: "Итальянский",
+  tr: "Турецкий",
+};
+
 const sortOptions = [
   { value: "", label: "По релевантности" },
   { value: "rating_desc", label: "По рейтингу" },
@@ -482,6 +501,34 @@ function getDurationShortFilterLabel(
   }
 
   return "Длительность";
+}
+
+function normalizeExcursionDifficulty(value: unknown): "easy" | "medium" | "hard" | null {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "easy" || normalized === "medium" || normalized === "hard"
+    ? normalized
+    : null;
+}
+
+function getDifficultyFilterLabel(
+  value: PublicExcursionCatalogResult["filters"]["difficulty"] | "",
+): string {
+  if (!value) {
+    return "Сложность";
+  }
+
+  return difficultyOptions.find((option) => option.value === value)?.label ?? "Сложность";
+}
+
+function getLanguageFilterLabel(value: string | null): string {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return "Язык";
+  }
+
+  return languageLabels[normalized] ?? normalized.toUpperCase();
 }
 
 function getSortFilterLabel(value: PublicExcursionCatalogResult["filters"]["sort"] | ""): string {
@@ -869,6 +916,8 @@ export function ExcursionSearchResults({
   const [guests, setGuests] = useState(String(filters.people ?? 2));
   const [format, setFormat] = useState(filters.format ?? "");
   const [durationBucket, setDurationBucket] = useState(filters.durationBucket ?? "");
+  const [language, setLanguage] = useState(filters.language ?? "");
+  const [difficulty, setDifficulty] = useState(filters.difficulty ?? "");
   const [minPrice, setMinPrice] = useState(filters.minPrice ? String(filters.minPrice) : "");
   const [maxPrice, setMaxPrice] = useState(filters.maxPrice ? String(filters.maxPrice) : "");
   const [radiusKm, setRadiusKm] = useState(String(filters.radiusKm));
@@ -909,6 +958,42 @@ export function ExcursionSearchResults({
   const searchRequestSeqRef = useRef(0);
   const hasMore = loadedPage < totalPages;
   const remaining = Math.max(0, totalCount - displayItems.length);
+  const availableLanguageOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+
+    for (const item of [...items, ...displayItems]) {
+      for (const rawCode of item.languageCodes ?? []) {
+        const value = rawCode.trim().toLowerCase();
+        if (!value || seen.has(value)) {
+          continue;
+        }
+
+        seen.add(value);
+        options.push({ value, label: getLanguageFilterLabel(value) });
+      }
+    }
+
+    if (filters.language && !seen.has(filters.language)) {
+      options.push({ value: filters.language, label: getLanguageFilterLabel(filters.language) });
+    }
+
+    return options.sort((left, right) => left.label.localeCompare(right.label, "ru"));
+  }, [displayItems, filters.language, items]);
+  const availableDifficultyOptions = useMemo(() => {
+    const available = new Set<string>();
+    for (const item of [...items, ...displayItems]) {
+      const value = normalizeExcursionDifficulty(item.difficulty);
+      if (value) {
+        available.add(value);
+      }
+    }
+    if (filters.difficulty) {
+      available.add(filters.difficulty);
+    }
+
+    return difficultyOptions.filter((option) => available.has(option.value));
+  }, [displayItems, filters.difficulty, items]);
 
   // ── Map state ────────────────────────────────────────────────────────────────
   const mapPlacement = useCatalogMapPlacement();
@@ -947,6 +1032,7 @@ export function ExcursionSearchResults({
     [[number, number], [number, number]] | null
   >(null);
   const [mapBoundsQuery, setMapBoundsQuery] = useState<string | null>(null);
+  const [pendingMapBoundsQuery, setPendingMapBoundsQuery] = useState<string | null>(null);
   const [initialViewport, setInitialViewport] = useState<YandexMapViewport | null>(null);
   const [storedMapViewport, setStoredMapViewport] = useState<YandexMapViewport | null>(() =>
     readCatalogMapViewport(catalogDirection, mapViewportStorageScope),
@@ -979,6 +1065,8 @@ export function ExcursionSearchResults({
     setGuests(String(filters.people ?? 2));
     setFormat(filters.format ?? "");
     setDurationBucket(filters.durationBucket ?? "");
+    setLanguage(filters.language ?? "");
+    setDifficulty(filters.difficulty ?? "");
     setMinPrice(filters.minPrice ? String(filters.minPrice) : "");
     setMaxPrice(filters.maxPrice ? String(filters.maxPrice) : "");
     setRadiusKm(String(filters.radiusKm));
@@ -999,6 +1087,8 @@ export function ExcursionSearchResults({
     filters.people,
     filters.format,
     filters.durationBucket,
+    filters.language,
+    filters.difficulty,
     filters.minPrice,
     filters.maxPrice,
     filters.radiusKm,
@@ -1031,6 +1121,7 @@ export function ExcursionSearchResults({
     hasMapInteractionRef.current = false;
     setMapViewportBounds(null);
     setMapBoundsQuery(null);
+    setPendingMapBoundsQuery(null);
     if (mapBoundsRefreshTimerRef.current !== null) {
       window.clearTimeout(mapBoundsRefreshTimerRef.current);
       mapBoundsRefreshTimerRef.current = null;
@@ -1729,7 +1820,6 @@ export function ExcursionSearchResults({
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
         setMapViewportBounds(bounds);
-        setMapBoundsQuery(normalizedBounds);
         setActivePointId(null);
         setHoveredCardId(null);
         setHoveredPinId(null);
@@ -1737,85 +1827,110 @@ export function ExcursionSearchResults({
 
       if (!mapBoundsBootstrapHandledRef.current && mapBoundsFilterRef.current === null) {
         mapBoundsBootstrapHandledRef.current = true;
-        return;
+        if (!hasMapInteractionRef.current) {
+          return;
+        }
       }
       mapBoundsBootstrapHandledRef.current = true;
 
       if (normalizedBounds === mapBoundsFilterRef.current) {
+        setPendingMapBoundsQuery(null);
         return;
       }
 
-      mapBoundsFilterRef.current = normalizedBounds;
-
-      if (mapBoundsRefreshTimerRef.current !== null) {
-        window.clearTimeout(mapBoundsRefreshTimerRef.current);
-        mapBoundsRefreshTimerRef.current = null;
+      if (hasMapInteractionRef.current) {
+        setPendingMapBoundsQuery(normalizedBounds);
       }
-      mapBoundsAbortControllerRef.current?.abort();
-
-      searchRequestSeqRef.current += 1;
-      const requestId = searchRequestSeqRef.current;
-
-      mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
-        mapBoundsRefreshTimerRef.current = null;
-        const controller = new AbortController();
-        mapBoundsAbortControllerRef.current = controller;
-        setIsBoundsRefreshing(true);
-        setMapPointsError("");
-
-        const params = buildExcursionSearchParams(filters, {
-          page: 1,
-          pageSize: 30,
-          bounds: normalizedBounds,
-        });
-
-        fetchWithRetry(`/api/search/excursions?${params.toString()}`, {
-          signal: controller.signal,
-          retries: 2,
-          retryDelayMs: 450,
-          timeoutMs: 9_000,
-        })
-          .then(async (response) => {
-            if (!response.ok) {
-              throw new Error("bounds_fetch_failed");
-            }
-
-            return (await response.json()) as {
-              items: PublicExcursionCatalogItem[];
-              total: number;
-              page: number;
-              total_pages: number;
-            };
-          })
-          .then((data) => {
-            if (controller.signal.aborted || requestId !== searchRequestSeqRef.current) {
-              return;
-            }
-
-            setDisplayItems(data.items);
-            setLoadedPage(data.page);
-            setTotalCount(data.total);
-            setTotalPages(data.total_pages);
-            setActivePointId(null);
-            setHoveredCardId(null);
-            setHoveredPinId(null);
-          })
-          .catch(() => {
-            if (!controller.signal.aborted && requestId === searchRequestSeqRef.current) {
-              setMapPointsError(
-                "Не удалось обновить выдачу по зоне карты. Показаны текущие результаты.",
-              );
-            }
-          })
-          .finally(() => {
-            if (requestId === searchRequestSeqRef.current) {
-              setIsBoundsRefreshing(false);
-            }
-          });
-      }, MAP_BOUNDS_REFRESH_DELAY_MS);
     },
-    [catalogDirection, filters, mapViewportStorageScope],
+    [catalogDirection, mapViewportStorageScope],
   );
+
+  const applyMapBoundsSearch = useCallback(() => {
+    const normalizedBounds = pendingMapBoundsQuery?.trim() || null;
+    if (!normalizedBounds || normalizedBounds === mapBoundsFilterRef.current) {
+      setPendingMapBoundsQuery(null);
+      return;
+    }
+
+    mapBoundsFilterRef.current = normalizedBounds;
+    setPendingMapBoundsQuery(null);
+    setMapBoundsQuery(normalizedBounds);
+
+    if (mapBoundsRefreshTimerRef.current !== null) {
+      window.clearTimeout(mapBoundsRefreshTimerRef.current);
+      mapBoundsRefreshTimerRef.current = null;
+    }
+    mapBoundsAbortControllerRef.current?.abort();
+
+    searchRequestSeqRef.current += 1;
+    const requestId = searchRequestSeqRef.current;
+
+    mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
+      mapBoundsRefreshTimerRef.current = null;
+      const controller = new AbortController();
+      mapBoundsAbortControllerRef.current = controller;
+      setIsBoundsRefreshing(true);
+      setMapPointsError("");
+
+      const params = buildExcursionSearchParams(filters, {
+        page: 1,
+        pageSize: 30,
+        bounds: normalizedBounds,
+      });
+
+      fetchWithRetry(`/api/search/excursions?${params.toString()}`, {
+        signal: controller.signal,
+        retries: 2,
+        retryDelayMs: 450,
+        timeoutMs: 9_000,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error("bounds_fetch_failed");
+          }
+
+          return (await response.json()) as {
+            items: PublicExcursionCatalogItem[];
+            total: number;
+            page: number;
+            total_pages: number;
+          };
+        })
+        .then((data) => {
+          if (controller.signal.aborted || requestId !== searchRequestSeqRef.current) {
+            return;
+          }
+
+          setDisplayItems(data.items);
+          setLoadedPage(data.page);
+          setTotalCount(data.total);
+          setTotalPages(data.total_pages);
+          setActivePointId(null);
+          setHoveredCardId(null);
+          setHoveredPinId(null);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted && requestId === searchRequestSeqRef.current) {
+            setMapPointsError(
+              "Не удалось обновить выдачу по зоне карты. Показаны текущие результаты.",
+            );
+          }
+        })
+        .finally(() => {
+          if (requestId === searchRequestSeqRef.current) {
+            setIsBoundsRefreshing(false);
+          }
+        });
+    }, MAP_BOUNDS_REFRESH_DELAY_MS);
+  }, [filters, pendingMapBoundsQuery]);
+
+  useEffect(() => {
+    if (!pendingMapBoundsQuery || pendingMapBoundsQuery === mapBoundsFilterRef.current) {
+      return;
+    }
+
+    applyMapBoundsSearch();
+  }, [applyMapBoundsSearch, pendingMapBoundsQuery]);
 
   // ── Navigation on pin click ──────────────────────────────────────────────────
   const handleMapPointClick = useCallback(
@@ -2249,7 +2364,6 @@ export function ExcursionSearchResults({
 
     return null;
   };
-
   // ── Apply filters ─────────────────────────────────────────────────────────────
   const applyFilters = useCallback(
     (overrides: Record<string, string> = {}) => {
@@ -2265,6 +2379,8 @@ export function ExcursionSearchResults({
         guests,
         format,
         durationBucket,
+        language,
+        difficulty,
         minPrice,
         maxPrice,
         radiusKm,
@@ -2298,6 +2414,8 @@ export function ExcursionSearchResults({
       guests,
       format,
       durationBucket,
+      language,
+      difficulty,
       minPrice,
       maxPrice,
       radiusKm,
@@ -2429,6 +2547,20 @@ export function ExcursionSearchResults({
     if (filters.kids) {
       chips.push({ key: "kids", label: "Для детей", onClear: () => applyFilters({ kids: "" }) });
     }
+    if (filters.language) {
+      chips.push({
+        key: "language",
+        label: getLanguageFilterLabel(filters.language),
+        onClear: () => applyFilters({ language: "" }),
+      });
+    }
+    if (filters.difficulty) {
+      chips.push({
+        key: "difficulty",
+        label: getDifficultyFilterLabel(filters.difficulty),
+        onClear: () => applyFilters({ difficulty: "" }),
+      });
+    }
     if (filters.sort && filters.sort !== "relevance") {
       chips.push({
         key: "sort",
@@ -2444,7 +2576,9 @@ export function ExcursionSearchResults({
     Number(Boolean(filters.districtName)) +
     Number(Boolean(filters.categoryName)) +
     Number(filters.pickup) +
-    Number(filters.kids);
+    Number(filters.kids) +
+    Number(Boolean(filters.language)) +
+    Number(Boolean(filters.difficulty));
   const effectiveProgramOfferType = isDefaultCatalogOffer ? "" : (filters.offerType ?? "");
   const programFiltersCount =
     Number(Boolean(filters.query?.trim())) +
@@ -2532,11 +2666,81 @@ export function ExcursionSearchResults({
     [maxPrice, minPrice],
   );
 
+  const emptyResultsContent = shouldShowConnectionEmptyState ? (
+    <CatalogConnectionEmptyState
+      title={connectionEmptyCopy.title}
+      description={connectionEmptyCopy.description}
+    />
+  ) : (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
+        <p className="text-sm text-olive/60">По вашим параметрам {resultsTitle} не найдены.</p>
+        <p className="mt-1 text-xs text-olive/45">
+          Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
+        </p>
+        {activeChips.length > 0 ? (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {activeChips.map((chip) => (
+              <span
+                key={chip.key}
+                className="rounded-full border border-olive/12 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive/64"
+              >
+                {chip.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {filters.minPrice || filters.maxPrice ? (
+            <button
+              type="button"
+              onClick={() => applyFilters({ minPrice: "", maxPrice: "" })}
+              className="rounded-xl border border-primary/16 bg-primary/8 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/14"
+            >
+              Сбросить цену
+            </button>
+          ) : null}
+          {filters.dateFrom || filters.dateTo ? (
+            <button
+              type="button"
+              onClick={() => applyFilters({ checkIn: "", checkOut: "" })}
+              className="rounded-xl border border-primary/16 bg-primary/8 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/14"
+            >
+              Убрать даты
+            </button>
+          ) : null}
+          {filters.locationName ? (
+            <button
+              type="button"
+              onClick={() =>
+                applyFilters({
+                  location: "",
+                  radiusKm: String(DEFAULT_NEARBY_RADIUS_KM),
+                })
+              }
+              className="rounded-xl border border-primary/16 bg-primary/8 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/14"
+            >
+              Расширить локацию
+            </button>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={resetAllFilters}
+          className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+        >
+          Сбросить все фильтры
+        </button>
+      </div>
+      <FirstListingPromo kind="excursions" />
+    </div>
+  );
+
   return (
-    <div className="mx-auto w-full max-w-[1680px] px-4 pb-24 md:px-6 md:pb-8">
+    <div className="mx-auto w-full max-w-[1680px] px-4 pb-24 md:px-6 md:pb-8 lg:max-w-none lg:px-0">
       <CatalogScrollRestorer catalogKey={catalogDirection} />
       <CatalogFilterShell
-        className="-mx-4 md:-mx-6"
+        className="-mx-4 md:-mx-6 lg:mx-0"
         chips={
           <>
             <ResponsiveFilterPanel
@@ -3049,7 +3253,15 @@ export function ExcursionSearchResults({
                   }
                   onClear={
                     moreFiltersCount > 0
-                      ? () => applyFilters({ district: "", category: "", pickup: "", kids: "" })
+                      ? () =>
+                          applyFilters({
+                            district: "",
+                            category: "",
+                            pickup: "",
+                            kids: "",
+                            language: "",
+                            difficulty: "",
+                          })
                       : undefined
                   }
                 />
@@ -3062,7 +3274,16 @@ export function ExcursionSearchResults({
                     setCategory("");
                     setPickup(false);
                     setKids(false);
-                    applyFilters({ district: "", category: "", pickup: "", kids: "" });
+                    setLanguage("");
+                    setDifficulty("");
+                    applyFilters({
+                      district: "",
+                      category: "",
+                      pickup: "",
+                      kids: "",
+                      language: "",
+                      difficulty: "",
+                    });
                   }}
                   applyLabel="Показать варианты"
                 />
@@ -3102,6 +3323,46 @@ export function ExcursionSearchResults({
                     </select>
                   </CatalogFieldGroup>
                 </div>
+
+                {availableLanguageOptions.length > 0 || availableDifficultyOptions.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {availableLanguageOptions.length > 0 ? (
+                      <CatalogFieldGroup label="Язык">
+                        <select
+                          name="language"
+                          value={language}
+                          onChange={(event) => setLanguage(event.target.value)}
+                          className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="">Любой язык</option>
+                          {availableLanguageOptions.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </CatalogFieldGroup>
+                    ) : null}
+
+                    {availableDifficultyOptions.length > 0 ? (
+                      <CatalogFieldGroup label="Сложность">
+                        <select
+                          name="difficulty"
+                          value={difficulty}
+                          onChange={(event) => setDifficulty(event.target.value)}
+                          className="h-12 w-full rounded-[20px] border border-olive/14 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="">Любая сложность</option>
+                          {availableDifficultyOptions.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </CatalogFieldGroup>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <CatalogFieldGroup label="Полезные детали">
                   <div className="grid gap-2 md:grid-cols-2">
@@ -3209,31 +3470,7 @@ export function ExcursionSearchResults({
                   )}
                 >
                   {displayItems.length === 0 ? (
-                    shouldShowConnectionEmptyState ? (
-                      <CatalogConnectionEmptyState
-                        title={connectionEmptyCopy.title}
-                        description={connectionEmptyCopy.description}
-                      />
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
-                          <p className="text-sm text-olive/60">
-                            По вашим параметрам {resultsTitle} не найдены.
-                          </p>
-                          <p className="mt-1 text-xs text-olive/45">
-                            Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={resetAllFilters}
-                            className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-                          >
-                            Сбросить все фильтры
-                          </button>
-                        </div>
-                        <FirstListingPromo kind="excursions" />
-                      </div>
-                    )
+                    emptyResultsContent
                   ) : (
                     <div className="space-y-4">
                       {displayItems.map((item, index) => {
@@ -3400,7 +3637,7 @@ export function ExcursionSearchResults({
         className={cn(
           mapPlacement === "mobile"
             ? "hidden"
-            : "catalog-layout mt-6 grid gap-4 md:mt-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]",
+            : "catalog-layout public-catalog-layout grid gap-0 lg:grid-cols-[minmax(0,60%)_minmax(0,40%)]",
         )}
       >
         {mapPlacement === "mobile" ? (
@@ -3426,33 +3663,12 @@ export function ExcursionSearchResults({
           </div>
         ) : null}
         {/* ── Center: Results ─────────────────────────────────────────────── */}
-        <div id="catalog-results" className="min-w-0 flex-1 lg:w-full">
+        <div
+          id="catalog-results"
+          className="min-w-0 flex-1 lg:w-full lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12"
+        >
           {displayItems.length === 0 ? (
-            shouldShowConnectionEmptyState ? (
-              <CatalogConnectionEmptyState
-                title={connectionEmptyCopy.title}
-                description={connectionEmptyCopy.description}
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-dashed border-olive/25 bg-white/94 p-8 text-center">
-                  <p className="text-sm text-olive/60">
-                    По вашим параметрам {resultsTitle} не найдены.
-                  </p>
-                  <p className="mt-1 text-xs text-olive/45">
-                    Попробуйте изменить локацию, увеличить радиус или снять часть фильтров.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={resetAllFilters}
-                    className="mt-4 rounded-xl bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-                  >
-                    Сбросить все фильтры
-                  </button>
-                </div>
-                <FirstListingPromo kind="excursions" />
-              </div>
-            )
+            emptyResultsContent
           ) : (
             <div className="space-y-4">
               {displayItems.map((item, index) => {
@@ -3525,7 +3741,10 @@ export function ExcursionSearchResults({
         </div>
 
         {/* ── Right: Map panel ────────────────────────────────────────────── */}
-        <aside className="catalog-map-sticky map-column hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[520px] lg:w-full">
+        <aside
+          data-map-yandex-chrome="compact"
+          className="catalog-map-sticky public-catalog-map hidden self-start overflow-visible lg:block lg:sticky lg:top-[var(--catalog-map-sticky-top)] lg:w-full"
+        >
           <section className="relative h-full overflow-hidden bg-[#e7eef3]">
             <div className="hidden">
               <div>
@@ -3550,21 +3769,22 @@ export function ExcursionSearchResults({
                   initialViewport={resolvedInitialViewport}
                   viewportKey={resolvedInitialViewportKey}
                   radiusCircle={radiusCircle}
-                  controls={["zoomControl"]}
+                  controls={[]}
+                  customZoomControls
                   showBalloons={false}
                   frameless
                   fitPointsOnChange="never"
                   className="h-full w-full"
                 />
 
-                <div className="pointer-events-none absolute right-3 top-3 z-30 flex items-start justify-end">
+                <div className="catalog-map-expand-control pointer-events-none absolute left-5 top-5 z-[1000] flex items-start justify-start">
                   <button
                     type="button"
                     onClick={openMapFully}
-                    className="pointer-events-auto inline-flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
+                    className="pointer-events-auto inline-flex h-11 items-center gap-3 rounded-xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96"
                     aria-label="Раскрыть карту полностью"
                   >
-                    <AppIcon icon={ExternalLink} className="h-5 w-5" />
+                    <AppIcon icon={Maximize2} className="h-5 w-5" />
                     Раскрыть карту
                   </button>
                 </div>

@@ -113,7 +113,7 @@ export default async function AdminObjectRoomCategoriesPage({
                     ID объекта: {displayPropertyNumber}
                   </p>
                   <h1 className="mt-0.5 text-2xl font-bold leading-tight text-olive">Номера</h1>
-                  <p className="mt-0.5 text-sm text-olive/55">Категории номеров и цены</p>
+                  <p className="mt-0.5 text-sm text-olive/55">Номера и цены</p>
                   <p className="mt-0.5 truncate text-xs text-olive/45">
                     {property.name ?? "Объект без названия"}
                   </p>
@@ -146,7 +146,7 @@ export default async function AdminObjectRoomCategoriesPage({
                     className="inline-flex items-center gap-1.5 rounded-xl bg-sage px-4 py-2.5 text-sm font-semibold text-midnight shadow-sm transition hover:bg-sage/85 active:scale-95"
                   >
                     <AppIcon icon={Plus} className="h-4 w-4" />
-                    Создать номер
+                    Добавить номер
                   </Link>
                 ) : null}
               </div>
@@ -155,7 +155,7 @@ export default async function AdminObjectRoomCategoriesPage({
         </div>
 
         <div className="rounded-xl bg-terra/5 px-4 py-3 text-[13px] leading-relaxed text-olive/70">
-          Создайте категории номеров для карточки пользователя. Админ работает в том же редакторе,
+          Создайте номера для карточки пользователя. Админ работает в том же редакторе,
           поэтому можно собрать фонд, цены, описание и фото так же, как это делает сам владелец.
         </div>
 

@@ -110,7 +110,7 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
-const MAP_POINTS_REFRESH_DELAY_MS = 650;
+const MAP_POINTS_REFRESH_DELAY_MS = 540;
 const MAP_BOUNDS_PRECISION = 4;
 const SEARCH_LOCATION_MAP_ZOOM = 10;
 
@@ -397,6 +397,9 @@ export function PublicHousingResultsWithMap({
   const mobileChromeProgressRef = useRef(0);
   const hasMapInteractionRef = useRef(false);
   const mapBoundsQueryRef = useRef<string | null>(null);
+  const appliedMapBoundsQueryRef = useRef<string | null>(null);
+  const mapPointsRequestSeqRef = useRef(0);
+  const previousPageRef = useRef(page);
   const suppressBoundsRefreshUntilRef = useRef(0);
   const mapPlacement = useCatalogMapPlacement();
 
@@ -575,6 +578,7 @@ export function PublicHousingResultsWithMap({
     : initialViewportKey;
   const isResultsRefreshing = loadingInitial || mapBoundsRefreshing;
   const isCatalogLoading = isResultsRefreshing;
+  const catalogSkeletonCount = mapBoundsRefreshing ? (view === "grid" ? 8 : 6) : 4;
   const hasCatalogPagination = totalPages > 1 && Boolean(onPageChange);
   const mapLoadingPillVisible =
     isResultsRefreshing || (hasMapInteractionRef.current && mapState.status === "loading");
@@ -656,6 +660,7 @@ export function PublicHousingResultsWithMap({
     setHoveredPointId(null);
     setMapState(createInitialMapState());
     mapBoundsQueryRef.current = null;
+    appliedMapBoundsQueryRef.current = null;
     setMapViewportBounds(null);
     setMapBoundsQuery(null);
     hasMapInteractionRef.current = false;
@@ -710,10 +715,15 @@ export function PublicHousingResultsWithMap({
     }
 
     const controller = new AbortController();
+    const requestId = ++mapPointsRequestSeqRef.current;
     const requestQuery = buildMapPointsRequestQuery(mapQuery, mapBoundsQuery);
     let refreshTimer: number | null = null;
 
     const fetchPoints = async () => {
+      if (requestId !== mapPointsRequestSeqRef.current || controller.signal.aborted) {
+        return;
+      }
+
       setMapState((current) => ({
         status: "loading",
         points: current.points,
@@ -742,6 +752,10 @@ export function PublicHousingResultsWithMap({
           };
         };
 
+        if (requestId !== mapPointsRequestSeqRef.current || controller.signal.aborted) {
+          return;
+        }
+
         const points = Array.isArray(body.map_points)
           ? body.map_points
               .map((point) => sanitizePoint(point))
@@ -757,17 +771,17 @@ export function PublicHousingResultsWithMap({
           errorMessage: "",
         });
       } catch {
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestId !== mapPointsRequestSeqRef.current) {
           return;
         }
 
-        setMapState({
+        setMapState((current) => ({
           status: "error",
-          points: [],
-          totalAvailable: null,
-          truncated: false,
+          points: current.points,
+          totalAvailable: current.totalAvailable,
+          truncated: current.truncated,
           errorMessage: "Не удалось обновить детали точек карты. Показаны объекты текущей выдачи.",
-        });
+        }));
       }
     };
 
@@ -831,13 +845,41 @@ export function PublicHousingResultsWithMap({
         return;
       }
 
-      results.scrollTop = MOBILE_SHEET_HANDLE_HEIGHT;
+      results.scrollTop = 0;
       mobileResultsScrollTopRef.current = results.scrollTop;
       setMobileChromeProgress(0, true);
     });
 
     return () => window.cancelAnimationFrame(frame);
   }, [isMapExpanded, mapPlacement, mobileSheetSnap, setMobileChromeProgress]);
+
+  useEffect(() => {
+    const previousPage = previousPageRef.current;
+    previousPageRef.current = page;
+
+    if (
+      previousPage === page ||
+      mapPlacement !== "mobile" ||
+      !isMapActivated ||
+      isMapExpanded ||
+      mobileSheetSnap !== "expanded"
+    ) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const results = mobileResultsScrollRef.current;
+      if (!results) {
+        return;
+      }
+
+      results.scrollTop = 0;
+      mobileResultsScrollTopRef.current = 0;
+      setMobileChromeProgress(0, true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMapActivated, isMapExpanded, mapPlacement, mobileSheetSnap, page, setMobileChromeProgress]);
 
   useEffect(() => {
     const shouldHideNav =
@@ -872,7 +914,6 @@ export function PublicHousingResultsWithMap({
     updateHeight();
     window.addEventListener("resize", updateHeight);
     window.addEventListener("orientationchange", updateHeight);
-    window.addEventListener("scroll", updateHeight, { passive: true });
 
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
@@ -887,54 +928,6 @@ export function PublicHousingResultsWithMap({
       window.clearTimeout(settleTimer);
       window.removeEventListener("resize", updateHeight);
       window.removeEventListener("orientationchange", updateHeight);
-      window.removeEventListener("scroll", updateHeight);
-    };
-  }, [mapPlacement]);
-
-  useLayoutEffect(() => {
-    if (mapPlacement !== "desktop") {
-      return;
-    }
-
-    let frame = 0;
-
-    const updateDesktopMapHeight = () => {
-      frame = 0;
-      const mapShell = desktopMapShellRef.current;
-      if (!mapShell) {
-        return;
-      }
-
-      const viewportHeight = window.innerHeight || 0;
-      const top = Math.round(Math.max(0, mapShell.getBoundingClientRect().top));
-      const nextTop = clamp(top, 96, Math.max(96, viewportHeight - 320));
-      mapShell.style.setProperty("--catalog-map-visible-top", `${nextTop}px`);
-      mapShell.dataset.mapYandexChrome = nextTop <= 120 ? "full" : "compact";
-    };
-
-    const scheduleUpdate = () => {
-      if (frame !== 0) {
-        return;
-      }
-
-      frame = window.requestAnimationFrame(updateDesktopMapHeight);
-    };
-
-    updateDesktopMapHeight();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("orientationchange", scheduleUpdate);
-
-    const settleTimer = window.setTimeout(updateDesktopMapHeight, 240);
-
-    return () => {
-      if (frame !== 0) {
-        window.cancelAnimationFrame(frame);
-      }
-      window.clearTimeout(settleTimer);
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("orientationchange", scheduleUpdate);
     };
   }, [mapPlacement]);
 
@@ -998,9 +991,6 @@ export function PublicHousingResultsWithMap({
       if (normalizedBounds !== mapBoundsQueryRef.current) {
         mapBoundsQueryRef.current = normalizedBounds;
         setMapViewportBounds(bounds);
-        if (!shouldSuppressBoundsRefresh) {
-          setMapBoundsQuery(normalizedBounds);
-        }
       }
 
       if (shouldSuppressBoundsRefresh) {
@@ -1012,10 +1002,32 @@ export function PublicHousingResultsWithMap({
         return;
       }
 
+      if (normalizedBounds === appliedMapBoundsQueryRef.current) {
+        return;
+      }
+
+      appliedMapBoundsQueryRef.current = normalizedBounds;
+      setMapBoundsQuery(normalizedBounds);
       onMapBoundsFilterChange?.(normalizedBounds);
     },
     [mapViewportStorageScope, onMapBoundsFilterChange],
   );
+
+  useLayoutEffect(() => {
+    if (!mapBoundsRefreshing || mapPlacement !== "mobile") {
+      return;
+    }
+
+    const results = mobileResultsScrollRef.current;
+    if (!results) {
+      return;
+    }
+
+    const preservedScrollTop = mobileResultsScrollTopRef.current;
+    window.requestAnimationFrame(() => {
+      results.scrollTop = preservedScrollTop;
+    });
+  }, [items, mapBoundsRefreshing, mapPlacement]);
 
   const handleMapWheelCapture = useCallback(() => {
     hasMapInteractionRef.current = true;
@@ -1205,12 +1217,12 @@ export function PublicHousingResultsWithMap({
     >
       <div
         className={cn(
-          "grid gap-4 transition-all duration-300",
+          "grid gap-4",
           view === "grid" ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1",
         )}
       >
         {isCatalogLoading
-          ? Array.from({ length: 4 }, (_, index) => (
+          ? Array.from({ length: catalogSkeletonCount }, (_, index) => (
               <SkeletonCard key={`initial-skeleton-${index}`} view={view} />
             ))
           : items.length === 0
@@ -1326,7 +1338,7 @@ export function PublicHousingResultsWithMap({
           isMapActivated ? (
             <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
               <div
-                className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
+                className="catalog-map-mobile-stage relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
                 style={{
                   height: mobileStageHeight
                     ? `${mobileStageHeight}px`
@@ -1334,7 +1346,7 @@ export function PublicHousingResultsWithMap({
                 }}
               >
                 <div
-                  className="absolute inset-0"
+                  className="catalog-map-touch-layer absolute inset-0"
                   onPointerDownCapture={handleMobileMapPointerDown}
                   onWheelCapture={handleMapWheelCapture}
                 >
@@ -1410,7 +1422,7 @@ export function PublicHousingResultsWithMap({
                     ref={mobileResultsScrollRef}
                     onScroll={handleMobileResultsScroll}
                     className={cn(
-                      "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
+                      "overflow-y-auto overscroll-y-contain bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
                       isMobileSheetExpanded
                         ? "h-full pt-0"
                         : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
@@ -1466,7 +1478,7 @@ export function PublicHousingResultsWithMap({
                 </div>
                 <div className="relative h-[320px] overflow-hidden">
                   <div
-                    className="h-full"
+                    className="catalog-map-touch-layer h-full"
                     onPointerDownCapture={handleMobileMapPointerDown}
                     onWheelCapture={handleMapWheelCapture}
                   >
@@ -1502,21 +1514,19 @@ export function PublicHousingResultsWithMap({
               </section>
             ) : null}
 
-            <div className="catalog-layout housing-catalog-layout grid gap-0 lg:grid-cols-[minmax(600px,47.5vw)_minmax(0,1fr)]">
-              <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">
-                {resultsSection}
-              </div>
+            <div className="catalog-layout housing-catalog-layout grid gap-0 lg:grid-cols-[minmax(0,60%)_minmax(0,40%)]">
+              <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">{resultsSection}</div>
 
-                <aside
-                  ref={desktopMapShellRef}
-                  data-map-yandex-chrome="compact"
-                  className="catalog-map-sticky housing-catalog-map hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px]"
-                >
+              <aside
+                ref={desktopMapShellRef}
+                data-map-yandex-chrome="compact"
+                className="catalog-map-sticky housing-catalog-map relative hidden self-start overflow-visible lg:block lg:sticky lg:top-[var(--catalog-map-sticky-top)]"
+              >
                 <section className="catalog-map-surface relative h-full overflow-hidden bg-[#e7eef3]">
                   {mapPlacement === "desktop" ? (
                     <>
                       <div
-                        className="absolute inset-0"
+                        className="catalog-map-touch-layer absolute inset-0"
                         onPointerDownCapture={handleMobileMapPointerDown}
                         onWheelCapture={handleMapWheelCapture}
                       >
@@ -1538,18 +1548,6 @@ export function PublicHousingResultsWithMap({
                         />
                       </div>
 
-                      <div className="pointer-events-none absolute left-4 top-4 z-30 flex items-start justify-start">
-                        <button
-                          type="button"
-                          onClick={openMapFully}
-                          className="pointer-events-auto inline-flex h-11 items-center gap-3 rounded-xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-black/5 transition hover:bg-white/96"
-                          aria-label="Раскрыть карту полностью"
-                        >
-                          <AppIcon icon={Maximize2} className="h-5 w-5" />
-                          Раскрыть карту
-                        </button>
-                      </div>
-
                       {activePopupItem ? (
                         <div className="pointer-events-none absolute left-1/2 top-20 z-20 w-[312px] max-w-[calc(100%-24px)] -translate-x-1/2">
                           <MapPropertyPopupCard
@@ -1565,6 +1563,19 @@ export function PublicHousingResultsWithMap({
                     </>
                   ) : null}
                 </section>
+                {mapPlacement === "desktop" ? (
+                  <div className="catalog-map-expand-control housing-catalog-map-expand-control pointer-events-none absolute left-5 top-5 z-[1000] flex items-start justify-start">
+                    <button
+                      type="button"
+                      onClick={openMapFully}
+                      className="pointer-events-auto inline-flex h-11 items-center gap-3 rounded-xl bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-black/5 transition hover:bg-white/96"
+                      aria-label="Раскрыть карту полностью"
+                    >
+                      <AppIcon icon={Maximize2} className="h-5 w-5" />
+                      Раскрыть карту
+                    </button>
+                  </div>
+                ) : null}
               </aside>
             </div>
           </>
@@ -1581,7 +1592,7 @@ export function PublicHousingResultsWithMap({
         >
           <section className="relative h-full w-full overflow-hidden">
             <div
-              className="absolute inset-0"
+              className="catalog-map-touch-layer absolute inset-0"
               onPointerDownCapture={handleMobileMapPointerDown}
               onWheelCapture={handleMapWheelCapture}
             >

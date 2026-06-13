@@ -14,6 +14,11 @@ function normalizeSort(raw: string | null): string {
   return value || "relevance";
 }
 
+function parseDifficulty(raw: string | null): "easy" | "medium" | "hard" | undefined {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "easy" || value === "medium" || value === "hard" ? value : undefined;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
@@ -100,6 +105,8 @@ export async function GET(request: Request) {
     })(),
     sort,
     durationBucket,
+    language: pickFirstListValue(searchParams.get("language") ?? searchParams.get("language[]")),
+    difficulty: parseDifficulty(searchParams.get("difficulty") ?? searchParams.get("difficulty[]")),
     minPrice: Number.isFinite(minPriceRaw) && minPriceRaw > 0 ? minPriceRaw : undefined,
     maxPrice: Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined,
   });
@@ -133,6 +140,9 @@ export async function GET(request: Request) {
         sort,
         language: pickFirstListValue(
           searchParams.get("language") ?? searchParams.get("language[]"),
+        ),
+        difficulty: parseDifficulty(
+          searchParams.get("difficulty") ?? searchParams.get("difficulty[]"),
         ),
       },
     },

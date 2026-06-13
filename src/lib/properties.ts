@@ -632,10 +632,10 @@ export function getRecommendedWizardStep(
 export type PropertyReadinessIssueId =
   | "about-info"
   | "about-location"
-  | "about-ksr"
   | "about-contacts"
   | "about-photo"
   | "rules"
+  | "rules-ksr"
   | "room-categories"
   | "chessboard-pricing";
 
@@ -683,9 +683,10 @@ export function getPropertyPaymentReadinessIssues(
 
   if (!progress.step7) {
     issues.push({
-      id: "about-ksr",
-      reason: "Укажите данные КСР или отметьте, что классификация не применяется.",
-      href: buildOwnerObjectSectionHref(propertyId, "about", "ksr"),
+      id: "rules-ksr",
+      reason:
+        "Укажите данные КСР в разделе «Правила размещения» или отметьте, что классификация не применяется.",
+      href: buildOwnerObjectSectionHref(propertyId, "rules"),
     });
   }
 

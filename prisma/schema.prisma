@@ -188,6 +188,21 @@ enum ReviewReportStatus {
   RESOLVED  @map("resolved")
 }
 
+enum AttractionReportReason {
+  WRONG_LOCATION    @map("wrong_location")
+  WRONG_DESCRIPTION @map("wrong_description")
+  WRONG_PHOTO       @map("wrong_photo")
+  OUTDATED_DATA     @map("outdated_data")
+  OTHER             @map("other")
+}
+
+enum AttractionReportStatus {
+  PENDING     @map("pending")
+  IN_PROGRESS @map("in_progress")
+  RESOLVED    @map("resolved")
+  DISMISSED   @map("dismissed")
+}
+
 enum ApplicationEntityType {
   PROPERTY  @map("property")
   EXCURSION @map("excursion")
@@ -245,6 +260,7 @@ model User {
   reviews                   Review[]
   reviewReactions           ReviewReaction[]
   reviewReports             ReviewReport[]         @relation("ReviewReporter")
+  attractionReports         AttractionReport[]     @relation("AttractionReportReporter")
   passwordResetRequests     PasswordResetRequest[] @relation("PasswordResetRequestedByUser")
   passwordResetTokens       PasswordResetToken[]
   chatConsentGiven          Boolean                @default(false) @map("chat_consent_given")
@@ -900,6 +916,28 @@ model ReviewReport {
   @@index([status, createdAt])
   @@index([reviewId, createdAt])
   @@index([reporterId, createdAt])
+}
+
+model AttractionReport {
+  id              String                 @id @default(cuid())
+  attractionId    String
+  attractionTitle String
+  attractionPath  String
+  reporterId      String
+  reason          AttractionReportReason
+  status          AttractionReportStatus @default(PENDING)
+  reportDate      DateTime               @db.Date
+  cooldownDays    Int                    @default(1)
+  resolvedByLogin String?
+  resolvedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  reporter        User                   @relation("AttractionReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([attractionId, reporterId, reportDate])
+  @@index([status, createdAt])
+  @@index([attractionId, status, createdAt])
+  @@index([reporterId, attractionId, createdAt])
 }
 
 model AdminActionLog {

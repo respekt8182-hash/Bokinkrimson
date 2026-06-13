@@ -5,9 +5,13 @@ import {
   Baby,
   ChevronDown,
   CigaretteOff,
+  CheckCircle2,
+  CircleHelp,
   ClipboardList,
+  ExternalLink,
   Moon,
   PawPrint,
+  ShieldCheck,
   Sunrise,
   Sunset,
 } from "lucide-react";
@@ -115,13 +119,13 @@ function isRulesSnapshotComplete(snapshot: RulesSnapshot): boolean {
 
   return Boolean(
     snapshot.checkInFrom &&
-      snapshot.checkOutUntil &&
-      snapshot.childrenAllowed !== null &&
-      childrenOk &&
-      snapshot.petsPolicy &&
-      snapshot.smokingPolicy &&
-      snapshot.quietHoursEnabled !== null &&
-      quietHoursOk,
+    snapshot.checkOutUntil &&
+    snapshot.childrenAllowed !== null &&
+    childrenOk &&
+    snapshot.petsPolicy &&
+    snapshot.smokingPolicy &&
+    snapshot.quietHoursEnabled !== null &&
+    quietHoursOk,
   );
 }
 
@@ -193,6 +197,12 @@ export function ObjectRulesPage({
   const [parkingInfo, setParkingInfo] = useState(initialProperty.parkingInfo ?? "");
   const [mealOptions, setMealOptions] = useState(initialProperty.mealOptions ?? "");
   const [prepaymentPolicy, setPrepaymentPolicy] = useState(initialProperty.prepaymentPolicy ?? "");
+  const [registryNumber, setRegistryNumber] = useState(
+    initialProperty.registryNumberPending ?? initialProperty.registryNumber ?? "",
+  );
+  const [isSavingRegistry, setIsSavingRegistry] = useState(false);
+  const [registryError, setRegistryError] = useState("");
+  const [registrySuccess, setRegistrySuccess] = useState("");
   const [error, setError] = useState("");
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
@@ -238,6 +248,14 @@ export function ObjectRulesPage({
   });
   const rulesSnapshot = JSON.stringify(currentRulesSnapshot);
   const isRulesComplete = isRulesSnapshotComplete(currentRulesSnapshot);
+  const savedRegistryNumber = (
+    initialProperty.registryNumberPending ??
+    initialProperty.registryNumber ??
+    ""
+  ).trim();
+  const normalizedRegistryNumber = registryNumber.trim();
+  const isRegistryComplete =
+    initialProperty.classificationApplicable === false || normalizedRegistryNumber.length >= 3;
 
   const applySnapshot = useCallback((snapshot: RulesSnapshot) => {
     setCheckInFrom(snapshot.checkInFrom);
@@ -293,9 +311,7 @@ export function ObjectRulesPage({
             return false;
           }
 
-          setError(
-            await readErrorMessage(response, "Не удалось сохранить правила проживания"),
-          );
+          setError(await readErrorMessage(response, "Не удалось сохранить правила проживания"));
           return false;
         }
 
@@ -329,6 +345,144 @@ export function ObjectRulesPage({
     [clearDraftSnapshot, initialProperty.id, router],
   );
 
+  const saveRegistry = useCallback(
+    async (options?: { allowSkip?: boolean }): Promise<boolean> => {
+      const normalizedNumber = registryNumber.trim();
+
+      setRegistryError("");
+      setRegistrySuccess("");
+
+      if (!normalizedNumber) {
+        if (!options?.allowSkip) {
+          setRegistryError("Укажите номер записи в реестре КСР или отметьте, что он не требуется.");
+          return false;
+        }
+
+        setIsSavingRegistry(true);
+        try {
+          const response = await fetch(`/api/properties/${initialProperty.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              step: 7,
+              data: {
+                classificationApplicable: false,
+                starRating: null,
+                registryNumber: null,
+                registryDetails: null,
+                selfAssessmentPassed: null,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            setRegistryError(
+              await readErrorMessage(response, "Не удалось сохранить данные реестра"),
+            );
+            return false;
+          }
+
+          setRegistryNumber("");
+          setRegistrySuccess("КСР отмечен как неприменимый для этого объекта.");
+          startTransition(() => {
+            router.refresh();
+          });
+          return true;
+        } catch {
+          setRegistryError("Не удалось сохранить данные реестра");
+          return false;
+        } finally {
+          setIsSavingRegistry(false);
+        }
+      }
+
+      if (normalizedNumber.length < 3) {
+        setRegistryError("Номер записи в реестре слишком короткий");
+        return false;
+      }
+
+      if (
+        normalizedNumber === savedRegistryNumber &&
+        initialProperty.classificationApplicable !== false
+      ) {
+        return true;
+      }
+
+      setIsSavingRegistry(true);
+      try {
+        const response = await fetch(`/api/properties/${initialProperty.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            step: 7,
+            data: {
+              classificationApplicable: true,
+              starRating: null,
+              registryNumber: normalizedNumber,
+              registryDetails: null,
+              selfAssessmentPassed: null,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          setRegistryError(await readErrorMessage(response, "Не удалось сохранить данные реестра"));
+          return false;
+        }
+
+        setRegistrySuccess(
+          "Номер записи отправлен на проверку. После модерации он появится в карточке объекта.",
+        );
+        startTransition(() => {
+          router.refresh();
+        });
+        return true;
+      } catch {
+        setRegistryError("Не удалось сохранить данные реестра");
+        return false;
+      } finally {
+        setIsSavingRegistry(false);
+      }
+    },
+    [
+      initialProperty.classificationApplicable,
+      initialProperty.id,
+      registryNumber,
+      router,
+      savedRegistryNumber,
+    ],
+  );
+
+  const goNext = useCallback(async () => {
+    setError("");
+
+    if (!isRulesComplete) {
+      setError("Заполните обязательные правила размещения: время, детей и тихие часы.");
+      return;
+    }
+
+    const rulesSaved =
+      rulesSnapshot === lastSavedSnapshotRef.current || (await saveRulesSnapshot(rulesSnapshot));
+    if (!rulesSaved) {
+      return;
+    }
+
+    const registrySaved = await saveRegistry({ allowSkip: true });
+    if (!registrySaved) {
+      return;
+    }
+
+    router.push(`${basePath}/${initialProperty.id}/room-categories`);
+  }, [
+    basePath,
+    initialProperty.id,
+    isRulesComplete,
+    router,
+    rulesSnapshot,
+    saveRegistry,
+    saveRulesSnapshot,
+  ]);
+
   useEffect(() => {
     const savedDraft = parseRulesSnapshot(window.sessionStorage.getItem(draftStorageKey));
 
@@ -336,7 +490,6 @@ export function ObjectRulesPage({
       const savedDraftSnapshot = JSON.stringify(savedDraft);
       if (savedDraftSnapshot !== lastSavedSnapshotRef.current) {
         // Restoring a local draft is the whole purpose of this hydration-only effect.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         applySnapshot(savedDraft);
       }
     }
@@ -371,7 +524,6 @@ export function ObjectRulesPage({
     const abortController = new AbortController();
 
     // This effect exists specifically to keep the server draft in sync with valid local changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void saveRulesSnapshot(rulesSnapshot, abortController.signal);
 
     return () => {
@@ -486,287 +638,436 @@ export function ObjectRulesPage({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl bg-cream p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="rounded-[22px] border border-olive/10 bg-white/95 p-5 shadow-[0_22px_58px_rgba(58,43,35,0.08)] ring-1 ring-white/70 sm:p-7">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wide text-olive/60">
-              ID объекта: {displayPropertyNumber}
+            <h1 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+              Создание объекта · Шаг 2. Правила размещения
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/64">
+              Укажите правила проживания и при необходимости регистрационные данные. Это помогает
+              гостям и повышает доверие.
             </p>
           </div>
-          <span className="rounded-full bg-sage/25 px-3 py-1 text-xs font-semibold uppercase text-olive">
-            {initialProperty.statusLabel}
+          <span className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64">
+            Объект #{displayPropertyNumber}
           </span>
         </div>
-      </div>
-
-      <section className="overflow-hidden rounded-2xl border border-olive/10 bg-white">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b border-olive/8 bg-cream/40 px-5 py-4">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <AppIcon icon={ClipboardList} className="h-5 w-5" />
+        <div className="mt-5 flex items-center gap-4">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
+            <div className="h-full w-[40%] rounded-full bg-primary" />
           </div>
-          <div>
-            <h2 className="font-semibold text-olive">Правила проживания</h2>
-            <p className="mt-0.5 text-sm text-olive/55">Условия заселения и пребывания гостей</p>
-          </div>
-        </div>
-
-        <div className="divide-y divide-olive/8">
-          {/* Intro hint */}
-          <div className="px-5 py-3">
-            <p className="rounded-xl bg-sky-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Заполните правила проживания — время заезда/выезда и основные политики. Эта информация отображается в карточке объекта и помогает гостям заранее узнать условия. Данные сохраняются автоматически.
-            </p>
-          </div>
-
-          {/* Check-in / Check-out */}
-          <div className="px-5 py-4">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Время заезда и выезда
-            </p>
-            <p className="mb-3 text-xs text-olive/50">Во сколько гости могут заселиться и до скольки должны выехать</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
-                  <AppIcon icon={Sunrise} className="h-4 w-4 text-sun" />
-                  Заезд после
-                </span>
-                <TimePicker
-                  name="checkInFrom"
-                  value={checkInFrom}
-                  onChange={setCheckInFrom}
-                  ariaLabel="Время заезда"
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
-                  <AppIcon icon={Sunset} className="h-4 w-4" />
-                  Выезд до
-                </span>
-                <TimePicker
-                  name="checkOutUntil"
-                  value={checkOutUntil}
-                  onChange={setCheckOutUntil}
-                  ariaLabel="Время выезда"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* Children */}
-          <div className="px-5 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="flex items-center gap-2 text-sm font-medium text-olive">
-                  <AppIcon icon={Baby} className="h-4 w-4" />
-                  Размещение с детьми
-                </span>
-                <p className="mt-0.5 pl-6 text-xs text-olive/50">Принимаете ли вы гостей с детьми?</p>
-              </div>
-              <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
-                <button
-                  type="button"
-                  onClick={() => setChildrenAllowed(true)}
-                  className={
-                    childrenAllowed === true
-                      ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
-                      : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
-                  }
-                >
-                  Разрешены
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChildrenAllowed(false);
-                    setChildrenMinAge(null);
-                  }}
-                  className={
-                    childrenAllowed === false
-                      ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
-                      : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
-                  }
-                >
-                  Запрещены
-                </button>
-              </div>
-            </div>
-            {childrenAllowed ? (
-              <div className="mt-3">
-                <Input
-                  type="number"
-                  min={0}
-                  max={17}
-                  value={childrenMinAge ?? ""}
-                  onChange={(event) =>
-                    setChildrenMinAge(event.target.value ? Number(event.target.value) : null)
-                  }
-                  placeholder="Минимальный возраст детей (лет)"
-                />
-                <p className="mt-2 text-xs text-olive/65">
-                  Если поле оставить пустым, разрешены дети любого возраста.
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Policies: Animals & Smoking */}
-          <div className="px-5 py-4">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Политики
-            </p>
-            <p className="mb-3 text-xs text-olive/50">Правила для животных и курения на территории</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
-                  <AppIcon icon={PawPrint} className="h-4 w-4" />
-                  Животные
-                </span>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none rounded-xl border border-olive/15 bg-white py-2.5 pl-3.5 pr-9 text-sm text-olive focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={petsPolicy}
-                    onChange={(event) => setPetsPolicy(event.target.value as PetsPolicy)}
-                  >
-                    {petsPolicyOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--icon-nav)]">
-                    <AppIcon icon={ChevronDown} className="h-4 w-4" />
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
-                  <AppIcon icon={CigaretteOff} className="h-4 w-4" />
-                  Курение
-                </span>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none rounded-xl border border-olive/15 bg-white py-2.5 pl-3.5 pr-9 text-sm text-olive focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={smokingPolicy}
-                    onChange={(event) => setSmokingPolicy(event.target.value as SmokingPolicy)}
-                  >
-                    {smokingPolicyOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--icon-nav)]">
-                    <AppIcon icon={ChevronDown} className="h-4 w-4" />
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quiet Hours */}
-          <div className="px-5 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="flex items-center gap-2 text-sm font-medium text-olive">
-                  <AppIcon icon={Moon} className="h-4 w-4" />
-                  Тихие часы
-                </span>
-                <p className="mt-0.5 pl-6 text-xs text-olive/50">Время, когда нужно соблюдать тишину</p>
-              </div>
-              <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
-                <button
-                  type="button"
-                  onClick={() => setQuietHoursEnabled(true)}
-                  className={
-                    quietHoursEnabled === true
-                      ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
-                      : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
-                  }
-                >
-                  Да
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuietHoursEnabled(false);
-                    setQuietHoursFrom("");
-                    setQuietHoursTo("");
-                  }}
-                  className={
-                    quietHoursEnabled === false
-                      ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
-                      : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
-                  }
-                >
-                  Нет
-                </button>
-              </div>
-            </div>
-            {quietHoursEnabled ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-xs font-medium text-olive/60">Начало</span>
-                  <TimePicker
-                    name="quietHoursFrom"
-                    value={quietHoursFrom}
-                    onChange={setQuietHoursFrom}
-                    ariaLabel="Начало тихих часов"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-xs font-medium text-olive/60">Конец</span>
-                  <TimePicker
-                    name="quietHoursTo"
-                    value={quietHoursTo}
-                    onChange={setQuietHoursTo}
-                    ariaLabel="Конец тихих часов"
-                  />
-                </label>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Extra conditions: Parking / Meals / Prepayment */}
-          <div className="px-5 py-4">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-              Дополнительные условия
-            </p>
-            <p className="mb-3 text-xs text-olive/50">Необязательно — укажите парковку, питание и предоплату, если они есть</p>
-            <PropertyRulesExtraFields
-              parkingInfo={parkingInfo}
-              onParkingInfoChange={setParkingInfo}
-              mealOptions={mealOptions}
-              onMealOptionsChange={setMealOptions}
-              prepaymentPolicy={prepaymentPolicy}
-              onPrepaymentPolicyChange={setPrepaymentPolicy}
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-olive/8 bg-cream/20 px-5 py-4">
-          {error ? (
-            <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-          ) : null}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Link
-              href={`${basePath}/${initialProperty.id}/about`}
-              className="text-sm font-semibold text-terra hover:underline"
-            >
-              Назад
-            </Link>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={`${basePath}/${initialProperty.id}/room-categories`}
-                className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
-              >
-                Далее
-              </Link>
-            </div>
-          </div>
+          <span className="text-xs font-semibold text-olive/55">~40%</span>
         </div>
       </section>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="overflow-hidden rounded-[22px] border border-olive/10 bg-white shadow-[0_16px_44px_rgba(58,43,35,0.06)]">
+          {/* Header */}
+          <div className="flex items-center gap-3 border-b border-olive/8 bg-cream/40 px-5 py-4">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <AppIcon icon={ClipboardList} className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-olive">Правила размещения</h2>
+              <p className="mt-0.5 text-sm text-olive/55">Условия заселения и пребывания гостей</p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-olive/8">
+            {/* Intro hint */}
+            <div className="px-5 py-3">
+              <p className="rounded-xl bg-sky-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+                Заполните правила проживания — время заезда/выезда и основные политики. Эта
+                информация отображается в карточке объекта и помогает гостям заранее узнать условия.
+                Данные сохраняются автоматически.
+              </p>
+            </div>
+
+            {/* Check-in / Check-out */}
+            <div className="px-5 py-4">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Время заезда и выезда
+              </p>
+              <p className="mb-3 text-xs text-olive/50">
+                Во сколько гости могут заселиться и до скольки должны выехать
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
+                    <AppIcon icon={Sunrise} className="h-4 w-4 text-sun" />
+                    Заезд после
+                  </span>
+                  <TimePicker
+                    name="checkInFrom"
+                    value={checkInFrom}
+                    onChange={setCheckInFrom}
+                    ariaLabel="Время заезда"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
+                    <AppIcon icon={Sunset} className="h-4 w-4" />
+                    Выезд до
+                  </span>
+                  <TimePicker
+                    name="checkOutUntil"
+                    value={checkOutUntil}
+                    onChange={setCheckOutUntil}
+                    ariaLabel="Время выезда"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Children */}
+            <div className="px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="flex items-center gap-2 text-sm font-medium text-olive">
+                    <AppIcon icon={Baby} className="h-4 w-4" />
+                    Размещение с детьми
+                  </span>
+                  <p className="mt-0.5 pl-6 text-xs text-olive/50">
+                    Принимаете ли вы гостей с детьми?
+                  </p>
+                </div>
+                <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setChildrenAllowed(true)}
+                    className={
+                      childrenAllowed === true
+                        ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
+                        : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
+                    }
+                  >
+                    Разрешены
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChildrenAllowed(false);
+                      setChildrenMinAge(null);
+                    }}
+                    className={
+                      childrenAllowed === false
+                        ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
+                        : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
+                    }
+                  >
+                    Запрещены
+                  </button>
+                </div>
+              </div>
+              {childrenAllowed ? (
+                <div className="mt-3">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={17}
+                    value={childrenMinAge ?? ""}
+                    onChange={(event) =>
+                      setChildrenMinAge(event.target.value ? Number(event.target.value) : null)
+                    }
+                    placeholder="Минимальный возраст детей (лет)"
+                  />
+                  <p className="mt-2 text-xs text-olive/65">
+                    Если поле оставить пустым, разрешены дети любого возраста.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Policies: Animals & Smoking */}
+            <div className="px-5 py-4">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Политики
+              </p>
+              <p className="mb-3 text-xs text-olive/50">
+                Правила для животных и курения на территории
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
+                    <AppIcon icon={PawPrint} className="h-4 w-4" />
+                    Животные
+                  </span>
+                  <div className="relative">
+                    <select
+                      className="w-full appearance-none rounded-xl border border-olive/15 bg-white py-2.5 pl-3.5 pr-9 text-sm text-olive focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      value={petsPolicy}
+                      onChange={(event) => setPetsPolicy(event.target.value as PetsPolicy)}
+                    >
+                      {petsPolicyOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--icon-nav)]">
+                      <AppIcon icon={ChevronDown} className="h-4 w-4" />
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-olive">
+                    <AppIcon icon={CigaretteOff} className="h-4 w-4" />
+                    Курение
+                  </span>
+                  <div className="relative">
+                    <select
+                      className="w-full appearance-none rounded-xl border border-olive/15 bg-white py-2.5 pl-3.5 pr-9 text-sm text-olive focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      value={smokingPolicy}
+                      onChange={(event) => setSmokingPolicy(event.target.value as SmokingPolicy)}
+                    >
+                      {smokingPolicyOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--icon-nav)]">
+                      <AppIcon icon={ChevronDown} className="h-4 w-4" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quiet Hours */}
+            <div className="px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="flex items-center gap-2 text-sm font-medium text-olive">
+                    <AppIcon icon={Moon} className="h-4 w-4" />
+                    Тихие часы
+                  </span>
+                  <p className="mt-0.5 pl-6 text-xs text-olive/50">
+                    Время, когда нужно соблюдать тишину
+                  </p>
+                </div>
+                <div className="inline-flex gap-0.5 rounded-xl border border-olive/12 bg-cream/60 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setQuietHoursEnabled(true)}
+                    className={
+                      quietHoursEnabled === true
+                        ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
+                        : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
+                    }
+                  >
+                    Да
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuietHoursEnabled(false);
+                      setQuietHoursFrom("");
+                      setQuietHoursTo("");
+                    }}
+                    className={
+                      quietHoursEnabled === false
+                        ? "rounded-[9px] bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition"
+                        : "rounded-[9px] px-4 py-1.5 text-sm font-semibold text-olive/55 transition hover:text-olive"
+                    }
+                  >
+                    Нет
+                  </button>
+                </div>
+              </div>
+              {quietHoursEnabled ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-olive/60">Начало</span>
+                    <TimePicker
+                      name="quietHoursFrom"
+                      value={quietHoursFrom}
+                      onChange={setQuietHoursFrom}
+                      ariaLabel="Начало тихих часов"
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-olive/60">Конец</span>
+                    <TimePicker
+                      name="quietHoursTo"
+                      value={quietHoursTo}
+                      onChange={setQuietHoursTo}
+                      ariaLabel="Конец тихих часов"
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Extra conditions: Parking / Meals / Prepayment */}
+            <div className="px-5 py-4">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Дополнительные условия
+              </p>
+              <p className="mb-3 text-xs text-olive/50">
+                Необязательно — укажите парковку, питание и предоплату, если они есть
+              </p>
+              <PropertyRulesExtraFields
+                parkingInfo={parkingInfo}
+                onParkingInfoChange={setParkingInfo}
+                mealOptions={mealOptions}
+                onMealOptionsChange={setMealOptions}
+                prepaymentPolicy={prepaymentPolicy}
+                onPrepaymentPolicyChange={setPrepaymentPolicy}
+              />
+            </div>
+
+            {/* Registry */}
+            <div className="px-5 py-4">
+              <section className="rounded-[18px] border border-olive/10 bg-foam/45 p-4 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <AppIcon icon={ShieldCheck} className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className="font-semibold text-olive">Регистрация в КСР</h2>
+                    <p className="mt-0.5 text-xs text-olive/50">
+                      Реестр классифицированных средств размещения
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-3 text-sm leading-6 text-olive/68">
+                  <p>
+                    Номер записи нужен, если объект сдаётся на платной основе и размещается на
+                    площадках онлайн-сервисов, сайтах или в приложениях.
+                  </p>
+                  <p>
+                    Если вы сдаёте объект не на платной основе, например друзьям или родственникам,
+                    этот шаг можно пропустить.
+                  </p>
+                </div>
+
+                <label className="mt-5 block space-y-2">
+                  <span className="text-sm font-semibold text-olive">Номер записи в реестре</span>
+                  <Input
+                    value={registryNumber}
+                    onChange={(event) => {
+                      setRegistryNumber(event.target.value);
+                      setRegistryError("");
+                      setRegistrySuccess("");
+                    }}
+                    placeholder="Введите номер записи (при наличии)"
+                  />
+                </label>
+
+                {initialProperty.registryModerationPending ? (
+                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                    На проверке: {initialProperty.registryNumberPending}
+                  </p>
+                ) : null}
+                {!initialProperty.registryModerationPending && initialProperty.registryNumber ? (
+                  <p className="mt-3 rounded-xl bg-primary/10 px-3 py-2 text-xs leading-5 text-primary">
+                    Подтвержденный номер: {initialProperty.registryNumber}
+                  </p>
+                ) : null}
+                {initialProperty.classificationApplicable === false && !normalizedRegistryNumber ? (
+                  <p className="mt-3 rounded-xl bg-sage/20 px-3 py-2 text-xs leading-5 text-olive">
+                    КСР отмечен как неприменимый для этого объекта.
+                  </p>
+                ) : null}
+                {registryError ? (
+                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
+                    {registryError}
+                  </p>
+                ) : null}
+                {registrySuccess ? (
+                  <p className="mt-3 rounded-xl bg-primary/10 px-3 py-2 text-xs leading-5 text-primary">
+                    {registrySuccess}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 grid gap-2">
+                  <a
+                    href="https://tourism.fsa.gov.ru/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/25 bg-white px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5"
+                  >
+                    Открыть реестр
+                    <AppIcon icon={ExternalLink} className="h-4 w-4" />
+                  </a>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveRegistry()}
+                      disabled={isSavingRegistry || !normalizedRegistryNumber}
+                      className="inline-flex items-center justify-center rounded-xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/25 hover:text-primary disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      Сохранить КСР
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void saveRegistry({ allowSkip: true })}
+                      disabled={isSavingRegistry || isRegistryComplete}
+                      className="inline-flex items-center justify-center rounded-xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive/70 transition hover:border-primary/25 hover:text-primary disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      Не требуется
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-olive/8 bg-cream/20 px-5 py-4">
+            {error ? (
+              <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Link
+                href={`${basePath}/${initialProperty.id}/about`}
+                className="text-sm font-semibold text-terra hover:underline"
+              >
+                Назад
+              </Link>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void goNext()}
+                  disabled={isSavingRegistry}
+                  className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingRegistry ? "Сохраняем..." : "Далее"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-5">
+          <section className="rounded-[22px] border border-olive/10 bg-white p-5 shadow-[0_16px_44px_rgba(58,43,35,0.06)]">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sun/15 text-sun">
+                <AppIcon icon={CircleHelp} className="h-5 w-5" />
+              </span>
+              <h2 className="font-semibold text-olive">Как заполнить проще</h2>
+            </div>
+            <div className="mt-5 space-y-4">
+              {[
+                ["Будьте конкретны", "Чёткие правила помогают избежать недоразумений."],
+                ["Думайте как гость", "Укажите важные детали заранее — это повышает доверие."],
+                ["Не усложняйте", "Достаточно базовых правил. Остальное можно описать в карточке."],
+              ].map(([title, text]) => (
+                <div key={title} className="flex gap-3">
+                  <AppIcon icon={CheckCircle2} className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  <div>
+                    <p className="text-sm font-semibold text-olive">{title}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-olive/58">{text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

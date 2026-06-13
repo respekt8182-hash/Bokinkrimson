@@ -77,7 +77,7 @@ export function CreateExcursionButton() {
       <Button
         onClick={openModal}
         disabled={isPending}
-        className="w-full justify-center gap-1.5 min-[420px]:w-auto"
+        className="dashboard-create-action h-14 w-full justify-center gap-2 rounded-[18px] px-6 text-base min-[420px]:w-auto"
       >
         <AppIcon icon={Plus} className="h-4 w-4" />
         {isPending ? "Создание..." : "Добавить программу"}

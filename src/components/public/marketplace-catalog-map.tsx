@@ -2150,13 +2150,13 @@ export function MarketplaceCatalogMap({
   }, [mapPlacement]);
 
   useLayoutEffect(() => {
-    if (!isAttractionsCatalog || mapPlacement !== "desktop") {
+    if (mapPlacement !== "desktop") {
       return;
     }
 
     let frame = 0;
 
-    const updateDesktopMapHeight = () => {
+    const updateDesktopMapChrome = () => {
       frame = 0;
       const mapShell = desktopMapShellRef.current;
       if (!mapShell) {
@@ -2164,9 +2164,12 @@ export function MarketplaceCatalogMap({
       }
 
       const viewportHeight = window.innerHeight || 0;
-      const top = Math.round(Math.max(0, mapShell.getBoundingClientRect().top));
+      const rect = mapShell.getBoundingClientRect();
+      const top = Math.round(Math.max(0, rect.top));
       const nextTop = clamp(top, 96, Math.max(96, viewportHeight - 320));
-      mapShell.style.setProperty("--catalog-map-visible-top", `${nextTop}px`);
+      mapShell.style.setProperty("--catalog-map-control-left", `${Math.round(rect.left + 16)}px`);
+      mapShell.style.setProperty("--catalog-map-control-top", `${nextTop + 16}px`);
+      mapShell.style.removeProperty("--catalog-map-visible-top");
       mapShell.dataset.mapYandexChrome = nextTop <= 120 ? "full" : "compact";
     };
 
@@ -2175,15 +2178,15 @@ export function MarketplaceCatalogMap({
         return;
       }
 
-      frame = window.requestAnimationFrame(updateDesktopMapHeight);
+      frame = window.requestAnimationFrame(updateDesktopMapChrome);
     };
 
-    updateDesktopMapHeight();
+    updateDesktopMapChrome();
     window.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     window.addEventListener("orientationchange", scheduleUpdate);
 
-    const settleTimer = window.setTimeout(updateDesktopMapHeight, 240);
+    const settleTimer = window.setTimeout(updateDesktopMapChrome, 240);
 
     return () => {
       if (frame !== 0) {
@@ -2194,7 +2197,7 @@ export function MarketplaceCatalogMap({
       window.removeEventListener("resize", scheduleUpdate);
       window.removeEventListener("orientationchange", scheduleUpdate);
     };
-  }, [isAttractionsCatalog, mapPlacement]);
+  }, [mapPlacement]);
 
   function handleMobileResultsScroll(event: ReactUIEvent<HTMLDivElement>) {
     const currentScrollTop = event.currentTarget.scrollTop;
@@ -2465,9 +2468,7 @@ export function MarketplaceCatalogMap({
         className={cn(
           mapPlacement === "mobile"
             ? "hidden"
-            : isAttractionsCatalog
-              ? "catalog-layout marketplace-attraction-catalog-layout grid gap-0 lg:grid-cols-[minmax(600px,47.5vw)_minmax(0,1fr)]"
-              : "catalog-layout grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,46vw)] xl:grid-cols-[minmax(0,1fr)_minmax(500px,48vw)] 2xl:grid-cols-[minmax(0,0.92fr)_minmax(560px,760px)]",
+            : "catalog-layout public-catalog-layout grid gap-0 lg:grid-cols-[minmax(0,60%)_minmax(0,40%)]",
         )}
       >
         {mapPlacement === "mobile" ? (
@@ -2492,21 +2493,12 @@ export function MarketplaceCatalogMap({
             </button>
           </div>
         ) : null}
-        {isAttractionsCatalog ? (
-          <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">{children}</div>
-        ) : (
-          children
-        )}
+        <div className="lg:pl-6 lg:pr-5 xl:pl-10 xl:pr-6 2xl:pl-12">{children}</div>
 
         <aside
-          ref={isAttractionsCatalog ? desktopMapShellRef : undefined}
-          data-map-yandex-chrome={isAttractionsCatalog ? "compact" : undefined}
-          className={cn(
-            "catalog-map-sticky hidden self-start overflow-hidden lg:block lg:sticky lg:top-[96px]",
-            isAttractionsCatalog
-              ? "marketplace-attraction-catalog-map"
-              : "map-column lg:h-[calc(100dvh-120px)] lg:min-h-[520px]",
-          )}
+          ref={desktopMapShellRef}
+          data-map-yandex-chrome="compact"
+          className="catalog-map-sticky public-catalog-map relative hidden self-start overflow-visible lg:block lg:sticky lg:top-[var(--catalog-map-sticky-top)]"
         >
           <section
             className={cn(
@@ -2537,36 +2529,13 @@ export function MarketplaceCatalogMap({
                   initialViewport={initialMapViewport}
                   viewportKey={initialMapViewportKey ?? undefined}
                   radiusCircle={radiusCircle}
-                  controls={isAttractionsCatalog ? [] : ["zoomControl"]}
-                  customZoomControls={isAttractionsCatalog}
+                  controls={[]}
+                  customZoomControls
                   showBalloons={false}
                   frameless
                   fitPointsOnChange="never"
                   className="h-full w-full"
                 />
-
-                <div
-                  className={cn(
-                    "pointer-events-none absolute top-3 z-30 flex items-start",
-                    isAttractionsCatalog ? "left-4 top-4 justify-start" : "right-3 justify-end",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={openMapFully}
-                    className={cn(
-                      "pointer-events-auto inline-flex items-center gap-3 bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96",
-                      isAttractionsCatalog ? "h-11 rounded-xl" : "h-12 rounded-2xl",
-                    )}
-                    aria-label="Раскрыть карту полностью"
-                  >
-                    <AppIcon
-                      icon={isAttractionsCatalog ? Maximize2 : ExternalLink}
-                      className="h-5 w-5"
-                    />
-                    Раскрыть карту
-                  </button>
-                </div>
 
                 {activePopupItem ? (
                   <div className="pointer-events-none absolute left-1/2 top-20 z-20 w-[312px] max-w-[calc(100%-24px)] -translate-x-1/2">
@@ -2583,6 +2552,27 @@ export function MarketplaceCatalogMap({
               </div>
             ) : null}
           </section>
+          {mapPlacement === "desktop" ? (
+            <div
+              className={cn(
+                "pointer-events-none absolute left-5 top-5 z-[1000] flex items-start justify-start",
+                "catalog-map-expand-control",
+              )}
+            >
+              <button
+                type="button"
+                onClick={openMapFully}
+                className={cn(
+                  "pointer-events-auto inline-flex items-center gap-3 bg-white px-4 text-sm font-semibold text-[#202124] shadow-[0_12px_28px_rgba(15,23,42,0.18)] ring-1 ring-black/5 transition hover:bg-white/96",
+                  "h-11 rounded-xl",
+                )}
+                aria-label="Раскрыть карту полностью"
+              >
+                <AppIcon icon={Maximize2} className="h-5 w-5" />
+                Раскрыть карту
+              </button>
+            </div>
+          ) : null}
         </aside>
       </div>
 

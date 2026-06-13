@@ -1520,3 +1520,12 @@ export const createReviewReportSchema = z.object({
     .optional()
     .or(z.literal("")),
 });
+
+export const createAttractionReportSchema = z.object({
+  reason: z.enum(
+    ["WRONG_LOCATION", "WRONG_DESCRIPTION", "WRONG_PHOTO", "OUTDATED_DATA", "OTHER"],
+    {
+      message: "Выберите тип ошибки",
+    },
+  ),
+});

@@ -383,7 +383,7 @@ function MarketplaceFilterFrame({
 }) {
   return (
     <CatalogFilterShell
-      className="-mx-4 md:-mx-6 md:mb-8"
+      className="-mx-4 md:-mx-6 md:mb-8 lg:mx-0"
       chips={children}
       totalLabel={totalLabel}
       hasActiveFilters={hasActiveFilters}

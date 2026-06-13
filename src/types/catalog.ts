@@ -41,6 +41,15 @@ export type SearchFilters = {
   hasReviews: boolean;
   familyFriendly: boolean;
   petsAllowed: boolean;
+  nearSea: boolean;
+  hasPool: boolean;
+  hasKitchen: boolean;
+  hasAirConditioner: boolean;
+  hasParking: boolean;
+  smokingForbidden: boolean;
+  quietHours: boolean;
+  amenityIds: string[];
+  roomFeatureIds: string[];
 };
 
 export type SearchResponse = {
@@ -67,4 +76,3 @@ export type EmptyStateSuggestion = {
   filters: Partial<SearchFilters>;
   count: number;
 };
-

@@ -199,6 +199,7 @@ const MARKER_FAIR_ROTATION_DAY_MS = 24 * 60 * 60 * 1000;
 const MARKER_DENSITY_MIN_TOTAL_POINTS = 90;
 const MARKER_DENSITY_FULL_DETAIL_MIN_ZOOM = 13;
 const YANDEX_SCRIPT_TIMEOUT_MS = 12_000;
+const MAP_BOUNDS_IDLE_DEBOUNCE_MS = 260;
 
 let scriptPromise: Promise<void> | null = null;
 
@@ -1403,6 +1404,11 @@ export function YandexMapMultiViewer({
   const clickHandlerRef = useRef(onPointClick);
   const hoverHandlerRef = useRef(onPointHoverChange);
   const boundsChangeHandlerRef = useRef(onBoundsChange);
+  const boundsReportTimerRef = useRef<number | null>(null);
+  const pendingBoundsReportRef = useRef<{
+    bounds: [[number, number], [number, number]] | null;
+    viewport: YandexMapViewport;
+  } | null>(null);
   const suppressResizeBoundsUntilRef = useRef(0);
   const showBalloonsRef = useRef(showBalloons);
   const markerBaseZIndexByPointIdRef = useRef<Map<string, number>>(new Map());
@@ -1527,10 +1533,49 @@ export function YandexMapMultiViewer({
     mapZoomRef.current = mapZoom;
   }, [mapZoom]);
 
+  const clearBoundsReportTimer = useCallback(() => {
+    if (boundsReportTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(boundsReportTimerRef.current);
+    boundsReportTimerRef.current = null;
+  }, []);
+
   const reportCurrentBounds = useCallback((map: YandexMapInstance) => {
+    clearBoundsReportTimer();
+    pendingBoundsReportRef.current = null;
     const bounds = normalizeMapBounds(map.getBounds());
     boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds));
-  }, []);
+  }, [clearBoundsReportTimer]);
+
+  const scheduleBoundsReport = useCallback(
+    (
+      map: YandexMapInstance,
+      bounds: [[number, number], [number, number]] | null,
+      zoom?: number,
+      delayMs = MAP_BOUNDS_IDLE_DEBOUNCE_MS,
+    ) => {
+      pendingBoundsReportRef.current = {
+        bounds,
+        viewport: getMapViewport(map, bounds, zoom),
+      };
+
+      clearBoundsReportTimer();
+      boundsReportTimerRef.current = window.setTimeout(() => {
+        boundsReportTimerRef.current = null;
+        const pending = pendingBoundsReportRef.current;
+        pendingBoundsReportRef.current = null;
+
+        if (!pending) {
+          return;
+        }
+
+        boundsChangeHandlerRef.current?.(pending.bounds, pending.viewport);
+      }, delayMs);
+    },
+    [clearBoundsReportTimer],
+  );
 
   const clearBalloonCloseTimer = useCallback((pointId: string) => {
     const timer = closeBalloonTimerByPointIdRef.current.get(pointId);
@@ -1818,7 +1863,16 @@ export function YandexMapMultiViewer({
               return;
             }
             const bounds = eventBounds ?? normalizeMapBounds(map.getBounds());
-            boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds, nextZoom));
+            scheduleBoundsReport(map, bounds, nextZoom);
+          });
+
+          map.events.add("actionend", () => {
+            if (Date.now() <= suppressResizeBoundsUntilRef.current) {
+              return;
+            }
+
+            const bounds = normalizeMapBounds(map.getBounds());
+            scheduleBoundsReport(map, bounds, getMapZoom(map));
           });
 
           map.events.add("click", (event) => {
@@ -1852,6 +1906,8 @@ export function YandexMapMultiViewer({
       mapRef.current?.destroy();
       mapRef.current = null;
       clearHoverClearTimer();
+      clearBoundsReportTimer();
+      pendingBoundsReportRef.current = null;
       closeAllBalloons();
       placemarkStore.clear();
       hoveredPointerPointIdRef.current = null;
@@ -1867,10 +1923,12 @@ export function YandexMapMultiViewer({
     };
   }, [
     apiKey,
+    clearBoundsReportTimer,
     clearHoverClearTimer,
     closeAllBalloons,
     controlsSignature,
     reportCurrentBounds,
+    scheduleBoundsReport,
     scriptRetryNonce,
   ]);
 

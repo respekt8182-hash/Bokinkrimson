@@ -148,6 +148,8 @@ export type PublicExcursionCatalogItem = {
   durationMinutes: number | null;
   durationDays: number | null;
   durationNights: number | null;
+  languageCodes: string[];
+  difficulty: ExcursionDifficulty | null;
   priceFrom: number | null;
   priceTo: number | null;
   currency: string;
@@ -1748,6 +1750,8 @@ export async function getPublicExcursionCatalog(
               durationMinutes: display.durationMinutes,
               durationDays: display.durationDays,
               durationNights: display.durationNights,
+              languageCodes: toStringArray(display.languageCodes),
+              difficulty: display.difficulty,
               priceFrom: toNumberOrNull(display.priceFrom),
               priceTo: toNumberOrNull(display.priceTo),
               currency: display.currency,

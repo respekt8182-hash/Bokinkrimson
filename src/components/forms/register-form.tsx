@@ -93,22 +93,34 @@ export function RegisterForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-olive">
+          <label htmlFor="firstName" className="mb-1.5 block text-sm font-medium text-olive/82">
             Имя
           </label>
-          <Input id="firstName" autoComplete="given-name" {...register("firstName")} />
+          <Input
+            id="firstName"
+            autoComplete="given-name"
+            placeholder="Введите имя"
+            className="h-11 border-olive/14 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus:ring-primary/18"
+            {...register("firstName")}
+          />
           {errors.firstName ? (
             <p className="mt-1 text-xs text-red-600">{errors.firstName.message}</p>
           ) : null}
         </div>
         <div>
-          <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-olive">
+          <label htmlFor="lastName" className="mb-1.5 block text-sm font-medium text-olive/82">
             Фамилия
           </label>
-          <Input id="lastName" autoComplete="family-name" {...register("lastName")} />
+          <Input
+            id="lastName"
+            autoComplete="family-name"
+            placeholder="Введите фамилию"
+            className="h-11 border-olive/14 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus:ring-primary/18"
+            {...register("lastName")}
+          />
           {errors.lastName ? (
             <p className="mt-1 text-xs text-red-600">{errors.lastName.message}</p>
           ) : null}
@@ -116,7 +128,7 @@ export function RegisterForm() {
       </div>
 
       <div>
-        <label htmlFor="phone" className="mb-1 block text-sm font-medium text-olive">
+        <label htmlFor="phone" className="mb-1.5 block text-sm font-medium text-olive/82">
           Телефон
         </label>
         <PhoneInput
@@ -124,12 +136,13 @@ export function RegisterForm() {
           value={phoneValue}
           onChange={setPhoneValue}
           hasError={!!phoneError}
+          className="h-11"
         />
         {phoneError ? <p className="mt-1 text-xs text-red-600">{phoneError}</p> : null}
       </div>
 
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-olive">
+        <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-olive/82">
           Пароль
         </label>
         <div className="relative">
@@ -141,14 +154,14 @@ export function RegisterForm() {
             autoCorrect="off"
             spellCheck={false}
             {...register("password")}
-            className="pr-12"
+            className="h-11 border-olive/14 px-4 pr-12 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus:ring-primary/18"
           />
           <button
             type="button"
             onClick={() => setIsPasswordVisible((prev) => !prev)}
             aria-label={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
             title={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
-            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-olive/72 transition hover:bg-cream hover:text-olive"
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/72 transition hover:bg-cream hover:text-primary"
           >
             <AppIcon icon={isPasswordVisible ? EyeOff : Eye} className="h-4 w-4" />
           </button>
@@ -159,7 +172,7 @@ export function RegisterForm() {
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-olive">
+        <label htmlFor="confirmPassword" className="mb-1.5 block text-sm font-medium text-olive/82">
           Повторите пароль
         </label>
         <div className="relative">
@@ -171,14 +184,14 @@ export function RegisterForm() {
             autoCorrect="off"
             spellCheck={false}
             {...register("confirmPassword")}
-            className="pr-12"
+            className="h-11 border-olive/14 px-4 pr-12 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus:ring-primary/18"
           />
           <button
             type="button"
             onClick={() => setIsConfirmPasswordVisible((prev) => !prev)}
             aria-label={isConfirmPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
             title={isConfirmPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
-            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-olive/72 transition hover:bg-cream hover:text-olive"
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/72 transition hover:bg-cream hover:text-primary"
           >
             <AppIcon icon={isConfirmPasswordVisible ? EyeOff : Eye} className="h-4 w-4" />
           </button>
@@ -190,7 +203,11 @@ export function RegisterForm() {
 
       {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
+      <Button
+        type="submit"
+        className="h-11 w-full rounded-xl bg-gradient-to-b from-[#19b8b2] to-primary shadow-[0_14px_28px_-18px_rgba(15,118,110,0.8)] hover:brightness-100 hover:from-[#21c6bf] hover:to-[#0d837a]"
+        disabled={isSubmitting}
+      >
         {isSubmitting ? "Создание..." : "Создать аккаунт"}
       </Button>
     </form>

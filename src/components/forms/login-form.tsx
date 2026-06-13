@@ -151,7 +151,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="phone" className="mb-1 block text-sm font-medium text-olive">
+        <label htmlFor="phone" className="mb-2 block text-sm font-medium text-olive/82">
           Телефон
         </label>
         <PhoneInput
@@ -159,16 +159,20 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           value={phoneValue}
           onChange={setPhoneValue}
           hasError={!!phoneError}
+          className="h-12"
         />
         {phoneError ? <p className="mt-1 text-xs text-red-600">{phoneError}</p> : null}
       </div>
 
       <div>
-        <div className="mb-1 flex items-center justify-between">
-          <label htmlFor="password" className="block text-sm font-medium text-olive">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <label htmlFor="password" className="block text-sm font-medium text-olive/82">
             Пароль
           </label>
-          <Link href="/auth/forgot-password" className="text-xs text-terra hover:underline">
+          <Link
+            href="/auth/forgot-password"
+            className="text-xs font-semibold text-primary hover:underline"
+          >
             Забыли пароль?
           </Link>
         </div>
@@ -182,14 +186,14 @@ export function LoginForm({ nextPath }: LoginFormProps) {
             spellCheck={false}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 pr-12 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-primary focus:ring-2 focus:ring-primary/22"
+            className="h-12 w-full rounded-xl border border-olive/14 bg-white px-4 pr-12 text-sm text-olive shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none placeholder:text-olive/42 focus:border-primary focus:ring-2 focus:ring-primary/18"
           />
           <button
             type="button"
             onClick={() => setIsPasswordVisible((prev) => !prev)}
             aria-label={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
             title={isPasswordVisible ? "Скрыть пароль" : "Показать пароль"}
-            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-olive/72 transition hover:bg-cream hover:text-olive"
+            className="absolute inset-y-0 right-2 my-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/72 transition hover:bg-cream hover:text-primary"
           >
             <AppIcon icon={isPasswordVisible ? EyeOff : Eye} className="h-4 w-4" />
           </button>
@@ -199,7 +203,11 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
       {visibleServerError ? <p className="text-sm text-red-600">{visibleServerError}</p> : null}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut}>
+      <Button
+        type="submit"
+        className="h-12 w-full rounded-xl bg-gradient-to-b from-[#19b8b2] to-primary shadow-[0_14px_28px_-18px_rgba(15,118,110,0.8)] hover:brightness-100 hover:from-[#21c6bf] hover:to-[#0d837a]"
+        disabled={isSubmitting || isLockedOut}
+      >
         {isLockedOut
           ? `Подождите ${formatWaitTime(lockoutSeconds)}`
           : isSubmitting

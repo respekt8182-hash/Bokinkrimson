@@ -7,6 +7,7 @@ import {
   isPointInsideBounds,
   parseBoundsParam,
   parseIntParam,
+  parseListParam,
   parseOptionalFloatParam,
   parseOptionalIntParam,
   pickFirstListValue,
@@ -77,6 +78,8 @@ export async function GET(request: Request) {
     { min: 0, max: 1_000_000_000 },
   );
   const minRating = parseOptionalFloatParam(searchParams.get("minRating"), { min: 1, max: 5 });
+  const amenityIds = parseListParam(searchParams, "amenityIds", "amenityIds[]");
+  const roomFeatureIds = parseListParam(searchParams, "roomFeatureIds", "roomFeatureIds[]");
 
   const query: PublicCatalogQuery = {
     page,
@@ -101,6 +104,15 @@ export async function GET(request: Request) {
     familyFriendly:
       parseFlag(searchParams.get("familyFriendly")) || parseFlag(searchParams.get("kidsFriendly")),
     petsAllowed: parseFlag(searchParams.get("petsAllowed")),
+    nearSea: parseFlag(searchParams.get("nearSea")),
+    hasPool: parseFlag(searchParams.get("hasPool")),
+    hasKitchen: parseFlag(searchParams.get("hasKitchen")),
+    hasAirConditioner: parseFlag(searchParams.get("hasAirConditioner")),
+    hasParking: parseFlag(searchParams.get("hasParking")),
+    smokingForbidden: parseFlag(searchParams.get("smokingForbidden")),
+    quietHours: parseFlag(searchParams.get("quietHours")),
+    amenityIds,
+    roomFeatureIds,
     bounds,
   };
 

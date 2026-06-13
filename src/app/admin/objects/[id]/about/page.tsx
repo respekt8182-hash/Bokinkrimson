@@ -22,19 +22,13 @@ type AdminObjectAboutPageProps = {
 
 function getInitialBlockFromSearchParam(
   value: string | string[] | undefined,
-): "info" | "location" | "ksr" | "contacts" | "photo" | undefined {
+): "info" | "location" | "contacts" | "photo" | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) {
     return undefined;
   }
 
-  if (
-    raw === "info" ||
-    raw === "location" ||
-    raw === "ksr" ||
-    raw === "contacts" ||
-    raw === "photo"
-  ) {
+  if (raw === "info" || raw === "location" || raw === "contacts" || raw === "photo") {
     return raw;
   }
 

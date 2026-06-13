@@ -107,3 +107,26 @@ export function pickFirstListValue(raw: string | null): string | undefined {
   const first = value.split(",")[0]?.trim();
   return first || undefined;
 }
+
+export function parseListParam(
+  searchParams: URLSearchParams,
+  ...keys: string[]
+): string[] {
+  const values = keys.flatMap((key) => searchParams.getAll(key));
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const rawValue of values) {
+    for (const item of rawValue.split(",")) {
+      const normalized = item.trim();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      result.push(normalized);
+    }
+  }
+
+  return result;
+}

@@ -13,19 +13,13 @@ type DashboardObjectAboutPageProps = {
 
 function getInitialBlockFromSearchParam(
   value: string | string[] | undefined,
-): "info" | "location" | "ksr" | "contacts" | "photo" | undefined {
+): "info" | "location" | "contacts" | "photo" | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) {
     return undefined;
   }
 
-  if (
-    raw === "info" ||
-    raw === "location" ||
-    raw === "ksr" ||
-    raw === "contacts" ||
-    raw === "photo"
-  ) {
+  if (raw === "info" || raw === "location" || raw === "contacts" || raw === "photo") {
     return raw;
   }
 
@@ -87,18 +81,18 @@ export default async function DashboardObjectAboutPage({
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const initialBlock = getInitialBlockFromSearchParam(resolvedSearchParams.block);
 
+  const activeNavSection = initialBlock === "location" ? "about-location" : "about-info";
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start">
+    <div className="object-create-page object-create-page-layout mx-auto w-full max-w-[2440px]">
       <div className="hidden lg:block">
-        <ObjectSectionNav propertyId={property.id} activeSection="about" />
+        <ObjectSectionNav propertyId={property.id} activeSection={activeNavSection} />
       </div>
-      <div className="min-w-0">
-        <ObjectAboutPage
-          initialProperty={serializeProperty(property)}
-          displayPropertyNumber={displayPropertyNumber}
-          initialBlock={initialBlock}
-        />
-      </div>
+      <ObjectAboutPage
+        initialProperty={serializeProperty(property)}
+        displayPropertyNumber={displayPropertyNumber}
+        initialBlock={initialBlock}
+      />
     </div>
   );
 }

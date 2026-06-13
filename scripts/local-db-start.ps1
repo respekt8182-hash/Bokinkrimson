@@ -24,7 +24,46 @@ if (-not (Test-Path (Join-Path $dataDir "PG_VERSION"))) {
   & $initdb -D $dataDir -U $dbUser -A trust --encoding=UTF8 --locale=C
 }
 
-& $pgCtl -D $dataDir -l $logFile -o "-p $port" -w start | Out-Host
+function Test-PostgresReady {
+  $result = & $psql -h 127.0.0.1 -p $port -U $dbUser -d postgres -tAc "SELECT 1;" 2>$null
+  return $LASTEXITCODE -eq 0 -and $result.Trim() -eq "1"
+}
+
+function Wait-PostgresReady {
+  param([int]$TimeoutSeconds = 30)
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-PostgresReady) {
+      return $true
+    }
+
+    Start-Sleep -Milliseconds 500
+  }
+
+  return $false
+}
+
+$statusOutput = & $pgCtl -D $dataDir status 2>&1
+$isRunning = $LASTEXITCODE -eq 0
+
+if ($isRunning) {
+  Write-Host "Local PostgreSQL is already running."
+} else {
+  & $pgCtl -D $dataDir -l $logFile -o "-p $port" -w start
+  if ($LASTEXITCODE -ne 0 -and -not (Test-PostgresReady)) {
+    $details = ($statusOutput | Out-String).Trim()
+    if ($details) {
+      throw "Failed to start local PostgreSQL. $details"
+    }
+
+    throw "Failed to start local PostgreSQL. Check $logFile"
+  }
+}
+
+if (-not (Wait-PostgresReady -TimeoutSeconds 30)) {
+  throw "Local PostgreSQL did not become ready on 127.0.0.1:$port. Check $logFile"
+}
 
 $dbExists = & $psql -h 127.0.0.1 -p $port -U $dbUser -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$dbName';"
 if ($dbExists.Trim() -ne "1") {

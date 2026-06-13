@@ -21,6 +21,7 @@ import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
 import { CatalogNearbyContinuationNote } from "@/components/public/catalog-nearby-continuation-note";
 import { CatalogBackLink, CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
+import { AttractionReportButton } from "@/components/public/attraction-report-button";
 import { AttractionCatalogClient } from "@/components/public/attraction-catalog-client";
 import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar";
 import { MarketplaceCatalogMap } from "@/components/public/marketplace-catalog-map";
@@ -565,7 +566,11 @@ function CatalogShell({
         </div>
       )}
 
-      <div className={cn("mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8")}>
+      <div
+        className={cn(
+          "mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8 lg:max-w-none lg:px-0",
+        )}
+      >
         {children}
       </div>
     </main>
@@ -1493,6 +1498,8 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
               ))}
             </div>
           ) : null}
+
+          <AttractionReportButton attractionId={item.id} attractionTitle={item.title} />
         </section>
 
         {item.facts.length > 0 ? (

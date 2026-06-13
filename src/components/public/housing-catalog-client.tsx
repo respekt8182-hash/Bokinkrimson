@@ -12,6 +12,7 @@ import {
   fetchAccommodationSearch,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
+import { propertyTypes } from "@/lib/constants";
 import { resolveKnownCrimeaLocationName } from "@/lib/seo/routes";
 import { formatLocationInPrepositional } from "@/lib/seo/site";
 import { parseDateRangeParam } from "@/lib/seo/url-normalize";
@@ -20,7 +21,7 @@ import type { SearchFilters, SearchResponse } from "@/types/catalog";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30;
-const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 540;
 
 const SORT_OPTIONS = [
   { value: "", label: "Рекомендуемые" },
@@ -63,6 +64,25 @@ function getSortLabel(sort: SearchFilters["sort"]): string {
 function parseBooleanParam(params: URLSearchParams, key: string): boolean {
   const value = params.get(key);
   return value === "1" || value === "true";
+}
+
+function parseListParam(params: URLSearchParams, key: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const rawValue of [...params.getAll(key), ...params.getAll(`${key}[]`)]) {
+    for (const item of rawValue.split(",")) {
+      const normalized = item.trim();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      result.push(normalized);
+    }
+  }
+
+  return result;
 }
 
 function readCatalogLocationFromPath(pathname: string): string {
@@ -119,7 +139,29 @@ function parseUrlFilters(search: string, pathname = ""): SearchFilters {
     hasReviews: parseBooleanParam(params, "hasReviews"),
     familyFriendly: parseBooleanParam(params, "familyFriendly"),
     petsAllowed: parseBooleanParam(params, "petsAllowed"),
+    nearSea: parseBooleanParam(params, "nearSea"),
+    hasPool: parseBooleanParam(params, "hasPool"),
+    hasKitchen: parseBooleanParam(params, "hasKitchen"),
+    hasAirConditioner: parseBooleanParam(params, "hasAirConditioner"),
+    hasParking: parseBooleanParam(params, "hasParking"),
+    smokingForbidden: parseBooleanParam(params, "smokingForbidden"),
+    quietHours: parseBooleanParam(params, "quietHours"),
+    amenityIds: parseListParam(params, "amenityIds"),
+    roomFeatureIds: parseListParam(params, "roomFeatureIds"),
   };
+}
+
+function restoreWindowScrollY(targetY: number): void {
+  const safeTargetY = Math.max(0, Math.round(targetY));
+
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: safeTargetY, left: 0, behavior: "auto" });
+    window.requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - safeTargetY) > 2) {
+        window.scrollTo({ top: safeTargetY, left: 0, behavior: "auto" });
+      }
+    });
+  });
 }
 
 // ── Internal components ──────────────────────────────────────────────────────
@@ -187,6 +229,51 @@ function HousingLocationConnectionEmptyState({ locationName }: { locationName: s
   );
 }
 
+function getHousingActiveFilterLabels(filters: SearchFilters): string[] {
+  const labels: string[] = [];
+  const typeLabel = propertyTypes.find((item) => item.id === filters.propertyType)?.name;
+
+  if (filters.query.trim()) labels.push(`Поиск: ${filters.query.trim()}`);
+  if (filters.location.trim()) labels.push(`Локация: ${filters.location.trim()}`);
+  if (typeLabel || filters.propertyType) labels.push(`Тип: ${typeLabel ?? filters.propertyType}`);
+  if (filters.checkIn || filters.checkOut) labels.push("Даты проживания");
+  if (filters.guests !== "2") labels.push(`Гостей: ${filters.guests}`);
+  if (filters.minPrice || filters.maxPrice) labels.push("Цена");
+  if (filters.minRating) labels.push(`Рейтинг ${filters.minRating}+`);
+  if (filters.hasReviews) labels.push("С отзывами");
+  if (filters.familyFriendly) labels.push("Можно с детьми");
+  if (filters.petsAllowed) labels.push("Можно с животными");
+  if (filters.nearSea) labels.push("У моря");
+  if (filters.hasPool) labels.push("С бассейном");
+  if (filters.hasKitchen) labels.push("С кухней");
+  if (filters.hasAirConditioner) labels.push("Кондиционер");
+  if (filters.hasParking) labels.push("Парковка");
+  if (filters.smokingForbidden) labels.push("Курение запрещено");
+  if (filters.quietHours) labels.push("Тихие часы");
+  if (filters.amenityIds.length > 0) labels.push(`Удобства: ${filters.amenityIds.length}`);
+  if (filters.roomFeatureIds.length > 0) labels.push(`В номере: ${filters.roomFeatureIds.length}`);
+
+  return labels;
+}
+
+function EmptyActionButton({
+  children,
+  onClick,
+}: {
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-primary/16 bg-primary/8 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/14"
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function HousingCatalogClient({
@@ -211,7 +298,6 @@ export function HousingCatalogClient({
   const mapBoundsRefreshTimerRef = useRef<number | null>(null);
   const mapBoundsAbortControllerRef = useRef<AbortController | null>(null);
   const filterAbortControllerRef = useRef<AbortController | null>(null);
-  const ignoreMapBoundsUntilRef = useRef(0);
 
   const {
     items,
@@ -230,6 +316,26 @@ export function HousingCatalogClient({
   });
 
   const hasFloatingMapButton = items.length > 0;
+
+  useEffect(() => {
+    requestSeqRef.current += 1;
+    if (mapBoundsRefreshTimerRef.current) {
+      window.clearTimeout(mapBoundsRefreshTimerRef.current);
+      mapBoundsRefreshTimerRef.current = null;
+    }
+    mapBoundsAbortControllerRef.current?.abort();
+    filterAbortControllerRef.current?.abort();
+    pendingMapBoundsFilterRef.current = null;
+    mapBoundsFilterRef.current = null;
+
+    replaceAll(initialResponse);
+    setFilters(initialFilters);
+    setLocationLabel(initialLocationLabel);
+    setMapBoundsFilter(null);
+    setIsRefreshing(false);
+    setIsMapBoundsRefreshing(false);
+    setNewItemIds([]);
+  }, [initialFilters, initialLocationLabel, initialResponse, replaceAll]);
 
   const pushToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 10_000);
@@ -262,10 +368,6 @@ export function HousingCatalogClient({
 
   const handleMapBoundsFilterChange = useCallback(
     (nextBounds: string | null) => {
-      if (Date.now() <= ignoreMapBoundsUntilRef.current) {
-        return;
-      }
-
       const normalizedBounds = nextBounds?.trim() || null;
       if (
         normalizedBounds === mapBoundsFilterRef.current ||
@@ -281,12 +383,7 @@ export function HousingCatalogClient({
         mapBoundsRefreshTimerRef.current = null;
       }
       mapBoundsAbortControllerRef.current?.abort();
-      filterAbortControllerRef.current?.abort();
-      pendingMapBoundsFilterRef.current = null;
-      ignoreMapBoundsUntilRef.current = Date.now() + 2200;
       requestSeqRef.current += 1;
-      setIsRefreshing(true);
-      setIsMapBoundsRefreshing(Boolean(normalizedBounds));
 
       if (!normalizedBounds) {
         mapBoundsFilterRef.current = null;
@@ -301,8 +398,16 @@ export function HousingCatalogClient({
 
       mapBoundsRefreshTimerRef.current = window.setTimeout(() => {
         mapBoundsRefreshTimerRef.current = null;
+        if (pendingMapBoundsFilterRef.current !== normalizedBounds) {
+          return;
+        }
+
         const controller = new AbortController();
         mapBoundsAbortControllerRef.current = controller;
+        const scrollYBeforeRefresh = window.scrollY || window.pageYOffset || 0;
+        filterAbortControllerRef.current?.abort();
+        setIsRefreshing(true);
+        setIsMapBoundsRefreshing(true);
 
         fetchAccommodationSearch(filters, 1, PAGE_SIZE, controller.signal, normalizedBounds)
           .then((nextResponse) => {
@@ -314,6 +419,7 @@ export function HousingCatalogClient({
             mapBoundsFilterRef.current = normalizedBounds;
             setMapBoundsFilter(normalizedBounds);
             replaceAll(nextResponse);
+            restoreWindowScrollY(scrollYBeforeRefresh);
             setNewItemIds([]);
           })
           .catch(() => {
@@ -322,6 +428,10 @@ export function HousingCatalogClient({
             }
           })
           .finally(() => {
+            if (mapBoundsAbortControllerRef.current === controller) {
+              mapBoundsAbortControllerRef.current = null;
+            }
+
             if (requestId === requestSeqRef.current) {
               pendingMapBoundsFilterRef.current = null;
               setIsRefreshing(false);
@@ -527,6 +637,15 @@ export function HousingCatalogClient({
         hasReviews: false,
         familyFriendly: false,
         petsAllowed: false,
+        nearSea: false,
+        hasPool: false,
+        hasKitchen: false,
+        hasAirConditioner: false,
+        hasParking: false,
+        smokingForbidden: false,
+        quietHours: false,
+        amenityIds: [],
+        roomFeatureIds: [],
       },
       "Фильтры сброшены",
     );
@@ -551,6 +670,7 @@ export function HousingCatalogClient({
     initialLocationActiveHousingCount === 0 &&
     initialLocationKey.length > 0 &&
     currentLocationKey === initialLocationKey;
+  const activeEmptyFilterLabels = getHousingActiveFilterLabels(filters);
 
   const emptyCatalogContent = shouldShowLocationConnectionEmpty ? (
     <HousingLocationConnectionEmptyState locationName={initialLocationLabel || null} />
@@ -563,6 +683,68 @@ export function HousingCatalogClient({
         <p className="mt-1 text-xs leading-5 text-olive/45">
           Попробуйте изменить локацию, даты или снять часть фильтров.
         </p>
+        {activeEmptyFilterLabels.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {activeEmptyFilterLabels.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-olive/12 bg-cream/60 px-3 py-1.5 text-xs font-semibold text-olive/64"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {filters.minPrice || filters.maxPrice ? (
+            <EmptyActionButton
+              onClick={() =>
+                void applyFilters(
+                  { ...filters, minPrice: "", maxPrice: "" },
+                  "Цена сброшена",
+                )
+              }
+            >
+              Сбросить цену
+            </EmptyActionButton>
+          ) : null}
+          {filters.checkIn || filters.checkOut ? (
+            <EmptyActionButton
+              onClick={() =>
+                void applyFilters(
+                  { ...filters, checkIn: "", checkOut: "" },
+                  "Даты убраны",
+                )
+              }
+            >
+              Убрать даты
+            </EmptyActionButton>
+          ) : null}
+          {filters.location ? (
+            <EmptyActionButton
+              onClick={() =>
+                void applyFilters(
+                  { ...filters, location: "", locationId: "" },
+                  "Показываем весь Крым",
+                )
+              }
+            >
+              Расширить локацию
+            </EmptyActionButton>
+          ) : null}
+          {filters.hasReviews ? (
+            <EmptyActionButton
+              onClick={() =>
+                void applyFilters(
+                  { ...filters, hasReviews: false },
+                  "Фильтр по отзывам убран",
+                )
+              }
+            >
+              Показать без отзывов
+            </EmptyActionButton>
+          ) : null}
+        </div>
         <button
           type="button"
           onClick={() => void resetFilters()}

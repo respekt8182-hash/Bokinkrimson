@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Heart, House } from "lucide-react";
+import { ChevronDown, Heart } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,7 +28,6 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
   const userMenuTransitionMs = 200;
   const displayName = formatPublicPersonName(user, "Пользователь");
 
-  const dashboardHref = user.role === "ADMIN" ? "/admin" : "/dashboard";
   const menuItems =
     user.role === "ADMIN"
       ? [{ href: "/admin", label: "Админ-панель" }]
@@ -116,16 +115,6 @@ export function SiteHeaderUserMenu({ user }: SiteHeaderUserMenuProps) {
         className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px]"
       >
         <AppIcon icon={Heart} className="h-5 w-5 text-[color:var(--icon-highlight)]" />
-      </Link>
-
-      <Link
-        href={dashboardHref}
-        prefetch={false}
-        aria-label="Мои объекты"
-        title="Мои объекты"
-        className="icon-button-soft hidden h-11 w-11 items-center justify-center rounded-[15px] sm:inline-flex"
-      >
-        <AppIcon icon={House} className="h-5 w-5 text-[color:var(--icon-stay)]" />
       </Link>
 
       <div className="relative">

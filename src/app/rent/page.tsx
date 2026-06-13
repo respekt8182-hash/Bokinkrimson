@@ -6,6 +6,9 @@ type RentPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata({ searchParams }: RentPageProps): Promise<Metadata> {
   const params = await searchParams;
 

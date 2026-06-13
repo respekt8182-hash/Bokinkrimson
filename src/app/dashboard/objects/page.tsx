@@ -21,6 +21,11 @@ import {
   dashboardSecondaryActionClass,
   dashboardStatsActionClass,
 } from "@/components/dashboard/listing-actions";
+import {
+  DashboardSoftStat,
+  DashboardVisualHero,
+  DashboardVisualPanel,
+} from "@/components/dashboard/dashboard-visual";
 import { CreatePropertyButton } from "@/components/objects/create-property-button";
 import { DeletePropertyButton } from "@/components/objects/delete-property-button";
 import { StatsButton } from "@/components/objects/stats-button";
@@ -175,25 +180,20 @@ export default async function DashboardObjectsPage() {
   ).length;
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <div className="rounded-2xl border border-olive/10 bg-cream/65 p-4 sm:p-5">
-        <div className="flex flex-col items-stretch gap-3 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-primary">Размещение объявлений</p>
-            <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">Недвижимость</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-olive/68">
-              Здесь собраны ваши объявления о жилье: черновики, опубликованные карточки, оплата и
-              статистика. Откройте объявление, чтобы заполнить данные и отправить его на публикацию.
-            </p>
-          </div>
-          <CreatePropertyButton />
-        </div>
-      </div>
+    <div className="space-y-5">
+      <DashboardVisualHero
+        eyebrow="Размещение объявлений"
+        title="Недвижимость"
+        description="Здесь собраны ваши объявления о жилье: черновики, опубликованные карточки, оплата и статистика. Откройте объявление, чтобы заполнить данные и отправить его на публикацию."
+        image="/dashboard-prof/objects.png"
+        imagePosition="right center"
+        action={<CreatePropertyButton />}
+      />
 
       {items.length === 0 ? (
         <div
           id="objects-list"
-          className="rounded-2xl border border-dashed border-primary/30 bg-white p-5 text-olive shadow-sm"
+          className="rounded-[24px] border border-dashed border-primary/30 bg-white/92 p-6 text-olive shadow-[0_22px_70px_rgba(58,43,35,0.08)]"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -218,280 +218,286 @@ export default async function DashboardObjectsPage() {
           </div>
         </div>
       ) : (
-        <div id="objects-list" className="grid gap-3">
-          {items.map((item) => {
-            const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
-            const completedStages = getCompletedDashboardStages(item.progress);
-            const isDone = completedStages >= 5;
-            const paymentDisplay = paymentDisplayByPropertyId.get(item.id) ?? null;
-            const publicationUntilDate = paymentDisplay?.paidUntil ?? null;
-            const publicationUntilLabel =
-              paymentDisplay?.status === "demo"
-                ? PLACEMENT_PROMO_SHORT_END_LABEL
-                : (publicationUntilDate?.toLocaleDateString("ru-RU") ?? null);
-            const publicationCaption =
-              paymentDisplay?.status === "unpaid" && publicationUntilDate
-                ? "Не оплачено с"
-                : paymentDisplay?.status === "demo"
-                  ? "Тестовый период до"
-                  : "Размещается до";
-            const daysLeft = publicationUntilDate
-              ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)
-              : null;
-            const publicationExpired = daysLeft !== null && daysLeft < 0;
-            const publicationSoon = daysLeft !== null && !publicationExpired && daysLeft <= 30;
-            const publicPath = buildPublicPropertyPath({
-              id: item.id,
-              locationId: item.locationId,
-              name: item.name,
-            });
-            const stats = reviewStatsByPropertyId.get(item.id) ?? null;
-            const avgRating = stats ? Number(stats.avg ?? 0) : 0;
-            const reviewCount = stats?.count ?? 0;
+        <DashboardVisualPanel className="p-5 sm:p-7">
+          <div id="objects-list" className="grid gap-4">
+            {items.map((item) => {
+              const firstImage = item.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
+              const completedStages = getCompletedDashboardStages(item.progress);
+              const isDone = completedStages >= 5;
+              const paymentDisplay = paymentDisplayByPropertyId.get(item.id) ?? null;
+              const publicationUntilDate = paymentDisplay?.paidUntil ?? null;
+              const publicationUntilLabel =
+                paymentDisplay?.status === "demo"
+                  ? PLACEMENT_PROMO_SHORT_END_LABEL
+                  : (publicationUntilDate?.toLocaleDateString("ru-RU") ?? null);
+              const publicationCaption =
+                paymentDisplay?.status === "unpaid" && publicationUntilDate
+                  ? "Не оплачено с"
+                  : paymentDisplay?.status === "demo"
+                    ? "Тестовый период до"
+                    : "Размещается до";
+              const daysLeft = publicationUntilDate
+                ? Math.ceil((publicationUntilDate.getTime() - todayUtcMs) / 86400000)
+                : null;
+              const publicationExpired = daysLeft !== null && daysLeft < 0;
+              const publicationSoon = daysLeft !== null && !publicationExpired && daysLeft <= 30;
+              const publicPath = buildPublicPropertyPath({
+                id: item.id,
+                locationId: item.locationId,
+                name: item.name,
+              });
+              const stats = reviewStatsByPropertyId.get(item.id) ?? null;
+              const avgRating = stats ? Number(stats.avg ?? 0) : 0;
+              const reviewCount = stats?.count ?? 0;
 
-            return (
-              <article
-                key={item.id}
-                className="overflow-hidden rounded-2xl border border-olive/10 bg-white p-3 sm:p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <Link
-                    href={`/dashboard/objects/${item.id}/about`}
-                    className="flex w-full min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
-                  >
-                    <div className="h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 min-[380px]:w-24">
-                      {firstImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={firstImage.url}
-                          alt={item.name ?? "Недвижимость"}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-[11px] text-olive/50">
-                          Фото
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 py-1">
-                      <h2 className="truncate text-lg text-olive sm:text-xl">
-                        {item.name ?? "Новое объявление"}
-                      </h2>
-                      <p className="mt-1 text-xs leading-snug text-olive/60">
-                        {item.locationName ?? "Локация не выбрана"} •{" "}
-                        {item.typeLabel ?? "Тип не указан"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
-                          {item.statusLabel}
-                        </span>
-                        {item.publicId ? (
-                          <span className="inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
-                            ID {item.publicId}
-                          </span>
-                        ) : null}
+              return (
+                <article
+                  key={item.id}
+                  className="overflow-hidden rounded-[22px] border border-olive/10 bg-white/96 p-4 shadow-[0_16px_48px_rgba(58,43,35,0.06)] sm:p-6"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <Link
+                      href={`/dashboard/objects/${item.id}/about`}
+                      className="flex w-full min-w-0 flex-1 items-start gap-4 rounded-xl transition hover:bg-cream/45 sm:items-center"
+                    >
+                      <div className="h-24 w-32 shrink-0 overflow-hidden rounded-2xl bg-cream ring-1 ring-olive/10 sm:h-32 sm:w-44">
+                        {firstImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={firstImage.url}
+                            alt={item.name ?? "Недвижимость"}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[11px] text-olive/50">
+                            Фото
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </Link>
-                  <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((i) => {
-                        const fill = Math.min(1, Math.max(0, avgRating - (i - 1)));
-                        const pct = Math.round(fill * 100);
-                        return (
-                          <svg
-                            key={i}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4 shrink-0"
-                            aria-hidden="true"
-                          >
-                            <defs>
-                              <clipPath id={`star-fill-${item.id}-${i}`}>
-                                <rect x="0" y="0" width={`${pct}%`} height="24" />
-                              </clipPath>
-                            </defs>
-                            <path
-                              d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                              fill="none"
-                              stroke={reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"}
-                              strokeWidth="1.65"
-                              strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            {pct > 0 && (
+                      <div className="min-w-0 flex-1 py-1">
+                        <h2 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                          {item.name ?? "Новое объявление"}
+                        </h2>
+                        <p className="mt-2 text-sm leading-snug text-olive/60">
+                          {item.locationName ?? "Локация не выбрана"} •{" "}
+                          {item.typeLabel ?? "Тип не указан"}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
+                            {item.statusLabel}
+                          </span>
+                          {item.publicId ? (
+                            <span className="inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
+                              ID {item.publicId}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Link>
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-olive/10 bg-cream/45 px-3 py-2 lg:w-auto lg:flex-col lg:items-end lg:justify-start lg:gap-2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((i) => {
+                          const fill = Math.min(1, Math.max(0, avgRating - (i - 1)));
+                          const pct = Math.round(fill * 100);
+                          return (
+                            <svg
+                              key={i}
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4 shrink-0"
+                              aria-hidden="true"
+                            >
+                              <defs>
+                                <clipPath id={`star-fill-${item.id}-${i}`}>
+                                  <rect x="0" y="0" width={`${pct}%`} height="24" />
+                                </clipPath>
+                              </defs>
                               <path
                                 d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                                fill="var(--color-sage)"
-                                stroke="none"
-                                clipPath={`url(#star-fill-${item.id}-${i})`}
+                                fill="none"
+                                stroke={
+                                  reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"
+                                }
+                                strokeWidth="1.65"
+                                strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                               />
-                            )}
-                          </svg>
-                        );
-                      })}
-                    </div>
-                    {reviewCount > 0 ? (
-                      <>
-                        <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
-                          <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
-                          <span className="text-sm font-bold leading-none text-olive">
-                            {avgRating.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-olive/50">
-                          <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
-                          <span className="text-xs leading-none">{reviewCount}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
-                        <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
-                        <span className="text-xs text-olive/35">Нет отзывов</span>
+                              {pct > 0 && (
+                                <path
+                                  d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+                                  fill="var(--color-sage)"
+                                  stroke="none"
+                                  clipPath={`url(#star-fill-${item.id}-${i})`}
+                                />
+                              )}
+                            </svg>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                  {publicationUntilDate && publicationUntilLabel ? (
-                    <div
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:w-auto",
-                        publicationExpired
-                          ? "border-red-200 bg-red-50"
-                          : publicationSoon
-                            ? "border-amber-200 bg-amber-50"
-                            : "border-emerald-200 bg-emerald-50",
+                      {reviewCount > 0 ? (
+                        <>
+                          <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
+                            <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
+                            <span className="text-sm font-bold leading-none text-olive">
+                              {avgRating.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-olive/50">
+                            <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
+                            <span className="text-xs leading-none">{reviewCount}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
+                          <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
+                          <span className="text-xs text-olive/35">Нет отзывов</span>
+                        </div>
                       )}
-                    >
-                      <AppIcon
-                        icon={CalendarDays}
+                    </div>
+                    {publicationUntilDate && publicationUntilLabel ? (
+                      <div
                         className={cn(
-                          "h-4 w-4 shrink-0",
+                          "flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 sm:w-auto",
                           publicationExpired
-                            ? "text-red-500"
+                            ? "border-red-200 bg-red-50"
                             : publicationSoon
-                              ? "text-amber-500"
-                              : "text-emerald-600",
+                              ? "border-amber-200 bg-amber-50"
+                              : "border-emerald-200 bg-emerald-50",
                         )}
-                      />
-                      <div className="min-w-0">
-                        <p
+                      >
+                        <AppIcon
+                          icon={CalendarDays}
                           className={cn(
-                            "text-[10px] leading-none",
+                            "h-4 w-4 shrink-0",
                             publicationExpired
-                              ? "text-red-400"
+                              ? "text-red-500"
                               : publicationSoon
                                 ? "text-amber-500"
-                                : "text-emerald-500",
+                                : "text-emerald-600",
                           )}
-                        >
-                          {publicationCaption}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-xs font-bold leading-snug",
-                            publicationExpired
-                              ? "text-red-600"
-                              : publicationSoon
-                                ? "text-amber-700"
-                                : "text-emerald-700",
-                          )}
-                        >
-                          {publicationUntilLabel}
-                        </p>
+                        />
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              "text-[10px] leading-none",
+                              publicationExpired
+                                ? "text-red-400"
+                                : publicationSoon
+                                  ? "text-amber-500"
+                                  : "text-emerald-500",
+                            )}
+                          >
+                            {publicationCaption}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xs font-bold leading-snug",
+                              publicationExpired
+                                ? "text-red-600"
+                                : publicationSoon
+                                  ? "text-amber-700"
+                                  : "text-emerald-700",
+                            )}
+                          >
+                            {publicationUntilLabel}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!publicationUntilDate && (
+                    <div className="mt-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs text-olive/65">
+                        <span>Готовность</span>
+                        {isDone ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
+                            <AppIcon icon={CircleCheckBig} className="h-4 w-4" />
+                            5/5
+                          </span>
+                        ) : (
+                          <span>{completedStages}/5</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              "h-2 flex-1 rounded-full transition-all duration-300",
+                              i < completedStages
+                                ? isDone
+                                  ? "bg-sky-500"
+                                  : "bg-primary"
+                                : "bg-cream ring-1 ring-inset ring-olive/20",
+                            )}
+                          />
+                        ))}
                       </div>
                     </div>
+                  )}
+
+                  {item.moderationNotes ? (
+                    <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
+                      {item.moderationNotes}
+                    </p>
                   ) : null}
-                </div>
 
-                {!publicationUntilDate && (
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs text-olive/65">
-                      <span>Готовность</span>
-                      {isDone ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
-                          <AppIcon icon={CircleCheckBig} className="h-4 w-4" />
-                          5/5
-                        </span>
-                      ) : (
-                        <span>{completedStages}/5</span>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      {[0, 1, 2, 3, 4].map((i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "h-2 flex-1 rounded-full transition-all duration-300",
-                            i < completedStages
-                              ? isDone
-                                ? "bg-sky-500"
-                                : "bg-primary"
-                              : "bg-cream ring-1 ring-inset ring-olive/20",
-                          )}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {item.moderationNotes ? (
-                  <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
-                    {item.moderationNotes}
-                  </p>
-                ) : null}
-
-                <DashboardListingActions
-                  updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
-                  primaryActions={
-                    item.status === "PUBLISHED" ? (
+                  <DashboardListingActions
+                    updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
+                    primaryActions={
+                      item.status === "PUBLISHED" ? (
+                        <>
+                          <Link href={publicPath} className={dashboardMainActionClass}>
+                            <AppIcon icon={Eye} className={dashboardActionIconClass} />
+                            Публичная страница
+                          </Link>
+                          <StatsButton
+                            propertyId={item.id}
+                            propertyName={item.name ?? "Недвижимость"}
+                            className={dashboardStatsActionClass}
+                          />
+                        </>
+                      ) : null
+                    }
+                    secondaryActions={
                       <>
-                        <Link href={publicPath} className={dashboardMainActionClass}>
-                          <AppIcon icon={Eye} className={dashboardActionIconClass} />
-                          Публичная страница
+                        <Link
+                          href={`/dashboard/objects/${item.id}/about`}
+                          className={dashboardSecondaryActionClass}
+                        >
+                          <AppIcon icon={PenLine} className={dashboardActionIconClass} />
+                          Редактировать
                         </Link>
-                        <StatsButton
+                        <Link
+                          href={`/dashboard/objects/${item.id}/payment`}
+                          className={dashboardSecondaryActionClass}
+                        >
+                          <AppIcon icon={CreditCard} className={dashboardActionIconClass} />
+                          Оплата
+                        </Link>
+                        <DeletePropertyButton
                           propertyId={item.id}
-                          propertyName={item.name ?? "Недвижимость"}
-                          className={dashboardStatsActionClass}
+                          propertyName={item.name ?? "Новое объявление"}
+                          propertyStatus={item.status}
+                          buttonClassName={dashboardDangerActionClass}
+                          label="Удалить"
                         />
                       </>
-                    ) : null
-                  }
-                  secondaryActions={
-                    <>
-                      <Link
-                        href={`/dashboard/objects/${item.id}/about`}
-                        className={dashboardSecondaryActionClass}
-                      >
-                        <AppIcon icon={PenLine} className={dashboardActionIconClass} />
-                        Редактировать
-                      </Link>
-                      <Link
-                        href={`/dashboard/objects/${item.id}/payment`}
-                        className={dashboardSecondaryActionClass}
-                      >
-                        <AppIcon icon={CreditCard} className={dashboardActionIconClass} />
-                        Оплата
-                      </Link>
-                      <DeletePropertyButton
-                        propertyId={item.id}
-                        propertyName={item.name ?? "Новое объявление"}
-                        propertyStatus={item.status}
-                        buttonClassName={dashboardDangerActionClass}
-                        label="Удалить"
-                      />
-                    </>
-                  }
-                />
-              </article>
-            );
-          })}
-        </div>
+                    }
+                  />
+                </article>
+              );
+            })}
+          </div>
+        </DashboardVisualPanel>
       )}
 
       {publishedCount > 0 ? (
-        <p className="text-xs text-olive/65">Опубликовано объявлений: {publishedCount}</p>
+        <DashboardSoftStat icon={<AppIcon icon={Building2} className="h-5 w-5" />}>
+          Опубликовано объявлений: {publishedCount}
+        </DashboardSoftStat>
       ) : null}
     </div>
   );

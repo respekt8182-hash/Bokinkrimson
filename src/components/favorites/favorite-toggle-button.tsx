@@ -150,22 +150,26 @@ export function FavoriteToggleButton({
                 "h-10 w-10 rounded-full px-0 text-xs",
                 "border-white/80 bg-white/95 text-slate-500 backdrop-blur-md",
                 "shadow-[0_14px_35px_rgba(15,23,42,0.16)] transition duration-300",
-                "hover:-translate-y-0.5 hover:scale-[1.03] hover:text-rose-500",
-                "focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-2",
+                "hover:-translate-y-0.5 hover:scale-[1.03] hover:text-red-600",
+                "focus-visible:ring-2 focus-visible:ring-red-200 focus-visible:ring-offset-2",
               ]
             : [
                 "min-h-11 gap-2.5 rounded-full px-4 py-2.5 text-sm tracking-[0.01em] backdrop-blur-md",
                 "shadow-[0_18px_36px_-22px_rgba(15,74,64,0.42),0_10px_24px_-18px_rgba(58,43,35,0.24)]",
                 "hover:-translate-y-0.5 hover:shadow-[0_24px_42px_-24px_rgba(15,74,64,0.48),0_16px_28px_-22px_rgba(58,43,35,0.28)]",
-                "focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-2",
+                "focus-visible:ring-2 focus-visible:ring-red-200 focus-visible:ring-offset-2",
               ],
           isFavorite
             ? isIcon
-              ? "border-rose-300 text-rose-500"
+              ? [
+                  "border-red-300 bg-red-50 text-red-600",
+                  "shadow-[0_14px_35px_rgba(220,38,38,0.24)]",
+                  "hover:border-red-400 hover:bg-red-100 hover:text-red-700",
+                ]
               : [
-                  "border-rose-200/85 bg-white/94 text-rose-600",
-                  "shadow-[0_18px_36px_-24px_rgba(244,63,94,0.5),0_10px_24px_-18px_rgba(58,43,35,0.24)]",
-                  "hover:border-rose-300 hover:bg-white hover:text-rose-700",
+                  "border-red-300 bg-red-50 text-red-700",
+                  "shadow-[0_18px_36px_-24px_rgba(220,38,38,0.55),0_10px_24px_-18px_rgba(58,43,35,0.24)]",
+                  "hover:border-red-400 hover:bg-red-100 hover:text-red-800",
                 ]
             : isIcon
               ? ""
@@ -176,7 +180,7 @@ export function FavoriteToggleButton({
       >
         {isIcon && isBursting ? (
           <>
-            <span className="favorite-burst-ring pointer-events-none absolute inset-0 rounded-full border border-rose-400/50" />
+            <span className="favorite-burst-ring pointer-events-none absolute inset-0 rounded-full border border-red-400/55" />
             {PARTICLES.map((particle) => (
               <span
                 key={`${burstKey}-${particle}`}
@@ -188,13 +192,18 @@ export function FavoriteToggleButton({
                   } as CSSProperties
                 }
               >
-                <AppIcon icon={Heart} className="h-3 w-3 text-rose-500" filled />
+                <AppIcon icon={Heart} className="h-3 w-3 text-[#B82221]" filled fillStyle="solid" />
               </span>
             ))}
           </>
         ) : null}
         <span className={cn("relative z-[1]", isIcon && isBursting && "favorite-heart-pop")}>
-          <AppIcon icon={Heart} className="h-4 w-4" filled={isFavorite} />
+          <AppIcon
+            icon={Heart}
+            className={cn("h-4 w-4", isFavorite ? "text-[#B82221]" : "")}
+            filled={isFavorite}
+            fillStyle={isFavorite ? "solid" : "soft"}
+          />
         </span>
         {isIcon ? (
           <span className="sr-only">{isFavorite ? "В избранном" : "В избранное"}</span>

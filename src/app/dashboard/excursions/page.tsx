@@ -18,6 +18,11 @@ import {
   dashboardSecondaryActionClass,
   dashboardStatsActionClass,
 } from "@/components/dashboard/listing-actions";
+import {
+  DashboardSoftStat,
+  DashboardVisualHero,
+  DashboardVisualPanel,
+} from "@/components/dashboard/dashboard-visual";
 import { CreateExcursionButton } from "@/components/excursions/create-excursion-button";
 import { DeleteExcursionButton } from "@/components/excursions/delete-excursion-button";
 import { ExcursionStatsButton } from "@/components/excursions/excursion-stats-button";
@@ -196,25 +201,20 @@ export default async function DashboardExcursionsPage({
   const publishedCount = items.filter((item) => item.status === ExcursionStatus.PUBLISHED).length;
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <div className="rounded-2xl border border-olive/10 bg-cream/65 p-4 sm:p-5">
-        <div className="flex flex-col items-stretch gap-3 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-primary">Программы и маршруты</p>
-            <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">Экскурсии и туры</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-olive/68">
-              Здесь собраны ваши карточки программ: черновики, опубликованные туры, экскурсии,
-              оплата и статистика. Создайте карточку и заполните ее по шагам.
-            </p>
-          </div>
-          <CreateExcursionButton />
-        </div>
-      </div>
+    <div className="space-y-5">
+      <DashboardVisualHero
+        eyebrow="Программы и маршруты"
+        title="Экскурсии и туры"
+        description="Здесь собраны ваши карточки программ: черновики, опубликованные туры, экскурсии, оплата и статистика. Создайте карточку и заполните ее по шагам."
+        image="/dashboard-prof/excursions.png"
+        imagePosition="right center"
+        action={<CreateExcursionButton />}
+      />
 
       {items.length === 0 ? (
         <div
           id="excursions-list"
-          className="rounded-2xl border border-dashed border-primary/30 bg-white p-5 text-olive shadow-sm"
+          className="rounded-[24px] border border-dashed border-primary/30 bg-white/92 p-6 text-olive shadow-[0_22px_70px_rgba(58,43,35,0.08)]"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -241,266 +241,276 @@ export default async function DashboardExcursionsPage({
       ) : filteredItems.length === 0 ? (
         <div
           id="excursions-list"
-          className="rounded-2xl border border-dashed border-olive/25 bg-white p-5 text-sm text-olive/70 shadow-sm"
+          className="rounded-[24px] border border-dashed border-olive/25 bg-white/92 p-6 text-sm text-olive/70 shadow-[0_22px_70px_rgba(58,43,35,0.08)]"
         >
           По выбранным фильтрам программы не найдены.
         </div>
       ) : (
-        <div id="excursions-list" className="grid gap-3">
-          {filteredItems.map((item, index) => {
-            const firstPhoto =
-              Array.isArray(item.photoUrls) && item.photoUrls.length > 0
-                ? (item.photoUrls[0] as string)
-                : null;
-            const nextItem = filteredItems[index + 1] ?? null;
-            const completedStages = getCompletedDashboardStages(item);
-            const isReady = getDashboardReadyState(item);
-            const routeSummary = buildProgramRouteSummary({
-              startPoint: item.startPoint,
-              finishPoint: item.finishPoint,
-              mainLocationName: item.mainLocationName,
-              anchorLocationName: item.anchorLocationName,
-              locationName: item.locationName,
-            });
-            const reviewCount = item.reviewsCount ?? 0;
-            const avgRating = Number(item.avgRating ?? 0);
-            const publicPath = publicPathByExcursionId.get(item.id) ?? null;
+        <DashboardVisualPanel className="p-5 sm:p-7">
+          <div id="excursions-list" className="grid gap-4">
+            {filteredItems.map((item, index) => {
+              const firstPhoto =
+                Array.isArray(item.photoUrls) && item.photoUrls.length > 0
+                  ? (item.photoUrls[0] as string)
+                  : null;
+              const nextItem = filteredItems[index + 1] ?? null;
+              const completedStages = getCompletedDashboardStages(item);
+              const isReady = getDashboardReadyState(item);
+              const routeSummary = buildProgramRouteSummary({
+                startPoint: item.startPoint,
+                finishPoint: item.finishPoint,
+                mainLocationName: item.mainLocationName,
+                anchorLocationName: item.anchorLocationName,
+                locationName: item.locationName,
+              });
+              const reviewCount = item.reviewsCount ?? 0;
+              const avgRating = Number(item.avgRating ?? 0);
+              const publicPath = publicPathByExcursionId.get(item.id) ?? null;
 
-            return (
-              <article key={item.id} className="rounded-2xl border border-olive/10 bg-white p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <Link
-                    href={`/dashboard/excursions/${item.id}`}
-                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl transition hover:bg-cream/45 sm:items-center"
-                  >
-                    <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-cream ring-1 ring-olive/10 sm:h-16 sm:w-24">
-                      {firstPhoto ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={firstPhoto}
-                          alt={getExcursionTitle(item)}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-[11px] text-olive/50">
-                          Фото
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 py-1">
-                      <h2 className="text-lg leading-tight text-olive sm:truncate sm:text-xl">
-                        {getExcursionTitle(item)}
-                      </h2>
-                      <p className="mt-1 text-xs leading-snug text-olive/60">
-                        {routeSummary} • {getOfferTypeLabel(item.offerType)}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
-                          {item.statusLabel}
+              return (
+                <article
+                  key={item.id}
+                  className="rounded-[22px] border border-olive/10 bg-white/96 p-4 shadow-[0_16px_48px_rgba(58,43,35,0.06)] sm:p-5"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <Link
+                      href={`/dashboard/excursions/${item.id}`}
+                      className="flex min-w-0 flex-1 items-start gap-4 rounded-xl transition hover:bg-cream/45 sm:items-center"
+                    >
+                      <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-2xl bg-cream ring-1 ring-olive/10 sm:h-32 sm:w-48">
+                        {firstPhoto ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={firstPhoto}
+                            alt={getExcursionTitle(item)}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[11px] text-olive/50">
+                            Фото
+                          </div>
+                        )}
+                        <span className="absolute bottom-3 left-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-primary shadow-[0_10px_24px_rgba(15,118,110,0.16)]">
+                          <AppIcon icon={MapPin} className="h-5 w-5" />
                         </span>
-                        {item.subtypeLabel ? (
-                          <span className="rounded-full border border-olive/10 px-2.5 py-1 text-[11px] font-medium text-olive/70">
-                            {item.subtypeLabel}
-                          </span>
-                        ) : null}
                       </div>
-                    </div>
-                  </Link>
+                      <div className="min-w-0 flex-1 py-1">
+                        <h2 className="font-heading text-2xl font-semibold leading-tight text-olive sm:text-3xl">
+                          {getExcursionTitle(item)}
+                        </h2>
+                        <p className="mt-2 text-sm leading-snug text-olive/60">
+                          {routeSummary} • {getOfferTypeLabel(item.offerType)}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex rounded-full bg-sage/25 px-2.5 py-1 text-[11px] font-semibold text-olive">
+                            {item.statusLabel}
+                          </span>
+                          {item.subtypeLabel ? (
+                            <span className="rounded-full border border-olive/10 px-2.5 py-1 text-[11px] font-medium text-olive/70">
+                              {item.subtypeLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Link>
 
-                  <div className="flex w-full items-start justify-between gap-3 rounded-xl border border-olive/10 bg-cream/50 px-3 py-2 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
-                    <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
-                      <div className="flex items-center gap-0.5">
-                        {[1, 2, 3, 4, 5].map((starIndex) => {
-                          const fill = Math.min(1, Math.max(0, avgRating - (starIndex - 1)));
-                          const pct = Math.round(fill * 100);
+                    <div className="flex w-full items-start justify-between gap-3 rounded-2xl border border-olive/10 bg-cream/45 px-3 py-2 lg:w-auto lg:flex-col lg:items-end lg:justify-start lg:gap-2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((starIndex) => {
+                            const fill = Math.min(1, Math.max(0, avgRating - (starIndex - 1)));
+                            const pct = Math.round(fill * 100);
 
-                          return (
-                            <svg
-                              key={starIndex}
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4 shrink-0"
-                              aria-hidden="true"
-                            >
-                              <defs>
-                                <clipPath id={`excursion-star-fill-${item.id}-${starIndex}`}>
-                                  <rect x="0" y="0" width={`${pct}%`} height="24" />
-                                </clipPath>
-                              </defs>
-                              <path
-                                d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                                fill="none"
-                                stroke={
-                                  reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"
-                                }
-                                strokeWidth="1.65"
-                                strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              {pct > 0 ? (
+                            return (
+                              <svg
+                                key={starIndex}
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4 shrink-0"
+                                aria-hidden="true"
+                              >
+                                <defs>
+                                  <clipPath id={`excursion-star-fill-${item.id}-${starIndex}`}>
+                                    <rect x="0" y="0" width={`${pct}%`} height="24" />
+                                  </clipPath>
+                                </defs>
                                 <path
                                   d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
-                                  fill="var(--color-sage)"
-                                  stroke="none"
-                                  clipPath={`url(#excursion-star-fill-${item.id}-${starIndex})`}
+                                  fill="none"
+                                  stroke={
+                                    reviewCount > 0 ? "var(--color-sage)" : "var(--color-olive)"
+                                  }
+                                  strokeWidth="1.65"
+                                  strokeOpacity={reviewCount > 0 ? 0.5 : 0.2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                 />
-                              ) : null}
-                            </svg>
-                          );
-                        })}
-                      </div>
-                      {reviewCount > 0 ? (
-                        <>
-                          <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
-                            <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
-                            <span className="text-sm font-bold leading-none text-olive">
-                              {avgRating.toFixed(1)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 text-olive/50">
-                            <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
-                            <span className="text-xs leading-none">{reviewCount}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
-                          <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
-                          <span className="text-xs text-olive/35">Нет отзывов</span>
+                                {pct > 0 ? (
+                                  <path
+                                    d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+                                    fill="var(--color-sage)"
+                                    stroke="none"
+                                    clipPath={`url(#excursion-star-fill-${item.id}-${starIndex})`}
+                                  />
+                                ) : null}
+                              </svg>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
-                      #{index + 1}
-                    </span>
-                    {item.publicId ? (
-                      <span className="shrink-0 rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">
-                        ID {item.publicId}
+                        {reviewCount > 0 ? (
+                          <>
+                            <div className="flex items-center gap-1 rounded-xl bg-sage/20 px-2.5 py-1.5">
+                              <AppIcon icon={Star} className="h-3.5 w-3.5 fill-sage text-sage" />
+                              <span className="text-sm font-bold leading-none text-olive">
+                                {avgRating.toFixed(1)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-olive/50">
+                              <AppIcon icon={MessageCircle} className="h-3.5 w-3.5" />
+                              <span className="text-xs leading-none">{reviewCount}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-1 rounded-xl border border-dashed border-olive/20 px-2.5 py-1.5">
+                            <AppIcon icon={Star} className="h-3.5 w-3.5 text-olive/30" />
+                            <span className="text-xs text-olive/35">Нет отзывов</span>
+                          </div>
+                        )}
+                      </div>
+                      <span className="shrink-0 rounded-full border border-olive/15 px-3 py-1 text-xs font-semibold text-olive/75">
+                        #{index + 1}
                       </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                {!isReady ? (
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs text-olive/65">
-                      <span>Готовность карточки</span>
-                      {completedStages >= 5 ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
-                          <AppIcon icon={CircleCheckBig} className="h-4 w-4" />
-                          5/5
+                      {item.publicId ? (
+                        <span className="shrink-0 rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">
+                          ID {item.publicId}
                         </span>
-                      ) : (
-                        <span>{completedStages}/5</span>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      {[0, 1, 2, 3, 4].map((stageIndex) => (
-                        <div
-                          key={stageIndex}
-                          className={cn(
-                            "h-2 flex-1 rounded-full transition-all duration-300",
-                            stageIndex < completedStages
-                              ? "bg-primary"
-                              : "bg-cream ring-1 ring-inset ring-olive/20",
-                          )}
-                        />
-                      ))}
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
 
-                <dl className="mt-3 grid gap-2 text-sm min-[360px]:grid-cols-2 md:grid-cols-4">
-                  <div className="rounded-xl bg-cream px-3 py-2">
-                    <dt className="text-olive/60">Длительность</dt>
-                    <dd className="font-medium text-olive">{formatProgramDuration(item)}</dd>
-                  </div>
-                  <div className="rounded-xl bg-cream px-3 py-2">
-                    <dt className="text-olive/60">Цена</dt>
-                    <dd className="font-medium text-olive">{formatProgramPrice(item)}</dd>
-                  </div>
-                  <div className="rounded-xl bg-cream px-3 py-2">
-                    <dt className="text-olive/60">Даты</dt>
-                    <dd className="font-medium text-olive">
-                      {formatAvailabilitySummary({
-                        availabilityMode: item.availabilityMode,
-                        scheduleMode: item.scheduleMode,
-                        scheduleText: item.scheduleText,
-                        availabilityNote: item.availabilityNote,
-                        nextSessionStartAt: item.nextSessionStartAt,
-                      })}
-                    </dd>
-                  </div>
-                  <div className="rounded-xl bg-cream px-3 py-2">
-                    <dt className="text-olive/60">Контакты</dt>
-                    <dd className="font-medium text-olive">
-                      {item.contactPhone?.trim() ? "Добавлены" : "Не заполнены"}
-                    </dd>
-                  </div>
-                </dl>
+                  {!isReady ? (
+                    <div className="mt-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs text-olive/65">
+                        <span>Готовность карточки</span>
+                        {completedStages >= 5 ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
+                            <AppIcon icon={CircleCheckBig} className="h-4 w-4" />
+                            5/5
+                          </span>
+                        ) : (
+                          <span>{completedStages}/5</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5">
+                        {[0, 1, 2, 3, 4].map((stageIndex) => (
+                          <div
+                            key={stageIndex}
+                            className={cn(
+                              "h-2 flex-1 rounded-full transition-all duration-300",
+                              stageIndex < completedStages
+                                ? "bg-primary"
+                                : "bg-cream ring-1 ring-inset ring-olive/20",
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
-                {item.moderationNotes ? (
-                  <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
-                    Комментарий модератора: {item.moderationNotes}
-                  </p>
-                ) : null}
+                  <dl className="mt-4 grid gap-3 text-sm min-[360px]:grid-cols-2 md:grid-cols-4">
+                    <div className="rounded-2xl border border-olive/10 bg-cream/70 px-4 py-3">
+                      <dt className="text-olive/60">Длительность</dt>
+                      <dd className="font-medium text-olive">{formatProgramDuration(item)}</dd>
+                    </div>
+                    <div className="rounded-2xl border border-olive/10 bg-cream/70 px-4 py-3">
+                      <dt className="text-olive/60">Цена</dt>
+                      <dd className="font-medium text-olive">{formatProgramPrice(item)}</dd>
+                    </div>
+                    <div className="rounded-2xl border border-olive/10 bg-cream/70 px-4 py-3">
+                      <dt className="text-olive/60">Даты</dt>
+                      <dd className="font-medium text-olive">
+                        {formatAvailabilitySummary({
+                          availabilityMode: item.availabilityMode,
+                          scheduleMode: item.scheduleMode,
+                          scheduleText: item.scheduleText,
+                          availabilityNote: item.availabilityNote,
+                          nextSessionStartAt: item.nextSessionStartAt,
+                        })}
+                      </dd>
+                    </div>
+                    <div className="rounded-2xl border border-olive/10 bg-cream/70 px-4 py-3">
+                      <dt className="text-olive/60">Контакты</dt>
+                      <dd className="font-medium text-olive">
+                        {item.contactPhone?.trim() ? "Добавлены" : "Не заполнены"}
+                      </dd>
+                    </div>
+                  </dl>
 
-                <DashboardListingActions
-                  updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
-                  secondaryLayout="two"
-                  primaryActions={
-                    item.status === ExcursionStatus.PUBLISHED && publicPath ? (
+                  {item.moderationNotes ? (
+                    <p className="mt-3 rounded-xl bg-terra/10 px-3 py-2 text-sm text-olive/85">
+                      Комментарий модератора: {item.moderationNotes}
+                    </p>
+                  ) : null}
+
+                  <DashboardListingActions
+                    updatedAt={new Date(item.updatedAt).toLocaleString("ru-RU")}
+                    secondaryLayout="two"
+                    primaryActions={
+                      item.status === ExcursionStatus.PUBLISHED && publicPath ? (
+                        <>
+                          <Link href={publicPath} className={dashboardMainActionClass}>
+                            <AppIcon icon={Eye} className={dashboardActionIconClass} />
+                            Публичная страница
+                          </Link>
+                          <ExcursionStatsButton
+                            excursionId={item.id}
+                            excursionTitle={getExcursionTitle(item)}
+                            className={dashboardStatsActionClass}
+                          />
+                        </>
+                      ) : null
+                    }
+                    secondaryActions={
                       <>
-                        <Link href={publicPath} className={dashboardMainActionClass}>
-                          <AppIcon icon={Eye} className={dashboardActionIconClass} />
-                          Публичная страница
+                        <Link
+                          href={`/dashboard/excursions/${item.id}`}
+                          className={dashboardSecondaryActionClass}
+                        >
+                          <AppIcon icon={PenLine} className={dashboardActionIconClass} />
+                          Редактирование
                         </Link>
-                        <ExcursionStatsButton
+                        <DeleteExcursionButton
                           excursionId={item.id}
                           excursionTitle={getExcursionTitle(item)}
-                          className={dashboardStatsActionClass}
+                          excursionStatus={item.status}
+                          buttonClassName={dashboardDangerActionClass}
+                          label="Удалить"
                         />
                       </>
-                    ) : null
-                  }
-                  secondaryActions={
-                    <>
-                      <Link
-                        href={`/dashboard/excursions/${item.id}`}
-                        className={dashboardSecondaryActionClass}
-                      >
-                        <AppIcon icon={PenLine} className={dashboardActionIconClass} />
-                        Редактирование
-                      </Link>
-                      <DeleteExcursionButton
-                        excursionId={item.id}
-                        excursionTitle={getExcursionTitle(item)}
-                        excursionStatus={item.status}
-                        buttonClassName={dashboardDangerActionClass}
-                        label="Удалить"
-                      />
-                    </>
-                  }
-                />
+                    }
+                  />
 
-                {nextItem ? (
-                  <div className="mt-2 border-t border-olive/10 pt-2 text-right">
-                    <Link
-                      href={`/dashboard/excursions/${nextItem.id}`}
-                      className="text-xs font-semibold text-terra hover:underline"
-                    >
-                      Следующая программа: {getExcursionTitle(nextItem)} →
-                    </Link>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+                  {nextItem ? (
+                    <div className="mt-2 border-t border-olive/10 pt-2 text-right">
+                      <Link
+                        href={`/dashboard/excursions/${nextItem.id}`}
+                        className="text-xs font-semibold text-terra hover:underline"
+                      >
+                        Следующая программа: {getExcursionTitle(nextItem)} →
+                      </Link>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </DashboardVisualPanel>
       )}
 
       {publishedCount > 0 ? (
-        <p className="text-xs text-olive/65">Опубликовано программ: {publishedCount}</p>
+        <DashboardSoftStat icon={<AppIcon icon={MapPin} className="h-5 w-5" />}>
+          Опубликовано программ: {publishedCount}
+        </DashboardSoftStat>
       ) : null}
     </div>
   );

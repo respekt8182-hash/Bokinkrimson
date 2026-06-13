@@ -90,8 +90,18 @@ type HomeSearchShowcaseProps = {
   cities: HomeCityShowcaseItem[];
   locationSuggestions: string[];
   publishedPropertiesCount: number | null;
+  publishedExcursionsCount: number | null;
+  publishedTransfersCount: number | null;
   publishedAttractionsCount: number;
+  heroAttractionCards?: HomeHeroAttractionCard[];
   initialPopularSuggestionsByDirection?: Partial<Record<Direction, HomeSearchSuggestionItem[]>>;
+};
+
+export type HomeHeroAttractionCard = {
+  title: string;
+  imageSrc: string;
+  href: string;
+  locationName: string | null;
 };
 
 type SearchSuggestionType = "location" | "hotel" | "listing";
@@ -973,7 +983,10 @@ export function HomeSearchShowcase({
   cities,
   locationSuggestions,
   publishedPropertiesCount,
+  publishedExcursionsCount,
+  publishedTransfersCount,
   publishedAttractionsCount,
+  heroAttractionCards = [],
   initialPopularSuggestionsByDirection,
 }: HomeSearchShowcaseProps) {
   const router = useRouter();
@@ -1049,6 +1062,39 @@ export function HomeSearchShowcase({
   >(new Map());
   const hasRestoredRecentSearchRef = useRef(false);
 
+  useEffect(() => {
+    const revealItems = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-home-scroll-reveal]"),
+    );
+
+    if (revealItems.length === 0) {
+      return;
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      revealItems.forEach((item) => item.classList.add("is-visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: "0px 0px -80px 0px", threshold: 0.16 },
+    );
+
+    revealItems.forEach((item) => observer.observe(item));
+
+    return () => observer.disconnect();
+  }, []);
+
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const calendarMonths = useMemo(() => buildCalendarMonths(new Date(), calendarMonthCount), []);
   const firstMonthKey = calendarMonths[0]?.key ?? "";
@@ -1092,7 +1138,7 @@ export function HomeSearchShowcase({
     </span>
   );
   const housingStat = useMemo(() => {
-    if (publishedPropertiesCount !== null) {
+    if (publishedPropertiesCount !== null && publishedPropertiesCount > 0) {
       return {
         value: countFormatter.format(publishedPropertiesCount),
         label: pluralize(publishedPropertiesCount, [
@@ -1104,20 +1150,53 @@ export function HomeSearchShowcase({
     }
 
     return {
-      value: String(cities.length),
-      label: `${pluralize(cities.length, ["курорт", "курорта", "курортов"])} на витрине`,
+      value: "подключаются",
+      label: "объекты",
     };
-  }, [cities.length, publishedPropertiesCount]);
-  const leisureStat = useMemo(() => {
+  }, [publishedPropertiesCount]);
+  const excursionStat = useMemo(() => {
+    if (publishedExcursionsCount !== null && publishedExcursionsCount > 0) {
+      return {
+        value: countFormatter.format(publishedExcursionsCount),
+        label: pluralize(publishedExcursionsCount, ["экскурсия", "экскурсии", "экскурсий"]),
+      };
+    }
+
     return {
-      value: countFormatter.format(publishedAttractionsCount),
-      label: pluralize(publishedAttractionsCount, [
+      value: "подключение",
+      label: "экскурсии",
+    };
+  }, [publishedExcursionsCount]);
+  const transferStat = useMemo(() => {
+    if (publishedTransfersCount !== null && publishedTransfersCount > 0) {
+      return {
+        value: countFormatter.format(publishedTransfersCount),
+        label: pluralize(publishedTransfersCount, [
+          "направление трансфера",
+          "направления трансфера",
+          "направлений трансфера",
+        ]),
+      };
+    }
+
+    return {
+      value: "подключение",
+      label: "трансферы",
+    };
+  }, [publishedTransfersCount]);
+  const leisureStat = useMemo(() => {
+    const attractionsCount = Math.max(0, publishedAttractionsCount);
+
+    return {
+      value: countFormatter.format(attractionsCount),
+      label: pluralize(attractionsCount, [
         "достопримечательность",
         "достопримечательности",
         "достопримечательностей",
       ]),
     };
   }, [publishedAttractionsCount]);
+  const dailyHeroCards = useMemo(() => heroAttractionCards.slice(0, 4), [heroAttractionCards]);
   const starterProgram = useMemo(() => {
     if (publishedPropertiesCount === null) {
       return {
@@ -3044,922 +3123,987 @@ export function HomeSearchShowcase({
 
   return (
     <>
-      <section className="relative mx-auto max-w-5xl rounded-3xl border border-white/65 bg-[linear-gradient(160deg,rgba(255,255,255,0.97)_0%,rgba(250,248,245,0.98)_44%,rgba(244,237,227,0.94)_100%)] p-4 shadow-[0_30px_70px_-42px_rgba(58,43,35,0.28)] ring-1 ring-olive/8 md:p-8">
-        {/* Ambient decorative orbs — clipped to section, isolated so popovers can overflow */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
-        >
-          <div className="absolute inset-0 bg-[linear-gradient(124deg,rgba(15,118,110,0.045)_0%,rgba(255,255,255,0)_34%),linear-gradient(180deg,rgba(242,196,77,0.07)_0%,rgba(255,255,255,0)_24%),linear-gradient(135deg,rgba(255,255,255,0)_58%,rgba(167,101,73,0.05)_84%,rgba(242,196,77,0.08)_100%)]" />
-          <div className="absolute right-[-9%] top-6 h-40 w-[34%] rotate-[9deg] rounded-[36px] border border-white/35 bg-[linear-gradient(135deg,rgba(255,255,255,0.32),rgba(255,255,255,0.02))] opacity-60" />
-          <div className="absolute -bottom-10 right-12 h-24 w-56 rounded-full bg-[linear-gradient(90deg,rgba(242,196,77,0.10),rgba(255,255,255,0))] opacity-70" />
-          <div className="absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.9),transparent)]" />
-        </div>
-        <div className="mb-6 text-center">
-          <h1 className="mt-3 text-3xl text-midnight sm:text-4xl md:text-5xl md:leading-tight">
-            Поиск по Крыму
-          </h1>
-          <p className="mt-2 text-base text-olive/60 md:text-lg">
-            Жильё, экскурсии, досуг и трансферы по всему полуострову
-          </p>
-        </div>
-
-        <div className="mt-5 md:hidden">
-          <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-foam p-1 ring-1 ring-olive/12">
-            {(Object.keys(directionLabels) as Direction[]).map((item) => (
-              <button
-                key={`mobile-compact-${item}`}
-                type="button"
-                onClick={() => {
-                  setDirection(item);
-                  setSelectedSuggestion(null);
-                  setOpenedPanel(null);
-                  setIsChildAgeSelectExpanded(false);
-                  closeSearchDropdown();
-                }}
-                className={cn(
-                  "flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold transition active:scale-[0.98]",
-                  direction === item
-                    ? "bg-primary text-white shadow-md shadow-primary/25"
-                    : "text-olive/72 hover:bg-white/60",
-                )}
-              >
-                <DirectionIcon direction={item} className="h-4 w-4" />
-                <span className="truncate">{directionLabels[item]}</span>
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => openMobileSearch("location")}
-            className="flex w-full items-center gap-3 rounded-[28px] bg-white p-2 text-left shadow-[0_16px_34px_-24px_rgba(58,43,35,0.55)] ring-1 ring-sand transition active:scale-[0.99]"
-          >
-            <span className="min-w-0 flex-1 px-3 py-2">
-              <span className="block truncate text-base font-semibold text-midnight">
-                {searchValue.trim() || renderSearchDemoLabel()}
-              </span>
-            </span>
-            <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.9)]">
-              <AppIcon icon={Search} className="h-6 w-6 text-white" />
-            </span>
-          </button>
-        </div>
-
-        <form
-          onSubmit={onSubmit}
-          className="mt-5 hidden rounded-2xl bg-cream/78 p-3 ring-1 ring-olive/12 md:block md:p-4"
-        >
-          <div className="relative mx-auto mb-4 grid w-full max-w-3xl grid-cols-2 gap-1 overflow-hidden rounded-xl bg-foam p-1 ring-1 ring-olive/12 sm:grid-cols-4">
-            {(Object.keys(directionLabels) as Direction[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => {
-                  setDirection(item);
-                  setOpenedPanel(null);
-                  setIsChildAgeSelectExpanded(false);
-                  setSelectedSuggestion(null);
-                  closeSearchDropdown();
-                }}
-                className={cn(
-                  "relative z-10 min-h-11 rounded-lg px-3 py-2 text-sm font-semibold",
-                  "outline-none transition-all duration-300 ease-out active:scale-[0.97]",
-                  "focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 focus-visible:ring-offset-foam motion-reduce:transition-none",
-                  direction === item
-                    ? "bg-primary text-white shadow-md shadow-primary/25"
-                    : "text-olive/72 hover:bg-white/55 hover:text-olive",
-                )}
-              >
-                {directionLabels[item]}
-              </button>
-            ))}
-          </div>
-
+      <div className="relative mx-auto max-w-6xl">
+        {dailyHeroCards.length > 0 ? (
           <div
-            className={cn(
-              "grid gap-3 md:items-end",
-              usesDateGuests
-                ? "md:grid-cols-[minmax(0,2fr)_minmax(0,1.7fr)_minmax(0,1.3fr)_155px]"
-                : "md:grid-cols-[minmax(0,1fr)_155px]",
-            )}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-16 z-0 hidden h-[470px] lg:block"
           >
-            <div ref={searchFieldRef} className="relative min-w-0">
-              <label htmlFor="home-search-input" className="sr-only">
-                {direction === "housing"
-                  ? "Город или отель"
-                  : direction === "transfers"
-                    ? "Город, маршрут или автомобиль"
-                    : "Город или место"}
-              </label>
-              <input
-                id="home-search-input"
-                ref={searchInputRef}
-                name="search"
-                autoComplete="off"
-                placeholder={searchDemoLabel}
-                aria-label={
-                  direction === "housing"
+            {dailyHeroCards.map((card, index) => {
+              const positions = [
+                "-left-10 -top-9 w-44",
+                "-right-8 -top-10 w-44",
+                "-left-36 top-[300px] w-40",
+                "-right-36 top-[310px] w-40",
+              ];
+
+              return (
+                <div
+                  key={`${card.href}-${index}`}
+                  className={cn(
+                    "absolute overflow-hidden rounded-2xl border border-white/75 bg-white/70 p-1.5 opacity-0 shadow-[0_22px_48px_-28px_rgba(58,43,35,0.55)] ring-1 ring-olive/8 backdrop-blur-sm home-hero-float-card",
+                    positions[index] ?? "left-0 top-0 w-40",
+                  )}
+                  style={{ animationDelay: `${160 + index * 150}ms` }}
+                >
+                  <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-sand">
+                    <Image src={card.imageSrc} alt="" fill sizes="176px" className="object-cover" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <section className="relative z-30 mx-auto max-w-5xl px-0 pt-4 md:pt-8 lg:pt-10">
+          <div className="mb-7 text-center">
+            <h1 className="mt-3 text-3xl text-midnight sm:text-4xl md:text-5xl md:leading-tight">
+              Поиск по Крыму
+            </h1>
+            <p className="mt-2 text-base text-olive/60 md:text-lg">
+              Жильё, экскурсии, досуг и трансферы по всему полуострову
+            </p>
+          </div>
+
+          <div className="mt-5 md:hidden">
+            <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-foam p-1 ring-1 ring-olive/12">
+              {(Object.keys(directionLabels) as Direction[]).map((item) => (
+                <button
+                  key={`mobile-compact-${item}`}
+                  type="button"
+                  onClick={() => {
+                    setDirection(item);
+                    setSelectedSuggestion(null);
+                    setOpenedPanel(null);
+                    setIsChildAgeSelectExpanded(false);
+                    closeSearchDropdown();
+                  }}
+                  className={cn(
+                    "flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold transition active:scale-[0.98]",
+                    direction === item
+                      ? "bg-primary text-white shadow-md shadow-primary/25"
+                      : "text-olive/72 hover:bg-white/60",
+                  )}
+                >
+                  <DirectionIcon direction={item} className="h-4 w-4" />
+                  <span className="truncate">{directionLabels[item]}</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openMobileSearch("location")}
+              className="flex w-full items-center gap-3 rounded-[28px] bg-white p-2 text-left shadow-[0_16px_34px_-24px_rgba(58,43,35,0.55)] ring-1 ring-sand transition active:scale-[0.99]"
+            >
+              <span className="min-w-0 flex-1 px-3 py-2">
+                <span className="block truncate text-base font-semibold text-midnight">
+                  {searchValue.trim() || renderSearchDemoLabel()}
+                </span>
+              </span>
+              <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.9)]">
+                <AppIcon icon={Search} className="h-6 w-6 text-white" />
+              </span>
+            </button>
+          </div>
+
+          <form
+            onSubmit={onSubmit}
+            className="mt-5 hidden rounded-[28px] border border-white/70 bg-white/80 p-3 shadow-[0_30px_72px_-44px_rgba(58,43,35,0.55)] ring-1 ring-olive/10 backdrop-blur-xl md:block md:p-4"
+          >
+            <div className="relative mx-auto mb-4 grid w-full grid-cols-2 gap-1 overflow-hidden rounded-2xl bg-cream/72 p-1.5 ring-1 ring-olive/10 sm:grid-cols-4">
+              {(Object.keys(directionLabels) as Direction[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setDirection(item);
+                    setOpenedPanel(null);
+                    setIsChildAgeSelectExpanded(false);
+                    setSelectedSuggestion(null);
+                    closeSearchDropdown();
+                  }}
+                  className={cn(
+                    "relative z-10 min-h-12 rounded-xl px-3 py-2 text-sm font-semibold",
+                    "outline-none transition-all duration-300 ease-out active:scale-[0.97]",
+                    "focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 focus-visible:ring-offset-foam motion-reduce:transition-none",
+                    direction === item
+                      ? "bg-primary text-white shadow-[0_12px_24px_-16px_rgba(15,118,110,0.9)]"
+                      : "text-olive/72 hover:bg-white/70 hover:text-olive",
+                  )}
+                >
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <DirectionIcon direction={item} className="h-4 w-4" />
+                    {directionLabels[item]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div
+              className={cn(
+                "grid gap-3 md:items-end",
+                usesDateGuests
+                  ? "md:grid-cols-[minmax(0,2fr)_minmax(0,1.7fr)_minmax(0,1.3fr)_155px]"
+                  : "md:grid-cols-[minmax(0,1fr)_155px]",
+              )}
+            >
+              <div ref={searchFieldRef} className="relative min-w-0">
+                <label htmlFor="home-search-input" className="sr-only">
+                  {direction === "housing"
                     ? "Город или отель"
                     : direction === "transfers"
                       ? "Город, маршрут или автомобиль"
-                      : "Город или место"
-                }
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={isSearchDropdownOpen}
-                aria-controls={homeSearchSuggestionsListboxId}
-                aria-activedescendant={
-                  activeSuggestionIndex >= 0 && searchDropdownOptions[activeSuggestionIndex]
-                    ? getSearchOptionDomId(searchDropdownOptions[activeSuggestionIndex].key)
-                    : undefined
-                }
-                value={searchValue}
-                onFocus={() => openSearchDropdown()}
-                onClick={() => openSearchDropdown()}
-                onChange={(event) => {
-                  const nextValue = event.target.value.slice(0, 120);
-                  setSearchValue(nextValue);
-                  setSelectedSuggestion(null);
-                  setActiveSuggestionIndex(-1);
-                  openSearchDropdown();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    openSearchDropdown();
-                    setActiveSuggestionIndex((prev) => {
-                      if (searchDropdownOptions.length === 0) {
-                        return -1;
-                      }
-                      if (prev < 0) {
-                        return 0;
-                      }
-                      return (prev + 1) % searchDropdownOptions.length;
-                    });
-                    return;
+                      : "Город или место"}
+                </label>
+                <input
+                  id="home-search-input"
+                  ref={searchInputRef}
+                  name="search"
+                  autoComplete="off"
+                  placeholder={searchDemoLabel}
+                  aria-label={
+                    direction === "housing"
+                      ? "Город или отель"
+                      : direction === "transfers"
+                        ? "Город, маршрут или автомобиль"
+                        : "Город или место"
                   }
-
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    openSearchDropdown();
-                    setActiveSuggestionIndex((prev) => {
-                      if (searchDropdownOptions.length === 0) {
-                        return -1;
-                      }
-                      if (prev < 0) {
-                        return searchDropdownOptions.length - 1;
-                      }
-                      return (
-                        (prev - 1 + searchDropdownOptions.length) % searchDropdownOptions.length
-                      );
-                    });
-                    return;
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={isSearchDropdownOpen}
+                  aria-controls={homeSearchSuggestionsListboxId}
+                  aria-activedescendant={
+                    activeSuggestionIndex >= 0 && searchDropdownOptions[activeSuggestionIndex]
+                      ? getSearchOptionDomId(searchDropdownOptions[activeSuggestionIndex].key)
+                      : undefined
                   }
-
-                  if (event.key === "Enter") {
-                    if (!isSearchDropdownOpen || activeSuggestionIndex < 0) {
+                  value={searchValue}
+                  onFocus={() => openSearchDropdown()}
+                  onClick={() => openSearchDropdown()}
+                  onChange={(event) => {
+                    const nextValue = event.target.value.slice(0, 120);
+                    setSearchValue(nextValue);
+                    setSelectedSuggestion(null);
+                    setActiveSuggestionIndex(-1);
+                    openSearchDropdown();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      openSearchDropdown();
+                      setActiveSuggestionIndex((prev) => {
+                        if (searchDropdownOptions.length === 0) {
+                          return -1;
+                        }
+                        if (prev < 0) {
+                          return 0;
+                        }
+                        return (prev + 1) % searchDropdownOptions.length;
+                      });
                       return;
                     }
 
-                    const option = searchDropdownOptions[activeSuggestionIndex];
-                    if (!option) {
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      openSearchDropdown();
+                      setActiveSuggestionIndex((prev) => {
+                        if (searchDropdownOptions.length === 0) {
+                          return -1;
+                        }
+                        if (prev < 0) {
+                          return searchDropdownOptions.length - 1;
+                        }
+                        return (
+                          (prev - 1 + searchDropdownOptions.length) % searchDropdownOptions.length
+                        );
+                      });
                       return;
                     }
 
-                    event.preventDefault();
-                    applySuggestionSelection(option);
-                    return;
-                  }
-
-                  if (event.key === "Escape") {
-                    closeSearchDropdown();
-                    return;
-                  }
-
-                  if (event.key === "Tab") {
-                    closeSearchDropdown();
-                  }
-                }}
-                className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-base text-olive transition placeholder:text-olive/50 hover:border-olive/32 focus:outline-none focus:ring-2 focus:ring-primary/35"
-              />
-
-              {isSearchDropdownMounted ? (
-                <div
-                  className={cn(
-                    "animated-popover absolute left-0 top-[calc(100%+8px)] z-40 w-full overflow-hidden rounded-2xl border border-sand bg-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.6)]",
-                    isSearchDropdownOpen ? "popover-enter" : "popover-exit pointer-events-none",
-                  )}
-                >
-                  <div
-                    id={homeSearchSuggestionsListboxId}
-                    role="listbox"
-                    className="max-h-[380px] overflow-y-auto p-1.5"
-                  >
-                    {isSuggestionsLoading ? (
-                      <div className="space-y-1 p-1">
-                        {Array.from({ length: 4 }).map((_, index) => (
-                          <div
-                            key={`skeleton-${index}`}
-                            className="h-12 animate-pulse rounded-xl bg-cream/70"
-                            aria-hidden="true"
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {!isSuggestionsLoading &&
-                    !isSuggestionQueryMode &&
-                    recentSuggestions.length > 0 ? (
-                      <div className="pb-1">
-                        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                          Ранее вы уже искали
-                        </p>
-                        <div className="space-y-1">
-                          {recentSuggestions.map((item, index) =>
-                            renderSuggestionButton("recent", item, index),
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {!isSuggestionsLoading &&
-                    !isSuggestionQueryMode &&
-                    shownPopularSuggestions.length > 0 ? (
-                      <div className="pb-1">
-                        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                          Популярные направления
-                        </p>
-                        <div className="space-y-1">
-                          {shownPopularSuggestions.map((item, index) =>
-                            renderSuggestionButton("popular", item, index),
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {!isSuggestionsLoading &&
-                    isSuggestionQueryMode &&
-                    shownMatchSuggestions.length > 0 ? (
-                      <div className="pb-1">
-                        {matchLocationSuggestionEntries.length > 0 ? (
-                          <>
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              Локации
-                            </p>
-                            <div className="space-y-1">
-                              {matchLocationSuggestionEntries.map((entry) =>
-                                renderSuggestionButton("matches", entry.item, entry.index),
-                              )}
-                            </div>
-                          </>
-                        ) : null}
-                        {matchHotelSuggestionEntries.length > 0 ? (
-                          <>
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              Отели
-                            </p>
-                            <div className="space-y-1">
-                              {matchHotelSuggestionEntries.map((entry) =>
-                                renderSuggestionButton("matches", entry.item, entry.index),
-                              )}
-                            </div>
-                          </>
-                        ) : null}
-                        {matchListingSuggestionEntries.length > 0 ? (
-                          <>
-                            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                              {listingSuggestionGroupLabel}
-                            </p>
-                            <div className="space-y-1">
-                              {matchListingSuggestionEntries.map((entry) =>
-                                renderSuggestionButton("matches", entry.item, entry.index),
-                              )}
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {!isSuggestionsLoading &&
-                    !isSuggestionQueryMode &&
-                    recentSuggestions.length === 0 &&
-                    shownPopularSuggestions.length === 0 ? (
-                      <p className="px-3 py-5 text-sm text-olive/65">
-                        Начните вводить город, место или отель.
-                      </p>
-                    ) : null}
-
-                    {!isSuggestionsLoading &&
-                    isSuggestionQueryMode &&
-                    shownMatchSuggestions.length === 0 ? (
-                      <p className="px-3 py-5 text-sm text-olive/65">Ничего не найдено.</p>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {usesDateGuests ? (
-              <>
-                <div ref={dateFieldRef} className="relative min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (openedPanel === "date") {
-                        setHoverHousingDate("");
-                        setOpenedPanel(null);
+                    if (event.key === "Enter") {
+                      if (!isSearchDropdownOpen || activeSuggestionIndex < 0) {
                         return;
                       }
 
-                      closeAllPopovers("date");
-                      clearDatePanelCloseTimer();
-                      setIsDatePanelMounted(true);
-                      setIsChildAgeSelectExpanded(false);
-                      setOpenedPanel("date");
-                    }}
-                    aria-haspopup="dialog"
-                    aria-expanded={openedPanel === "date"}
-                    className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-                  >
-                    <div className="truncate pr-12 text-sm font-semibold">{dateFieldValue}</div>
-                    <CalendarIcon className="right-3.5" />
-                  </button>
+                      const option = searchDropdownOptions[activeSuggestionIndex];
+                      if (!option) {
+                        return;
+                      }
 
-                  {isDatePanelMounted ? (
-                    <>
-                      <button
-                        type="button"
-                        className={cn(
-                          "fixed inset-0 z-20 bg-primary/30 xl:hidden",
-                          openedPanel === "date"
-                            ? "popover-overlay-enter"
-                            : "popover-overlay-exit pointer-events-none",
-                        )}
-                        onClick={closeDatePanelByOutside}
-                        aria-label="Закрыть календарь"
-                      />
+                      event.preventDefault();
+                      applySuggestionSelection(option);
+                      return;
+                    }
+
+                    if (event.key === "Escape") {
+                      closeSearchDropdown();
+                      return;
+                    }
+
+                    if (event.key === "Tab") {
+                      closeSearchDropdown();
+                    }
+                  }}
+                  className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-base text-olive transition placeholder:text-olive/50 hover:border-olive/32 focus:outline-none focus:ring-2 focus:ring-primary/35"
+                />
+
+                {isSearchDropdownMounted ? (
+                  <div
+                    className={cn(
+                      "animated-popover absolute left-0 top-[calc(100%+8px)] z-40 w-full overflow-hidden rounded-2xl border border-sand bg-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.6)]",
+                      isSearchDropdownOpen ? "popover-enter" : "popover-exit pointer-events-none",
+                    )}
+                  >
+                    <div
+                      id={homeSearchSuggestionsListboxId}
+                      role="listbox"
+                      className="max-h-[380px] overflow-y-auto p-1.5"
+                    >
+                      {isSuggestionsLoading ? (
+                        <div className="space-y-1 p-1">
+                          {Array.from({ length: 4 }).map((_, index) => (
+                            <div
+                              key={`skeleton-${index}`}
+                              className="h-12 animate-pulse rounded-xl bg-cream/70"
+                              aria-hidden="true"
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {!isSuggestionsLoading &&
+                      !isSuggestionQueryMode &&
+                      recentSuggestions.length > 0 ? (
+                        <div className="pb-1">
+                          <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                            Ранее вы уже искали
+                          </p>
+                          <div className="space-y-1">
+                            {recentSuggestions.map((item, index) =>
+                              renderSuggestionButton("recent", item, index),
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {!isSuggestionsLoading &&
+                      !isSuggestionQueryMode &&
+                      shownPopularSuggestions.length > 0 ? (
+                        <div className="pb-1">
+                          <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                            Популярные направления
+                          </p>
+                          <div className="space-y-1">
+                            {shownPopularSuggestions.map((item, index) =>
+                              renderSuggestionButton("popular", item, index),
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {!isSuggestionsLoading &&
+                      isSuggestionQueryMode &&
+                      shownMatchSuggestions.length > 0 ? (
+                        <div className="pb-1">
+                          {matchLocationSuggestionEntries.length > 0 ? (
+                            <>
+                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                                Локации
+                              </p>
+                              <div className="space-y-1">
+                                {matchLocationSuggestionEntries.map((entry) =>
+                                  renderSuggestionButton("matches", entry.item, entry.index),
+                                )}
+                              </div>
+                            </>
+                          ) : null}
+                          {matchHotelSuggestionEntries.length > 0 ? (
+                            <>
+                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                                Отели
+                              </p>
+                              <div className="space-y-1">
+                                {matchHotelSuggestionEntries.map((entry) =>
+                                  renderSuggestionButton("matches", entry.item, entry.index),
+                                )}
+                              </div>
+                            </>
+                          ) : null}
+                          {matchListingSuggestionEntries.length > 0 ? (
+                            <>
+                              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-olive/55">
+                                {listingSuggestionGroupLabel}
+                              </p>
+                              <div className="space-y-1">
+                                {matchListingSuggestionEntries.map((entry) =>
+                                  renderSuggestionButton("matches", entry.item, entry.index),
+                                )}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {!isSuggestionsLoading &&
+                      !isSuggestionQueryMode &&
+                      recentSuggestions.length === 0 &&
+                      shownPopularSuggestions.length === 0 ? (
+                        <p className="px-3 py-5 text-sm text-olive/65">
+                          Начните вводить город, место или отель.
+                        </p>
+                      ) : null}
+
+                      {!isSuggestionsLoading &&
+                      isSuggestionQueryMode &&
+                      shownMatchSuggestions.length === 0 ? (
+                        <p className="px-3 py-5 text-sm text-olive/65">Ничего не найдено.</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {usesDateGuests ? (
+                <>
+                  <div ref={dateFieldRef} className="relative min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (openedPanel === "date") {
+                          setHoverHousingDate("");
+                          setOpenedPanel(null);
+                          return;
+                        }
+
+                        closeAllPopovers("date");
+                        clearDatePanelCloseTimer();
+                        setIsDatePanelMounted(true);
+                        setIsChildAgeSelectExpanded(false);
+                        setOpenedPanel("date");
+                      }}
+                      aria-haspopup="dialog"
+                      aria-expanded={openedPanel === "date"}
+                      className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+                    >
+                      <div className="truncate pr-12 text-sm font-semibold">{dateFieldValue}</div>
+                      <CalendarIcon className="right-3.5" />
+                    </button>
+
+                    {isDatePanelMounted ? (
+                      <>
+                        <button
+                          type="button"
+                          className={cn(
+                            "fixed inset-0 z-20 bg-primary/30 xl:hidden",
+                            openedPanel === "date"
+                              ? "popover-overlay-enter"
+                              : "popover-overlay-exit pointer-events-none",
+                          )}
+                          onClick={closeDatePanelByOutside}
+                          aria-label="Закрыть календарь"
+                        />
+                        <div
+                          className={cn(
+                            "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:bottom-auto xl:right-auto xl:left-0 xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
+                            openedPanel === "date"
+                              ? "popover-enter"
+                              : "popover-exit pointer-events-none",
+                          )}
+                        >
+                          {/* Mobile drag handle */}
+                          <div
+                            aria-hidden="true"
+                            className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden"
+                          />
+                          <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)]">
+                            <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 xl:block">
+                              {calendarMonths.map((month) => (
+                                <button
+                                  key={month.key}
+                                  type="button"
+                                  onClick={() => scrollToMonth(month.key)}
+                                  className={cn(
+                                    "mb-1 block w-full touch-manipulation rounded-lg px-2.5 py-2 text-left text-sm transition",
+                                    month.key === activeMonthKey
+                                      ? "bg-primary text-white"
+                                      : "text-olive/75 hover:bg-foam",
+                                  )}
+                                >
+                                  {month.label}
+                                </button>
+                              ))}
+                            </aside>
+
+                            <div className="min-w-0">
+                              <div className="mb-3 flex items-center justify-between rounded-xl bg-cream/75 px-3 py-2 text-xs text-olive/80">
+                                {direction === "housing" ? (
+                                  housingDates.checkIn && !housingDates.checkOut ? (
+                                    <span>Выберите дату выезда</span>
+                                  ) : (
+                                    <span>Выберите даты проживания</span>
+                                  )
+                                ) : (
+                                  <span>Выберите дату экскурсии</span>
+                                )}
+                                {direction === "excursions" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsExcursionAnyDate(true);
+                                      setExcursionDate("");
+                                      setOpenedPanel(null);
+                                      setIsChildAgeSelectExpanded(false);
+                                    }}
+                                    className={cn(
+                                      "inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
+                                      isExcursionAnyDate
+                                        ? "bg-primary text-white"
+                                        : "bg-white text-olive ring-1 ring-olive/15 hover:bg-cream",
+                                    )}
+                                  >
+                                    Любая дата
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              <div
+                                ref={monthListRef}
+                                className="max-h-[68dvh] touch-pan-y overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
+                                onMouseLeave={() => {
+                                  if (
+                                    direction === "housing" &&
+                                    housingDates.checkIn &&
+                                    !housingDates.checkOut
+                                  ) {
+                                    setHoverHousingDate("");
+                                  }
+                                }}
+                              >
+                                {calendarMonths.map((month) => (
+                                  <div
+                                    key={month.key}
+                                    ref={(node) => {
+                                      monthSectionRefs.current[month.key] = node;
+                                    }}
+                                    className="mb-5 last:mb-0"
+                                  >
+                                    <h3 className="text-sm font-semibold text-olive">
+                                      {month.label}
+                                    </h3>
+                                    <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
+                                      {weekdayLabels.map((weekday) => (
+                                        <span key={`${month.key}-${weekday}`}>{weekday}</span>
+                                      ))}
+                                    </div>
+
+                                    <div className="mt-1 grid grid-cols-7 gap-1">
+                                      {month.cells.map((cell, cellIndex) => {
+                                        const iso = cell.iso;
+
+                                        if (!iso || !cell.day) {
+                                          return (
+                                            <span
+                                              key={`${month.key}-blank-${cellIndex}`}
+                                              className="h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
+                                              aria-hidden="true"
+                                            />
+                                          );
+                                        }
+
+                                        const isDisabled = iso < todayIso;
+                                        const isHousingStart =
+                                          direction === "housing" && iso === housingDates.checkIn;
+                                        const isHousingEnd =
+                                          direction === "housing" && iso === housingPreviewCheckOut;
+                                        const hasHousingRange =
+                                          direction === "housing" &&
+                                          Boolean(
+                                            housingDates.checkIn &&
+                                            housingPreviewCheckOut &&
+                                            housingPreviewCheckOut > housingDates.checkIn,
+                                          );
+                                        const isHousingMiddle =
+                                          direction === "housing" &&
+                                          Boolean(
+                                            housingDates.checkIn &&
+                                            housingPreviewCheckOut &&
+                                            iso > housingDates.checkIn &&
+                                            iso < housingPreviewCheckOut,
+                                          );
+                                        const isExcursionSelected =
+                                          direction === "excursions" &&
+                                          !isExcursionAnyDate &&
+                                          iso === excursionDate;
+                                        const isSelected =
+                                          isHousingStart || isHousingEnd || isExcursionSelected;
+                                        const isHousingRangeStart =
+                                          isHousingStart && hasHousingRange;
+                                        const isHousingRangeEnd = isHousingEnd && hasHousingRange;
+                                        const isHousingPreviewEnd =
+                                          direction === "housing" &&
+                                          !housingDates.checkOut &&
+                                          isHousingRangeEnd;
+
+                                        return (
+                                          <button
+                                            key={iso}
+                                            type="button"
+                                            disabled={isDisabled}
+                                            onMouseEnter={() => {
+                                              if (
+                                                direction !== "housing" ||
+                                                !housingDates.checkIn ||
+                                                housingDates.checkOut ||
+                                                isDisabled
+                                              ) {
+                                                return;
+                                              }
+                                              setHoverHousingDate(
+                                                iso > housingDates.checkIn ? iso : "",
+                                              );
+                                            }}
+                                            onFocus={() => {
+                                              if (
+                                                direction !== "housing" ||
+                                                !housingDates.checkIn ||
+                                                housingDates.checkOut ||
+                                                isDisabled
+                                              ) {
+                                                return;
+                                              }
+                                              setHoverHousingDate(
+                                                iso > housingDates.checkIn ? iso : "",
+                                              );
+                                            }}
+                                            onClick={() =>
+                                              direction === "housing"
+                                                ? onHousingDateSelect(iso)
+                                                : onExcursionDateSelect(iso)
+                                            }
+                                            className={cn(
+                                              "h-10 touch-manipulation text-sm transition-all duration-200 ease-out min-[390px]:h-11 min-[480px]:h-12 xl:h-9",
+                                              isSelected
+                                                ? isHousingRangeStart
+                                                  ? "rounded-l-lg rounded-r-[4px] bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
+                                                  : isHousingRangeEnd
+                                                    ? cn(
+                                                        "rounded-r-lg rounded-l-[4px] font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]",
+                                                        isHousingPreviewEnd
+                                                          ? "calendar-range-pulse bg-primary/92"
+                                                          : "bg-primary",
+                                                      )
+                                                    : "rounded-lg bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
+                                                : isHousingMiddle
+                                                  ? "rounded-none bg-foam text-olive"
+                                                  : isDisabled
+                                                    ? "cursor-not-allowed rounded-lg text-olive/28"
+                                                    : cell.isWeekend
+                                                      ? "rounded-lg text-terra hover:bg-cream"
+                                                      : "rounded-lg text-olive hover:bg-cream",
+                                              iso === todayIso && !isSelected && !isHousingMiddle
+                                                ? "ring-1 ring-sage/45"
+                                                : "",
+                                            )}
+                                          >
+                                            {cell.day}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div ref={guestsFieldRef} className="relative min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChildAgeSelectExpanded(false);
+                        if (openedPanel === "guests") {
+                          setOpenedPanel(null);
+                          return;
+                        }
+
+                        closeAllPopovers("guests");
+                        clearGuestsPanelCloseTimer();
+                        setIsGuestsPanelMounted(true);
+                        setOpenedPanel("guests");
+                      }}
+                      aria-haspopup="dialog"
+                      aria-expanded={openedPanel === "guests"}
+                      className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
+                    >
+                      <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/72">
+                        {guestsFieldLabel}
+                      </span>
+                      <span className="block truncate pr-12 text-sm font-semibold">
+                        {guestsFieldValue}
+                      </span>
+                      <UserIcon className="right-3.5" />
+                    </button>
+
+                    {isGuestsPanelMounted ? (
                       <div
                         className={cn(
-                          "animated-popover date-picker-sheet fixed inset-x-2 bottom-2 top-auto z-30 max-h-[88dvh] overflow-hidden overscroll-y-contain rounded-2xl border border-sand bg-white p-3 shadow-[0_-8px_32px_-8px_rgba(15,118,110,0.28)] min-[480px]:inset-x-4 min-[480px]:bottom-3 sm:inset-x-5 sm:p-4 md:inset-x-8 md:bottom-4 md:max-h-[84dvh] xl:absolute xl:bottom-auto xl:right-auto xl:left-0 xl:top-[calc(100%+8px)] xl:max-h-none xl:w-[min(92vw,840px)] xl:overflow-visible xl:rounded-2xl xl:p-4 xl:shadow-[0_18px_40px_-20px_rgba(15,118,110,0.55)]",
-                          openedPanel === "date"
-                            ? "popover-enter"
-                            : "popover-exit pointer-events-none",
+                          "absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)] origin-top transition-all duration-200 ease-out md:right-0 md:left-auto md:w-[412px]",
+                          openedPanel === "guests"
+                            ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                            : "pointer-events-none opacity-0 scale-95 -translate-y-2",
                         )}
                       >
-                        {/* Mobile drag handle */}
-                        <div
-                          aria-hidden="true"
-                          className="mx-auto mb-3 h-1 w-10 rounded-full bg-olive/20 xl:hidden"
-                        />
-                        <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)]">
-                          <aside className="hidden max-h-[420px] overflow-y-auto rounded-xl bg-cream/65 p-2 xl:block">
-                            {calendarMonths.map((month) => (
-                              <button
-                                key={month.key}
-                                type="button"
-                                onClick={() => scrollToMonth(month.key)}
-                                className={cn(
-                                  "mb-1 block w-full touch-manipulation rounded-lg px-2.5 py-2 text-left text-sm transition",
-                                  month.key === activeMonthKey
-                                    ? "bg-primary text-white"
-                                    : "text-olive/75 hover:bg-foam",
-                                )}
-                              >
-                                {month.label}
-                              </button>
-                            ))}
-                          </aside>
+                        <h3 className="text-lg font-semibold text-olive">
+                          {direction === "housing" ? "Гости" : "Участники"}
+                        </h3>
 
-                          <div className="min-w-0">
-                            <div className="mb-3 flex items-center justify-between rounded-xl bg-cream/75 px-3 py-2 text-xs text-olive/80">
-                              {direction === "housing" ? (
-                                housingDates.checkIn && !housingDates.checkOut ? (
-                                  <span>Выберите дату выезда</span>
-                                ) : (
-                                  <span>Выберите даты проживания</span>
-                                )
-                              ) : (
-                                <span>Выберите дату экскурсии</span>
-                              )}
-                              {direction === "excursions" ? (
+                        <div className="mt-3 space-y-3">
+                          <section className="rounded-xl border border-sand bg-cream p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-olive">Взрослые</p>
+                                <p className="text-xs text-olive">от 18 лет</p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateAdults(direction, activeGuests.adults - 1)}
+                                  disabled={activeGuests.adults <= 1}
+                                  aria-label="Уменьшить количество взрослых"
+                                  className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  -
+                                </button>
+                                <span className="w-8 text-center text-sm font-semibold text-olive">
+                                  {activeGuests.adults}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateAdults(direction, activeGuests.adults + 1)}
+                                  disabled={
+                                    activeGuests.adults + activeGuests.childrenAges.length >=
+                                    maxGuestsCount
+                                  }
+                                  aria-label="Увеличить количество взрослых"
+                                  className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </section>
+
+                          <section className="rounded-xl border border-sand bg-cream p-3">
+                            <p className="text-sm font-semibold text-olive">Дети</p>
+                            <p className="mt-0.5 text-xs text-olive">
+                              Возраст на момент выезда из отеля
+                            </p>
+
+                            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                              <div ref={childAgeSelectRef} className="relative">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setIsExcursionAnyDate(true);
-                                    setExcursionDate("");
-                                    setOpenedPanel(null);
-                                    setIsChildAgeSelectExpanded(false);
+                                    setIsChildAgeSelectExpanded((prev) => !prev);
+                                    setOpenedChildAgeDropdownKey(null);
                                   }}
+                                  aria-haspopup="listbox"
+                                  aria-expanded={isChildAgeSelectExpanded}
+                                  className="flex h-10 w-full items-center justify-between rounded-xl border border-sand bg-white px-3 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                                >
+                                  <span className="truncate">{pendingChildAgeLabel}</span>
+                                  <AppIcon
+                                    icon={ChevronDown}
+                                    className={cn(
+                                      "h-4 w-4 transition-transform duration-200",
+                                      isChildAgeSelectExpanded ? "rotate-180" : "",
+                                    )}
+                                  />
+                                </button>
+
+                                <div
+                                  role="listbox"
                                   className={cn(
-                                    "inline-flex min-h-10 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
-                                    isExcursionAnyDate
-                                      ? "bg-primary text-white"
-                                      : "bg-white text-olive ring-1 ring-olive/15 hover:bg-cream",
+                                    "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
+                                    isChildAgeSelectExpanded
+                                      ? "visible translate-y-0 opacity-100 pointer-events-auto"
+                                      : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
                                   )}
                                 >
-                                  Любая дата
-                                </button>
-                              ) : null}
-                            </div>
-
-                            <div
-                              ref={monthListRef}
-                              className="max-h-[68dvh] touch-pan-y overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch] min-[480px]:max-h-[70dvh] md:max-h-[66dvh] xl:max-h-[410px]"
-                              onMouseLeave={() => {
-                                if (
-                                  direction === "housing" &&
-                                  housingDates.checkIn &&
-                                  !housingDates.checkOut
-                                ) {
-                                  setHoverHousingDate("");
-                                }
-                              }}
-                            >
-                              {calendarMonths.map((month) => (
-                                <div
-                                  key={month.key}
-                                  ref={(node) => {
-                                    monthSectionRefs.current[month.key] = node;
-                                  }}
-                                  className="mb-5 last:mb-0"
-                                >
-                                  <h3 className="text-sm font-semibold text-olive">
-                                    {month.label}
-                                  </h3>
-                                  <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-wide text-olive/55">
-                                    {weekdayLabels.map((weekday) => (
-                                      <span key={`${month.key}-${weekday}`}>{weekday}</span>
-                                    ))}
-                                  </div>
-
-                                  <div className="mt-1 grid grid-cols-7 gap-1">
-                                    {month.cells.map((cell, cellIndex) => {
-                                      const iso = cell.iso;
-
-                                      if (!iso || !cell.day) {
-                                        return (
-                                          <span
-                                            key={`${month.key}-blank-${cellIndex}`}
-                                            className="h-10 rounded-lg min-[390px]:h-11 min-[480px]:h-12 xl:h-9"
-                                            aria-hidden="true"
-                                          />
-                                        );
-                                      }
-
-                                      const isDisabled = iso < todayIso;
-                                      const isHousingStart =
-                                        direction === "housing" && iso === housingDates.checkIn;
-                                      const isHousingEnd =
-                                        direction === "housing" && iso === housingPreviewCheckOut;
-                                      const hasHousingRange =
-                                        direction === "housing" &&
-                                        Boolean(
-                                          housingDates.checkIn &&
-                                          housingPreviewCheckOut &&
-                                          housingPreviewCheckOut > housingDates.checkIn,
-                                        );
-                                      const isHousingMiddle =
-                                        direction === "housing" &&
-                                        Boolean(
-                                          housingDates.checkIn &&
-                                          housingPreviewCheckOut &&
-                                          iso > housingDates.checkIn &&
-                                          iso < housingPreviewCheckOut,
-                                        );
-                                      const isExcursionSelected =
-                                        direction === "excursions" &&
-                                        !isExcursionAnyDate &&
-                                        iso === excursionDate;
-                                      const isSelected =
-                                        isHousingStart || isHousingEnd || isExcursionSelected;
-                                      const isHousingRangeStart = isHousingStart && hasHousingRange;
-                                      const isHousingRangeEnd = isHousingEnd && hasHousingRange;
-                                      const isHousingPreviewEnd =
-                                        direction === "housing" &&
-                                        !housingDates.checkOut &&
-                                        isHousingRangeEnd;
+                                  <div className="flex flex-col gap-0.5">
+                                    {Array.from({ length: 18 }, (_, age) => {
+                                      const value = String(age);
+                                      const isSelected = value === pendingChildAgeValue;
 
                                       return (
                                         <button
-                                          key={iso}
+                                          key={`child-age-${age}`}
                                           type="button"
-                                          disabled={isDisabled}
-                                          onMouseEnter={() => {
-                                            if (
-                                              direction !== "housing" ||
-                                              !housingDates.checkIn ||
-                                              housingDates.checkOut ||
-                                              isDisabled
-                                            ) {
-                                              return;
-                                            }
-                                            setHoverHousingDate(
-                                              iso > housingDates.checkIn ? iso : "",
-                                            );
+                                          role="option"
+                                          aria-selected={isSelected}
+                                          onClick={() => {
+                                            setPendingChildAge(direction, value);
+                                            setIsChildAgeSelectExpanded(false);
                                           }}
-                                          onFocus={() => {
-                                            if (
-                                              direction !== "housing" ||
-                                              !housingDates.checkIn ||
-                                              housingDates.checkOut ||
-                                              isDisabled
-                                            ) {
-                                              return;
-                                            }
-                                            setHoverHousingDate(
-                                              iso > housingDates.checkIn ? iso : "",
-                                            );
-                                          }}
-                                          onClick={() =>
-                                            direction === "housing"
-                                              ? onHousingDateSelect(iso)
-                                              : onExcursionDateSelect(iso)
-                                          }
                                           className={cn(
-                                            "h-10 touch-manipulation text-sm transition-all duration-200 ease-out min-[390px]:h-11 min-[480px]:h-12 xl:h-9",
-                                            isSelected
-                                              ? isHousingRangeStart
-                                                ? "rounded-l-lg rounded-r-[4px] bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
-                                                : isHousingRangeEnd
-                                                  ? cn(
-                                                      "rounded-r-lg rounded-l-[4px] font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]",
-                                                      isHousingPreviewEnd
-                                                        ? "calendar-range-pulse bg-primary/92"
-                                                        : "bg-primary",
-                                                    )
-                                                  : "rounded-lg bg-primary font-semibold text-white shadow-[0_5px_14px_-8px_rgba(15,118,110,0.9)]"
-                                              : isHousingMiddle
-                                                ? "rounded-none bg-foam text-olive"
-                                                : isDisabled
-                                                  ? "cursor-not-allowed rounded-lg text-olive/28"
-                                                  : cell.isWeekend
-                                                    ? "rounded-lg text-terra hover:bg-cream"
-                                                    : "rounded-lg text-olive hover:bg-cream",
-                                            iso === todayIso && !isSelected && !isHousingMiddle
-                                              ? "ring-1 ring-sage/45"
-                                              : "",
+                                            "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
+                                            isSelected ? "bg-cream" : "hover:bg-cream",
                                           )}
                                         >
-                                          {cell.day}
+                                          {formatChildAgeOption(age)}
                                         </button>
                                       );
                                     })}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-
-                <div ref={guestsFieldRef} className="relative min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsChildAgeSelectExpanded(false);
-                      if (openedPanel === "guests") {
-                        setOpenedPanel(null);
-                        return;
-                      }
-
-                      closeAllPopovers("guests");
-                      clearGuestsPanelCloseTimer();
-                      setIsGuestsPanelMounted(true);
-                      setOpenedPanel("guests");
-                    }}
-                    aria-haspopup="dialog"
-                    aria-expanded={openedPanel === "guests"}
-                    className="h-[62px] w-full rounded-2xl border border-sand bg-white px-4 text-left text-olive transition hover:border-olive/32 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage/35"
-                  >
-                    <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-olive/72">
-                      {guestsFieldLabel}
-                    </span>
-                    <span className="block truncate pr-12 text-sm font-semibold">
-                      {guestsFieldValue}
-                    </span>
-                    <UserIcon className="right-3.5" />
-                  </button>
-
-                  {isGuestsPanelMounted ? (
-                    <div
-                      className={cn(
-                        "absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-2xl border border-sand bg-white p-4 shadow-[0_18px_38px_-20px_rgba(15,118,110,0.58)] origin-top transition-all duration-200 ease-out md:right-0 md:left-auto md:w-[412px]",
-                        openedPanel === "guests"
-                          ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                          : "pointer-events-none opacity-0 scale-95 -translate-y-2",
-                      )}
-                    >
-                      <h3 className="text-lg font-semibold text-olive">
-                        {direction === "housing" ? "Гости" : "Участники"}
-                      </h3>
-
-                      <div className="mt-3 space-y-3">
-                        <section className="rounded-xl border border-sand bg-cream p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-olive">Взрослые</p>
-                              <p className="text-xs text-olive">от 18 лет</p>
-                            </div>
-
-                            <div className="flex items-center gap-2">
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => updateAdults(direction, activeGuests.adults - 1)}
-                                disabled={activeGuests.adults <= 1}
-                                aria-label="Уменьшить количество взрослых"
-                                className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                -
-                              </button>
-                              <span className="w-8 text-center text-sm font-semibold text-olive">
-                                {activeGuests.adults}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => updateAdults(direction, activeGuests.adults + 1)}
+                                onClick={() => addChild(direction, pendingChildAgeValue)}
                                 disabled={
+                                  !pendingChildAgeValue ||
                                   activeGuests.adults + activeGuests.childrenAges.length >=
-                                  maxGuestsCount
+                                    maxGuestsCount
                                 }
-                                aria-label="Увеличить количество взрослых"
-                                className="h-10 w-10 rounded-full border border-sand bg-white text-lg leading-none text-olive transition enabled:hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                                className="h-10 rounded-xl border border-sand bg-white px-3 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
                               >
-                                +
+                                Добавить
                               </button>
                             </div>
-                          </div>
-                        </section>
 
-                        <section className="rounded-xl border border-sand bg-cream p-3">
-                          <p className="text-sm font-semibold text-olive">Дети</p>
-                          <p className="mt-0.5 text-xs text-olive">
-                            Возраст на момент выезда из отеля
-                          </p>
-
-                          <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                            <div ref={childAgeSelectRef} className="relative">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsChildAgeSelectExpanded((prev) => !prev);
-                                  setOpenedChildAgeDropdownKey(null);
-                                }}
-                                aria-haspopup="listbox"
-                                aria-expanded={isChildAgeSelectExpanded}
-                                className="flex h-10 w-full items-center justify-between rounded-xl border border-sand bg-white px-3 text-sm text-olive transition hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                              >
-                                <span className="truncate">{pendingChildAgeLabel}</span>
-                                <AppIcon
-                                  icon={ChevronDown}
-                                  className={cn(
-                                    "h-4 w-4 transition-transform duration-200",
-                                    isChildAgeSelectExpanded ? "rotate-180" : "",
-                                  )}
-                                />
-                              </button>
-
-                              <div
-                                role="listbox"
-                                className={cn(
-                                  "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
-                                  isChildAgeSelectExpanded
-                                    ? "visible translate-y-0 opacity-100 pointer-events-auto"
-                                    : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
-                                )}
-                              >
-                                <div className="flex flex-col gap-0.5">
-                                  {Array.from({ length: 18 }, (_, age) => {
-                                    const value = String(age);
-                                    const isSelected = value === pendingChildAgeValue;
+                            <div className="mt-2 space-y-2">
+                              {activeGuests.childrenAges.length === 0 ? (
+                                <p className="text-xs text-olive">Дети не добавлены</p>
+                              ) : (
+                                <div ref={childAgeRowsRef} className="space-y-2">
+                                  {activeGuests.childrenAges.map((age, index) => {
+                                    const ageKey = `${direction}-${index}`;
+                                    const isAgeDropdownOpen = openedChildAgeDropdownKey === ageKey;
 
                                     return (
-                                      <button
-                                        key={`child-age-${age}`}
-                                        type="button"
-                                        role="option"
-                                        aria-selected={isSelected}
-                                        onClick={() => {
-                                          setPendingChildAge(direction, value);
-                                          setIsChildAgeSelectExpanded(false);
-                                        }}
-                                        className={cn(
-                                          "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
-                                          isSelected ? "bg-cream" : "hover:bg-cream",
-                                        )}
+                                      <div
+                                        key={`child-${direction}-${index}`}
+                                        className="grid grid-cols-[1fr_minmax(0,120px)_auto] items-center gap-2 rounded-lg bg-white px-2 py-1.5"
                                       >
-                                        {formatChildAgeOption(age)}
-                                      </button>
+                                        <span className="text-xs font-medium text-olive">
+                                          Ребенок {index + 1}
+                                        </span>
+
+                                        <div className="relative">
+                                          <button
+                                            type="button"
+                                            aria-haspopup="listbox"
+                                            aria-expanded={isAgeDropdownOpen}
+                                            onClick={() => {
+                                              setIsChildAgeSelectExpanded(false);
+                                              setOpenedChildAgeDropdownKey((prev) =>
+                                                prev === ageKey ? null : ageKey,
+                                              );
+                                            }}
+                                            className="flex h-8 w-full items-center justify-between rounded-lg border border-sand bg-white px-2 text-xs text-olive outline-none transition hover:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+                                          >
+                                            <span className="truncate">
+                                              {formatChildAgeOption(age)}
+                                            </span>
+                                            <AppIcon
+                                              icon={ChevronDown}
+                                              className={cn(
+                                                "ml-1 h-4 w-4 shrink-0 transition-transform duration-200",
+                                                isAgeDropdownOpen ? "rotate-180" : "",
+                                              )}
+                                            />
+                                          </button>
+
+                                          <div
+                                            role="listbox"
+                                            className={cn(
+                                              "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
+                                              isAgeDropdownOpen
+                                                ? "visible translate-y-0 opacity-100 pointer-events-auto"
+                                                : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
+                                            )}
+                                          >
+                                            <div className="flex flex-col gap-0.5">
+                                              {Array.from({ length: 18 }, (_, ageOption) => {
+                                                const optionValue = String(ageOption);
+                                                const isSelected = ageOption === age;
+
+                                                return (
+                                                  <button
+                                                    key={`child-age-option-${direction}-${index}-${ageOption}`}
+                                                    type="button"
+                                                    role="option"
+                                                    aria-selected={isSelected}
+                                                    onClick={() => {
+                                                      updateChildAge(direction, index, optionValue);
+                                                      setOpenedChildAgeDropdownKey(null);
+                                                    }}
+                                                    className={cn(
+                                                      "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
+                                                      isSelected ? "bg-cream" : "hover:bg-cream",
+                                                    )}
+                                                  >
+                                                    {formatChildAgeOption(ageOption)}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenedChildAgeDropdownKey((prev) =>
+                                              prev === ageKey ? null : prev,
+                                            );
+                                            removeChild(direction, index);
+                                          }}
+                                          aria-label={`Удалить ребенка ${index + 1}`}
+                                          className="h-8 rounded-lg border border-terra bg-white px-2 text-xs font-semibold text-terra transition hover:bg-foam"
+                                        >
+                                          Удалить
+                                        </button>
+                                      </div>
                                     );
                                   })}
                                 </div>
-                              </div>
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => addChild(direction, pendingChildAgeValue)}
-                              disabled={
-                                !pendingChildAgeValue ||
-                                activeGuests.adults + activeGuests.childrenAges.length >=
-                                  maxGuestsCount
-                              }
-                              className="h-10 rounded-xl border border-sand bg-white px-3 text-sm font-semibold text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-45"
-                            >
-                              Добавить
-                            </button>
-                          </div>
+                          </section>
+                        </div>
 
-                          <div className="mt-2 space-y-2">
-                            {activeGuests.childrenAges.length === 0 ? (
-                              <p className="text-xs text-olive">Дети не добавлены</p>
-                            ) : (
-                              <div ref={childAgeRowsRef} className="space-y-2">
-                                {activeGuests.childrenAges.map((age, index) => {
-                                  const ageKey = `${direction}-${index}`;
-                                  const isAgeDropdownOpen = openedChildAgeDropdownKey === ageKey;
-
-                                  return (
-                                    <div
-                                      key={`child-${direction}-${index}`}
-                                      className="grid grid-cols-[1fr_minmax(0,120px)_auto] items-center gap-2 rounded-lg bg-white px-2 py-1.5"
-                                    >
-                                      <span className="text-xs font-medium text-olive">
-                                        Ребенок {index + 1}
-                                      </span>
-
-                                      <div className="relative">
-                                        <button
-                                          type="button"
-                                          aria-haspopup="listbox"
-                                          aria-expanded={isAgeDropdownOpen}
-                                          onClick={() => {
-                                            setIsChildAgeSelectExpanded(false);
-                                            setOpenedChildAgeDropdownKey((prev) =>
-                                              prev === ageKey ? null : ageKey,
-                                            );
-                                          }}
-                                          className="flex h-8 w-full items-center justify-between rounded-lg border border-sand bg-white px-2 text-xs text-olive outline-none transition hover:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                                        >
-                                          <span className="truncate">
-                                            {formatChildAgeOption(age)}
-                                          </span>
-                                          <AppIcon
-                                            icon={ChevronDown}
-                                            className={cn(
-                                              "ml-1 h-4 w-4 shrink-0 transition-transform duration-200",
-                                              isAgeDropdownOpen ? "rotate-180" : "",
-                                            )}
-                                          />
-                                        </button>
-
-                                        <div
-                                          role="listbox"
-                                          className={cn(
-                                            "animated-popover custom-scrollbar absolute left-0 top-[calc(100%+4px)] z-40 h-[160px] w-full overflow-y-auto rounded-xl border border-sand bg-white p-1.5 shadow-lg transition-all duration-300 ease-out",
-                                            isAgeDropdownOpen
-                                              ? "visible translate-y-0 opacity-100 pointer-events-auto"
-                                              : "invisible -translate-y-[10px] opacity-0 pointer-events-none",
-                                          )}
-                                        >
-                                          <div className="flex flex-col gap-0.5">
-                                            {Array.from({ length: 18 }, (_, ageOption) => {
-                                              const optionValue = String(ageOption);
-                                              const isSelected = ageOption === age;
-
-                                              return (
-                                                <button
-                                                  key={`child-age-option-${direction}-${index}-${ageOption}`}
-                                                  type="button"
-                                                  role="option"
-                                                  aria-selected={isSelected}
-                                                  onClick={() => {
-                                                    updateChildAge(direction, index, optionValue);
-                                                    setOpenedChildAgeDropdownKey(null);
-                                                  }}
-                                                  className={cn(
-                                                    "cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-olive transition active:bg-sand/30",
-                                                    isSelected ? "bg-cream" : "hover:bg-cream",
-                                                  )}
-                                                >
-                                                  {formatChildAgeOption(ageOption)}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setOpenedChildAgeDropdownKey((prev) =>
-                                            prev === ageKey ? null : prev,
-                                          );
-                                          removeChild(direction, index);
-                                        }}
-                                        aria-label={`Удалить ребенка ${index + 1}`}
-                                        className="h-8 rounded-lg border border-terra bg-white px-2 text-xs font-semibold text-terra transition hover:bg-foam"
-                                      >
-                                        Удалить
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </section>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            setOpenedPanel(null);
+                            setIsChildAgeSelectExpanded(false);
+                          }}
+                          className="mt-3 h-10 w-full rounded-xl"
+                        >
+                          Готово
+                        </Button>
                       </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
 
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          setOpenedPanel(null);
-                          setIsChildAgeSelectExpanded(false);
-                        }}
-                        className="mt-3 h-10 w-full rounded-xl"
-                      >
-                        Готово
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
+              <Button
+                type="submit"
+                className="h-[62px] w-full rounded-2xl text-base"
+                disabled={isLocationEmpty}
+              >
+                Найти
+              </Button>
+            </div>
 
-            <Button
-              type="submit"
-              className="h-[62px] w-full rounded-2xl text-base"
-              disabled={isLocationEmpty}
+            {/* ── Distance row: slides in for geo-based catalogs ── */}
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
+                usesRadius ? "mt-3 max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none",
+              )}
             >
-              Найти
-            </Button>
-          </div>
-
-          {/* ── Distance row: slides in for geo-based catalogs ── */}
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
-              usesRadius ? "mt-3 max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none",
-            )}
-          >
-            <div className="flex items-center gap-3 px-1">
-              <span className="flex shrink-0 items-center gap-1.5 text-sm text-olive/55">
-                <AppIcon icon={LocateFixed} className="h-4 w-4 shrink-0" />
-                Радиус
-              </span>
-              {/* Segmented control track */}
-              <div className="flex flex-1 rounded-2xl bg-olive/[0.07] p-[3px] ring-1 ring-olive/[0.09]">
-                <div className="relative flex flex-1">
-                  {/* Animated sliding pill */}
-                  <div
-                    className="pointer-events-none absolute inset-y-0 rounded-[13px] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] transition-all duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-                    style={{
-                      width: `${100 / radiusOptions.length}%`,
-                      left: `${radiusOptions.indexOf(excursionRadius as (typeof radiusOptions)[number]) * (100 / radiusOptions.length)}%`,
-                    }}
-                  />
-                  {radiusOptions.map((km) => (
-                    <button
-                      key={km}
-                      type="button"
-                      onClick={() => setExcursionRadius(km)}
-                      className={cn(
-                        "relative z-10 flex-1 min-h-10 min-w-10 py-2 text-center text-sm font-semibold",
-                        "cursor-pointer rounded-[13px] outline-none",
-                        "transition-colors duration-200",
-                        "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1",
-                        excursionRadius === km
-                          ? "text-primary"
-                          : "text-olive/45 hover:text-olive/70",
-                      )}
-                    >
-                      {km}
-                      <span className="ml-0.5 text-[0.68rem] font-medium opacity-55">км</span>
-                    </button>
-                  ))}
+              <div className="flex items-center gap-3 px-1">
+                <span className="flex shrink-0 items-center gap-1.5 text-sm text-olive/55">
+                  <AppIcon icon={LocateFixed} className="h-4 w-4 shrink-0" />
+                  Радиус
+                </span>
+                {/* Segmented control track */}
+                <div className="flex flex-1 rounded-2xl bg-olive/[0.07] p-[3px] ring-1 ring-olive/[0.09]">
+                  <div className="relative flex flex-1">
+                    {/* Animated sliding pill */}
+                    <div
+                      className="pointer-events-none absolute inset-y-0 rounded-[13px] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] transition-all duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                      style={{
+                        width: `${100 / radiusOptions.length}%`,
+                        left: `${radiusOptions.indexOf(excursionRadius as (typeof radiusOptions)[number]) * (100 / radiusOptions.length)}%`,
+                      }}
+                    />
+                    {radiusOptions.map((km) => (
+                      <button
+                        key={km}
+                        type="button"
+                        onClick={() => setExcursionRadius(km)}
+                        className={cn(
+                          "relative z-10 flex-1 min-h-10 min-w-10 py-2 text-center text-sm font-semibold",
+                          "cursor-pointer rounded-[13px] outline-none",
+                          "transition-colors duration-200",
+                          "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1",
+                          excursionRadius === km
+                            ? "text-primary"
+                            : "text-olive/45 hover:text-olive/70",
+                        )}
+                      >
+                        {km}
+                        <span className="ml-0.5 text-[0.68rem] font-medium opacity-55">км</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
 
-      {renderMobileSearchModal()}
+        {renderMobileSearchModal()}
+
+        <section className="relative z-10 mx-auto mt-6 hidden max-w-5xl overflow-hidden rounded-[24px] border border-white/70 bg-white/82 shadow-[0_20px_52px_-36px_rgba(58,43,35,0.55)] ring-1 ring-olive/10 backdrop-blur-xl md:block">
+          <div className="flex w-full items-center gap-5 px-6 py-5">
+            <span className="shrink-0 text-sm font-semibold text-olive/72">Сейчас на сайте:</span>
+            {[
+              { icon: House, value: housingStat.value, label: housingStat.label },
+              { icon: Compass, value: excursionStat.value, label: excursionStat.label },
+              { icon: Car, value: transferStat.value, label: transferStat.label },
+              { icon: Landmark, value: leisureStat.value, label: leisureStat.label },
+            ].map((item, index) => (
+              <div
+                key={`${item.label}-${index}`}
+                className="flex min-w-0 flex-1 items-center gap-3 border-l border-olive/10 pl-5 first:border-l-0 first:pl-0"
+              >
+                <span className="icon-surface-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                  <AppIcon icon={item.icon} className="h-5 w-5 text-[color:var(--icon-default)]" />
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      "block whitespace-nowrap font-heading text-2xl leading-none text-midnight",
+                      item.value === "подключение" || item.value === "подключаются"
+                        ? "font-sans text-sm font-bold"
+                        : "",
+                    )}
+                  >
+                    {item.value}
+                  </span>
+                  <span className="mt-1 block max-w-[170px] whitespace-nowrap text-[11px] leading-4 text-olive/60">
+                    {item.label}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
 
       {/* ── Why choose us ── */}
-      <div className="mx-auto mt-6 max-w-5xl">
-        <div className="mx-auto mb-5 max-w-3xl rounded-2xl border border-olive/10 bg-white/90 p-4 shadow-[0_18px_38px_-34px_rgba(15,74,64,0.45)]">
+      <div className="mx-auto mt-8 max-w-5xl">
+        <div className="mx-auto mb-5 max-w-3xl rounded-2xl border border-white/70 bg-white/82 p-4 shadow-[0_18px_38px_-34px_rgba(15,74,64,0.45)] ring-1 ring-olive/8 backdrop-blur-xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
                 <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ до
                 мая 2027
               </span>
-              <p className="mt-2 text-sm font-semibold leading-6 text-olive">Программа первых партнёров</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-olive">
+                Программа первых партнёров
+              </p>
             </div>
 
             <div className="w-full shrink-0 rounded-xl border border-olive/10 bg-cream/45 p-3 sm:w-[220px]">
@@ -3988,7 +4132,10 @@ export function HomeSearchShowcase({
         >
           <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
             {/* Card 1 */}
-            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
+            <div
+              data-home-scroll-reveal
+              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto"
+            >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
                 <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
               </div>
@@ -4000,7 +4147,11 @@ export function HomeSearchShowcase({
             </div>
 
             {/* Card 2 */}
-            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto">
+            <div
+              data-home-scroll-reveal
+              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto"
+              style={{ animationDelay: "80ms" }}
+            >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
                 <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
               </div>
@@ -4012,7 +4163,11 @@ export function HomeSearchShowcase({
             </div>
 
             {/* Card 3 */}
-            <div className="group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1">
+            <div
+              data-home-scroll-reveal
+              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1"
+              style={{ animationDelay: "160ms" }}
+            >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
                 <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
               </div>
@@ -4038,7 +4193,7 @@ export function HomeSearchShowcase({
 
         <div className="mt-6 -mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:snap-none md:overflow-visible md:px-0 md:pb-0">
           <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {cities.map((city) => {
+            {cities.map((city, index) => {
               const price =
                 direction === "housing" ? city.housingPriceFrom : city.excursionPriceFrom;
               const href = buildCityHref({
@@ -4052,7 +4207,9 @@ export function HomeSearchShowcase({
                   key={city.key}
                   href={href}
                   prefetch={false}
-                  className="group relative block w-[240px] shrink-0 snap-start overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
+                  data-home-scroll-reveal
+                  className="home-scroll-reveal group relative block w-[240px] shrink-0 snap-start overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
+                  style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}
                 >
                   <div className="relative aspect-[3/4] w-full bg-cream">
                     <Image

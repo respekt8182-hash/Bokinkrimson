@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_noStore as noStore } from "next/cache";
 import { HousingCatalogClient } from "@/components/public/housing-catalog-client";
 import { ExcursionSearchResults } from "@/components/public/excursion-search-results";
 import { JsonLd } from "@/components/seo/JsonLd";
@@ -21,6 +22,9 @@ type SearchPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   return buildSearchMetadata(await searchParams);
 }
@@ -31,6 +35,26 @@ function pick(value: string | string[] | undefined): string {
   }
 
   return value ?? "";
+}
+
+function pickList(value: string | string[] | undefined): string[] {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const rawValue of values) {
+    for (const item of rawValue.split(",")) {
+      const normalized = item.trim();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      result.push(normalized);
+    }
+  }
+
+  return result;
 }
 
 function CatalogSeoHeader({
@@ -77,6 +101,8 @@ function toLocationSuggestions(
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
+  noStore();
+
   const params = await searchParams;
   const seoState = await getSearchSeoState(params);
   const normalizedDirection = seoState.direction;
@@ -123,6 +149,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasReviewsRaw = pick(params.hasReviews);
   const familyFriendlyRaw = pick(params.familyFriendly) || pick(params.kidsFriendly);
   const petsAllowedRaw = pick(params.petsAllowed);
+  const nearSeaRaw = pick(params.nearSea);
+  const hasPoolRaw = pick(params.hasPool);
+  const hasKitchenRaw = pick(params.hasKitchen);
+  const hasAirConditionerRaw = pick(params.hasAirConditioner);
+  const hasParkingRaw = pick(params.hasParking);
+  const smokingForbiddenRaw = pick(params.smokingForbidden);
+  const quietHoursRaw = pick(params.quietHours);
+  const amenityIds = pickList(params.amenityIds);
+  const roomFeatureIds = pickList(params.roomFeatureIds);
   const radiusKm = pick(params.radiusKm) || "20";
   const compactDates = parseDateRangeParam(pick(params.dates));
   const checkIn =
@@ -135,6 +170,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasReviews = hasReviewsRaw === "1" || hasReviewsRaw === "true";
   const familyFriendly = familyFriendlyRaw === "1" || familyFriendlyRaw === "true";
   const petsAllowed = petsAllowedRaw === "1" || petsAllowedRaw === "true";
+  const nearSea = nearSeaRaw === "1" || nearSeaRaw === "true";
+  const hasPool = hasPoolRaw === "1" || hasPoolRaw === "true";
+  const hasKitchen = hasKitchenRaw === "1" || hasKitchenRaw === "true";
+  const hasAirConditioner =
+    hasAirConditionerRaw === "1" || hasAirConditionerRaw === "true";
+  const hasParking = hasParkingRaw === "1" || hasParkingRaw === "true";
+  const smokingForbidden =
+    smokingForbiddenRaw === "1" || smokingForbiddenRaw === "true";
+  const quietHours = quietHoursRaw === "1" || quietHoursRaw === "true";
   const bounds = parseBoundsParam(pick(params.bounds));
   const pageRaw = Number.parseInt(pick(params.page) || "1", 10);
   const page = Number.isFinite(pageRaw) ? Math.max(1, pageRaw) : 1;
@@ -260,9 +304,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       hasReviews,
       familyFriendly,
       petsAllowed,
+      nearSea,
+      hasPool,
+      hasKitchen,
+      hasAirConditioner,
+      hasParking,
+      smokingForbidden,
+      quietHours,
+      amenityIds,
+      roomFeatureIds,
       sort: normalizedSort || undefined,
       bounds,
-      page: 1,
+      page,
       pageSize: 30,
     }),
     shouldCheckLocationHousing
@@ -303,10 +356,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         initialResponse={{
           items: initialHousingResult.items,
           total: initialHousingResult.total,
-          page: 1,
+          page: initialHousingResult.page,
           pageSize: 30,
           totalPages: initialHousingResult.totalPages,
-          hasMore: initialHousingResult.totalPages > 1,
+          hasMore: initialHousingResult.page < initialHousingResult.totalPages,
         }}
         initialFilters={{
           direction: "housing",
@@ -327,6 +380,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           hasReviews,
           familyFriendly,
           petsAllowed,
+          nearSea,
+          hasPool,
+          hasKitchen,
+          hasAirConditioner,
+          hasParking,
+          smokingForbidden,
+          quietHours,
+          amenityIds,
+          roomFeatureIds,
         }}
         locationNames={locationDirectory.map((item) => item.name)}
         initialPopularLocationSuggestions={popularHousingLocationSuggestions}

@@ -1,16 +1,37 @@
 // Next.js page for route /dashboard.
-import {
-  ArrowRight,
-  Bus,
-  Building2,
-  MessageSquareText,
-  Search,
-  TentTree,
-} from "lucide-react";
+import { ArrowRight, Bus, Building2, MessageSquareText, Search, TentTree } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DashboardVisualHero, DashboardVisualPanel } from "@/components/dashboard/dashboard-visual";
 import { AppIcon } from "@/components/ui/app-icon";
 import { getSession } from "@/lib/auth";
+
+const sectionCards = [
+  {
+    href: "/dashboard/objects",
+    title: "Недвижимость",
+    text: "Жильё, номера, удобства, календарь и публикация.",
+    image: "/dashboard-prof/sections-housing.png",
+    icon: Building2,
+    tone: "text-primary",
+  },
+  {
+    href: "/dashboard/excursions",
+    title: "Экскурсии",
+    text: "Маршруты, программы, расписание и заявки гостей.",
+    image: "/dashboard-prof/sections-excursions.png",
+    icon: TentTree,
+    tone: "text-terra",
+  },
+  {
+    href: "/dashboard/transfers",
+    title: "Трансферы",
+    text: "Автопарк, направления, цены и публикация услуг.",
+    image: "/dashboard-prof/sections-transfers.png",
+    icon: Bus,
+    tone: "text-primary",
+  },
+];
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -19,102 +40,91 @@ export default async function DashboardPage() {
     redirect("/auth/login?next=/dashboard");
   }
 
+  const firstName = session.firstName?.trim() || "друг";
+
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-olive/10 bg-cream/70 p-4 sm:p-5">
-        <p className="text-sm font-semibold text-primary">Личный кабинет</p>
-        <h1 className="mt-1 text-2xl font-semibold text-olive sm:text-3xl">
-          Что вы хотите сделать?
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-olive/70">
-          Здесь владельцы управляют объявлениями о недвижимости, экскурсиях и трансферах. Если вы
-          гость и хотите оставить отзыв, перейдите к поиску на сайте и откройте нужную карточку.
+      <DashboardVisualHero
+        eyebrow={`Добро пожаловать, ${firstName}!`}
+        title="Что вы хотите сделать?"
+        description="Здесь владельцы управляют объявлениями о недвижимости, экскурсиях и трансферах. Если вы гость и хотите оставить отзыв, перейдите к поиску на сайте и откройте нужную карточку."
+        image="/dashboard-prof/main.png"
+        imagePosition="right center"
+      >
+        <p className="font-heading text-xl italic leading-8 text-primary/75 sm:text-2xl">
+          Ваш бизнес - часть путешествия
         </p>
-      </section>
+      </DashboardVisualHero>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.45fr)]">
         <Link
           href="/"
-          className="group flex min-h-[190px] flex-col justify-between rounded-2xl border border-primary/16 bg-white p-4 text-olive shadow-sm transition hover:border-primary/28 hover:bg-foam/45 sm:p-5"
+          className="group relative flex min-h-[260px] flex-col justify-between overflow-hidden rounded-[24px] border border-primary/14 bg-white/90 p-5 text-olive shadow-[0_18px_55px_rgba(15,118,110,0.09)] transition hover:-translate-y-0.5 hover:border-primary/28 hover:shadow-[0_26px_70px_rgba(15,118,110,0.12)] sm:p-7"
         >
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <span className="absolute -bottom-16 -right-12 h-44 w-44 rounded-full bg-primary/8" />
+          <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10">
             <AppIcon icon={MessageSquareText} className="h-5 w-5" />
           </span>
-          <span>
-            <span className="block text-xl font-semibold">Оставить отзыв</span>
+          <span className="relative">
+            <span className="block font-heading text-2xl font-semibold">Оставить отзыв</span>
             <span className="mt-1 block text-sm leading-relaxed text-olive/62">
               Откроется главная страница с поиском. Найдите недвижимость, экскурсию или трансфер и
               перейдите к отзывам в карточке.
             </span>
           </span>
-          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+          <span className="relative inline-flex w-fit items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_16px_35px_rgba(15,118,110,0.2)]">
             Перейти к поиску
             <AppIcon icon={Search} className="h-4 w-4 transition group-hover:translate-x-0.5" />
           </span>
         </Link>
 
-        <section className="rounded-2xl border border-olive/10 bg-white p-4 shadow-sm sm:p-5">
+        <DashboardVisualPanel className="p-5 sm:p-7">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-primary">Размещение объявлений</p>
-              <h2 className="mt-1 text-xl font-semibold text-olive">Мои разделы</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-primary">
+                Размещение объявлений
+              </p>
+              <h2 className="mt-1 font-heading text-3xl font-semibold text-olive">Мои разделы</h2>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <Link
-              href="/dashboard/objects"
-              className="group rounded-xl border border-olive/10 bg-cream/45 p-3 transition hover:border-primary/25 hover:bg-foam/65"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white text-primary ring-1 ring-primary/10">
-                <AppIcon icon={Building2} className="h-5 w-5" />
-              </span>
-              <span className="mt-3 block text-base font-semibold text-olive">Недвижимость</span>
-              <span className="mt-1 block text-xs leading-relaxed text-olive/58">
-                Жильё, номера, удобства, календарь и публикация.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
-                Открыть
-                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-
-            <Link
-              href="/dashboard/excursions"
-              className="group rounded-xl border border-olive/10 bg-cream/45 p-3 transition hover:border-terra/25 hover:bg-terra/5"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white text-terra ring-1 ring-terra/10">
-                <AppIcon icon={TentTree} className="h-5 w-5" />
-              </span>
-              <span className="mt-3 block text-base font-semibold text-olive">Экскурсии</span>
-              <span className="mt-1 block text-xs leading-relaxed text-olive/58">
-                Маршруты, программы, расписание и заявки гостей.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-terra">
-                Открыть
-                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-
-            <Link
-              href="/dashboard/transfers"
-              className="group rounded-xl border border-olive/10 bg-cream/45 p-3 transition hover:border-sage/40 hover:bg-sage/10"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white text-olive ring-1 ring-sage/25">
-                <AppIcon icon={Bus} className="h-5 w-5" />
-              </span>
-              <span className="mt-3 block text-base font-semibold text-olive">Трансферы</span>
-              <span className="mt-1 block text-xs leading-relaxed text-olive/58">
-                Автопарк, направления, цены и публикация услуги.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-olive">
-                Открыть
-                <AppIcon icon={ArrowRight} className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-              </span>
-            </Link>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {sectionCards.map((card) => (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="group relative min-h-[215px] overflow-hidden rounded-2xl border border-olive/10 bg-cream/45 p-4 transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_18px_45px_rgba(15,118,110,0.12)]"
+              >
+                <span
+                  className="absolute inset-0 opacity-60 transition group-hover:scale-105 group-hover:opacity-75"
+                  style={{
+                    backgroundImage: `linear-gradient(135deg, rgba(255,253,248,0.98) 0%, rgba(255,253,248,0.9) 38%, rgba(255,253,248,0.56) 66%, rgba(255,253,248,0.2) 100%), linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.18) 48%, rgba(58,43,35,0.08)), url(${card.image})`,
+                    backgroundPosition: "center",
+                    backgroundSize: "cover, cover, cover",
+                  }}
+                />
+                <span className="relative inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/88 ring-1 ring-primary/10">
+                  <AppIcon icon={card.icon} className={`h-6 w-6 ${card.tone}`} />
+                </span>
+                <span className="relative mt-12 block">
+                  <span className="block font-heading text-2xl font-semibold text-olive">
+                    {card.title}
+                  </span>
+                  <span className="mt-1 block text-sm leading-relaxed text-olive/62">
+                    {card.text}
+                  </span>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                    Открыть
+                    <AppIcon
+                      icon={ArrowRight}
+                      className="h-4 w-4 transition group-hover:translate-x-0.5"
+                    />
+                  </span>
+                </span>
+              </Link>
+            ))}
           </div>
-
-        </section>
+        </DashboardVisualPanel>
       </div>
     </div>
   );

@@ -47,7 +47,7 @@ export function SiteFooter() {
   const maxUrl = companyConfig.publicMessengerLinks.max.trim() || null;
 
   return (
-    <footer className="relative overflow-hidden border-t border-olive/8 bg-gradient-to-b from-sand/40 to-sand/70">
+    <footer className="site-footer relative overflow-hidden border-t border-olive/8 bg-gradient-to-b from-sand/40 to-sand/70">
       <div className="pointer-events-none absolute -left-32 -top-32 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-terra/[0.04] blur-3xl" />
 

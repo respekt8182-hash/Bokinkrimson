@@ -1,4 +1,4 @@
-import { ArrowUpRight, Plus } from "lucide-react";
+import { ArrowUpRight, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import {
   AdminEmptyState,
@@ -9,6 +9,7 @@ import {
 } from "@/components/admin/admin-ui";
 import { AdminPagination } from "@/components/admin/admin-pagination";
 import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
+import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicAttractionPath } from "@/lib/public-marketplace";
 import { getStaticAttractions, type StaticAttractionStatus } from "@/lib/static-attractions";
@@ -35,7 +36,10 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
   const query = filters.q?.trim() ?? "";
   const requestedPage = parseAdminPageParam(filters.page);
 
-  const rows = await getStaticAttractions({ includeUnpublished: true });
+  const [rows, pendingReportsCount] = await Promise.all([
+    getStaticAttractions({ includeUnpublished: true }),
+    db.attractionReport.count({ where: { status: "PENDING" } }),
+  ]);
 
   const statusCounts = rows.reduce(
     (acc, item) => {
@@ -91,13 +95,27 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
         title="Достопримечательности"
         description="Файловый каталог мест: базовые записи лежат в коде, а быстрые правки из админки сохраняются в data/attractions-overrides.json."
         actions={
-          <Link
-            href="/admin/attractions/new"
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Новое место
-          </Link>
+          <>
+            <Link
+              href="/admin/attractions/reports"
+              className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+            >
+              <TriangleAlert className="h-4 w-4" />
+              Ошибки
+              {pendingReportsCount > 0 ? (
+                <span className="rounded-full bg-amber-700 px-2 py-0.5 text-[11px] text-white">
+                  {pendingReportsCount}
+                </span>
+              ) : null}
+            </Link>
+            <Link
+              href="/admin/attractions/new"
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Новое место
+            </Link>
+          </>
         }
       />
 

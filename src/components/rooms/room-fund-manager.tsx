@@ -6,8 +6,12 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronUp,
+  Copy,
   Image as ImageIcon,
+  Pencil,
   RulerDimensionLine,
+  Trash2,
+  Users,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -106,7 +110,7 @@ const MAX_BED_SETS = 10;
 const MAX_TOTAL_GUESTS = 20;
 const MAX_ROOMS_IN_ROOM = 20;
 const DEFAULT_BED_TYPE: BedTypeId = "double_queen";
-const MOBILE_ROOMS_PAGE_SIZE = 4;
+const MOBILE_ROOMS_PAGE_SIZE = 6;
 const DESKTOP_ROOMS_PAGE_SIZE = 6;
 function toFloatOrNull(value: string): number | null {
   const normalized = value.replace(",", ".").trim();
@@ -411,6 +415,7 @@ export function RoomFundManager({
   const [roomsLoadError, setRoomsLoadError] = useState("");
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const [isReorderingRooms, setIsReorderingRooms] = useState(false);
+  const [duplicatingRoomId, setDuplicatingRoomId] = useState<string | null>(null);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [openedRoomMenuId, setOpenedRoomMenuId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(initialCreateMode);
@@ -1362,6 +1367,53 @@ export function RoomFundManager({
     await notifyChanged();
   }
 
+  async function duplicateRoom(room: SerializedRoom) {
+    if (duplicatingRoomId) {
+      return;
+    }
+
+    setError("");
+    setOpenedRoomMenuId(null);
+    setDuplicatingRoomId(room.id);
+
+    try {
+      const response = await fetch(`/api/properties/${propertyId}/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: room.title,
+          beds: room.beds,
+          extraBeds: room.extraBeds,
+          roomsCount: room.roomsCount,
+          areaSqm: room.areaSqm,
+          bathroomType: room.bathroomType,
+          featureIds: room.featureIds,
+          customFeatures: room.customFeatures,
+          meta: getLegacyMeta(room),
+        }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setError(body.error ?? "Не удалось дублировать номер");
+        return;
+      }
+
+      const body = (await response.json()) as { item: SerializedRoom };
+      const savedRoom = body.item;
+
+      setRooms((prev) =>
+        prev.some((item) => item.id === savedRoom.id) ? prev : [...prev, savedRoom],
+      );
+      setCurrentRoomsPage(Math.max(1, Math.ceil((rooms.length + 1) / roomsPerPage)));
+      await notifyChanged();
+    } catch {
+      setError("Не удалось дублировать номер");
+    } finally {
+      setDuplicatingRoomId(null);
+    }
+  }
+
   async function reorderRooms(nextRooms: SerializedRoom[]) {
     if (isReorderingRooms) {
       return;
@@ -1452,13 +1504,13 @@ export function RoomFundManager({
       buildRoomTitle(normalizedRoomName || normalizedFallbackTitle || "Номер", roomMeta.floor) ||
       "Номер";
     const areaTitle = room.areaSqm === null ? null : `${formatAreaSqmForTitle(room.areaSqm)} м²`;
-    const title = areaTitle ? `${baseTitle} · ${areaTitle}` : baseTitle;
+    const title = baseTitle;
     const roomsTitle = formatRoomsCompactLabel(room.roomsCount);
     const primaryBedUnits = resolvePrimaryBedUnits(room, roomMeta);
     const bedsText =
       room.extraBeds > 0
-        ? `В номере: ${formatBedsLabel(primaryBedUnits)} + ${formatExtraPlacesLabel(room.extraBeds)}`
-        : `В номере: ${formatBedsLabel(primaryBedUnits)}`;
+        ? `${formatBedsLabel(primaryBedUnits)} + ${formatExtraPlacesLabel(room.extraBeds)}`
+        : formatBedsLabel(primaryBedUnits);
     const layoutText =
       room.areaSqm === null
         ? `Площадь: не указана · ${roomsTitle}`
@@ -2328,7 +2380,7 @@ export function RoomFundManager({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-base font-semibold text-olive">Номера</p>
           <Button variant="secondary" onClick={openCreateForm} className="rounded-2xl">
-            Создать номер
+            Добавить номер
           </Button>
         </div>
       ) : null}
@@ -2368,7 +2420,7 @@ export function RoomFundManager({
         <section className="rounded-2xl border border-dashed border-olive/30 bg-white p-5 text-center">
           <p className="text-base text-olive/65">Номеров пока нет.</p>
           <Button variant="secondary" onClick={openCreateForm} className="mt-3 rounded-2xl">
-            Создать номер
+            Добавить номер
           </Button>
         </section>
       ) : null}
@@ -2379,7 +2431,7 @@ export function RoomFundManager({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-olive">
-                  Создано номеров: {roomCards.length}
+                  Всего номеров: {roomCards.length}
                 </p>
                 <p className="mt-1 text-xs text-olive/60">
                   Показаны {roomsRangeStart}-{roomsRangeEnd} из {roomCards.length}
@@ -2432,16 +2484,20 @@ export function RoomFundManager({
             </div>
           </section>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3">
             {paginatedRoomCards.map((roomCard) => {
               const { room, cardDetails, instanceNumber } = roomCard;
               const globalRoomIndex = rooms.findIndex((item) => item.id === room.id);
               const firstImage = room.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
+              const featureSummary = [...room.features.map((feature) => feature.name), ...room.customFeatures]
+                .slice(0, 6)
+                .join(", ");
               const roomInstanceLabel = instanceNumber === null ? null : `Номер ${instanceNumber}`;
               const deleteLabel =
                 roomInstanceLabel === null
                   ? cardDetails.title
                   : `${cardDetails.title}, ${roomInstanceLabel.toLowerCase()}`;
+              const isDuplicatingThisRoom = duplicatingRoomId === room.id;
               const isFirstRoom = globalRoomIndex <= 0;
               const isLastRoom = globalRoomIndex < 0 || globalRoomIndex >= rooms.length - 1;
 
@@ -2457,10 +2513,10 @@ export function RoomFundManager({
                       openRoomCard(room);
                     }
                   }}
-                  className="group relative min-h-[180px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 sm:min-h-[180px]"
+                  className="group relative min-h-[152px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25"
                 >
                   <div
-                    className="absolute right-3 top-3 z-20"
+                    className="hidden"
                     onClick={(event) => {
                       event.stopPropagation();
                     }}
@@ -2505,8 +2561,11 @@ export function RoomFundManager({
                     ) : null}
                   </div>
 
-                  <div className="flex h-full flex-col gap-3 pr-10 sm:flex-row sm:items-start">
-                    <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-cream ring-1 ring-olive/10 sm:h-[145.87px] sm:w-[198px] sm:shrink-0 sm:aspect-auto">
+                  <div className="flex h-full flex-col gap-3 lg:flex-row lg:items-stretch lg:pr-[172px]">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-cream ring-1 ring-olive/10 sm:h-[128px] sm:w-[188px] sm:shrink-0 sm:aspect-auto">
+                      <span className="absolute left-2 top-2 z-10 inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-white/95 px-2 text-sm font-bold text-olive shadow-sm ring-1 ring-olive/10">
+                        {globalRoomIndex + 1}
+                      </span>
                       {firstImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -2523,7 +2582,7 @@ export function RoomFundManager({
 
                     <div className="min-w-0 flex-1">
                       <div
-                        className="flex flex-wrap items-center gap-2"
+                        className="hidden"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
@@ -2572,24 +2631,78 @@ export function RoomFundManager({
                           ))}
                         </select>
                       </div>
-                      <h4
-                        title={cardDetails.title}
-                        className="mt-2 overflow-hidden pr-2 text-base font-semibold leading-5 text-olive text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere]"
-                      >
-                        {cardDetails.title}
-                      </h4>
-                      <p className="mt-1 pr-2 text-sm leading-5 text-olive/78 [overflow-wrap:anywhere]">
-                        {cardDetails.bedsText}
-                      </p>
-                      <p className="mt-0.5 flex w-full min-w-0 items-start gap-1.5 pr-2 text-xs leading-4 text-olive/65">
-                        <AppIcon
-                          icon={RulerDimensionLine}
-                          className="mt-px h-3.5 w-3.5 shrink-0 text-olive/40"
-                        />
-                        <span className="min-w-0 [overflow-wrap:anywhere]">
-                          {cardDetails.layoutText}
+                      <div className="flex flex-wrap items-start gap-2">
+                        <h4
+                          title={cardDetails.title}
+                          className="min-w-0 flex-1 overflow-hidden pr-2 text-base font-semibold leading-5 text-olive text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere] sm:text-lg sm:leading-6"
+                        >
+                          {cardDetails.title}
+                        </h4>
+                        <span className="inline-flex shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                          Активен
                         </span>
-                      </p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pr-2 text-sm font-medium text-olive/78">
+                        <span className="inline-flex min-w-0 items-center gap-1.5">
+                          <AppIcon icon={Users} className="h-4 w-4 shrink-0 text-primary/70" />
+                          {formatPlacesLabel(room.beds + room.extraBeds)}
+                        </span>
+                        <span className="inline-flex min-w-0 items-center gap-1.5 [overflow-wrap:anywhere]">
+                          <AppIcon icon={BedDouble} className="h-4 w-4 shrink-0 text-primary/70" />
+                          {cardDetails.bedsText}
+                        </span>
+                        <span className="inline-flex min-w-0 items-center gap-1.5 [overflow-wrap:anywhere]">
+                          <AppIcon
+                            icon={RulerDimensionLine}
+                            className="h-4 w-4 shrink-0 text-primary/70"
+                          />
+                          {room.areaSqm === null
+                            ? "Площадь не указана"
+                            : `${formatAreaSqmForTitle(room.areaSqm)} м²`}
+                        </span>
+                      </div>
+                      {featureSummary ? (
+                        <p className="mt-2 pr-2 text-sm leading-5 text-olive/58 [overflow-wrap:anywhere]">
+                          {featureSummary}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div
+                      className="flex shrink-0 flex-col gap-2 lg:absolute lg:right-3 lg:top-3 lg:w-[148px]"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => startEdit(room)}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-olive/12 bg-white px-3 py-2 text-sm font-semibold text-olive shadow-sm transition hover:bg-cream"
+                      >
+                        <AppIcon icon={Pencil} className="h-4 w-4 text-primary" />
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void duplicateRoom(room)}
+                        disabled={Boolean(duplicatingRoomId)}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-olive/12 bg-white px-3 py-2 text-sm font-semibold text-olive shadow-sm transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        <AppIcon icon={Copy} className="h-4 w-4 text-olive/65" />
+                        {isDuplicatingThisRoom ? "Дублируем..." : "Дублировать"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const confirmed = window.confirm(`Удалить номер «${deleteLabel}»?`);
+                          if (!confirmed) {
+                            return;
+                          }
+                          void removeRoom(room.id);
+                        }}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-white px-3 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50"
+                      >
+                        <AppIcon icon={Trash2} className="h-4 w-4" />
+                        Удалить
+                      </button>
                     </div>
                   </div>
                 </article>

@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { useCarouselImagePreload } from "@/hooks/use-carousel-image-preload";
 import { cn } from "@/lib/cn";
 import type { PopularPropertyItem } from "@/lib/popular-properties";
+import { housingHubPath } from "@/lib/seo/routes";
 
 const SWIPE_THRESHOLD = 50;
 const EMPTY_SET = new Set<string>();
@@ -244,9 +245,19 @@ export function PopularPropertiesSection({ items }: PopularPropertiesSectionProp
 
   return (
     <section className="mt-10 sm:mt-14">
-      <h2 className="font-heading text-2xl font-bold text-olive sm:text-3xl md:text-4xl">
-        Последние добавленные объекты
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-heading text-2xl font-bold text-olive sm:text-3xl md:text-4xl">
+          Последние добавленные объекты
+        </h2>
+        <Link
+          href={housingHubPath}
+          prefetch={false}
+          className="inline-flex h-11 items-center gap-2 rounded-full border border-white/70 bg-white/82 px-4 text-sm font-semibold text-olive shadow-[0_12px_28px_-22px_rgba(58,43,35,0.45)] ring-1 ring-olive/10 backdrop-blur transition hover:bg-primary hover:text-white"
+        >
+          Смотреть все
+          <AppIcon icon={ArrowUpRight} className="h-4 w-4" />
+        </Link>
+      </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 xs:grid-cols-2 sm:mt-6 sm:gap-4 lg:grid-cols-4 lg:gap-5">
         {items.map((item) => (

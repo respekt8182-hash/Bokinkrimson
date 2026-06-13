@@ -81,7 +81,7 @@ type MainMenuItem = {
 // Keep the same sequence as object onboarding sections for predictable navigation.
 const objectTabs: ObjectTabItem[] = [
   { slug: "about", label: "Об объекте", shortLabel: "Объект", icon: "about" },
-  { slug: "rules", label: "Правила проживания", shortLabel: "Правила", icon: "rules" },
+  { slug: "rules", label: "Правила размещения", shortLabel: "Правила", icon: "rules" },
   {
     slug: "room-categories",
     label: "Номера",
@@ -202,11 +202,7 @@ export function DashboardSidebar({
       <p className="text-xs uppercase tracking-wide text-olive/60">Личный кабинет</p>
       <div className="mt-2 flex items-center gap-2">
         <span className="inline-flex h-9 w-9 overflow-hidden rounded-full bg-cream ring-1 ring-olive/15">
-          <AvatarImage
-            src={avatarUrl}
-            alt="Profile"
-            className="h-full w-full object-cover"
-          >
+          <AvatarImage src={avatarUrl} alt="Profile" className="h-full w-full object-cover">
             <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-olive/75">
               {initials}
             </span>

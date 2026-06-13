@@ -5,9 +5,13 @@ import { SearchFiltersSchema } from "@/lib/schemas/search";
 import {
   isPointInsideBounds,
   parseBoundsParam,
+  parseListParam,
   parseOptionalIntParam,
   pickFirstListValue,
 } from "@/lib/search-contracts";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function parseSort(raw: string | null) {
   const value = (raw ?? "").trim().toLowerCase();
@@ -65,6 +69,8 @@ export async function GET(request: Request) {
   const sort = parseSort(input.sort);
   const query = input.query ?? input.q;
   const familyFriendly = input.familyFriendly === true || input.kidsFriendly === true;
+  const amenityIds = parseListParam(searchParams, "amenityIds", "amenityIds[]");
+  const roomFeatureIds = parseListParam(searchParams, "roomFeatureIds", "roomFeatureIds[]");
 
   const result = await getPublicCatalog({
     // Contract adapter: normalize external API names to internal catalog query.
@@ -85,6 +91,15 @@ export async function GET(request: Request) {
     hasReviews: input.hasReviews === true,
     familyFriendly,
     petsAllowed: input.petsAllowed === true,
+    nearSea: input.nearSea === true,
+    hasPool: input.hasPool === true,
+    hasKitchen: input.hasKitchen === true,
+    hasAirConditioner: input.hasAirConditioner === true,
+    hasParking: input.hasParking === true,
+    smokingForbidden: input.smokingForbidden === true,
+    quietHours: input.quietHours === true,
+    amenityIds,
+    roomFeatureIds,
     bounds,
     candidateLimit: bounds ? 1500 : undefined,
     type:
@@ -131,7 +146,7 @@ export async function GET(request: Request) {
     },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=45, stale-while-revalidate=180",
+        "Cache-Control": "no-store, max-age=0, must-revalidate",
       },
     },
   );

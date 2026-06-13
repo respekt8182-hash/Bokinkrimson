@@ -4,6 +4,7 @@ import {
   isPointInsideBounds,
   parseBoundsParam,
   parseIntParam,
+  parseListParam,
   pickFirstListValue,
 } from "../../src/lib/search-contracts";
 
@@ -39,5 +40,19 @@ describe("search contracts helpers", () => {
   it("extracts first value from comma-separated lists", () => {
     expect(pickFirstListValue("hotel,guest_house")).toBe("hotel");
     expect(pickFirstListValue("   ")).toBeUndefined();
+  });
+
+  it("parses repeated and comma-separated list params", () => {
+    const params = new URLSearchParams();
+    params.append("amenityIds", "pool, parking");
+    params.append("amenityIds", "wifi");
+    params.append("amenityIds[]", "pool,beach_access");
+
+    expect(parseListParam(params, "amenityIds", "amenityIds[]")).toEqual([
+      "pool",
+      "parking",
+      "wifi",
+      "beach_access",
+    ]);
   });
 });

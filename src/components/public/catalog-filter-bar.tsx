@@ -1,13 +1,19 @@
 "use client";
 
 import {
+  Baby,
   Building2,
   CalendarDays,
+  Car,
+  MessageCircle,
   MapPin,
+  PawPrint,
   SlidersHorizontal,
   Star,
+  Waves,
   Users,
   WalletCards,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -18,6 +24,7 @@ import {
   ResponsiveFilterPanel,
 } from "@/components/public/catalog-filter-shell";
 import { AppIcon } from "@/components/ui/app-icon";
+import { CookingPot, Wind } from "@/components/ui/lucide-react";
 import { UnifiedCalendarContent } from "@/components/ui/unified-calendar-content";
 import { UnifiedGuestsEditor } from "@/components/ui/unified-guests-editor";
 import { cn } from "@/lib/cn";
@@ -40,6 +47,52 @@ const RATING_OPTIONS = [
   { value: "3.5", label: "3.5+" },
   { value: "4", label: "4+" },
   { value: "4.5", label: "4.5+" },
+] as const;
+
+const QUICK_PRESETS = [
+  { key: "nearSea", label: "У моря", icon: Waves },
+  { key: "hasPool", label: "С бассейном", icon: Waves },
+  { key: "hasKitchen", label: "С кухней", icon: CookingPot },
+  { key: "hasAirConditioner", label: "Кондиционер", icon: Wind },
+  { key: "hasParking", label: "Парковка", icon: Car },
+  { key: "familyFriendly", label: "Можно с детьми", icon: Baby },
+  { key: "petsAllowed", label: "Можно с животными", icon: PawPrint },
+  { key: "hasReviews", label: "С отзывами", icon: MessageCircle },
+] as const satisfies ReadonlyArray<{
+  key:
+    | "nearSea"
+    | "hasPool"
+    | "hasKitchen"
+    | "hasAirConditioner"
+    | "hasParking"
+    | "familyFriendly"
+    | "petsAllowed"
+    | "hasReviews";
+  label: string;
+  icon: LucideIcon;
+}>;
+
+const PROPERTY_AMENITY_FILTERS = [
+  { id: "beach_access", label: "Пляж рядом" },
+  { id: "pool", label: "Бассейн" },
+  { id: "parking", label: "Парковка" },
+  { id: "shared_kitchen", label: "Общая кухня" },
+  { id: "playground", label: "Детская площадка" },
+  { id: "breakfast", label: "Завтрак" },
+  { id: "wifi", label: "Wi-Fi" },
+  { id: "transfer", label: "Трансфер" },
+  { id: "laundry", label: "Прачечная" },
+] as const;
+
+const ROOM_FEATURE_FILTERS = [
+  { id: "air_conditioner", label: "Кондиционер" },
+  { id: "private_kitchen", label: "Своя кухня" },
+  { id: "kitchenette", label: "Мини-кухня" },
+  { id: "washing_machine", label: "Стиральная машина" },
+  { id: "balcony", label: "Балкон" },
+  { id: "view_sea", label: "Вид на море" },
+  { id: "wifi", label: "Wi-Fi в номере" },
+  { id: "tv", label: "Телевизор" },
 ] as const;
 
 type PanelKey = "location" | "dates" | "guests" | "type" | "price" | "rating" | "more";
@@ -173,7 +226,91 @@ function getNightsCount(checkIn: string, checkOut: string): number {
 }
 
 function extrasCount(filters: SearchFilters): number {
-  return Number(filters.hasPhotos) + Number(filters.hasReviews) + Number(filters.familyFriendly) + Number(filters.petsAllowed);
+  return (
+    Number(filters.hasPhotos) +
+    Number(filters.hasReviews) +
+    Number(filters.familyFriendly) +
+    Number(filters.petsAllowed) +
+    Number(filters.nearSea) +
+    Number(filters.hasPool) +
+    Number(filters.hasKitchen) +
+    Number(filters.hasAirConditioner) +
+    Number(filters.hasParking) +
+    Number(filters.smokingForbidden) +
+    Number(filters.quietHours) +
+    filters.amenityIds.length +
+    filters.roomFeatureIds.length
+  );
+}
+
+function toggleListValue(values: readonly string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function QuickPresetChip({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-[52px] shrink-0 snap-start items-center gap-2.5 rounded-[24px] border px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 md:hidden",
+        active
+          ? "border-primary/18 bg-[linear-gradient(180deg,rgba(15,118,110,0.11),rgba(15,118,110,0.03))] text-primary shadow-[0_16px_34px_-28px_rgba(15,118,110,0.42)]"
+          : "border-white/80 bg-white/92 text-olive shadow-[0_14px_30px_-26px_rgba(15,74,64,0.34)] hover:border-olive/14 hover:bg-white hover:shadow-[0_18px_34px_-28px_rgba(15,74,64,0.44)]",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-all duration-200",
+          active ? "bg-primary/12 text-primary" : "bg-cream/80 text-olive/70",
+        )}
+      >
+        <AppIcon icon={icon} className="h-[18px] w-[18px]" />
+      </span>
+      <span className="max-w-[172px] truncate">{label}</span>
+    </button>
+  );
+}
+
+function CatalogToggleCard({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition",
+        selected
+          ? "border-primary/25 bg-primary/8 text-primary"
+          : "border-olive/12 bg-white text-olive hover:bg-cream/60",
+      )}
+    >
+      <span>{label}</span>
+      <span
+        className={cn(
+          "h-2.5 w-2.5 shrink-0 rounded-full transition",
+          selected ? "bg-primary" : "bg-olive/16",
+        )}
+      />
+    </button>
+  );
 }
 
 function readRecentLocations(): LocationSuggestionItem[] {
@@ -195,7 +332,12 @@ function readRecentLocations(): LocationSuggestionItem[] {
       const key = normalizeLocation(item.name);
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      result.push({ type: "location", id: item.id ?? key, name: item.name, subtitle: item.subtitle ?? "" });
+      result.push({
+        type: "location",
+        id: item.id ?? key,
+        name: item.name,
+        subtitle: item.subtitle ?? "",
+      });
       if (result.length >= LOCATION_RECENT_LIMIT) break;
     }
     return result;
@@ -207,11 +349,25 @@ function readRecentLocations(): LocationSuggestionItem[] {
 function storeRecentLocation(name: string, id: string) {
   try {
     const current = readRecentLocations();
-    const next = [{ type: "location", direction: "housing", id: id || normalizeLocation(name), name, subtitle: "" }, ...current].filter(
+    const next = [
+      {
+        type: "location",
+        direction: "housing",
+        id: id || normalizeLocation(name),
+        name,
+        subtitle: "",
+      },
+      ...current,
+    ].filter(
       (item, index, items) =>
-        items.findIndex((candidate) => normalizeLocation(candidate.name) === normalizeLocation(item.name)) === index,
+        items.findIndex(
+          (candidate) => normalizeLocation(candidate.name) === normalizeLocation(item.name),
+        ) === index,
     );
-    localStorage.setItem(LOCATION_RECENT_STORAGE_KEY, JSON.stringify(next.slice(0, LOCATION_RECENT_LIMIT)));
+    localStorage.setItem(
+      LOCATION_RECENT_STORAGE_KEY,
+      JSON.stringify(next.slice(0, LOCATION_RECENT_LIMIT)),
+    );
   } catch {
     // Ignore localStorage failures.
   }
@@ -236,7 +392,9 @@ function LocationSuggestionsField({
     matches: [],
   });
   const [isLoading, setIsLoading] = useState(false);
-  const cacheRef = useRef<Map<string, { payload: LocationSuggestionsPayload; expiresAt: number }>>(new Map());
+  const cacheRef = useRef<Map<string, { payload: LocationSuggestionsPayload; expiresAt: number }>>(
+    new Map(),
+  );
 
   useEffect(() => {
     setRecentSuggestions(readRecentLocations());
@@ -296,9 +454,20 @@ function LocationSuggestionsField({
                 typeof (item as { id?: string }).id === "string" &&
                 typeof (item as { name?: string }).name === "string",
             )
-            .map((item) => ({ type: "location", id: item.id, name: item.name, subtitle: item.subtitle ?? "" }));
-        const nextPayload = { popular: parseList(payload.popular ?? []), matches: parseList(payload.matches ?? []) };
-        cacheRef.current.set(cacheKey, { payload: nextPayload, expiresAt: Date.now() + LOCATION_SUGGESTIONS_CACHE_TTL_MS });
+            .map((item) => ({
+              type: "location",
+              id: item.id,
+              name: item.name,
+              subtitle: item.subtitle ?? "",
+            }));
+        const nextPayload = {
+          popular: parseList(payload.popular ?? []),
+          matches: parseList(payload.matches ?? []),
+        };
+        cacheRef.current.set(cacheKey, {
+          payload: nextPayload,
+          expiresAt: Date.now() + LOCATION_SUGGESTIONS_CACHE_TTL_MS,
+        });
         setSuggestions(nextPayload);
       } catch {
         const normalizedQuery = normalizeLocation(query);
@@ -308,7 +477,12 @@ function LocationSuggestionsField({
             : locationNames
                 .filter((name) => normalizeLocation(name).includes(normalizedQuery))
                 .slice(0, 8)
-                .map((name) => ({ type: "location" as const, id: normalizeLocation(name), name, subtitle: "Локация Крыма" }));
+                .map((name) => ({
+                  type: "location" as const,
+                  id: normalizeLocation(name),
+                  name,
+                  subtitle: "Локация Крыма",
+                }));
         setSuggestions({ popular: [], matches: localMatches });
       } finally {
         setIsLoading(false);
@@ -343,12 +517,16 @@ function LocationSuggestionsField({
         />
       </label>
       <div className="max-h-[320px] space-y-3 overflow-y-auto rounded-2xl border border-olive/10 bg-cream/35 p-2.5">
-        {isLoading ? <p className="px-2 py-2 text-sm text-olive/60">Ищем подходящие варианты...</p> : null}
+        {isLoading ? (
+          <p className="px-2 py-2 text-sm text-olive/60">Ищем подходящие варианты...</p>
+        ) : null}
         {!isLoading
           ? visibleGroups.map((group) =>
               group.items.length > 0 ? (
                 <div key={group.label} className="space-y-1">
-                  <p className="px-2 text-[11px] font-semibold uppercase tracking-wide text-olive/50">{group.label}</p>
+                  <p className="px-2 text-[11px] font-semibold uppercase tracking-wide text-olive/50">
+                    {group.label}
+                  </p>
                   {group.items.map((item) => (
                     <button
                       key={`${group.label}-${item.id}`}
@@ -360,8 +538,14 @@ function LocationSuggestionsField({
                         <AppIcon icon={MapPin} className="h-4 w-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-olive">{item.name}</span>
-                        {item.subtitle ? <span className="block truncate text-xs text-olive/55">{item.subtitle}</span> : null}
+                        <span className="block truncate text-sm font-semibold text-olive">
+                          {item.name}
+                        </span>
+                        {item.subtitle ? (
+                          <span className="block truncate text-xs text-olive/55">
+                            {item.subtitle}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   ))}
@@ -371,7 +555,9 @@ function LocationSuggestionsField({
           : null}
         {!isLoading && visibleGroups.every((group) => group.items.length === 0) ? (
           <p className="px-2 py-2 text-sm text-olive/60">
-            {isQueryMode ? "Ничего не найдено. Попробуйте другой город." : "Начните вводить название локации."}
+            {isQueryMode
+              ? "Ничего не найдено. Попробуйте другой город."
+              : "Начните вводить название локации."}
           </p>
         ) : null}
       </div>
@@ -414,19 +600,45 @@ export function CatalogFilterBar({
     if (filters.location) return true;
     if (filters.checkIn || filters.checkOut) return true;
     if (filters.guests !== "2") return true;
-    if ((filters.guestsAdults || "2") !== "2" || (filters.guestsChildren || "0") !== "0") return true;
+    if ((filters.guestsAdults || "2") !== "2" || (filters.guestsChildren || "0") !== "0")
+      return true;
     if (filters.propertyType) return true;
     if (filters.minPrice || filters.maxPrice) return true;
     if (filters.minRating) return true;
-    if (filters.hasPhotos || filters.hasReviews || filters.familyFriendly || filters.petsAllowed) return true;
+    if (
+      filters.hasPhotos ||
+      filters.hasReviews ||
+      filters.familyFriendly ||
+      filters.petsAllowed ||
+      filters.nearSea ||
+      filters.hasPool ||
+      filters.hasKitchen ||
+      filters.hasAirConditioner ||
+      filters.hasParking ||
+      filters.smokingForbidden ||
+      filters.quietHours ||
+      filters.amenityIds.length > 0 ||
+      filters.roomFeatureIds.length > 0
+    ) {
+      return true;
+    }
     return Boolean(filters.sort && filters.sort !== "relevance");
   })();
 
   const extras = extrasCount(filters);
-  const draftAdults = clamp(Number.parseInt(draftFilters.guestsAdults || draftFilters.guests || "2", 10) || 2, 1, 12);
+  const draftAdults = clamp(
+    Number.parseInt(draftFilters.guestsAdults || draftFilters.guests || "2", 10) || 2,
+    1,
+    12,
+  );
   const draftChildren = clamp(Number.parseInt(draftFilters.guestsChildren || "0", 10) || 0, 0, 8);
-  const leftPct = ((Number(draftFilters.minPrice || 0) - PRICE_MIN_BOUND) / (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) * 100;
-  const rightPct = ((Number(draftFilters.maxPrice || PRICE_MAX_BOUND) - PRICE_MIN_BOUND) / (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) * 100;
+  const leftPct =
+    ((Number(draftFilters.minPrice || 0) - PRICE_MIN_BOUND) / (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) *
+    100;
+  const rightPct =
+    ((Number(draftFilters.maxPrice || PRICE_MAX_BOUND) - PRICE_MIN_BOUND) /
+      (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) *
+    100;
   const nights = getNightsCount(draftFilters.checkIn, draftFilters.checkOut);
 
   const commitPanel = useCallback(
@@ -456,7 +668,11 @@ export function CatalogFilterBar({
       const currentMax = Number(draftFilters.maxPrice || PRICE_MAX_BOUND);
       const nextMin = patch.minPrice ?? currentMin;
       const nextMax = patch.maxPrice ?? currentMax;
-      const safeMin = clamp(Math.floor(nextMin / PRICE_STEP) * PRICE_STEP, PRICE_MIN_BOUND, nextMax);
+      const safeMin = clamp(
+        Math.floor(nextMin / PRICE_STEP) * PRICE_STEP,
+        PRICE_MIN_BOUND,
+        nextMax,
+      );
       const safeMax = clamp(Math.ceil(nextMax / PRICE_STEP) * PRICE_STEP, safeMin, PRICE_MAX_BOUND);
       updateDraft({
         minPrice: safeMin > PRICE_MIN_BOUND ? String(safeMin) : "",
@@ -482,14 +698,21 @@ export function CatalogFilterBar({
                 active={Boolean(filters.location)}
                 open={openPanel === "location"}
                 onClick={() => openDraftPanel("location")}
-                onClear={filters.location ? () => onApplyFilters({ ...filters, location: "", locationId: "" }) : undefined}
+                onClear={
+                  filters.location
+                    ? () => onApplyFilters({ ...filters, location: "", locationId: "" })
+                    : undefined
+                }
               />
             }
             footer={
               <CatalogFilterPanelActions
                 onApply={() => {
                   if (draftFilters.location) {
-                    storeRecentLocation(draftFilters.location, draftFilters.locationId || normalizeLocation(draftFilters.location));
+                    storeRecentLocation(
+                      draftFilters.location,
+                      draftFilters.locationId || normalizeLocation(draftFilters.location),
+                    );
                   }
                   commitPanel();
                 }}
@@ -520,14 +743,22 @@ export function CatalogFilterBar({
                 active={Boolean(filters.checkIn || filters.checkOut)}
                 open={openPanel === "dates"}
                 onClick={() => openDraftPanel("dates")}
-                onClear={filters.checkIn || filters.checkOut ? () => onApplyFilters({ ...filters, checkIn: "", checkOut: "" }) : undefined}
+                onClear={
+                  filters.checkIn || filters.checkOut
+                    ? () => onApplyFilters({ ...filters, checkIn: "", checkOut: "" })
+                    : undefined
+                }
               />
             }
             footer={
               <CatalogFilterPanelActions
                 onApply={() => commitPanel()}
                 onClear={() => updateDraft({ checkIn: "", checkOut: "" })}
-                applyLabel={nights > 0 ? `Показать на ${nights} ${pluralize(nights, ["ночь", "ночи", "ночей"])}` : "Показать варианты"}
+                applyLabel={
+                  nights > 0
+                    ? `Показать на ${nights} ${pluralize(nights, ["ночь", "ночи", "ночей"])}`
+                    : "Показать варианты"
+                }
               />
             }
           >
@@ -599,7 +830,11 @@ export function CatalogFilterBar({
                 active={Boolean(filters.propertyType)}
                 open={openPanel === "type"}
                 onClick={() => openDraftPanel("type")}
-                onClear={filters.propertyType ? () => onApplyFilters({ ...filters, propertyType: "" }) : undefined}
+                onClear={
+                  filters.propertyType
+                    ? () => onApplyFilters({ ...filters, propertyType: "" })
+                    : undefined
+                }
               />
             }
             footer={
@@ -653,7 +888,11 @@ export function CatalogFilterBar({
                 active={Boolean(filters.minPrice || filters.maxPrice)}
                 open={openPanel === "price"}
                 onClick={() => openDraftPanel("price")}
-                onClear={filters.minPrice || filters.maxPrice ? () => onApplyFilters({ ...filters, minPrice: "", maxPrice: "" }) : undefined}
+                onClear={
+                  filters.minPrice || filters.maxPrice
+                    ? () => onApplyFilters({ ...filters, minPrice: "", maxPrice: "" })
+                    : undefined
+                }
               />
             }
             footer={
@@ -674,7 +913,9 @@ export function CatalogFilterBar({
                     max={PRICE_MAX_BOUND}
                     step={PRICE_STEP}
                     value={draftFilters.minPrice}
-                    onChange={(event) => updateDraftPrice({ minPrice: Number(event.target.value || PRICE_MIN_BOUND) })}
+                    onChange={(event) =>
+                      updateDraftPrice({ minPrice: Number(event.target.value || PRICE_MIN_BOUND) })
+                    }
                     className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="Без минимума"
                   />
@@ -687,7 +928,9 @@ export function CatalogFilterBar({
                     max={PRICE_MAX_BOUND}
                     step={PRICE_STEP}
                     value={draftFilters.maxPrice}
-                    onChange={(event) => updateDraftPrice({ maxPrice: Number(event.target.value || PRICE_MAX_BOUND) })}
+                    onChange={(event) =>
+                      updateDraftPrice({ maxPrice: Number(event.target.value || PRICE_MAX_BOUND) })
+                    }
                     className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="Без лимита"
                   />
@@ -742,7 +985,11 @@ export function CatalogFilterBar({
                 active={Boolean(filters.minRating)}
                 open={openPanel === "rating"}
                 onClick={() => openDraftPanel("rating")}
-                onClear={filters.minRating ? () => onApplyFilters({ ...filters, minRating: "" }) : undefined}
+                onClear={
+                  filters.minRating
+                    ? () => onApplyFilters({ ...filters, minRating: "" })
+                    : undefined
+                }
               />
             }
             footer={
@@ -772,6 +1019,25 @@ export function CatalogFilterBar({
             </div>
           </ResponsiveFilterPanel>
 
+          {QUICK_PRESETS.map((preset) => (
+            <QuickPresetChip
+              key={preset.key}
+              icon={preset.icon}
+              label={preset.label}
+              active={filters[preset.key]}
+              onClick={() => onApplyFilters({ ...filters, [preset.key]: !filters[preset.key] })}
+            />
+          ))}
+
+          <QuickPresetChip
+            icon={Star}
+            label="Высокий рейтинг"
+            active={filters.minRating === "4.5"}
+            onClick={() =>
+              onApplyFilters({ ...filters, minRating: filters.minRating === "4.5" ? "" : "4.5" })
+            }
+          />
+
           <ResponsiveFilterPanel
             open={openPanel === "more"}
             title="Дополнительные параметры"
@@ -790,35 +1056,100 @@ export function CatalogFilterBar({
             footer={
               <CatalogFilterPanelActions
                 onApply={() => commitPanel()}
-                onClear={() => updateDraft({ hasPhotos: false, hasReviews: false, familyFriendly: false, petsAllowed: false })}
+                onClear={() =>
+                  updateDraft({
+                    hasPhotos: false,
+                    hasReviews: false,
+                    familyFriendly: false,
+                    petsAllowed: false,
+                    nearSea: false,
+                    hasPool: false,
+                    hasKitchen: false,
+                    hasAirConditioner: false,
+                    hasParking: false,
+                    smokingForbidden: false,
+                    quietHours: false,
+                    amenityIds: [],
+                    roomFeatureIds: [],
+                  })
+                }
                 applyLabel="Показать варианты"
               />
             }
           >
-            <div className="space-y-2">
-              {[
-                { key: "hasPhotos" as const, label: "Только с фото" },
-                { key: "hasReviews" as const, label: "С отзывами" },
-                { key: "familyFriendly" as const, label: "Для отдыха с детьми" },
-                { key: "petsAllowed" as const, label: "Можно с животными" },
-              ].map((item) => (
-                <label
-                  key={item.key}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3.5 transition",
-                    draftFilters[item.key] ? "border-primary/25 bg-primary/8" : "border-olive/12 bg-white hover:bg-cream/60",
-                  )}
-                >
-                  <input
-                    name={String(item.key)}
-                    type="checkbox"
-                    checked={draftFilters[item.key]}
-                    onChange={(event) => updateDraft({ [item.key]: event.target.checked })}
-                    className="h-5 w-5 shrink-0 rounded accent-primary"
-                  />
-                  <span className="text-sm font-medium text-olive">{item.label}</span>
-                </label>
-              ))}
+            <div className="space-y-5">
+              <CatalogFieldGroup label="Быстрые условия">
+                <div className="grid gap-2 md:grid-cols-2">
+                  {[
+                    { key: "hasPhotos" as const, label: "Только с фото" },
+                    { key: "hasReviews" as const, label: "С отзывами" },
+                    { key: "nearSea" as const, label: "У моря" },
+                    { key: "hasPool" as const, label: "С бассейном" },
+                    { key: "hasKitchen" as const, label: "С кухней" },
+                    { key: "hasAirConditioner" as const, label: "Кондиционер" },
+                    { key: "hasParking" as const, label: "Парковка" },
+                  ].map((item) => (
+                    <CatalogToggleCard
+                      key={item.key}
+                      label={item.label}
+                      selected={draftFilters[item.key]}
+                      onClick={() => updateDraft({ [item.key]: !draftFilters[item.key] })}
+                    />
+                  ))}
+                </div>
+              </CatalogFieldGroup>
+
+              <CatalogFieldGroup label="Удобства объекта">
+                <div className="grid gap-2 md:grid-cols-2">
+                  {PROPERTY_AMENITY_FILTERS.map((item) => (
+                    <CatalogToggleCard
+                      key={item.id}
+                      label={item.label}
+                      selected={draftFilters.amenityIds.includes(item.id)}
+                      onClick={() =>
+                        updateDraft({
+                          amenityIds: toggleListValue(draftFilters.amenityIds, item.id),
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              </CatalogFieldGroup>
+
+              <CatalogFieldGroup label="В номере">
+                <div className="grid gap-2 md:grid-cols-2">
+                  {ROOM_FEATURE_FILTERS.map((item) => (
+                    <CatalogToggleCard
+                      key={item.id}
+                      label={item.label}
+                      selected={draftFilters.roomFeatureIds.includes(item.id)}
+                      onClick={() =>
+                        updateDraft({
+                          roomFeatureIds: toggleListValue(draftFilters.roomFeatureIds, item.id),
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              </CatalogFieldGroup>
+
+              <CatalogFieldGroup label="Правила">
+                <div className="grid gap-2 md:grid-cols-2">
+                  {[
+                    { key: "familyFriendly" as const, label: "Можно с детьми" },
+                    { key: "petsAllowed" as const, label: "Можно с животными" },
+                    { key: "smokingForbidden" as const, label: "Курение запрещено" },
+                    { key: "quietHours" as const, label: "Тихие часы" },
+                  ].map((item) => (
+                    <CatalogToggleCard
+                      key={item.key}
+                      label={item.label}
+                      selected={draftFilters[item.key]}
+                      onClick={() => updateDraft({ [item.key]: !draftFilters[item.key] })}
+                    />
+                  ))}
+                </div>
+              </CatalogFieldGroup>
             </div>
           </ResponsiveFilterPanel>
         </>

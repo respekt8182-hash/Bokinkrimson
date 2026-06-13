@@ -1,11 +1,12 @@
 import {
   BedDouble,
-  Building2,
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   LayoutGrid,
   MessageSquareText,
+  MapPin,
   ShieldCheck,
   Sparkles,
   WalletCards,
@@ -17,6 +18,8 @@ import { db } from "@/lib/db";
 import { getPropertyProgress } from "@/lib/properties";
 
 type SectionSlug =
+  | "about-info"
+  | "about-location"
   | "about"
   | "rules"
   | "room-categories"
@@ -47,16 +50,24 @@ type SectionItem = {
 
 const sections: SectionItem[] = [
   {
-    slug: "about",
+    slug: "about-info",
     label: "Основное",
-    description: "Тип, локация, контакты, фото",
-    icon: Building2,
+    description: "Расскажите о вашем объекте и его особенностях",
+    icon: MessageSquareText,
     tone: "primary",
   },
   {
+    slug: "about-location",
+    label: "Локация",
+    description: "Адрес и карта",
+    icon: MapPin,
+    tone: "primary",
+    hiddenInTabs: true,
+  },
+  {
     slug: "rules",
-    label: "Правила",
-    description: "Заезд, выезд, условия проживания",
+    label: "Правила размещения",
+    description: "Условия и реестр",
     icon: ShieldCheck,
     tone: "sky",
   },
@@ -77,14 +88,14 @@ const sections: SectionItem[] = [
   {
     slug: "amenities",
     label: "Удобства",
-    description: "Что есть в номерах",
+    description: "Что есть на объекте",
     icon: Sparkles,
     tone: "emerald",
   },
   {
     slug: "payment",
     label: "Оплата",
-    description: "Публикация объявления",
+    description: "Настройте оплату и правила предоплаты",
     icon: WalletCards,
     tone: "gold",
   },
@@ -97,34 +108,6 @@ const sections: SectionItem[] = [
     hiddenInTabs: true,
   },
 ];
-
-const toneClassByName: Record<SectionItem["tone"], { active: string; idle: string; icon: string }> = {
-  primary: {
-    active: "border-primary/30 bg-primary/8 text-primary",
-    idle: "border-primary/10 bg-primary/7 text-primary/72",
-    icon: "bg-primary/10 text-primary",
-  },
-  sky: {
-    active: "border-sky-300/70 bg-sky-50 text-sky-700",
-    idle: "border-sky-200/55 bg-sky-50/55 text-sky-700/72",
-    icon: "bg-sky-100 text-sky-700",
-  },
-  terra: {
-    active: "border-terra/28 bg-terra/8 text-terra",
-    idle: "border-terra/12 bg-terra/6 text-terra/75",
-    icon: "bg-terra/10 text-terra",
-  },
-  emerald: {
-    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    idle: "border-emerald-100 bg-emerald-50/60 text-emerald-700/75",
-    icon: "bg-emerald-100 text-emerald-700",
-  },
-  gold: {
-    active: "border-sage/36 bg-sage/16 text-amber-800",
-    idle: "border-sage/18 bg-sage/10 text-amber-800/75",
-    icon: "bg-sage/18 text-amber-800",
-  },
-};
 
 async function getSectionCompletion(
   propertyId: string,
@@ -200,16 +183,13 @@ async function getSectionCompletion(
 
   const progress = getPropertyProgress(property);
   const aboutDone =
-    progress.step1 &&
-    progress.step3 &&
-    progress.step4 &&
-    progress.step5 &&
-    progress.step7 &&
-    progress.step8;
+    progress.step1 && progress.step3 && progress.step4 && progress.step5 && progress.step8;
 
   return {
     about: aboutDone,
-    rules: progress.step6,
+    "about-info": aboutDone,
+    "about-location": progress.step3,
+    rules: progress.step6 && progress.step7,
     "room-categories": progress.step9,
     "external-reviews": true,
     amenities: enabledRoomAmenitiesCount > 0,
@@ -233,14 +213,21 @@ export async function ObjectSectionNav({
   const shouldShowChessboardTab = showChessboardTab || activeSection === "chessboard";
   const availableSections = sections.filter(
     (section) =>
+      section.slug !== "about" &&
       (includePayment || section.slug !== "payment") &&
       (shouldIncludeExternalReviews || section.slug !== "external-reviews"),
   );
-  const activeIndex = availableSections.findIndex((section) => section.slug === activeSection);
+  const normalizedActiveSection: SectionSlug =
+    activeSection === "about" || activeSection === "about-location" ? "about-info" : activeSection;
+  const activeIndex = availableSections.findIndex(
+    (section) => section.slug === normalizedActiveSection,
+  );
   const visibleSections = availableSections.filter(
     (section) => shouldShowChessboardTab || !section.hiddenInTabs,
   );
-  const visibleActiveIndex = visibleSections.findIndex((section) => section.slug === activeSection);
+  const visibleActiveIndex = visibleSections.findIndex(
+    (section) => section.slug === normalizedActiveSection,
+  );
   const completionBySection = await getSectionCompletion(propertyId);
 
   const completionFallback = Object.fromEntries(
@@ -262,48 +249,46 @@ export async function ObjectSectionNav({
 
   const steps = visibleSections.map((section) => {
     const isComplete = completionBySection?.[section.slug] ?? completionFallback[section.slug];
+    const href =
+      section.slug === "about-info"
+        ? `${basePath}/${propertyId}/about?block=info`
+        : section.slug === "about-location"
+          ? `${basePath}/${propertyId}/about?block=location`
+          : `${basePath}/${propertyId}/${section.slug}`;
 
     return {
       ...section,
       complete: isComplete,
-      href: `${basePath}/${propertyId}/${section.slug}`,
+      href,
     };
   });
   const completedCount = steps.filter((step) => step.complete).length;
   const progressPercent = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
 
   return (
-    <nav
-      aria-label="Разделы объявления"
-      className="min-w-0 lg:sticky lg:top-20 lg:self-start"
-    >
-      <div className="min-w-0 rounded-2xl border border-olive/10 bg-white/95 p-3 shadow-[0_18px_36px_-30px_rgba(15,74,64,0.34)]">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-olive/58 transition hover:bg-cream hover:text-olive"
-        >
-          <AppIcon icon={ChevronLeft} className="h-4 w-4" />
-          {backLabel}
-        </Link>
-
-        <div className="mt-3">
-          <div className="flex items-center justify-between gap-2 text-xs text-olive/55">
-            <span>Заполнено</span>
-            <span className="font-semibold text-primary">{completedCount}/{steps.length}</span>
+    <nav aria-label="Разделы объявления" className="min-w-0 lg:sticky lg:top-32 lg:self-start">
+      <div className="min-w-0 rounded-[8px] border border-olive/10 bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.04)]">
+        <div className="flex items-center justify-between gap-3 border-b border-olive/8 pb-5">
+          <div>
+            <p className="text-base font-semibold text-olive">Создание объекта</p>
+            <p className="mt-1 text-xs text-olive/52">
+              Заполнено {completedCount}/{steps.length} · {progressPercent}%
+            </p>
           </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-olive/8">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+          <Link
+            href={backHref}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-olive/10 bg-white text-olive/58 transition hover:border-primary/25 hover:text-primary"
+            aria-label={backLabel}
+            title={backLabel}
+          >
+            <AppIcon icon={ChevronLeft} className="h-4 w-4" />
+          </Link>
         </div>
 
-        <div className="custom-scrollbar -mx-1 mt-3 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-1.5 lg:overflow-visible lg:px-0 lg:pb-0">
+        <div className="custom-scrollbar -mx-1 mt-5 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-3 lg:overflow-visible lg:px-0 lg:pb-0">
           {steps.map((step, index) => {
-            const isActive = step.slug === activeSection;
+            const isActive = step.slug === normalizedActiveSection;
             const StepIcon = step.icon;
-            const toneClasses = toneClassByName[step.tone];
 
             return (
               <Link
@@ -311,31 +296,42 @@ export async function ObjectSectionNav({
                 href={step.href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "group flex min-w-[188px] items-center gap-2.5 rounded-xl border px-3 py-2.5 transition lg:min-w-0",
+                  "group relative flex min-w-[226px] items-center gap-4 rounded-[8px] border px-4 py-4 transition lg:min-w-0",
                   isActive
-                    ? cn(toneClasses.active, "shadow-sm")
-                    : "border-olive/10 bg-white text-olive hover:border-primary/20 hover:bg-cream/50",
+                    ? "border-primary/28 bg-[linear-gradient(90deg,rgba(15,118,110,0.1),rgba(255,255,255,0.92))] text-primary shadow-[0_12px_36px_rgba(15,118,110,0.08)] ring-1 ring-primary/12"
+                    : "border-transparent bg-white text-olive hover:border-primary/18 hover:bg-foam/45",
                 )}
               >
                 <span
                   className={cn(
-                    "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                    isActive ? toneClasses.icon : "bg-olive/6 text-olive/55 group-hover:bg-primary/8 group-hover:text-primary",
+                    "relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                    isActive
+                      ? "border-primary bg-primary text-white"
+                      : step.complete
+                        ? "border-primary/22 bg-primary/10 text-primary"
+                        : "border-olive/12 bg-white text-olive/65 group-hover:border-primary/22 group-hover:text-primary",
                   )}
                 >
-                  <AppIcon icon={StepIcon} className="h-[18px] w-[18px]" />
-                  {step.complete ? (
-                    <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white">
-                      <AppIcon icon={Check} className="h-2.5 w-2.5" />
-                    </span>
-                  ) : null}
+                  {step.complete && !isActive ? (
+                    <AppIcon icon={Check} className="h-4 w-4" />
+                  ) : (
+                    index + 1
+                  )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold text-olive/40">{index + 1}</span>
-                    <span className="truncate text-sm font-semibold">{step.label}</span>
+                  <span className="flex items-center gap-2">
+                    <AppIcon
+                      icon={StepIcon}
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        isActive ? "text-primary" : "text-primary/72",
+                      )}
+                    />
+                    <span className="truncate text-base font-semibold text-olive">
+                      {step.label}
+                    </span>
                   </span>
-                  <span className="mt-0.5 hidden text-xs leading-snug text-olive/54 sm:block">
+                  <span className="mt-1 block truncate text-sm leading-snug text-olive/54">
                     {step.description}
                   </span>
                 </span>
@@ -344,10 +340,34 @@ export async function ObjectSectionNav({
           })}
         </div>
 
-        <div className="mt-3 hidden grid-cols-2 gap-2 border-t border-olive/8 pt-3 sm:grid">
+        <div className="mt-7 rounded-[8px] border border-primary/12 bg-foam/70 p-4 text-primary">
+          <div className="flex items-start gap-2.5">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-primary shadow-sm">
+              <AppIcon icon={CircleHelp} className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Нужна помощь?</p>
+              <Link
+                href="/cooperation"
+                className="mt-1 inline-flex items-center gap-1 text-sm text-primary/85 hover:text-primary"
+              >
+                Посмотрите инструкцию
+                <AppIcon icon={ChevronRight} className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 hidden grid-cols-2 gap-2 border-t border-olive/8 pt-4 sm:grid">
           {prevSection ? (
             <Link
-              href={`${basePath}/${propertyId}/${prevSection.slug}`}
+              href={
+                prevSection.slug === "about-info"
+                  ? `${basePath}/${propertyId}/about?block=info`
+                  : prevSection.slug === "about-location"
+                    ? `${basePath}/${propertyId}/about?block=location`
+                    : `${basePath}/${propertyId}/${prevSection.slug}`
+              }
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-olive/12 bg-white text-sm font-semibold text-olive/70 transition hover:bg-cream hover:text-olive"
             >
               <AppIcon icon={ChevronLeft} className="h-4 w-4" />
@@ -360,7 +380,13 @@ export async function ObjectSectionNav({
           )}
           {nextSection ? (
             <Link
-              href={`${basePath}/${propertyId}/${nextSection.slug}`}
+              href={
+                nextSection.slug === "about-info"
+                  ? `${basePath}/${propertyId}/about?block=info`
+                  : nextSection.slug === "about-location"
+                    ? `${basePath}/${propertyId}/about?block=location`
+                    : `${basePath}/${propertyId}/${nextSection.slug}`
+              }
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-semibold text-white transition hover:bg-primary/90"
             >
               Далее

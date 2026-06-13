@@ -145,7 +145,7 @@ function shouldShowDashboardBottomNav(pathname: string) {
 }
 
 function shouldUseWideDashboardFrame(pathname: string) {
-  return /^\/dashboard\/objects\/[^/?#]+\/room-categories(?:[/?#]|$)/.test(pathname);
+  return /^\/dashboard\/objects\/[^/?#]+(?:[/?#]|\/)/.test(pathname);
 }
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -203,6 +203,13 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
   const useWideFrame = shouldUseWideDashboardFrame(pathname);
+  const useObjectEditorFrame = useWideFrame;
+  const useVisualFrame =
+    pathname === "/dashboard" ||
+    pathname === "/dashboard/objects" ||
+    /^\/dashboard\/objects\/[^/?#]+(?:[/?#]|\/)/.test(pathname) ||
+    pathname === "/dashboard/excursions" ||
+    pathname === "/dashboard/transfers";
   const displayName = formatPublicPersonName(user, "Пользователь");
 
   function closeDrawer() {
@@ -318,24 +325,44 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   }, [isDrawerOpen]);
 
   return (
-    <div className="min-h-screen">
+    <div
+      className={cn(
+        "min-h-screen",
+        useVisualFrame ? "dashboard-visual-page" : "",
+        useObjectEditorFrame ? "dashboard-object-editor-shell" : "",
+      )}
+    >
       <UserActivityTracker />
-      <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-olive/10 bg-cream/92 text-olive backdrop-blur">
-        <div className="mx-auto flex h-full w-full max-w-[1600px] items-center gap-3 px-3 md:px-6">
+      <header
+        className={cn(
+          "fixed inset-x-0 top-0 z-50 text-olive",
+          useObjectEditorFrame
+            ? "border-b border-olive/10 bg-white px-5 pt-0 shadow-[0_2px_18px_rgba(58,43,35,0.06)] md:px-8"
+            : "px-3 pt-3 md:px-6 md:pt-5",
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto flex w-full items-center gap-3",
+            useObjectEditorFrame
+              ? "h-[92px] max-w-none rounded-none border-0 bg-white px-0 shadow-none ring-0 backdrop-blur-0 md:h-[96px]"
+              : "h-16 max-w-[1600px] rounded-[26px] border border-white/75 bg-white/92 px-3 shadow-[0_18px_52px_rgba(58,43,35,0.11)] ring-1 ring-olive/10 backdrop-blur-xl md:h-20 md:px-5",
+          )}
+        >
           <Link href="/dashboard" className="flex items-center gap-3 min-w-0 lg:flex-none">
             <Image
               src="/favicon.svg"
               alt="Логотип Крым вокруг"
-              width={44}
-              height={44}
+              width={54}
+              height={54}
               priority
-              className="shrink-0"
+              className="h-11 w-11 shrink-0 md:h-[54px] md:w-[54px]"
             />
             <div className="min-w-0">
-              <p className="truncate font-heading text-lg tracking-wide text-olive md:text-xl">
+              <p className="truncate font-heading text-xl tracking-wide text-olive md:text-2xl">
                 Крым вокруг
               </p>
-              <p className="truncate text-[11px] uppercase tracking-[0.16em] text-olive/60">
+              <p className="truncate text-[11px] lowercase tracking-[0.16em] text-primary">
                 Личный кабинет
               </p>
             </div>
@@ -350,10 +377,10 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
                   key={item.key}
                   href={item.href}
                   className={cn(
-                    "inline-flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition",
+                    "inline-flex items-center gap-2.5 rounded-[18px] px-3.5 py-2.5 text-sm font-semibold transition",
                     isActive
-                      ? "bg-white/82 text-olive shadow-[0_12px_26px_rgba(15,118,110,0.08)]"
-                      : "text-olive/80 hover:bg-white/72",
+                      ? "bg-primary/8 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]"
+                      : "text-olive/78 hover:bg-cream/72",
                   )}
                 >
                   <IconShell active={isActive} compact>
@@ -420,17 +447,30 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
         </div>
       </header>
 
-      <div className="pt-16">
+      <div className={cn(useObjectEditorFrame ? "pt-[92px] md:pt-[96px]" : "pt-24 md:pt-32")}>
         <div
           className={cn(
-            "mx-auto w-full px-4 py-5 md:px-6",
-            useWideFrame ? "max-w-[1380px]" : "max-w-6xl",
+            "mx-auto w-full",
+            useObjectEditorFrame
+              ? "max-w-none px-6 py-8 md:px-8"
+              : "px-4 py-5 md:px-6",
+            useObjectEditorFrame
+              ? ""
+              : useVisualFrame
+                ? "max-w-[1600px]"
+                : useWideFrame
+                  ? "max-w-[1380px]"
+                  : "max-w-6xl",
             showBottomNav ? "pb-[calc(env(safe-area-inset-bottom,0px)+6.75rem)] lg:pb-5" : "",
           )}
         >
-          <section className="rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10 md:p-5">
-            {children}
-          </section>
+          {useVisualFrame ? (
+            children
+          ) : (
+            <section className="rounded-2xl bg-white/94 p-4 ring-1 ring-olive/10 md:p-5">
+              {children}
+            </section>
+          )}
         </div>
       </div>
 
