@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { canUseDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import {
   isConfiguredDatabaseReachable,
@@ -51,7 +52,7 @@ const getCachedHomeStats = unstable_cache(
 );
 
 export async function getHomeStats(): Promise<HomeStats> {
-  const canUseFallback = process.env.NODE_ENV !== "production";
+  const canUseFallback = canUseDatabaseFallback();
 
   if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(

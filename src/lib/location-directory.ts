@@ -6,6 +6,7 @@ import {
   findCrimeaSettlementByName,
   getCrimeaSettlementDirectoryItems,
 } from "@/lib/crimea-settlements";
+import { canUseDatabaseFallback } from "@/lib/database-fallback";
 import { db, type DbTransactionClient } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import {
@@ -210,7 +211,7 @@ export function isBuiltInLocationId(locationId: string | null | undefined): bool
 }
 
 async function readLocationDirectorySourceRows() {
-  const canUseFallback = process.env.NODE_ENV !== "production";
+  const canUseFallback = canUseDatabaseFallback();
   if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(
       "location-directory",

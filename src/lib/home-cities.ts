@@ -1,6 +1,7 @@
 // Home showcase aggregator: computes "prices from" for popular Crimea cities from published housing and excursions.
 import { unstable_cache } from "next/cache";
 import { addDays, toIsoDate } from "@/lib/pricing";
+import { canUseDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import {
   isConfiguredDatabaseReachable,
@@ -215,7 +216,7 @@ function resolveExcursionPricesByLocation(input: {
 }
 
 async function readHomeCitySourceRows(locationIds: string[], today: Date) {
-  const canUseFallback = process.env.NODE_ENV !== "production";
+  const canUseFallback = canUseDatabaseFallback();
   if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(
       "home-cities",

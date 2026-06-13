@@ -17,12 +17,16 @@ function resolveFallbackValue<T>(fallbackValue: FallbackValue<T>): T {
   return typeof fallbackValue === "function" ? (fallbackValue as () => T)() : fallbackValue;
 }
 
+export function canUseDatabaseFallback(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.BUILD_WITHOUT_DATABASE === "1";
+}
+
 export async function loadDataWithDatabaseFallback<T>(
   context: DatabaseFallbackContext,
   load: () => Promise<T>,
   fallbackValue: FallbackValue<T>,
 ): Promise<T> {
-  const canUseFallback = process.env.NODE_ENV !== "production";
+  const canUseFallback = canUseDatabaseFallback();
 
   if (canUseFallback && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(context.contextId, context.unavailableMessage);
