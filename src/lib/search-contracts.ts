@@ -77,6 +77,28 @@ export function parseBoundsParam(raw: string | null): MapBounds | null {
   };
 }
 
+export function parseMapBoundsSearchParams(searchParams: URLSearchParams): MapBounds | null {
+  const compactBounds = parseBoundsParam(searchParams.get("bounds"));
+  if (compactBounds) {
+    return compactBounds;
+  }
+
+  const south = Number.parseFloat(searchParams.get("south") ?? "");
+  const west = Number.parseFloat(searchParams.get("west") ?? "");
+  const north = Number.parseFloat(searchParams.get("north") ?? "");
+  const east = Number.parseFloat(searchParams.get("east") ?? "");
+  if (![south, west, north, east].every(Number.isFinite) || south > north || west > east) {
+    return null;
+  }
+
+  return {
+    south: clamp(south, { min: -90, max: 90 }),
+    west: clamp(west, { min: -180, max: 180 }),
+    north: clamp(north, { min: -90, max: 90 }),
+    east: clamp(east, { min: -180, max: 180 }),
+  };
+}
+
 export function isPointInsideBounds(
   latitude: number | null,
   longitude: number | null,

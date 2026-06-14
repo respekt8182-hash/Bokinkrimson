@@ -1513,6 +1513,7 @@ export function MarketplaceCatalogMap({
     endpoint: string;
     items: MarketplaceCatalogMapItem[];
   } | null>(null);
+  const [isMapItemsLoading, setIsMapItemsLoading] = useState(false);
   const [mapItemsErrorMessage, setMapItemsErrorMessage] = useState("");
   const [viewedPointIds, setViewedPointIds] = useState<Set<string>>(() =>
     readCatalogMapViewedItems(kind),
@@ -1538,9 +1539,22 @@ export function MarketplaceCatalogMap({
     };
   }, [kind]);
 
+  const shouldLoadRemoteMapItems =
+    Boolean(mapItemsEndpoint) &&
+    (mapExpanded ||
+      mapPlacement === "desktop" ||
+      mapPlacement === "tablet" ||
+      mobileSheetSnap !== "preview");
+
   useEffect(() => {
-    const endpoint = mapItemsEndpoint ?? "";
+    const endpoint = shouldLoadRemoteMapItems ? (mapItemsEndpoint ?? "") : "";
     if (!endpoint) {
+      setIsMapItemsLoading(false);
+      return;
+    }
+
+    if (loadedMapItemsState?.endpoint === endpoint) {
+      setIsMapItemsLoading(false);
       return;
     }
 
@@ -1549,6 +1563,7 @@ export function MarketplaceCatalogMap({
 
     async function loadMapItems() {
       setMapItemsErrorMessage("");
+      setIsMapItemsLoading(true);
 
       try {
         const response = await fetchWithRetry(endpoint, {
@@ -1580,6 +1595,10 @@ export function MarketplaceCatalogMap({
         if (!isDisposed && !controller.signal.aborted) {
           setMapItemsErrorMessage("Не удалось загрузить все точки карты. Показана текущая выдача.");
         }
+      } finally {
+        if (!isDisposed) {
+          setIsMapItemsLoading(false);
+        }
       }
     }
 
@@ -1589,7 +1608,7 @@ export function MarketplaceCatalogMap({
       isDisposed = true;
       controller.abort();
     };
-  }, [mapItemsEndpoint]);
+  }, [loadedMapItemsState?.endpoint, mapItemsEndpoint, shouldLoadRemoteMapItems]);
 
   const loadedMapItems =
     loadedMapItemsState?.endpoint === mapItemsEndpoint ? loadedMapItemsState.items : null;
@@ -1688,6 +1707,7 @@ export function MarketplaceCatalogMap({
   const mapNetworkNotice = mapItemsErrorMessage ? (
     <MapNetworkNotice message={mapItemsErrorMessage} />
   ) : null;
+  const showMapLoading = isLoading || isMapItemsLoading;
 
   const mobileSheetSnaps = useMemo<MobileSheetSnaps>(() => {
     const height = mobileStageHeight || 640;
@@ -2291,7 +2311,7 @@ export function MarketplaceCatalogMap({
               />
             </div>
 
-            {isLoading ? <MapLoadingDotsPill className="top-3" /> : null}
+            {showMapLoading ? <MapLoadingDotsPill className="top-3" /> : null}
             {mapNetworkNotice}
 
             {activePopupItem && mobileSheetSnap !== "expanded" ? (
@@ -2434,7 +2454,7 @@ export function MarketplaceCatalogMap({
               fitPointsOnChange="never"
               className="h-full w-full"
             />
-            {isLoading ? <MapLoadingDotsPill /> : null}
+            {showMapLoading ? <MapLoadingDotsPill /> : null}
             {mapNetworkNotice}
             <div
               className={cn(
@@ -2547,7 +2567,7 @@ export function MarketplaceCatalogMap({
                     />
                   </div>
                 ) : null}
-                {isLoading ? <MapLoadingDotsPill /> : null}
+                {showMapLoading ? <MapLoadingDotsPill /> : null}
                 {mapNetworkNotice}
               </div>
             ) : null}
@@ -2614,7 +2634,7 @@ export function MarketplaceCatalogMap({
               />
             </div>
 
-            {isLoading ? <MapLoadingDotsPill className="top-5" /> : null}
+            {showMapLoading ? <MapLoadingDotsPill className="top-5" /> : null}
             {mapNetworkNotice}
 
             <div className="pointer-events-none absolute right-3 top-3 z-30 sm:right-5 sm:top-5">

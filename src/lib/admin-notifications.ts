@@ -31,6 +31,7 @@ export type AdminModerationSnapshot = {
   };
   supportChat: {
     waitingCount: number;
+    latestCreatedAtMs: number | null;
   };
   managerPayments: {
     pendingCount: number;
@@ -61,6 +62,7 @@ const emptyAdminModerationSnapshot: AdminModerationSnapshot = {
   },
   supportChat: {
     waitingCount: 0,
+    latestCreatedAtMs: null,
   },
   managerPayments: {
     pendingCount: 0,
@@ -82,38 +84,28 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
         "Admin moderation snapshot: database is unavailable or credentials are invalid. Returning zero notification counters.",
     },
     async () => {
-      const isUserSoftDeleteAvailable = await areDatabaseColumnsAvailable("User", [
-        "deletedAt",
-      ]);
+      const isUserSoftDeleteAvailable = await areDatabaseColumnsAvailable("User", ["deletedAt"]);
       const supportChatWaitingQuery = isUserSoftDeleteAvailable
-        ? db.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM support_chats sc
+        ? db.$queryRaw<Array<{ count: bigint; latestCreatedAt: Date | null }>>`
+          SELECT COUNT(*) as count, MAX(sm.created_at) as "latestCreatedAt" FROM support_chats sc
           JOIN "User" u ON u.id = sc.user_id AND u."deletedAt" IS NULL
-          WHERE EXISTS (
-            SELECT 1 FROM support_messages sm
-            WHERE sm.chat_id = sc.id
-            AND sm.sender_type = 'user'
-            AND sm.created_at = (
-              SELECT MAX(sm2.created_at) FROM support_messages sm2
-              WHERE sm2.chat_id = sc.id
-            )
+          JOIN support_messages sm ON sm.chat_id = sc.id
+          WHERE sm.sender_type = 'user'
+          AND sm.created_at = (
+            SELECT MAX(sm2.created_at) FROM support_messages sm2
+            WHERE sm2.chat_id = sc.id
           )
         `
-        : db.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM support_chats sc
-          WHERE EXISTS (
-            SELECT 1 FROM support_messages sm
-            WHERE sm.chat_id = sc.id
-            AND sm.sender_type = 'user'
-            AND sm.created_at = (
-              SELECT MAX(sm2.created_at) FROM support_messages sm2
-              WHERE sm2.chat_id = sc.id
-            )
+        : db.$queryRaw<Array<{ count: bigint; latestCreatedAt: Date | null }>>`
+          SELECT COUNT(*) as count, MAX(sm.created_at) as "latestCreatedAt" FROM support_chats sc
+          JOIN support_messages sm ON sm.chat_id = sc.id
+          WHERE sm.sender_type = 'user'
+          AND sm.created_at = (
+            SELECT MAX(sm2.created_at) FROM support_messages sm2
+            WHERE sm2.chat_id = sc.id
           )
         `;
-      const hasImportedReviewColumns = await areDatabaseColumnsAvailable("Review", [
-        "isImported",
-      ]);
+      const hasImportedReviewColumns = await areDatabaseColumnsAvailable("Review", ["isImported"]);
       const hasFallbackExternalReviews = await isDatabaseTableAvailable("ExternalReviewFallback");
       const databaseImportedReviewsQuery = hasImportedReviewColumns
         ? Promise.all([
@@ -252,7 +244,10 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
           select: { createdAt: true },
         }),
         // Count support chats where the last message is from a user (waiting for moderator).
-        supportChatWaitingQuery.then((r) => Number(r[0]?.count ?? 0)),
+        supportChatWaitingQuery.then((r) => ({
+          waitingCount: Number(r[0]?.count ?? 0),
+          latestCreatedAtMs: r[0]?.latestCreatedAt?.getTime() ?? null,
+        })),
         databaseImportedReviewsQuery,
         fallbackImportedReviewsQuery,
       ]);
@@ -284,7 +279,8 @@ export async function getAdminModerationSnapshot(): Promise<AdminModerationSnaps
           latestCreatedAtMs: latestMessage?.createdAt.getTime() ?? null,
         },
         supportChat: {
-          waitingCount: supportChatWaiting,
+          waitingCount: supportChatWaiting.waitingCount,
+          latestCreatedAtMs: supportChatWaiting.latestCreatedAtMs,
         },
         managerPayments: {
           pendingCount: managerPaymentCount,

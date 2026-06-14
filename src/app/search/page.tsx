@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { unstable_noStore as noStore } from "next/cache";
+import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 import { HousingCatalogClient } from "@/components/public/housing-catalog-client";
 import { ExcursionSearchResults } from "@/components/public/excursion-search-results";
 import { JsonLd } from "@/components/seo/JsonLd";
@@ -24,6 +24,35 @@ type SearchPageProps = {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const getCachedExcursionCatalogOverview = unstable_cache(
+  async (offerType: "excursion" | "tour") =>
+    getPublicExcursionCatalog({
+      offerType,
+      page: 1,
+      pageSize: 1,
+    }),
+  ["search-excursion-catalog-overview-v1"],
+  {
+    revalidate: 300,
+    tags: ["public-excursion-catalog"],
+  },
+);
+
+const getCachedHousingLocationOverview = unstable_cache(
+  async (location: string) =>
+    getPublicCatalog({
+      location,
+      page: 1,
+      pageSize: 1,
+      trackSearchImpressions: false,
+    }),
+  ["search-housing-location-overview-v1"],
+  {
+    revalidate: 300,
+    tags: ["public-housing-catalog"],
+  },
+);
 
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   return buildSearchMetadata(await searchParams);
@@ -230,11 +259,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         page,
         pageSize: 30,
       }),
-      getPublicExcursionCatalog({
-        offerType: catalogOfferType,
-        page: 1,
-        pageSize: 1,
-      }),
+      getCachedExcursionCatalogOverview(catalogOfferType),
     ]);
     return (
       <>
@@ -319,12 +344,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       pageSize: 30,
     }),
     shouldCheckLocationHousing
-      ? getPublicCatalog({
-          location,
-          page: 1,
-          pageSize: 1,
-          trackSearchImpressions: false,
-        })
+      ? getCachedHousingLocationOverview(location)
       : Promise.resolve(null),
   ]);
 

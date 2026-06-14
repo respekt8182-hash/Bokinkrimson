@@ -2070,6 +2070,13 @@ export function HomeSearchShowcase({
     }
 
     const query = normalizedSearchQuery.slice(0, 120);
+    if (query.length === 1) {
+      setPopularSuggestions([]);
+      setMatchSuggestions([]);
+      setIsSuggestionsLoading(false);
+      return;
+    }
+
     const include = direction === "housing" ? "locations,hotels" : "locations,listings";
     const cacheKey = `${direction}|${query.toLowerCase()}`;
     const cached = suggestionsCacheRef.current.get(cacheKey);

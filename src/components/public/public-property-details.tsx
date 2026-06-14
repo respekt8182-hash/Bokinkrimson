@@ -1386,7 +1386,8 @@ export function PublicPropertyDetails({
     seaDistanceLabel,
   ].filter((badge): badge is string => Boolean(badge));
   const ownerDisplayName = formatPublicPersonName(item.owner, "Владелец");
-  const ownerVerificationLabel = "Владелец проверен";
+  const isOwnerVerified = Boolean(item.owner.phoneVerifiedAt);
+  const ownerVerificationLabel = "Пользователь проверен";
   const rankedRooms = useMemo(() => {
     return item.rooms
       .map((room, index) => {
@@ -2740,10 +2741,12 @@ export function PublicPropertyDetails({
               </AvatarImage>
               <div className="min-w-0">
                 <p className="truncate text-base font-semibold text-olive">{ownerDisplayName}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-sm text-primary/85">
-                  <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5" />
-                  <span>{ownerVerificationLabel}</span>
-                </p>
+                {isOwnerVerified ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-primary/85">
+                    <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5" />
+                    <span>{ownerVerificationLabel}</span>
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="mt-4 space-y-3" data-property-contacts-panel>
@@ -2783,10 +2786,12 @@ export function PublicPropertyDetails({
 
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{ownerDisplayName}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-primary/85">
-                  <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{ownerVerificationLabel}</span>
-                </p>
+                {isOwnerVerified ? (
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-primary/85">
+                    <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{ownerVerificationLabel}</span>
+                  </p>
+                ) : null}
               </div>
             </div>
             {mobileMessengerLinks.length > 0 ? (

@@ -112,6 +112,7 @@ import {
   IconSend2,
   IconShare2,
   IconShieldCheck,
+  IconShieldX,
   IconShip,
   IconShoe,
   IconShirt,
@@ -274,6 +275,7 @@ export const Search = asLucideIcon(IconSearch);
 export const SendHorizontal = asLucideIcon(IconSend2);
 export const Share2 = asLucideIcon(IconShare2);
 export const ShieldCheck = asLucideIcon(IconShieldCheck);
+export const ShieldX = asLucideIcon(IconShieldX);
 export const Ship = asLucideIcon(IconShip);
 export const Shirt = asLucideIcon(IconShirt);
 export const ShoppingBag = asLucideIcon(IconShoppingBag);

@@ -506,8 +506,11 @@ function resolveMarkerCategoryLabel(point: YandexMapPoint): string {
     return explicitLabel;
   }
 
-  const category = hasPointMarkerCategory(point) ? point.markerCategory : "landmark";
-  return categoryMarkerDefinitions[category]?.label ?? categoryMarkerDefinitions.landmark.label;
+  if (!hasPointMarkerCategory(point)) {
+    return "";
+  }
+
+  return categoryMarkerDefinitions[point.markerCategory]?.label ?? "";
 }
 
 function formatReviewsCount(value: number): string {

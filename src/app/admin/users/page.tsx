@@ -316,6 +316,15 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-olive/72">
                       <span className="font-semibold text-olive">{user.phone}</span>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          user.phoneVerifiedAt
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70"
+                            : "bg-red-50 text-red-700 ring-1 ring-red-200/70"
+                        }`}
+                      >
+                        {user.phoneVerifiedAt ? "Телефон подтвержден" : "Телефон не подтвержден"}
+                      </span>
                       {user.email ? <span>{user.email}</span> : null}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-olive/55">

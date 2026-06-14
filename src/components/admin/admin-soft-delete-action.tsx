@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
 import { Button } from "@/components/ui/button";
+import { hasAdminPermission, type AdminPermission } from "@/lib/admin-rbac";
 
 type AdminSoftDeleteActionProps = {
   deleteEndpoint: string;
@@ -34,10 +36,14 @@ export function AdminSoftDeleteAction({
   disabled = false,
   disabledReason = null,
 }: AdminSoftDeleteActionProps) {
+  const currentAdmin = useCurrentAdmin();
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const requiredPermission: AdminPermission = deleteEndpoint.includes("/api/admin/users/")
+    ? "users:delete"
+    : "content:delete";
 
   const restoreUntilLabel = useMemo(() => {
     if (!restoreUntil) {
@@ -46,6 +52,10 @@ export function AdminSoftDeleteAction({
 
     return new Date(restoreUntil).toLocaleString("ru-RU");
   }, [restoreUntil]);
+
+  if (!currentAdmin || !hasAdminPermission(currentAdmin.role, requiredPermission)) {
+    return null;
+  }
 
   async function handleDelete() {
     setIsSubmitting(true);

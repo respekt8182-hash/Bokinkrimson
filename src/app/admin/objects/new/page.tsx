@@ -8,6 +8,8 @@ import { db } from "@/lib/db";
 import { createPropertyDraft } from "@/lib/properties";
 import { AdminCreatePropertyForm } from "@/components/admin/admin-create-property-form";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
+import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 
 type AdminCreatePropertyPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -36,6 +38,14 @@ export default async function AdminCreatePropertyPage({
 
   async function createProperty(formData: FormData) {
     "use server";
+    const admin = await verifyAdminSession();
+    if (!admin) {
+      redirect("/admin/login");
+    }
+    if (!hasAdminPermission(admin.role, "content:create")) {
+      redirect("/admin");
+    }
+
     const ownerId = formData.get("ownerId") as string;
     const name = (formData.get("name") as string)?.trim() || null;
     const type = (formData.get("type") as string)?.trim() || null;

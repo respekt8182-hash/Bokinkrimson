@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { cleanupOldAdminActionLogs } from "@/lib/admin-audit-retention";
 import { getAdminModerationSnapshot } from "@/lib/admin-notifications";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +25,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     return <>{children}</>;
   }
 
-  const moderationSnapshot = await getAdminModerationSnapshot();
+  const [moderationSnapshot] = await Promise.all([
+    getAdminModerationSnapshot(),
+    cleanupOldAdminActionLogs(),
+  ]);
 
   return (
-    <AdminShell moderationSnapshot={moderationSnapshot}>
+    <AdminShell moderationSnapshot={moderationSnapshot} currentAdmin={session}>
       {children}
     </AdminShell>
   );

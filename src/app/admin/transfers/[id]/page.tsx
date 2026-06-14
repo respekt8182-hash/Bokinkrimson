@@ -10,6 +10,7 @@ import { ListingStatsButton } from "@/components/statistics/listing-stats-button
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
 import { AppIcon } from "@/components/ui/app-icon";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { normalizeEmailAddress } from "@/lib/contact-links";
 import { db } from "@/lib/db";
 import {
@@ -172,6 +173,9 @@ export default async function AdminTransferEditPage({ params }: AdminTransferEdi
     const admin = await verifyAdminSession();
     if (!admin) {
       redirect("/admin/login");
+    }
+    if (!hasAdminPermission(admin.role, "content:manage")) {
+      redirect("/admin");
     }
 
     const current = await db.transfer.findUnique({

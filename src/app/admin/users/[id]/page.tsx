@@ -117,6 +117,29 @@ export default async function AdminUserProfilePage({ params }: AdminUserProfileP
               {user.phone}
               {user.email ? ` · ${user.email}` : ""}
             </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              <span
+                className={`rounded-full px-2.5 py-1 font-semibold ${
+                  user.phoneVerifiedAt
+                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70"
+                    : "bg-red-50 text-red-700 ring-1 ring-red-200/70"
+                }`}
+              >
+                {user.phoneVerifiedAt ? "Телефон подтвержден" : "Телефон не подтвержден"}
+              </span>
+              {user.phoneVerifiedAt ? (
+                <span className="rounded-full bg-cream px-2.5 py-1 text-olive/65">
+                  Подтвержден: {formatAbsoluteActivityDate(user.phoneVerifiedAt)}
+                </span>
+              ) : (
+                <Link
+                  href="/admin/phone-verification"
+                  className="rounded-full bg-cream px-2.5 py-1 font-semibold text-primary hover:bg-primary/10"
+                >
+                  Перейти к подтверждению
+                </Link>
+              )}
+            </div>
           </div>
 
           <AdminSoftDeleteAction

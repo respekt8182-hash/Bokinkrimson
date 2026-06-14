@@ -4,15 +4,25 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 
 type AdminMessageDeleteButtonProps = {
   messageId: string;
 };
 
 export function AdminMessageDeleteButton({ messageId }: AdminMessageDeleteButtonProps) {
+  const currentAdmin = useCurrentAdmin();
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
+  const canManageMessages = Boolean(
+    currentAdmin && hasAdminPermission(currentAdmin.role, "messages:manage"),
+  );
+
+  if (!canManageMessages) {
+    return null;
+  }
 
   async function onDelete() {
     if (!window.confirm("Удалить сообщение?")) {

@@ -32,6 +32,8 @@ function serializeProfile(user: {
   firstName: string;
   lastName: string;
   phone: string;
+  phoneVerifiedAt: Date | null;
+  email: string | null;
   avatarUrl: string | null;
   role: "USER" | "ADMIN";
   createdAt: Date;
@@ -42,6 +44,8 @@ function serializeProfile(user: {
     firstName: user.firstName,
     lastName: user.lastName,
     phone: user.phone,
+    phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
+    email: user.email,
     avatarUrl: user.avatarUrl,
     role: user.role,
     createdAt: user.createdAt.toISOString(),
@@ -57,6 +61,8 @@ async function getCurrentUser(userId: string) {
       firstName: true,
       lastName: true,
       phone: true,
+      phoneVerifiedAt: true,
+      email: true,
       avatarUrl: true,
       role: true,
       createdAt: true,
@@ -113,6 +119,7 @@ export async function PATCH(request: Request) {
   }
 
   const requestedPhone = normalizeUserPhone(parsed.data.phone);
+  const isPhoneChanged = requestedPhone !== existing.phone;
 
   const phoneOwner = await db.user.findFirst({
     where: {
@@ -134,12 +141,20 @@ export async function PATCH(request: Request) {
       firstName: parsed.data.firstName.trim(),
       lastName: parsed.data.lastName.trim(),
       phone: requestedPhone,
+      ...(isPhoneChanged
+        ? {
+            phoneVerifiedAt: null,
+            phoneVerifiedByAdminId: null,
+          }
+        : {}),
     },
     select: {
       id: true,
       firstName: true,
       lastName: true,
       phone: true,
+      phoneVerifiedAt: true,
+      email: true,
       avatarUrl: true,
       role: true,
       createdAt: true,

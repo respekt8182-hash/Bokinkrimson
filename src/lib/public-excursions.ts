@@ -1,6 +1,4 @@
 // Domain/service module for public excursions.
-import { existsSync } from "fs";
-import path from "path";
 import {
   ExcursionAvailabilityMode,
   ExcursionDifficulty,
@@ -168,6 +166,7 @@ export type PublicExcursionCatalogItem = {
     firstName: string;
     lastName: string;
     avatarUrl: string | null;
+    phoneVerifiedAt: string | null;
   };
 };
 
@@ -329,6 +328,7 @@ export type PublicExcursionCard = {
     firstName: string;
     lastName: string;
     avatarUrl: string | null;
+    phoneVerifiedAt: string | null;
   };
   sessions: Array<{
     id: string;
@@ -489,16 +489,7 @@ function normalizePublicPhotoUrls(urls: string[]): string[] {
 }
 
 function filterExistingPublicAssetUrls(urls: string[]): string[] {
-  return normalizePublicPhotoUrls(urls).filter((url) => {
-    const trimmed = url.trim();
-    if (!trimmed.startsWith("/uploads/")) {
-      return true;
-    }
-
-    const relativePath = decodeURIComponent(trimmed.slice(1));
-    const absolutePath = path.join(process.cwd(), "public", ...relativePath.split("/"));
-    return existsSync(absolutePath);
-  });
+  return normalizePublicPhotoUrls(urls);
 }
 
 function collectRawPublicExcursionGalleryPhotoUrls(input: {
@@ -1195,10 +1186,71 @@ export async function getPublicExcursionCatalog(
       const locationTextQuery =
         rawLocationQuery || resolvedLocation?.name || locationFilterId || "";
 
-      // Fetch a broad candidate set first; final relevance depends on geo/date/text signals
+      const sessionAvailabilityWhere: Prisma.ExcursionWhereInput = dateRange
+        ? {
+            OR: [
+              { sessions: { none: {} } },
+              {
+                sessions: {
+                  some: {
+                    status: ExcursionSessionStatus.AVAILABLE,
+                    startAt: {
+                      gte: dateRange.dateFrom,
+                      lte: dateRange.dateTo,
+                    },
+                    ...(people
+                      ? {
+                          OR: [{ capacity: null }, { capacity: { gte: people } }],
+                        }
+                      : {}),
+                  },
+                },
+              },
+            ],
+          }
+        : {
+            OR: [
+              { sessions: { none: {} } },
+              {
+                sessions: {
+                  some: {
+                    status: ExcursionSessionStatus.AVAILABLE,
+                    startAt: { gte: new Date() },
+                  },
+                },
+              },
+            ],
+          };
+      const priceFromWhere: Prisma.ExcursionWhereInput["priceFrom"] =
+        minPrice !== null || maxPrice !== null
+          ? {
+              ...(minPrice !== null ? { gte: minPrice } : {}),
+              ...(maxPrice !== null ? { lte: maxPrice } : {}),
+            }
+          : undefined;
+      const catalogWhere: Prisma.ExcursionWhereInput = {
+        ...buildPublicCatalogExcursionVisibilityWhere(),
+        ...(offerTypeFilter ? { offerType: offerTypeFilter } : {}),
+        ...(resolvedDistrict ? { districtId: resolvedDistrict.id } : {}),
+        ...(resolvedCategory ? { categoryId: resolvedCategory.id } : {}),
+        ...(formatFilter ? { format: formatFilter } : {}),
+        ...(difficultyFilter ? { difficulty: difficultyFilter } : {}),
+        ...(query.pickup ? { pickupAvailable: true } : {}),
+        ...(query.kids ? { isKidFriendly: true } : {}),
+        ...(priceFromWhere ? { priceFrom: priceFromWhere } : {}),
+        ...(bounds
+          ? {
+              latitude: { gte: bounds.south, lte: bounds.north },
+              longitude: { gte: bounds.west, lte: bounds.east },
+            }
+          : {}),
+        ...sessionAvailabilityWhere,
+      };
+
+      // Fetch a narrowed candidate set first; final relevance still depends on geo/text signals
       // that are easier to combine in application code than in SQL.
       const rows = await db.excursion.findMany({
-        where: buildPublicCatalogExcursionVisibilityWhere(),
+        where: catalogWhere,
         include: {
           mainLocation: {
             select: { id: true, name: true },
@@ -1227,6 +1279,7 @@ export async function getPublicExcursionCatalog(
             select: {
               firstName: true,
               avatarUrl: true,
+              phoneVerifiedAt: true,
             },
           },
           sessions: dateRange
@@ -1781,6 +1834,7 @@ export async function getPublicExcursionCatalog(
                 firstName: item.owner.firstName,
                 lastName: "",
                 avatarUrl: item.owner.avatarUrl,
+                phoneVerifiedAt: item.owner.phoneVerifiedAt?.toISOString() ?? null,
               },
             };
           },
@@ -1915,6 +1969,7 @@ async function getExcursionCardByIdentifier(input: {
           phone: true,
           email: true,
           avatarUrl: true,
+          phoneVerifiedAt: true,
         },
       },
       reviews: {
@@ -2200,6 +2255,7 @@ async function getExcursionCardByIdentifier(input: {
       firstName: excursion.owner.firstName,
       lastName: "",
       avatarUrl: excursion.owner.avatarUrl,
+      phoneVerifiedAt: excursion.owner.phoneVerifiedAt?.toISOString() ?? null,
     },
     sessions: displaySessions.map((session) => ({
       id: session.id,

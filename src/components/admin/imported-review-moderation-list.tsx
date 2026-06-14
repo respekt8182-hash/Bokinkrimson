@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
 import { Button } from "@/components/ui/button";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { getReviewCategoryLabel, reviewCategoryOptions } from "@/lib/review-categories";
 import type { SerializedReview } from "@/lib/reviews";
 
@@ -57,6 +59,7 @@ export function ImportedReviewModerationList({
   initialReviews,
   activeStatus = "ALL",
 }: ImportedReviewModerationListProps) {
+  const currentAdmin = useCurrentAdmin();
   const [reviews, setReviews] = useState(initialReviews);
   const [processingById, setProcessingById] = useState<
     Record<string, "approve" | "reject" | "duplicate" | "delete" | "edit" | null>
@@ -84,6 +87,9 @@ export function ImportedReviewModerationList({
     (currentPage - 1) * importedReviewsPageSize,
     currentPage * importedReviewsPageSize,
   );
+  const canDeleteContent = Boolean(
+    currentAdmin && hasAdminPermission(currentAdmin.role, "content:delete"),
+  );
 
   function getEditDraft(review: SerializedReview): EditDraft {
     return (
@@ -104,6 +110,11 @@ export function ImportedReviewModerationList({
     review: SerializedReview,
     action: "approve" | "reject" | "duplicate" | "delete" | "edit",
   ) {
+    if (action === "delete" && !canDeleteContent) {
+      setError("Недостаточно прав для удаления отзыва.");
+      return;
+    }
+
     setError("");
     setProcessingById((previous) => ({ ...previous, [review.id]: action }));
     try {
@@ -447,13 +458,15 @@ export function ImportedReviewModerationList({
                   Редактировать
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                disabled={processing}
-                onClick={() => void moderateReview(review, "delete")}
-              >
-                {(processingById[review.id] ?? null) === "delete" ? "Удаляем..." : "Удалить"}
-              </Button>
+              {canDeleteContent ? (
+                <Button
+                  variant="ghost"
+                  disabled={processing}
+                  onClick={() => void moderateReview(review, "delete")}
+                >
+                  {(processingById[review.id] ?? null) === "delete" ? "Удаляем..." : "Удалить"}
+                </Button>
+              ) : null}
             </div>
           </article>
         );

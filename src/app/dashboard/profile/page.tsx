@@ -17,8 +17,17 @@ export default async function DashboardProfilePage() {
       firstName: true,
       lastName: true,
       phone: true,
+      phoneVerifiedAt: true,
+      email: true,
       avatarUrl: true,
+      createdAt: true,
       updatedAt: true,
+      _count: {
+        select: {
+          favoriteProperties: true,
+          reviews: true,
+        },
+      },
     },
   });
 
@@ -26,12 +35,18 @@ export default async function DashboardProfilePage() {
     notFound();
   }
 
+  const { _count, ...profile } = user;
+
   return (
     <ProfileSettings
       initialProfile={{
-        ...user,
-        updatedAt: user.updatedAt.toISOString(),
+        ...profile,
+        phoneVerifiedAt: profile.phoneVerifiedAt?.toISOString() ?? null,
+        createdAt: profile.createdAt.toISOString(),
+        updatedAt: profile.updatedAt.toISOString(),
       }}
+      favoriteCount={_count.favoriteProperties}
+      reviewCount={_count.reviews}
     />
   );
 }

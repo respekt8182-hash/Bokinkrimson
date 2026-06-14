@@ -268,6 +268,13 @@ export function HousingCatalogSearchCombobox({
     }
 
     const query = searchValue.trim().slice(0, 120);
+    if (query.length === 1) {
+      setPopularSuggestions([]);
+      setMatchSuggestions([]);
+      setIsLoading(false);
+      return;
+    }
+
     const cacheKey = `housing|${query.toLowerCase()}`;
     const cached = suggestionsCacheRef.current.get(cacheKey);
 

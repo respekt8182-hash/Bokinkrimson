@@ -1,5 +1,3 @@
-import { stat } from "node:fs/promises";
-import { join } from "node:path";
 import type { MetadataRoute } from "next";
 import { crimeaLocationById } from "@/lib/constants";
 import { db } from "@/lib/db";
@@ -113,24 +111,16 @@ const staticRouteFiles: RouteFileEntry[] = [
   },
 ];
 
-async function getFileLastModified(relativeFilePath: string): Promise<Date | undefined> {
-  try {
-    const stats = await stat(join(process.cwd(), relativeFilePath));
-    return stats.mtime;
-  } catch {
-    return undefined;
-  }
+async function getFileLastModified(): Promise<Date | undefined> {
+  return undefined;
 }
 
 async function buildStaticEntries(): Promise<MetadataRoute.Sitemap> {
-  const entries = await Promise.all(
-    staticRouteFiles.map(async (routeFile) => ({
-      url: absoluteUrl(routeFile.path),
-      lastModified: await getFileLastModified(routeFile.file),
-      changeFrequency: routeFile.changeFrequency,
-      priority: routeFile.priority,
-    })),
-  );
+  const entries = staticRouteFiles.map((routeFile) => ({
+    url: absoluteUrl(routeFile.path),
+    changeFrequency: routeFile.changeFrequency,
+    priority: routeFile.priority,
+  }));
 
   return entries;
 }
@@ -175,9 +165,9 @@ async function buildExcursionSeoEntries(): Promise<MetadataRoute.Sitemap> {
   const [directory, locationPageModified, categoryPageModified, districtPageModified] =
     await Promise.all([
       getExcursionSeoDirectoryData(),
-      getFileLastModified("src/app/excursions/[location]/page.tsx"),
-      getFileLastModified("src/app/excursions/category/[category]/page.tsx"),
-      getFileLastModified("src/app/excursions/district/[district]/page.tsx"),
+      getFileLastModified(),
+      getFileLastModified(),
+      getFileLastModified(),
     ]);
 
   return [

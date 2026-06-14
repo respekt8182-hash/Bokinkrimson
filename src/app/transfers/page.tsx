@@ -49,19 +49,12 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
     sort,
   } as const;
 
-  const [result, mapResult, directory] = await Promise.all([
+  const [result, directory] = await Promise.all([
     getPublicTransferCatalog({
       ...catalogQuery,
       bounds,
       page: Number.isFinite(page) ? page : 1,
       pageSize: 30,
-    }),
-    getPublicTransferCatalog({
-      ...catalogQuery,
-      location: "",
-      page: 1,
-      pageSize: 5000,
-      allowLargePageSize: true,
     }),
     getMarketplaceDirectoryData(),
   ]);
@@ -69,7 +62,6 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
   return (
     <TransferCatalog
       result={result}
-      mapItems={mapResult.items}
       transferTypes={directory.transferTypes}
       locationSuggestions={directory.transferLocationSuggestions}
       activeBounds={boundsParam || null}

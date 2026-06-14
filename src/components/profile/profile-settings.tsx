@@ -1,16 +1,22 @@
 ﻿"use client";
 
 import {
+  CalendarDays,
   Camera,
   ChevronDown,
   ChevronUp,
   CircleAlert,
   CircleCheckBig,
-  CloudUpload,
   Eye,
   EyeOff,
+  Heart,
   LockKeyhole,
   LogOut,
+  MessageSquareText,
+  PenLine,
+  ShieldCheck,
+  ShieldX,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -19,6 +25,7 @@ import { AppIcon } from "@/components/ui/app-icon";
 import { AvatarImage } from "@/components/ui/avatar-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/cn";
 import { imageSizeLimitBytes } from "@/lib/constants";
 import { AvatarCropEditor, type CropParams } from "@/components/profile/avatar-crop-editor";
 
@@ -30,6 +37,34 @@ function CameraIcon({ className }: { className?: string }) {
 
 function UserIcon({ className }: { className?: string }) {
   return <AppIcon icon={UserRound} className={className} />;
+}
+
+function HeartIcon({ className }: { className?: string }) {
+  return <AppIcon icon={Heart} className={className} />;
+}
+
+function ReviewsIcon({ className }: { className?: string }) {
+  return <AppIcon icon={MessageSquareText} className={className} />;
+}
+
+function PenIcon({ className }: { className?: string }) {
+  return <AppIcon icon={PenLine} className={className} />;
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return <AppIcon icon={ShieldCheck} className={className} />;
+}
+
+function ShieldXIcon({ className }: { className?: string }) {
+  return <AppIcon icon={ShieldX} className={className} />;
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return <AppIcon icon={CalendarDays} className={className} />;
+}
+
+function SparklesIcon({ className }: { className?: string }) {
+  return <AppIcon icon={Sparkles} className={className} />;
 }
 
 function LockIcon({ className }: { className?: string }) {
@@ -46,10 +81,6 @@ function EyeIcon() {
 
 function EyeOffIcon() {
   return <AppIcon icon={EyeOff} className="h-4 w-4" />;
-}
-
-function UploadCloudIcon({ className }: { className?: string }) {
-  return <AppIcon icon={CloudUpload} className={className} />;
 }
 
 function CheckIcon({ className }: { className?: string }) {
@@ -108,12 +139,17 @@ type ProfileItem = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  phoneVerifiedAt: string | null;
+  email: string | null;
   avatarUrl: string | null;
+  createdAt: string;
   updatedAt: string;
 };
 
 type ProfileSettingsProps = {
   initialProfile: ProfileItem;
+  favoriteCount?: number;
+  reviewCount?: number;
   passwordChangeAvailable?: boolean;
   passwordChangeUnavailableReason?: string | null;
 };
@@ -195,10 +231,6 @@ function formatPhoneForInput(value: string | null | undefined): string {
   }
 
   return `+${normalized}`;
-}
-
-function formatMegabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(0)} МБ`;
 }
 
 function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
@@ -308,6 +340,8 @@ type CropEditorState = {
 
 export function ProfileSettings({
   initialProfile,
+  favoriteCount = 0,
+  reviewCount = 0,
   passwordChangeAvailable = true,
   passwordChangeUnavailableReason = null,
 }: ProfileSettingsProps) {
@@ -331,7 +365,7 @@ export function ProfileSettings({
   const [profileSuccess, setProfileSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
-  const [isPasswordSectionOpen, setIsPasswordSectionOpen] = useState(false);
+  const [isPasswordSectionOpen, setIsPasswordSectionOpen] = useState(true);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -345,6 +379,12 @@ export function ProfileSettings({
     [profile.firstName],
   );
   const isPasswordSectionDisabled = !passwordChangeAvailable;
+  const displayName =
+    [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() || "Пользователь";
+  const memberSince = Number.isNaN(new Date(profile.createdAt).getTime())
+    ? "2025"
+    : String(new Date(profile.createdAt).getFullYear());
+  const isPhoneVerified = Boolean(profile.phoneVerifiedAt);
 
   async function saveProfile() {
     setProfileError("");
@@ -563,266 +603,435 @@ export function ProfileSettings({
         />
       )}
 
-      {/* ── Profile hero ───────────────────────────────────────────────────── */}
-
-      {/* ── Sections ───────────────────────────────────────────────────────── */}
-      <div className="space-y-5">
-        {/* ── Avatar section ──────────────────────────────────────────── */}
-        <section
-          id="avatar"
-          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-olive/8 px-5 py-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
-              <CameraIcon className="h-4 w-4" />
-            </div>
-            <h2 className="font-semibold text-olive">Фото профиля</h2>
-          </div>
-          <div className="p-5">
-            <div className="flex flex-wrap items-center gap-5">
-              <div
-                className={`h-24 w-24 shrink-0 overflow-hidden rounded-full bg-cream ring-2 transition ${
-                  profile.avatarUrl ? "ring-primary/30" : "ring-olive/12"
-                }`}
-              >
-                <AvatarImage
-                  src={profile.avatarUrl}
-                  alt="Profile avatar"
-                  className="h-full w-full object-cover"
+      <div className="dashboard-profile-page overflow-hidden rounded-[26px] bg-white/94 p-3 shadow-[0_28px_80px_rgba(58,43,35,0.1)] ring-1 ring-white/80 backdrop-blur-xl md:p-4">
+        <section className="dashboard-profile-hero relative overflow-hidden rounded-[22px] px-5 py-6 md:px-10 md:py-8">
+          <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="relative mx-auto h-36 w-36 shrink-0 sm:mx-0 md:h-44 md:w-44">
+                <div
+                  className={cn(
+                    "h-full w-full overflow-hidden rounded-full bg-cream ring-[7px] ring-white shadow-[0_18px_42px_rgba(58,43,35,0.18)] transition",
+                    profile.avatarUrl ? "bg-white" : "bg-[linear-gradient(180deg,#fff7df,#d7f3ee)]",
+                  )}
                 >
-                  <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-olive/40">
-                    {initials}
-                  </div>
-                </AvatarImage>
-              </div>
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <label
-                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition ${
-                      isBusy ? "cursor-not-allowed bg-primary/55" : "bg-primary hover:bg-primary/88"
-                    }`}
+                  <AvatarImage
+                    src={profile.avatarUrl}
+                    alt="Фото профиля"
+                    className="h-full w-full object-cover"
                   >
-                    <UploadCloudIcon className="h-4 w-4" />
-                    {isBusy ? "Обработка..." : "Загрузить фото"}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
-                      className="hidden"
-                      disabled={isBusy}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void handleFileSelect(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  {profile.avatarUrl ? (
-                    <Button variant="ghost" disabled={isBusy} onClick={() => void removeAvatar()}>
-                      Удалить фото
-                    </Button>
-                  ) : null}
+                    <div className="flex h-full w-full items-center justify-center text-5xl font-bold text-primary/72">
+                      {initials}
+                    </div>
+                  </AvatarImage>
                 </div>
-                <p className="text-xs text-olive/45">
-                  PNG, JPEG, WEBP или HEIC · до {formatMegabytes(imageSizeLimitBytes)}
+                <label
+                  className={cn(
+                    "absolute -bottom-1 -right-1 inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-white text-primary shadow-[0_12px_26px_rgba(58,43,35,0.18)] ring-1 ring-olive/8 transition hover:text-primary-hover",
+                    isBusy && "cursor-not-allowed opacity-65",
+                  )}
+                  title="Изменить фото"
+                >
+                  <CameraIcon className="h-5 w-5" />
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                    className="hidden"
+                    disabled={isBusy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleFileSelect(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="min-w-0 text-center sm:text-left">
+                <h1 className="font-heading text-3xl font-semibold leading-tight text-olive md:text-4xl">
+                  {displayName}
+                </h1>
+                <p className="mt-2 text-sm text-olive/74 md:text-base">
+                  Путешественник <span className="px-1.5 text-olive/35">·</span> Крым вокруг
+                </p>
+                <div className="mt-5 flex flex-wrap justify-center gap-3 text-sm text-olive/80 sm:justify-start">
+                  <span className="inline-flex items-center gap-2">
+                    {isPhoneVerified ? (
+                      <ShieldIcon className="h-5 w-5 text-primary" />
+                    ) : (
+                      <ShieldXIcon className="h-5 w-5 text-red-600" />
+                    )}
+                    {isPhoneVerified ? "Телефон подтверждён" : "Телефон не подтверждён"}
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-primary" />
+                    Участник с {memberSince}
+                  </span>
+                </div>
+                <StatusMessage type="error" message={avatarError} />
+                <StatusMessage type="success" message={avatarSuccess} />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+              <label
+                className={cn(
+                  "inline-flex h-14 cursor-pointer items-center justify-center gap-3 rounded-xl border border-white/80 bg-white/82 px-6 text-sm font-bold text-primary shadow-[0_14px_34px_rgba(15,118,110,0.12)] backdrop-blur transition hover:bg-white",
+                  isBusy && "cursor-not-allowed opacity-65",
+                )}
+              >
+                <CameraIcon className="h-5 w-5" />
+                {isBusy ? "Обработка..." : "Изменить фото"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                  className="hidden"
+                  disabled={isBusy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleFileSelect(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <a
+                href="#personal"
+                className="inline-flex h-14 items-center justify-center gap-3 rounded-xl bg-primary px-6 text-sm font-bold text-white shadow-[0_18px_40px_rgba(15,118,110,0.28)] transition hover:bg-primary-hover"
+              >
+                <PenIcon className="h-5 w-5" />
+                Редактировать профиль
+              </a>
+              {profile.avatarUrl ? (
+                <Button
+                  variant="ghost"
+                  disabled={isBusy}
+                  onClick={() => void removeAvatar()}
+                  className="h-14 border-white/80 bg-white/70 px-5 text-primary hover:bg-white hover:text-primary-hover"
+                >
+                  Удалить фото
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <section className="rounded-[16px] bg-white/88 p-5 ring-1 ring-olive/10">
+            <div className="flex items-center gap-5">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/8 text-primary">
+                <HeartIcon className="h-8 w-8" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-olive">Избранное</p>
+                <p className="mt-0.5 text-3xl font-bold leading-none text-primary">{favoriteCount}</p>
+                <p className="mt-2 text-xs uppercase tracking-[0.08em] text-olive/45">
+                  сохранённых мест
                 </p>
               </div>
             </div>
-            <StatusMessage type="error" message={avatarError} />
-            <StatusMessage type="success" message={avatarSuccess} />
-          </div>
-        </section>
-
-        {/* ── Personal data section ────────────────────────────────────── */}
-        <section
-          id="personal"
-          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
-        >
-          <div className="flex items-center gap-3 border-b border-olive/8 px-5 py-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
-              <UserIcon className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-olive">Основные данные</h2>
-              <p className="text-xs text-olive/45">Имя, фамилия и контакты</p>
-            </div>
-          </div>
-          <div className="p-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Имя</span>
-                <Input
-                  value={profileForm.firstName}
-                  onChange={(event) =>
-                    setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Фамилия</span>
-                <Input
-                  value={profileForm.lastName}
-                  onChange={(event) =>
-                    setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Телефон</span>
-                <Input
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="+7 (___) ___-__-__"
-                  required
-                  value={profileForm.phone}
-                  onChange={(event) =>
-                    setProfileForm((prev) => ({
-                      ...prev,
-                      phone: formatPhoneForInput(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="mt-5">
-              <Button onClick={() => void saveProfile()} disabled={isProfileSaving}>
-                {isProfileSaving ? "Сохранение..." : "Сохранить изменения"}
-              </Button>
-            </div>
-            <StatusMessage type="error" message={profileError} />
-            <StatusMessage type="success" message={profileSuccess} />
-          </div>
-        </section>
-
-        {/* ── Password section ─────────────────────────────────────────── */}
-        <section
-          id="password"
-          className="scroll-mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-olive/10"
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-olive/8 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
-                <LockIcon className="h-4 w-4" />
+          </section>
+          <section className="rounded-[16px] bg-white/88 p-5 ring-1 ring-olive/10">
+            <div className="flex items-center gap-5">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/8 text-primary">
+                <ReviewsIcon className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="font-semibold text-olive">Смена пароля</h2>
-                <p className="text-xs text-olive/45">Обновите пароль для входа</p>
+                <p className="text-sm font-medium text-olive">Отзывы</p>
+                <p className="mt-0.5 text-3xl font-bold leading-none text-primary">{reviewCount}</p>
+                <p className="mt-2 text-xs uppercase tracking-[0.08em] text-olive/45">
+                  оставлено отзывов
+                </p>
               </div>
             </div>
-            <button
-              type="button"
-              aria-expanded={isPasswordSectionOpen}
-              onClick={() => setIsPasswordSectionOpen((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-xl border border-olive/12 px-3.5 py-2 text-sm font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
+          </section>
+        </div>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-[0.92fr_1fr]">
+          <div className="grid gap-3">
+            <section
+              id="personal"
+              className="scroll-mt-32 rounded-[16px] bg-white/90 p-5 ring-1 ring-olive/10 md:p-6"
             >
-              {isPasswordSectionOpen ? "Скрыть" : "Открыть"}
-              {isPasswordSectionOpen ? (
-                <ChevronUpIcon className="h-4 w-4" />
-              ) : (
-                <ChevronDownIcon className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-          {isPasswordSectionOpen ? (
-            <div className={`p-5${isPasswordSectionDisabled ? " opacity-70" : ""}`}>
-              <AvailabilityNotice
-                message={isPasswordSectionDisabled ? passwordChangeUnavailableReason : null}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-1.5 sm:col-span-2">
-                  <span className="text-sm font-medium text-olive">Текущий пароль</span>
-                  <div className="relative">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                  <UserIcon className="h-5 w-5" />
+                </div>
+                <h2 className="font-heading text-2xl font-semibold text-olive">Личные данные</h2>
+              </div>
+              <div className="grid gap-3">
+                <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                  <span className="text-sm font-medium text-olive">Имя</span>
+                  <Input
+                    value={profileForm.firstName}
+                    onChange={(event) =>
+                      setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
+                    }
+                    className="h-10 rounded-lg bg-white/90 py-2 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]"
+                  />
+                </label>
+                <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                  <span className="text-sm font-medium text-olive">Фамилия</span>
+                  <Input
+                    value={profileForm.lastName}
+                    onChange={(event) =>
+                      setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
+                    }
+                    className="h-10 rounded-lg bg-white/90 py-2 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]"
+                  />
+                </label>
+                <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                  <span className="text-sm font-medium text-olive">Телефон</span>
+                  <span className="relative block">
                     <Input
-                      type={showCurrent ? "text" : "password"}
-                      autoComplete="current-password"
-                      value={passwordForm.currentPassword}
-                      disabled={isPasswordSectionDisabled}
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="+7 (___) ___-__-__"
+                      required
+                      value={profileForm.phone}
                       onChange={(event) =>
-                        setPasswordForm((prev) => ({
+                        setProfileForm((prev) => ({
                           ...prev,
-                          currentPassword: event.target.value,
+                          phone: formatPhoneForInput(event.target.value),
                         }))
                       }
-                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
+                      className="h-10 rounded-lg bg-white/90 py-2 pr-10 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]"
                     />
-                    <button
-                      type="button"
-                      disabled={isPasswordSectionDisabled}
-                      onClick={() => setShowCurrent((v) => !v)}
-                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    <span
+                      className={cn(
+                        "absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white",
+                        isPhoneVerified ? "bg-primary" : "bg-red-600",
+                      )}
+                      title={isPhoneVerified ? "Телефон подтверждён" : "Телефон не подтверждён"}
                     >
-                      {showCurrent ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
+                      {isPhoneVerified ? (
+                        <CheckIcon className="h-3.5 w-3.5" />
+                      ) : (
+                        <ShieldXIcon className="h-3.5 w-3.5" />
+                      )}
+                    </span>
+                  </span>
                 </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Новый пароль</span>
-                  <div className="relative">
-                    <Input
-                      type={showNew ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={passwordForm.newPassword}
-                      disabled={isPasswordSectionDisabled}
-                      onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
-                      }
-                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
-                    />
-                    <button
-                      type="button"
-                      disabled={isPasswordSectionDisabled}
-                      onClick={() => setShowNew((v) => !v)}
-                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {showNew ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Повторите пароль</span>
-                  <div className="relative">
-                    <Input
-                      type={showConfirm ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={passwordForm.confirmPassword}
-                      disabled={isPasswordSectionDisabled}
-                      onChange={(event) =>
-                        setPasswordForm((prev) => ({
-                          ...prev,
-                          confirmPassword: event.target.value,
-                        }))
-                      }
-                      className={`pr-9${isPasswordSectionDisabled ? " cursor-not-allowed bg-cream text-olive/60" : ""}`}
-                    />
-                    <button
-                      type="button"
-                      disabled={isPasswordSectionDisabled}
-                      onClick={() => setShowConfirm((v) => !v)}
-                      className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
+                <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                  <span className="text-sm font-medium text-olive">Email</span>
+                  <Input
+                    value={profile.email ?? ""}
+                    placeholder="Email не указан"
+                    readOnly
+                    className="h-10 rounded-lg bg-white/72 py-2 text-olive/72 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]"
+                  />
                 </label>
               </div>
-              <div className="mt-5">
+              <Button
+                onClick={() => void saveProfile()}
+                disabled={isProfileSaving}
+                className="mt-5 h-11 w-full rounded-lg bg-primary shadow-[0_14px_30px_rgba(15,118,110,0.22)] hover:bg-primary-hover"
+              >
+                {isProfileSaving ? "Сохранение..." : "Сохранить изменения"}
+              </Button>
+              <StatusMessage type="error" message={profileError} />
+              <StatusMessage type="success" message={profileSuccess} />
+            </section>
+
+            <section className="rounded-[16px] bg-white/90 p-5 ring-1 ring-olive/10 md:p-6">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                  <SparklesIcon className="h-5 w-5" />
+                </div>
+                <h2 className="font-heading text-2xl font-semibold text-olive">
+                  Предпочтения поездок
+                </h2>
+              </div>
+              <div className="grid gap-4 text-sm sm:grid-cols-[110px_1fr] sm:items-center">
+                <span className="font-medium text-olive">Тип отдыха</span>
+                <div className="flex flex-wrap gap-2">
+                  {["Экскурсии", "Природа", "Пляжный отдых"].map((item, index) => (
+                    <span
+                      key={item}
+                      className={cn(
+                        "rounded-full px-4 py-2 font-semibold",
+                        index === 0 ? "bg-primary text-white" : "bg-primary/10 text-primary",
+                      )}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+                <span className="font-medium text-olive">Транспорт</span>
+                <div className="flex flex-wrap gap-2">
+                  {["Авто", "Пешком", "Общественный транспорт"].map((item, index) => (
+                    <span
+                      key={item}
+                      className={cn(
+                        "rounded-full px-4 py-2 font-semibold",
+                        index === 0 ? "bg-primary text-white" : "bg-olive/8 text-olive/78",
+                      )}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section
+            id="password"
+            className="scroll-mt-32 rounded-[16px] bg-white/90 p-5 ring-1 ring-olive/10 md:p-6"
+          >
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                  <LockIcon className="h-5 w-5" />
+                </div>
+                <h2 className="font-heading text-2xl font-semibold text-olive">
+                  Безопасность аккаунта
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-expanded={isPasswordSectionOpen}
+                onClick={() => setIsPasswordSectionOpen((value) => !value)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-primary transition hover:bg-primary/8"
+                title={isPasswordSectionOpen ? "Скрыть" : "Открыть"}
+              >
+                {isPasswordSectionOpen ? (
+                  <ChevronUpIcon className="h-5 w-5" />
+                ) : (
+                  <ChevronDownIcon className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+            {isPasswordSectionOpen ? (
+              <div
+                className={cn(
+                  "rounded-[18px] bg-white/56 p-4 ring-1 ring-olive/10 md:p-5",
+                  isPasswordSectionDisabled && "opacity-70",
+                )}
+              >
+                <h3 className="font-semibold text-olive">Изменение пароля</h3>
+                <p className="mt-1 text-sm text-olive/58">
+                  Рекомендуем регулярно обновлять пароль для защиты вашего аккаунта.
+                </p>
+                <AvailabilityNotice
+                  message={isPasswordSectionDisabled ? passwordChangeUnavailableReason : null}
+                />
+                <div className="mt-5 grid gap-3">
+                  <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                    <span className="text-sm font-medium text-olive">Текущий пароль</span>
+                    <span className="relative block">
+                      <Input
+                        type={showCurrent ? "text" : "password"}
+                        autoComplete="current-password"
+                        value={passwordForm.currentPassword}
+                        disabled={isPasswordSectionDisabled}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({
+                            ...prev,
+                            currentPassword: event.target.value,
+                          }))
+                        }
+                        className={cn(
+                          "h-10 rounded-lg bg-white/90 py-2 pr-10 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]",
+                          isPasswordSectionDisabled && "cursor-not-allowed bg-cream text-olive/60",
+                        )}
+                      />
+                      <button
+                        type="button"
+                        disabled={isPasswordSectionDisabled}
+                        onClick={() => setShowCurrent((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                        title={showCurrent ? "Скрыть пароль" : "Показать пароль"}
+                      >
+                        {showCurrent ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </span>
+                  </label>
+                  <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                    <span className="text-sm font-medium text-olive">Новый пароль</span>
+                    <span className="relative block">
+                      <Input
+                        type={showNew ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={passwordForm.newPassword}
+                        disabled={isPasswordSectionDisabled}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
+                        }
+                        className={cn(
+                          "h-10 rounded-lg bg-white/90 py-2 pr-10 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]",
+                          isPasswordSectionDisabled && "cursor-not-allowed bg-cream text-olive/60",
+                        )}
+                      />
+                      <button
+                        type="button"
+                        disabled={isPasswordSectionDisabled}
+                        onClick={() => setShowNew((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                        title={showNew ? "Скрыть пароль" : "Показать пароль"}
+                      >
+                        {showNew ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </span>
+                  </label>
+                  <label className="grid gap-2 sm:grid-cols-[190px_1fr] sm:items-center">
+                    <span className="text-sm font-medium text-olive">Повторите новый пароль</span>
+                    <span className="relative block">
+                      <Input
+                        type={showConfirm ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={passwordForm.confirmPassword}
+                        disabled={isPasswordSectionDisabled}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({
+                            ...prev,
+                            confirmPassword: event.target.value,
+                          }))
+                        }
+                        className={cn(
+                          "h-10 rounded-lg bg-white/90 py-2 pr-10 shadow-[inset_0_1px_2px_rgba(58,43,35,0.04)]",
+                          isPasswordSectionDisabled && "cursor-not-allowed bg-cream text-olive/60",
+                        )}
+                      />
+                      <button
+                        type="button"
+                        disabled={isPasswordSectionDisabled}
+                        onClick={() => setShowConfirm((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-olive/40 hover:text-olive/70 disabled:cursor-not-allowed disabled:opacity-50"
+                        title={showConfirm ? "Скрыть пароль" : "Показать пароль"}
+                      >
+                        {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </span>
+                  </label>
+                </div>
+                <div className="mt-5 flex items-start gap-4 rounded-xl bg-primary/8 px-4 py-3 text-sm text-primary">
+                  <LockIcon className="mt-0.5 h-5 w-5 shrink-0" />
+                  <p>
+                    <span className="font-semibold">Для безопасности используйте сложный пароль</span>
+                    <br />
+                    <span className="text-olive/68">
+                      Минимум 8 символов, с цифрами и буквами разного регистра.
+                    </span>
+                  </p>
+                </div>
                 <Button
                   onClick={() => void savePassword()}
                   disabled={isPasswordSaving || isPasswordSectionDisabled}
+                  className="mt-5 h-11 w-full rounded-lg bg-primary shadow-[0_14px_30px_rgba(15,118,110,0.22)] hover:bg-primary-hover"
                 >
                   {isPasswordSaving ? "Сохранение..." : "Изменить пароль"}
                 </Button>
+                <StatusMessage type="error" message={passwordError} />
+                <StatusMessage type="success" message={passwordSuccess} />
               </div>
-              <StatusMessage type="error" message={passwordError} />
-              <StatusMessage type="success" message={passwordSuccess} />
-            </div>
-          ) : (
-            <div className="p-5 text-sm text-olive/60">
-              Форма скрыта для безопасности. Нажмите «Открыть», чтобы сменить пароль.
-            </div>
-          )}
-        </section>
+            ) : (
+              <div className="rounded-[18px] bg-white/56 p-5 text-sm text-olive/60 ring-1 ring-olive/10">
+                Форма скрыта для безопасности.
+              </div>
+            )}
+          </section>
+        </div>
 
-        <section className="overflow-hidden rounded-2xl bg-red-50/70 p-4 ring-1 ring-red-100 lg:hidden">
+        <section className="mt-3 overflow-hidden rounded-2xl bg-red-50/70 p-4 ring-1 ring-red-100 lg:hidden">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-red-700 ring-1 ring-red-100">
               <LogoutIcon className="h-5 w-5" />

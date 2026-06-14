@@ -352,7 +352,7 @@ async function localPublicUploadExists(key: string): Promise<boolean> {
     return cached.exists;
   }
 
-  const fullPath = path.join(localUploadsPublicDir, ...normalizedKey.split("/"));
+  const fullPath = `${localUploadsPublicDir}${path.sep}${normalizedKey.split("/").join(path.sep)}`;
   const fileStat = await stat(fullPath).catch(() => null);
   const exists = Boolean(fileStat?.isFile());
   publicUploadExistsCache.set(normalizedKey, { checkedAt: now, exists });

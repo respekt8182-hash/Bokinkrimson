@@ -16,6 +16,8 @@ import {
   Phone,
 } from "lucide-react";
 import { AdminEmptyState, AdminPageHeader, AdminPanel } from "@/components/admin/admin-ui";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { cn } from "@/lib/cn";
 import { useDocumentVisibility } from "@/hooks/use-document-visibility";
 
@@ -220,7 +222,11 @@ function formatMessageTime(value: string) {
 // ─── Component ──────────────────────────────────────────────────
 
 export function SupportChatManager({ initialEnabled, initialTemplates, initialManagers }: Props) {
+  const currentAdmin = useCurrentAdmin();
   const isDocumentVisible = useDocumentVisibility();
+  const canManageSupportSettings = Boolean(
+    currentAdmin && hasAdminPermission(currentAdmin.role, "support-settings:manage"),
+  );
   // ─── State: settings ──────────────────────────────────────
   const [enabled, setEnabled] = useState(initialEnabled);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
@@ -411,7 +417,7 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
   }, [chatDetail?.messages]);
 
   useEffect(() => {
-    if (!isSidebarOpen) {
+    if (!isSidebarOpen || !canManageSupportSettings) {
       return;
     }
 
@@ -430,27 +436,34 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [isSidebarOpen]);
+  }, [canManageSupportSettings, isSidebarOpen]);
 
   // ─── Toggle chat enabled ──────────────────────────────────
 
   async function toggleEnabled() {
+    if (!canManageSupportSettings) {
+      return;
+    }
+
     setTogglingEnabled(true);
     const newVal = !enabled;
-    const res = await fetch("/api/admin/support-chat", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: newVal }),
-    });
-    if (res.ok) setEnabled(newVal);
-    setTogglingEnabled(false);
+    try {
+      const res = await fetch("/api/admin/support-chat", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newVal }),
+      });
+      if (res.ok) setEnabled(newVal);
+    } finally {
+      setTogglingEnabled(false);
+    }
   }
 
   // ─── Create manager ───────────────────────────────────────
 
   async function handleCreateManager(e: FormEvent) {
     e.preventDefault();
-    if (!newManagerName.trim() || creatingManager) return;
+    if (!canManageSupportSettings || !newManagerName.trim() || creatingManager) return;
     setCreatingManager(true);
 
     const fd = new FormData();
@@ -468,6 +481,10 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
   }
 
   async function toggleManagerActive(id: string, activate: boolean) {
+    if (!canManageSupportSettings) {
+      return;
+    }
+
     const res = await fetch("/api/admin/chat-managers", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -484,6 +501,10 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
   }
 
   async function deleteManager(id: string) {
+    if (!canManageSupportSettings) {
+      return;
+    }
+
     const res = await fetch(`/api/admin/chat-managers?id=${id}`, { method: "DELETE" });
     if (res.ok) setManagers((prev) => prev.filter((m) => m.id !== id));
   }
@@ -491,34 +512,43 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
   // ─── Templates ────────────────────────────────────────────
 
   async function saveTemplates(newTemplates: string[]) {
+    if (!canManageSupportSettings) {
+      return;
+    }
+
     setSavingTemplates(true);
-    const res = await fetch("/api/admin/support-chat", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ templates: newTemplates }),
-    });
-    if (res.ok) setTemplates(newTemplates);
-    setSavingTemplates(false);
+    try {
+      const res = await fetch("/api/admin/support-chat", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templates: newTemplates }),
+      });
+      if (res.ok) setTemplates(newTemplates);
+    } finally {
+      setSavingTemplates(false);
+    }
   }
 
   function addTemplate() {
-    if (!newTemplate.trim() || templates.length >= 12) return;
+    if (!canManageSupportSettings || !newTemplate.trim() || templates.length >= 12) return;
     const updated = [...templates, newTemplate.trim()];
     setNewTemplate("");
     saveTemplates(updated);
   }
 
   function removeTemplate(idx: number) {
+    if (!canManageSupportSettings) return;
     saveTemplates(templates.filter((_, i) => i !== idx));
   }
 
   function startEditTemplate(idx: number) {
+    if (!canManageSupportSettings) return;
     setEditingTemplateIdx(idx);
     setEditingTemplateVal(templates[idx]);
   }
 
   function saveEditTemplate() {
-    if (editingTemplateIdx === null) return;
+    if (!canManageSupportSettings || editingTemplateIdx === null) return;
     const updated = [...templates];
     updated[editingTemplateIdx] = editingTemplateVal.trim();
     setEditingTemplateIdx(null);
@@ -550,6 +580,10 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
   }
 
   async function deleteChat(chatId: string) {
+    if (!canManageSupportSettings) {
+      return;
+    }
+
     if (!confirm("Удалить весь диалог?")) return;
     const res = await fetch(`/api/admin/support-chat?chatId=${chatId}`, { method: "DELETE" });
     if (res.ok) {
@@ -587,7 +621,8 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
         description="Диалоги, менеджеры и быстрые ответы в одном рабочем окне."
         actions={
           <>
-            <button
+            {canManageSupportSettings ? (
+              <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
               className="inline-flex items-center gap-3 rounded-[22px] border border-white/80 bg-white/82 px-4 py-3 text-left shadow-[0_14px_30px_rgba(58,43,35,0.07)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(58,43,35,0.09)]"
@@ -604,7 +639,8 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
                 </span>
                 <span className="block text-sm font-semibold text-olive">Команда и фразы</span>
               </span>
-            </button>
+              </button>
+            ) : null}
 
             <div className="flex items-center gap-3 rounded-[22px] border border-white/80 bg-white/78 px-3 py-2 shadow-[0_14px_30px_rgba(58,43,35,0.07)]">
               <div className="min-w-0">
@@ -616,7 +652,8 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
                 </p>
               </div>
 
-              <button
+              {canManageSupportSettings ? (
+                <button
                 type="button"
                 onClick={toggleEnabled}
                 disabled={togglingEnabled}
@@ -633,14 +670,15 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
                     enabled ? "translate-x-6" : "translate-x-1",
                   )}
                 />
-              </button>
+                </button>
+              ) : null}
             </div>
           </>
         }
       />
 
       <div className="grid gap-6">
-        {isSidebarOpen ? (
+        {isSidebarOpen && canManageSupportSettings ? (
           <div className="fixed inset-0 z-50">
             <button
               type="button"
@@ -1137,14 +1175,16 @@ export function SupportChatManager({ initialEnabled, initialTemplates, initialMa
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => deleteChat(chatDetail.id)}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-red-200/80 bg-red-50/95 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Удалить диалог</span>
-                      </button>
+                      {canManageSupportSettings ? (
+                        <button
+                          type="button"
+                          onClick={() => deleteChat(chatDetail.id)}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-red-200/80 bg-red-50/95 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="hidden sm:inline">Удалить диалог</span>
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 

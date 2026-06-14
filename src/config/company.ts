@@ -7,7 +7,7 @@ export const companyConfig = {
   brandName: "Крым Вокруг",
   domain: "krymvokrug.ru",
   baseUrl: "https://krymvokrug.ru",
-  logoPath: "/favicon.svg",
+  logoPath: "/krymvokrug-logo.svg",
   shortDescription:
     "Крым Вокруг — маркетплейс жилья у моря и экскурсий по Крыму. Идёт набор в ранний доступ: размещение на сайте бесплатно до 1 мая 2027; после бесплатного периода сервис не удерживает комиссию с каждого клиента или бронирования.",
   region: "Республика Крым",

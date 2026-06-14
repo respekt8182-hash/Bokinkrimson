@@ -13,6 +13,19 @@ enum UserRole {
   ADMIN
 }
 
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  SUPPORT
+  FINANCE
+}
+
+enum AdminAccountStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum PasswordResetRequestStatus {
   PENDING
   COMPLETED
@@ -228,6 +241,8 @@ enum CustomLocationStatus {
 model User {
   id                        String                 @id @default(cuid())
   phone                     String                 @unique
+  phoneVerifiedAt           DateTime?
+  phoneVerifiedByAdminId    String?
   firstName                 String
   lastName                  String
   passwordHash              String
@@ -267,6 +282,7 @@ model User {
   supportChat               SupportChat?
 
   @@index([deletedAt, deletionExpiresAt, createdAt])
+  @@index([phoneVerifiedAt])
   @@index([lastSeenAt])
   @@index([lastLoginAt])
   @@index([pendingEmail])
@@ -309,6 +325,30 @@ model AdminSessionState {
   sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model AdminAccount {
+  id                 String             @id @default(cuid())
+  login              String             @unique
+  email              String?            @unique
+  passwordHash       String
+  displayName        String
+  avatarUrl          String?
+  avatarStorageKey   String?
+  role               AdminRole          @default(ADMIN)
+  status             AdminAccountStatus @default(ACTIVE)
+  sessionVersion     Int                @default(0)
+  mustChangePassword Boolean            @default(false)
+  createdById        String?
+  disabledById       String?
+  disabledAt         DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([status, role, createdAt])
+  @@index([createdById, createdAt])
+  @@index([disabledAt])
 }
 
 model WebhookReceipt {
@@ -429,6 +469,9 @@ model Property {
   @@index([avgRating, status, isPublishedVisible], map: "property_catalog_rating_visible_idx")
   @@index([createdAt], map: "property_catalog_created_idx")
   @@index([latitude, longitude], map: "property_catalog_geo_idx")
+  @@index([status, isPublishedVisible, latitude, longitude], map: "property_map_visible_geo_idx")
+  @@index([status, isPublishedVisible, locationId, type, updatedAt], map: "property_map_location_type_updated_idx")
+  @@index([status, isPublishedVisible, avgRating, reviewsCount, updatedAt], map: "property_search_rating_reviews_updated_idx")
 }
 
 model FavoriteProperty {
@@ -741,6 +784,10 @@ model Excursion {
   @@index([meetingLocationId])
   @@index([scheduleMode])
   @@index([pickupAvailable])
+  @@index([status, isPublishedVisible, latitude, longitude], map: "excursion_map_visible_geo_idx")
+  @@index([status, isPublishedVisible, offerType, categoryId, updatedAt], map: "excursion_map_offer_category_updated_idx")
+  @@index([status, isPublishedVisible, anchorLocationId, offerType, updatedAt], map: "excursion_map_anchor_offer_updated_idx")
+  @@index([status, isPublishedVisible, priceFrom, updatedAt], map: "excursion_search_price_updated_idx")
 }
 
 model Attraction {

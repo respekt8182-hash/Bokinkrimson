@@ -37,6 +37,8 @@ const EXCURSION_COMPAT_COLUMNS = [
 
 const USER_COMPAT_COLUMNS = [
   "pendingEmail",
+  "phoneVerifiedAt",
+  "phoneVerifiedByAdminId",
   "emailChangeTokenHash",
   "emailChangeTokenExpiresAt",
   "emailChangeRequestedAt",
@@ -113,6 +115,8 @@ const SCHEMA_COMPAT_MODELS = {
     columns: USER_COMPAT_COLUMNS,
     defaults: {
       pendingEmail: null,
+      phoneVerifiedAt: null,
+      phoneVerifiedByAdminId: null,
       emailChangeTokenHash: null,
       emailChangeTokenExpiresAt: null,
       emailChangeRequestedAt: null,

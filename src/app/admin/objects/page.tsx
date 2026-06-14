@@ -624,7 +624,7 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                       buttonLabel="Аналитика"
                     />
                     <Link
-                      href={`/admin/objects/${item.id}`}
+                      href={`/admin/objects/${item.id}/about`}
                       className="rounded-2xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
                     >
                       Редактировать

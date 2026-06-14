@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/admin-session-token";
+import { getAdminApiRequestPermission, getAdminUiPathPermission, hasAdminPermission } from "@/lib/admin-rbac";
 import { isSameOrigin } from "@/lib/csrf";
 import {
   createRateLimiter,
@@ -108,9 +109,9 @@ function requiresStrictSecurityConfiguration(pathname: string, method: string): 
     return true;
   }
 
-  if (pathname.startsWith("/api/admin/") || pathname.startsWith("/api/auth/")) {
-    return true;
-  }
+    if (pathname.startsWith("/api/admin/") || pathname.startsWith("/api/auth/")) {
+      return true;
+    }
 
   return isOwnerSpaceApiPath(pathname);
 }
@@ -282,6 +283,20 @@ export async function proxy(request: NextRequest) {
       );
     }
 
+    if (pathname.startsWith("/api/admin/")) {
+      const requiredPermission = getAdminApiRequestPermission(pathname, requestMethod);
+      if (requiredPermission) {
+        const adminToken = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+        const adminSession = adminToken ? await verifyAdminSessionToken(adminToken) : null;
+
+        if (!adminSession || !hasAdminPermission(adminSession.role, requiredPermission)) {
+          return applySecurityHeaders(
+            NextResponse.json({ error: "Доступ запрещен" }, { status: 403 }),
+          );
+        }
+      }
+    }
+
     const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
     if (token) {
       const session = await verifySessionToken(token);
@@ -328,6 +343,11 @@ export async function proxy(request: NextRequest) {
         clearAdminCookie(response);
       }
       return applySecurityHeaders(response);
+    }
+
+    const requiredPermission = getAdminUiPathPermission(pathname);
+    if (requiredPermission && !hasAdminPermission(adminSession.role, requiredPermission)) {
+      return applySecurityHeaders(NextResponse.redirect(new URL("/admin", request.url)));
     }
 
     return applySecurityHeaders(NextResponse.next());

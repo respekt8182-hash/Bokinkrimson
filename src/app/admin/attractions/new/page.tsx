@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminPageHeader, AdminPanel, adminInputClass } from "@/components/admin/admin-ui";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { createAttractionDraft } from "@/lib/public-marketplace";
 
 export default async function AdminCreateAttractionPage() {
@@ -11,6 +12,9 @@ export default async function AdminCreateAttractionPage() {
     const admin = await verifyAdminSession();
     if (!admin) {
       redirect("/admin/login");
+    }
+    if (!hasAdminPermission(admin.role, "content:create")) {
+      redirect("/admin");
     }
 
     const created = await createAttractionDraft({

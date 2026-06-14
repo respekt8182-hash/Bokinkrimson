@@ -145,7 +145,10 @@ function shouldShowDashboardBottomNav(pathname: string) {
 }
 
 function shouldUseWideDashboardFrame(pathname: string) {
-  return /^\/dashboard\/objects\/[^/?#]+(?:[/?#]|\/)/.test(pathname);
+  return (
+    /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname)
+  );
 }
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -203,13 +206,15 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
   const useWideFrame = shouldUseWideDashboardFrame(pathname);
-  const useObjectEditorFrame = useWideFrame;
+  const useObjectEditorFrame = /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname);
   const useVisualFrame =
     pathname === "/dashboard" ||
     pathname === "/dashboard/objects" ||
-    /^\/dashboard\/objects\/[^/?#]+(?:[/?#]|\/)/.test(pathname) ||
+    /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
     pathname === "/dashboard/excursions" ||
-    pathname === "/dashboard/transfers";
+    pathname === "/dashboard/transfers" ||
+    pathname === "/dashboard/profile";
   const displayName = formatPublicPersonName(user, "Пользователь");
 
   function closeDrawer() {
@@ -451,9 +456,7 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
         <div
           className={cn(
             "mx-auto w-full",
-            useObjectEditorFrame
-              ? "max-w-none px-6 py-8 md:px-8"
-              : "px-4 py-5 md:px-6",
+            useObjectEditorFrame ? "max-w-none px-6 py-8 md:px-8" : "px-4 py-5 md:px-6",
             useObjectEditorFrame
               ? ""
               : useVisualFrame

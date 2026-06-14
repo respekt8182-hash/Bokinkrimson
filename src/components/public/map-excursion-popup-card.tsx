@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { BadgeCheck, X } from "lucide-react";
 import Link from "next/link";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -220,6 +220,9 @@ export function MapExcursionPopupCard({
             </AvatarImage>
           </span>
           <span className="truncate text-xs font-semibold text-olive/70">{ownerName}</span>
+          {item.owner.phoneVerifiedAt ? (
+            <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0 text-primary" />
+          ) : null}
         </div>
 
         <div className="rounded-xl bg-cream/70 px-3 py-2">

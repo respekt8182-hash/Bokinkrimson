@@ -2,7 +2,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
 import { Button } from "@/components/ui/button";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { reviewCategoryOptions } from "@/lib/review-categories";
 import type { SerializedReview } from "@/lib/reviews";
 
@@ -52,6 +54,7 @@ export function ReviewModerationList({
   title = "Отзывы объекта",
   pageSize = defaultModerationReviewsPageSize,
 }: ReviewModerationListProps) {
+  const currentAdmin = useCurrentAdmin();
   const [reviews, setReviews] = useState(initialReviews);
   const [avgRating, setAvgRating] = useState(initialAvgRating);
   const [reviewsCount, setReviewsCount] = useState(initialReviewsCount);
@@ -84,8 +87,16 @@ export function ReviewModerationList({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
+  const canDeleteContent = Boolean(
+    currentAdmin && hasAdminPermission(currentAdmin.role, "content:delete"),
+  );
 
   async function moderateReview(id: string, action: "approve" | "reject" | "delete") {
+    if (action === "delete" && !canDeleteContent) {
+      setError("Недостаточно прав для удаления отзыва.");
+      return;
+    }
+
     setError("");
     setProcessingById((previous) => ({ ...previous, [id]: action }));
     try {
@@ -318,7 +329,7 @@ export function ReviewModerationList({
                       : "Восстановить"}
                   </Button>
                 ) : null}
-                {review.isImported ? (
+                {review.isImported && canDeleteContent ? (
                   <Button
                     variant="ghost"
                     disabled={(processingById[review.id] ?? null) !== null}

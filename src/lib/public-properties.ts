@@ -187,6 +187,7 @@ export type PublicCatalogItem = {
     firstName: string;
     lastName: string;
     avatarUrl: string | null;
+    phoneVerifiedAt: string | null;
   };
 };
 
@@ -318,6 +319,7 @@ export type PublicPropertyCard = {
     firstName: string;
     lastName: string;
     avatarUrl: string | null;
+    phoneVerifiedAt: string | null;
   };
 };
 
@@ -1057,22 +1059,24 @@ function resolveCatalogStayRange(checkIn?: string, checkOut?: string): CatalogSt
 }
 
 function buildCatalogRoomPriceArgs(stayRange: CatalogStayRange) {
-  if (stayRange.mode === "selected") {
-    const checkInDate = parseIsoDate(stayRange.checkIn);
-    const checkOutDate = parseIsoDate(stayRange.checkOut);
-    const lastStayNight = checkOutDate ? addDays(checkOutDate, -1) : null;
+  const checkInDate = parseIsoDate(stayRange.checkIn);
+  const checkOutDate = parseIsoDate(stayRange.checkOut);
+  const lastStayNight = checkOutDate ? addDays(checkOutDate, -1) : null;
 
-    if (checkInDate && lastStayNight) {
-      return {
-        where: {
-          dateFrom: { lte: lastStayNight },
-          dateTo: { gte: checkInDate },
-        },
-        orderBy: catalogSelectedStayPriceOrderBy,
-        take: CATALOG_SELECTED_STAY_PRICE_PERIOD_LIMIT,
-        select: catalogRoomPriceSelect,
-      };
-    }
+  if (checkInDate && lastStayNight) {
+    return {
+      where: {
+        dateFrom: { lte: lastStayNight },
+        dateTo: { gte: checkInDate },
+      },
+      orderBy:
+        stayRange.mode === "selected" ? catalogSelectedStayPriceOrderBy : catalogMinPriceOrderBy,
+      take:
+        stayRange.mode === "selected"
+          ? CATALOG_SELECTED_STAY_PRICE_PERIOD_LIMIT
+          : CATALOG_MIN_PRICE_PERIOD_LIMIT,
+      select: catalogRoomPriceSelect,
+    };
   }
 
   return {
@@ -1860,6 +1864,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             id: true,
             firstName: true,
             avatarUrl: true,
+            phoneVerifiedAt: true,
           },
         },
         media: {
@@ -2106,8 +2111,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             checkOut: stayRange.checkOut,
             guests: guestsCount,
           });
-          const priceForFilter =
-            stayRange.mode === "selected" && stayPrice ? stayPrice.totalNightly : minNightPrice;
+          const priceForFilter = stayPrice ? stayPrice.totalNightly : minNightPrice;
 
           if (minPrice !== null && (priceForFilter === null || priceForFilter < minPrice)) {
             return null;
@@ -2519,6 +2523,7 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             firstName: property.owner.firstName,
             lastName: "",
             avatarUrl: property.owner.avatarUrl,
+            phoneVerifiedAt: property.owner.phoneVerifiedAt?.toISOString() ?? null,
           },
         };
       });
@@ -2590,6 +2595,7 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       email: true,
       firstName: true,
       avatarUrl: true,
+      phoneVerifiedAt: true,
     },
   },
   media: {
@@ -2925,6 +2931,7 @@ function buildPublicPropertyCardFromRecord(
       firstName: property.owner.firstName,
       lastName: "",
       avatarUrl: property.owner.avatarUrl,
+      phoneVerifiedAt: property.owner.phoneVerifiedAt?.toISOString() ?? null,
     },
   };
 }

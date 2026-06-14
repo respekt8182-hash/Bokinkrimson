@@ -1,14 +1,21 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Images, X } from "lucide-react";
+import { Images } from "lucide-react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import type { PublicPropertyCard } from "@/lib/public-properties";
 
 type Media = PublicPropertyCard["media"][number];
+
+const PropertyMediaLightbox = dynamic(
+  () =>
+    import("@/components/public/property-media-lightbox").then(
+      (module) => module.PropertyMediaLightbox,
+    ),
+  { ssr: false },
+);
 
 interface PropertyMediaGalleryProps {
   media: Media[];
@@ -46,77 +53,20 @@ export function PropertyMediaGallery({
 }: PropertyMediaGalleryProps) {
   const photos = media.filter((item) => item.type === "IMAGE").slice(0, 10);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-  const thumbsRef = useRef<HTMLDivElement>(null);
+  const [lightboxInitialIndex, setLightboxInitialIndex] = useState(0);
 
   const openLightbox = useCallback((index: number) => {
-    setActiveIndex(index);
+    setLightboxInitialIndex(index);
     setLightboxOpen(true);
   }, []);
 
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
 
-  const prev = useCallback(() => {
-    setActiveIndex((i) => (i - 1 + photos.length) % photos.length);
-  }, [photos.length]);
-
-  const next = useCallback(() => {
-    setActiveIndex((i) => (i + 1) % photos.length);
-  }, [photos.length]);
-
   const count = photos.length;
-  const safeActiveIndex = count > 0 ? Math.min(activeIndex, count - 1) : 0;
   const isLightboxVisible = lightboxOpen && count > 0;
-  useBodyScrollLock(isLightboxVisible);
-
-  useEffect(() => {
-    if (!isLightboxVisible) return;
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-      else if (e.key === "ArrowLeft") prev();
-      else if (e.key === "ArrowRight") next();
-    };
-
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isLightboxVisible, closeLightbox, prev, next]);
-
-  useEffect(() => {
-    if (!isLightboxVisible || !thumbsRef.current) return;
-
-    const thumb = thumbsRef.current.children[safeActiveIndex] as HTMLElement | undefined;
-    if (thumb) {
-      thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-    }
-  }, [isLightboxVisible, safeActiveIndex]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
-
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      if (dx < 0) next();
-      else prev();
-    }
-
-    touchStartX.current = null;
-    touchStartY.current = null;
-  };
 
   if (count === 0) return null;
 
-  const activeMedia = photos[safeActiveIndex];
-  const portalRoot = typeof document === "undefined" ? null : document.body;
   const desktopPreviewPhotos = photos.slice(1, 5);
 
   const renderDesktopGallery = () => {
@@ -316,7 +266,6 @@ export function PropertyMediaGallery({
             <MediaItem
               media={photos[0]}
               alt={title}
-              loading="eager"
               className="gallery-img h-64 w-full object-cover"
             />
           </div>
@@ -337,7 +286,6 @@ export function PropertyMediaGallery({
             <MediaItem
               media={photos[0]}
               alt={title}
-              loading="eager"
               className="gallery-img h-full w-full object-cover"
             />
           </div>
@@ -376,7 +324,6 @@ export function PropertyMediaGallery({
           <MediaItem
             media={photos[0]}
             alt={title}
-            loading="eager"
             className="gallery-img h-full w-full object-cover"
           />
         </div>
@@ -421,88 +368,13 @@ export function PropertyMediaGallery({
         {renderMobileGallery()}
       </div>
 
-      {isLightboxVisible && portalRoot
-        ? createPortal(
-            <div
-              className="gallery-lightbox"
-              onClick={closeLightbox}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Просмотр фотографий"
-            >
-              <div className="gallery-lightbox-content" onClick={(e) => e.stopPropagation()}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  key={safeActiveIndex}
-                  src={activeMedia.url}
-                  alt={`Фото ${safeActiveIndex + 1} из ${count}`}
-                  className="gallery-lightbox-img"
-                />
-              </div>
-
-              <div className="gallery-lightbox-counter">
-                {safeActiveIndex + 1} / {count}
-              </div>
-
-              <button
-                className="gallery-lightbox-close"
-                onClick={closeLightbox}
-                aria-label="Закрыть"
-              >
-                <AppIcon icon={X} className="h-5 w-5" />
-              </button>
-
-              {count > 1 ? (
-                <>
-                  <button
-                    className="gallery-lightbox-nav gallery-lightbox-prev"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      prev();
-                    }}
-                    aria-label="Предыдущее фото"
-                  >
-                    <AppIcon icon={ChevronLeft} className="h-5 w-5" />
-                  </button>
-                  <button
-                    className="gallery-lightbox-nav gallery-lightbox-next"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      next();
-                    }}
-                    aria-label="Следующее фото"
-                  >
-                    <AppIcon icon={ChevronRight} className="h-5 w-5" />
-                  </button>
-                </>
-              ) : null}
-
-              {count > 1 ? (
-                <div
-                  className="gallery-lightbox-thumbs"
-                  ref={thumbsRef}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {photos.map((photo, i) => (
-                    <button
-                      key={photo.id}
-                      className={`gallery-lightbox-thumb ${i === safeActiveIndex ? "active" : ""}`}
-                      onClick={() => setActiveIndex(i)}
-                      aria-label={`Фото ${i + 1}`}
-                      aria-current={i === safeActiveIndex}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.url} alt="" className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>,
-            portalRoot,
-          )
-        : null}
+      {isLightboxVisible ? (
+        <PropertyMediaLightbox
+          photos={photos}
+          initialIndex={lightboxInitialIndex}
+          onClose={closeLightbox}
+        />
+      ) : null}
     </>
   );
 }

@@ -12,6 +12,8 @@ import {
 } from "@/components/admin/admin-ui";
 import { AdminCreateExcursionForm } from "@/components/admin/admin-create-excursion-form";
 import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
+import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { loadDataWithDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import { createExcursionDraft } from "@/lib/excursions";
@@ -56,6 +58,14 @@ export default async function AdminCreateExcursionPage({
 
   async function createExcursion(formData: FormData) {
     "use server";
+    const admin = await verifyAdminSession();
+    if (!admin) {
+      redirect("/admin/login");
+    }
+    if (!hasAdminPermission(admin.role, "content:create")) {
+      redirect("/admin");
+    }
+
     const ownerId = formData.get("ownerId") as string;
     const offerType = formData.get("offerType") as string;
     const title = (formData.get("title") as string)?.trim() || null;

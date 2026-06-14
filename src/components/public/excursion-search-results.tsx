@@ -2,6 +2,7 @@
 
 import {
   ArrowDown,
+  BadgeCheck,
   Check,
   CalendarDays,
   ChevronDown,
@@ -282,7 +283,7 @@ function buildExcursionSearchParams(
   }
 
   if (filters.query) params.set("q", filters.query);
-  if (filters.locationName && !options?.bounds) params.set("location", filters.locationName);
+  if (filters.locationName) params.set("location", filters.locationName);
   if (filters.offerType) params.set("offerType", filters.offerType);
   if (filters.districtSlug) params.set("district", filters.districtSlug);
   if (filters.categorySlug) params.set("category", filters.categorySlug);
@@ -1353,6 +1354,13 @@ export function ExcursionSearchResults({
 
     // Cache + debounce + abort prevents extra network traffic while typing.
     const query = location.trim().slice(0, 120);
+    if (query.length === 1) {
+      setLocationPopularSuggestions([]);
+      setLocationMatchSuggestions([]);
+      setIsLocationSuggestionsLoading(false);
+      return;
+    }
+
     const cacheKey = `exc-location|${query.toLowerCase()}`;
     const cached = locationSuggestionsCacheRef.current.get(cacheKey);
     const fallbackPopular = locationNames.slice(0, 12).map((name, index) => ({
@@ -4029,6 +4037,12 @@ function ExcursionCard({
                 </span>
                 <span className="truncate">{ownerName}</span>
               </span>
+              {item.owner.phoneVerifiedAt ? (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
+                  <AppIcon icon={BadgeCheck} className="h-3 w-3 shrink-0" />
+                  Пользователь проверен
+                </span>
+              ) : null}
             </div>
 
             {/* Info chips row */}

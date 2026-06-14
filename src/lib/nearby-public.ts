@@ -1,5 +1,3 @@
-import { existsSync } from "fs";
-import path from "path";
 import { ExcursionSessionStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { haversineDistanceKm } from "@/lib/excursion-directory";
@@ -64,13 +62,7 @@ function toRoadDistanceKm(haversineKm: number): number {
 function normalizePublicAssetUrls(urls: string[]): string[] {
   return urls.filter((url) => {
     const trimmed = url.trim();
-    if (!trimmed.startsWith("/uploads/")) {
-      return trimmed.length > 0;
-    }
-
-    const relativePath = decodeURIComponent(trimmed.slice(1));
-    const absolutePath = path.join(process.cwd(), "public", ...relativePath.split("/"));
-    return existsSync(absolutePath);
+    return trimmed.length > 0;
   });
 }
 

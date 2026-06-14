@@ -1,6 +1,7 @@
 // Admin support chat API.
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { db } from "@/lib/db";
 import {
   isConfiguredDatabaseReachable,
@@ -137,6 +138,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Доступ запрещен" }, { status: 403 });
   }
 
+  const canManageSupportSettings = hasAdminPermission(admin.role, "support-settings:manage");
+
   const body = await req.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Невалидный запрос" }, { status: 400 });
@@ -181,7 +184,7 @@ export async function POST(req: NextRequest) {
       const manager = await db.chatManager.findUnique({ where: { id: managerId } });
       if (manager) {
         senderName = manager.name;
-        if (!manager.isActive) {
+        if (!manager.isActive && canManageSupportSettings) {
           await db.$transaction([
             db.chatManager.updateMany({ where: { isActive: true }, data: { isActive: false } }),
             db.chatManager.update({ where: { id: managerId }, data: { isActive: true } }),

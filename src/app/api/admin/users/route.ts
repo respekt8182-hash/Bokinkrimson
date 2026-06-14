@@ -58,6 +58,7 @@ export async function GET(request: Request) {
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       lastSeenAt: user.lastSeenAt?.toISOString() ?? null,
       lastLogoutAt: user.lastLogoutAt?.toISOString() ?? null,
+      phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
       counts: {
         properties: user._count.properties,
         excursions: user._count.excursions,

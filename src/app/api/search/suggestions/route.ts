@@ -59,7 +59,6 @@ type ExcursionSuggestionRow = {
   mainLocation: { slug: string; name: string } | null;
   district: { name: string } | null;
   category: { name: string } | null;
-  routeLocations: Array<{ location: { slug: string; name: string } }>;
 };
 
 type AttractionSuggestionRow = Pick<
@@ -127,6 +126,7 @@ const defaultLimit = 10;
 const minLimit = 5;
 const maxLimit = 20;
 const sourceCacheTtlMs = 60_000;
+const sourceRowsLimit = 1200;
 const popularLocationsLimit = 8;
 const crimeaLocationSubtitle = "Крым, Россия";
 
@@ -781,7 +781,6 @@ function buildExcursionListingCandidates(rows: ExcursionSuggestionRow[]): Listin
         row.mainLocation?.name?.trim() ||
         row.locationName?.trim() ||
         null;
-      const routeLocationNames = row.routeLocations.map((route) => route.location.name);
       const offerLabel = row.offerType === "TOUR" ? "Тур" : "Экскурсия";
       const subtitle = compactListingSubtitle([offerLabel, row.category?.name, locationName]);
 
@@ -810,7 +809,6 @@ function buildExcursionListingCandidates(rows: ExcursionSuggestionRow[]): Listin
           row.description,
           row.routeDescription,
           row.tags,
-          routeLocationNames,
         ]),
         popularity: 1,
       };
@@ -964,7 +962,7 @@ async function getHousingSuggestionRows(): Promise<HousingSuggestionRow[]> {
       address: true,
     },
     orderBy: [{ updatedAt: "desc" }],
-    take: 5000,
+    take: sourceRowsLimit,
   });
 
   housingRowsCache = {
@@ -1021,19 +1019,9 @@ async function getExcursionSuggestionRows(): Promise<ExcursionSuggestionRow[]> {
           name: true,
         },
       },
-      routeLocations: {
-        select: {
-          location: {
-            select: {
-              slug: true,
-              name: true,
-            },
-          },
-        },
-      },
     },
     orderBy: [{ updatedAt: "desc" }],
-    take: 5000,
+    take: sourceRowsLimit,
   });
 
   excursionRowsCache = {
@@ -1106,7 +1094,7 @@ async function getTransferSuggestionRows(): Promise<TransferSuggestionRow[]> {
       },
     },
     orderBy: [{ updatedAt: "desc" }],
-    take: 5000,
+    take: sourceRowsLimit,
   });
 
   transferRowsCache = {
@@ -1355,6 +1343,22 @@ export async function GET(request: Request) {
     "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
     "X-RateLimit-Remaining": String(rate.remaining),
   };
+
+  if (query.length > 0 && query.length < 2) {
+    return NextResponse.json(
+      {
+        recent: [],
+        popular: [],
+        matches: [],
+      } satisfies SearchSuggestionsResponse,
+      {
+        headers: {
+          ...responseHeaders,
+          "X-Suggestions-Skipped": "min-query-length",
+        },
+      },
+    );
+  }
 
   if (canUseFallback && requiresDatabase && !(await isConfiguredDatabaseReachable())) {
     logDatabaseFallbackOnce(

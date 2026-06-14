@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BadgeCheck,
   BriefcaseBusiness,
   Car,
   Clock3,
@@ -992,6 +993,12 @@ function TransferCard({
                 />
                 {contactName}
               </span>
+              {item.owner.phoneVerifiedAt ? (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-[11px] font-semibold text-primary">
+                  <AppIcon icon={BadgeCheck} className="h-3 w-3 shrink-0" />
+                  Пользователь проверен
+                </span>
+              ) : null}
               <span className="rounded-lg border border-dashed border-olive/18 px-2.5 py-1.5 text-xs font-semibold text-olive/42 md:hidden">
                 {hasReviews
                   ? `${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
@@ -1229,6 +1236,15 @@ export function TransferCatalog({
     sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
     bounds: activeBounds,
   };
+  const mapItemsEndpoint = buildCatalogPath("/api/map/transfers", {
+    q: result.filters.query,
+    location: "",
+    transferType: result.filters.transferType,
+    radiusKm: String(result.filters.radiusKm),
+    minPrice: result.filters.minPrice ? String(result.filters.minPrice) : "",
+    maxPrice: result.filters.maxPrice ? String(result.filters.maxPrice) : "",
+    sort: result.filters.sort === "relevance" ? "" : result.filters.sort,
+  });
   const pagination = (
     <Pagination
       basePath="/transfers"
@@ -1271,6 +1287,7 @@ export function TransferCatalog({
           items={mapItems ?? result.items}
           resultsCount={result.total}
           filters={result.filters}
+          mapItemsEndpoint={mapItemsEndpoint}
           mapTitle="Карта трансферов"
         >
           <section className="min-w-0 flex-1 lg:w-full" id="catalog-results">
@@ -1912,6 +1929,12 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
               />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-olive">{contactName}</p>
+                {item.owner.phoneVerifiedAt ? (
+                  <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-primary">
+                    <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
+                    Пользователь проверен
+                  </p>
+                ) : null}
                 <p className="mt-1 text-xs text-olive/56">
                   {hasReviews
                     ? `${formatReviewsLabel(item.reviewsCount)} уже есть на карточке`
@@ -2174,11 +2197,18 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
               />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{contactName}</p>
-                <p className="mt-0.5 text-xs text-primary/80">
-                  {hasReviews
-                    ? `${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
-                    : "На связи"}
-                </p>
+                {item.owner.phoneVerifiedAt ? (
+                  <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-primary">
+                    <AppIcon icon={BadgeCheck} className="h-3.5 w-3.5 shrink-0" />
+                    Пользователь проверен
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-xs text-primary/80">
+                    {hasReviews
+                      ? `${item.avgRating.toFixed(1)} • ${formatReviewsLabel(item.reviewsCount)}`
+                      : "На связи"}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2217,7 +2247,16 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
               />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-olive">{contactName}</p>
-                <p className="mt-0.5 truncate text-[11px] text-primary/85">Водитель на связи</p>
+                <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-primary/85">
+                  {item.owner.phoneVerifiedAt ? (
+                    <>
+                      <AppIcon icon={BadgeCheck} className="h-3 w-3 shrink-0" />
+                      <span className="truncate">Пользователь проверен</span>
+                    </>
+                  ) : (
+                    "Водитель на связи"
+                  )}
+                </p>
               </div>
             </div>
             {mobileMessengerLinks.length > 0 || mobilePhoneLinks.length > 0 ? (

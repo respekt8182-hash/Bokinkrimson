@@ -24,7 +24,6 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -726,9 +725,7 @@ export function ExcursionEditor({
   const [contactFirstName, setContactFirstName] = useState(initialExcursion.contactFirstName ?? "");
   const [contactLastName, setContactLastName] = useState(initialExcursion.contactLastName ?? "");
   const [contactPhone, setContactPhone] = useState(initialExcursion.contactPhone ?? "");
-  const [contactPhoneName, setContactPhoneName] = useState(
-    initialExcursion.contactPhoneName ?? "",
-  );
+  const [contactPhoneName, setContactPhoneName] = useState(initialExcursion.contactPhoneName ?? "");
   const [contactPhone2, setContactPhone2] = useState(initialExcursion.contactPhone2 ?? "");
   const [contactPhone2Name, setContactPhone2Name] = useState(
     initialExcursion.contactPhone2Name ?? "",
@@ -3150,8 +3147,43 @@ export function ExcursionEditor({
     setError("");
   }
 
+  const asideTitle =
+    [
+      "Что вы создаёте?",
+      "Подсказки по географии",
+      "Предпросмотр маршрута",
+      "Подсказки по расписанию",
+      "Предпросмотр цены",
+      "Готовность к публикации",
+    ][currentStep] ?? "Подсказки";
+  const asideLead =
+    [
+      "На этом шаге гости увидят основу карточки: тип, название, описание и сильные стороны программы.",
+      "Укажите понятную точку сбора, адрес и маршрут. Карта помогает гостю быстрее понять логистику.",
+      "Соберите маршрут в понятный таймлайн: чем конкретнее этапы, тем выше доверие к программе.",
+      "Покажите длительность, режим проведения, состав группы и ограничения для участников.",
+      "Цена должна быть прозрачной: что входит, что оплачивается отдельно и как работает отмена.",
+      "Финальный шаг: контакты, фото, FAQ и публикация после проверки обязательных разделов.",
+    ][currentStep] ?? "";
+  const asideChecks =
+    [
+      ["Понятное название", "Короткие преимущества", "Категория и формат"],
+      ["Населённый пункт", "Точка на карте", "Старт и финиш"],
+      ["Хайлайты", "Шаги маршрута", "Текстовое описание"],
+      ["Длительность", "Даты или режим", "Размер группы"],
+      ["Цена от", "Включено в стоимость", "Условия отмены"],
+      ["Контакты", "Основные фото", "FAQ и готовность"],
+    ][currentStep] ?? [];
+  const asideStatusLabel = wizardSteps[currentStep]?.status ?? "incomplete";
+  const asideStatusText =
+    asideStatusLabel === "complete"
+      ? "Раздел заполнен"
+      : asideStatusLabel === "partial"
+        ? "Есть часть данных"
+        : "Нужно заполнить";
+
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="excursion-editor-surface space-y-4 sm:space-y-5">
       {excursion.moderationNotes ? (
         <section className="rounded-[28px] border border-olive/8 bg-white/95 p-2.5 shadow-[0_18px_36px_-28px_rgba(15,74,64,0.35)] sm:p-4">
           <div className="flex gap-2 rounded-xl bg-terra/8 p-3">
@@ -3193,43 +3225,1176 @@ export function ExcursionEditor({
         backLabel={backLabel}
       />
 
-      {/* ===== STEP 0: ОПИСАНИЕ ===== */}
-      {currentStep === 0 && (
-        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Описание программы</h2>
-            <p className="mt-1 text-sm text-olive/55">
-              Заполните основные поля — они помогут туристам найти и понять вашу экскурсию.
-            </p>
-          </div>
-
-          {/* ── Группа 1: Основное ── */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                1
-              </span>
+      <div className="excursion-editor-stage">
+        <div className="excursion-editor-stage-main space-y-4 sm:space-y-5">
+          {/* ===== STEP 0: ОПИСАНИЕ ===== */}
+          {currentStep === 0 && (
+            <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
               <div>
-                <p className="text-sm font-semibold text-olive">Тип и название</p>
-                <p className="text-xs text-olive/50">
-                  Выберите тип, укажите название и опишите программу
+                <h2 className="text-lg font-semibold text-olive md:text-xl">Описание программы</h2>
+                <p className="mt-1 text-sm text-olive/55">
+                  Заполните основные поля — они помогут туристам найти и понять вашу экскурсию.
                 </p>
               </div>
-            </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,1fr)]">
-              <section className="rounded-xl border border-olive/15 bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-olive/70">
-                  Тип предложения
+              {/* ── Группа 1: Основное ── */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    1
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Тип и название</p>
+                    <p className="text-xs text-olive/50">
+                      Выберите тип, укажите название и опишите программу
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,1fr)]">
+                  <section className="rounded-xl border border-olive/15 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-olive/70">
+                      Тип предложения
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {OFFER_TYPE_OPTIONS.map((option) => {
+                        const isActive = offerType === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setOfferType(option.value)}
+                            className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
+                              isActive
+                                ? "border-primary bg-primary text-white"
+                                : "border-olive/20 bg-white text-olive hover:border-olive/40"
+                            }`}
+                          >
+                            <span className="block font-semibold">{option.label}</span>
+                            <span
+                              className={`mt-1 block text-xs ${isActive ? "text-white/75" : "text-olive/60"}`}
+                            >
+                              {option.value === "TOUR"
+                                ? "Заезды, программа по дням, проживание и туровая цена."
+                                : "Короткий маршрут, почасовая длительность и расписание."}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <label className="block space-y-1.5 rounded-xl border border-olive/15 bg-white p-3">
+                    <span className="text-sm font-medium text-olive">Подтип / вид программы</span>
+                    <Input
+                      value={subtypeLabel}
+                      onChange={(event) => setSubtypeLabel(event.target.value)}
+                      placeholder={
+                        isTour
+                          ? "Авторский, многодневный, джип-тур..."
+                          : "Пешеходная, морская, индивидуальная..."
+                      }
+                      list="offer-subtype-presets"
+                      maxLength={120}
+                    />
+                    <datalist id="offer-subtype-presets">
+                      {(isTour ? OFFER_SUBTYPE_PRESETS.TOUR : OFFER_SUBTYPE_PRESETS.EXCURSION).map(
+                        (item) => (
+                          <option key={item} value={item} />
+                        ),
+                      )}
+                    </datalist>
+                    <p className="text-xs text-olive/50">
+                      Подтип показывает характер программы, но не заменяет теги и тематику.
+                    </p>
+                  </label>
+                </div>
+
+                {/* Название */}
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-olive">
+                    Название <span className="text-terra">*</span>
+                  </span>
+                  <Input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    maxLength={120}
+                    placeholder={
+                      isTour ? "Авторский тур по Южному берегу" : "Обзорная экскурсия по Ялте"
+                    }
+                  />
+                  <p className="text-xs text-olive/50">
+                    Коротко и по делу, без эмодзи — до 120 символов
+                  </p>
+                </label>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-olive">
+                      Описание <span className="text-terra">*</span>
+                    </span>
+                    <span className="tabular-nums text-xs text-olive/50">
+                      {description.length}/5000
+                    </span>
+                  </div>
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={6}
+                    maxLength={5000}
+                    className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder={
+                      isTour
+                        ? "Опишите тур: маршрут, формат, длительность, ключевые точки программы и организационные детали."
+                        : "Опишите экскурсию: маршрут, формат, продолжительность, что входит в программу и как проходит выезд."
+                    }
+                  />
+                  <p className="text-xs text-olive/50">
+                    Краткое превью для карточек сформируется автоматически из этого текста.
+                  </p>
+                  <p className="mt-2 rounded-2xl border border-primary/10 bg-primary/5 px-3.5 py-3 text-xs leading-6 text-olive/72">
+                    Основные фото используются в верхней галерее карточки. Для разделов страницы
+                    можно назначить отдельные подборки в блоке «Медиа» ниже. Фото для программы по
+                    дням и шагам маршрута по-прежнему добавляются прямо внутри соответствующего дня
+                    или шага.
+                  </p>
+                </div>
+              </div>
+
+              {/* ── Группа 2: Особенности ── */}
+              <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                    2
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Преимущества и особенности</p>
+                    <p className="text-xs text-olive/50">
+                      Укажите ключевые особенности программы без рекламных формулировок
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-olive">Что вас ждёт</h3>
+                    <p className="text-xs text-olive/55">
+                      3–6 коротких и конкретных пунктов. Выберите из готовых или добавьте свои. Этот
+                      блок показывается на публичной карточке отдельным списком.
+                    </p>
+                  </div>
+                  <IncludedEditor
+                    items={highlights}
+                    onChange={setHighlights}
+                    presets={HIGHLIGHT_PRESETS}
+                    placeholder="Например: старт из Ялты, мини-группа до 8 человек"
+                  />
+                </div>
+              </div>
+
+              {/* ── Группа 3: Категория и формат ── */}
+              <div className="space-y-5 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                    3
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Категория и формат</p>
+                    <p className="text-xs text-olive/50">
+                      Нажимайте на подходящие кнопки — это поможет туристам находить вас в поиске
+                    </p>
+                  </div>
+                </div>
+
+                {/* Теги */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-olive">Дополнительные теги</span>
+                    {tags.length > 0 && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                        {tags.length}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-olive/45">
+                    Нажмите на тег, чтобы выбрать его. Выбранные теги подсветятся.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tagOptions.map((tag) => {
+                      const isSelected = tags.some(
+                        (item) => item.toLowerCase() === tag.toLowerCase(),
+                      );
+                      const isRemovable = !defaultCategoryTagSet.has(tag.toLowerCase());
+                      return (
+                        <div key={tag} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => toggleTag(tag)}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs font-medium transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary/8 text-primary shadow-sm"
+                                : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                            }`}
+                          >
+                            {isSelected ? (
+                              <AppIcon icon={Check} className="h-3 w-3" />
+                            ) : (
+                              <AppIcon icon={Plus} className="h-3 w-3 opacity-50" />
+                            )}
+                            {tag}
+                          </button>
+                          {isSelected && isRemovable && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeTagOption(tag);
+                              }}
+                              className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
+                              aria-label={`Удалить категорию ${tag}`}
+                              title="Удалить категорию"
+                            >
+                              <AppIcon icon={X} className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {isAddingTag ? (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <Input
+                        ref={newTagInputRef}
+                        value={newTagDraft}
+                        onChange={(event) => setNewTagDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addTagOption();
+                          }
+                          if (event.key === "Escape") {
+                            setIsAddingTag(false);
+                            setNewTagDraft("");
+                          }
+                        }}
+                        placeholder="Добавить тег"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={addTagOption}
+                        disabled={!newTagDraft.trim()}
+                      >
+                        Добавить
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setIsAddingTag(false);
+                          setNewTagDraft("");
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                    </div>
+                  ) : (
+                    <AddActionButton
+                      label="Добавить тег"
+                      onClick={() => {
+                        setIsAddingTag(true);
+                        setError("");
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div className="border-t border-olive/8" />
+
+                {/* Формат участия */}
+                <div className="space-y-2.5">
+                  <span className="text-sm font-medium text-olive">Формат участия</span>
+                  <p className="text-xs text-olive/45">
+                    Выберите один формат. Активный вариант выделен цветом.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {formatOptions.map(({ id, value, label }) => (
+                      <div key={id} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExcursionFormat(value);
+                            setSelectedFormatOptionId(id);
+                          }}
+                          className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
+                            selectedFormatOptionId === id
+                              ? "border-primary bg-primary/8 text-primary shadow-sm"
+                              : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                        {selectedFormatOptionId === id && !defaultFormatOptionIdSet.has(id) && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeFormatOption(id);
+                            }}
+                            className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
+                            aria-label={`Удалить тип ${label}`}
+                            title="Удалить тип"
+                          >
+                            <AppIcon icon={X} className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {isAddingFormat ? (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <Input
+                        ref={newFormatInputRef}
+                        value={newFormatDraft}
+                        onChange={(event) => setNewFormatDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addFormatOption();
+                          }
+                          if (event.key === "Escape") {
+                            setIsAddingFormat(false);
+                            setNewFormatDraft("");
+                          }
+                        }}
+                        placeholder="Добавить тип"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={addFormatOption}
+                        disabled={!newFormatDraft.trim()}
+                      >
+                        Добавить
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setIsAddingFormat(false);
+                          setNewFormatDraft("");
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                    </div>
+                  ) : (
+                    <AddActionButton
+                      label="Добавить тип"
+                      onClick={() => {
+                        setIsAddingFormat(true);
+                        setError("");
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div className="border-t border-olive/8" />
+
+                {/* Язык проведения */}
+                <div className="space-y-2.5">
+                  <span className="text-sm font-medium text-olive">Язык проведения</span>
+                  <p className="text-xs text-olive/45">
+                    Нажмите на язык, чтобы добавить или убрать его из списка.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {languageOptions.map(({ code, label }) => {
+                      const isSelected = languageCodes.includes(code);
+                      const isRemovable = !defaultLanguageCodeSet.has(code);
+                      return (
+                        <div key={code} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => toggleLanguage(code)}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs font-medium transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary/8 text-primary shadow-sm"
+                                : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                            }`}
+                          >
+                            {isSelected && <AppIcon icon={Check} className="h-3 w-3" />}
+                            {label}
+                          </button>
+                          {isSelected && isRemovable && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeLanguageOption(code);
+                              }}
+                              className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
+                              aria-label={`Удалить язык ${label}`}
+                              title="Удалить язык"
+                            >
+                              <AppIcon icon={X} className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {isAddingLanguage ? (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <Input
+                        ref={newLanguageInputRef}
+                        value={newLanguageCodeDraft}
+                        onChange={(event) => setNewLanguageCodeDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addLanguageOption();
+                          }
+                          if (event.key === "Escape") {
+                            setIsAddingLanguage(false);
+                            setNewLanguageCodeDraft("");
+                          }
+                        }}
+                        placeholder="Код языка: ru, en, es, pt-br"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={addLanguageOption}
+                        disabled={!newLanguageCodeDraft.trim()}
+                      >
+                        Добавить
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setIsAddingLanguage(false);
+                          setNewLanguageCodeDraft("");
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                    </div>
+                  ) : (
+                    <AddActionButton
+                      label="Добавить язык"
+                      onClick={() => {
+                        setIsAddingLanguage(true);
+                        setError("");
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* ── Tour-specific: вид тура, транспорт, режим заездов ── */}
+              {showTourLogistics && (
+                <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                      T
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Параметры тура</p>
+                      <p className="text-xs text-olive/50">
+                        Укажите вид тура, транспорт и режим заездов
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium text-olive">Вид тура</span>
+                    <div className="flex flex-wrap gap-2">
+                      {TOUR_KIND_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() =>
+                            setTourKind(tourKind === option.value ? null : option.value)
+                          }
+                          className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                            tourKind === option.value
+                              ? "border-primary bg-primary/8 text-primary shadow-sm"
+                              : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium text-olive">Транспорт</span>
+                    <p className="text-xs text-olive/50">Выберите все подходящие варианты</p>
+                    <div className="flex flex-wrap gap-2">
+                      {TRANSPORT_MODE_OPTIONS.map((option) => {
+                        const isSelected = transportModes.includes(option.value);
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              setTransportModes((prev) =>
+                                isSelected
+                                  ? prev.filter((m) => m !== option.value)
+                                  : [...prev, option.value],
+                              )
+                            }
+                            className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                              isSelected
+                                ? "border-primary bg-primary/8 text-primary shadow-sm"
+                                : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium text-olive">Режим заездов</span>
+                    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                      {DEPARTURE_MODE_OPTIONS.map((option) => {
+                        const isActive = departureMode === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setDepartureMode(isActive ? null : option.value)}
+                            className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                              isActive
+                                ? "border-primary bg-primary text-white"
+                                : "border-olive/20 bg-white text-olive hover:border-olive/40"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ===== STEP 1: ГЕОГРАФИЯ И МАРШРУТ ===== */}
+          {currentStep === 1 && (
+            <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-olive md:text-xl">География и маршрут</h2>
+                <p className="mt-1 text-sm text-olive/55">
+                  Укажите, где проходит {isTour ? "тур" : "экскурсия"}, место сбора и точки
+                  маршрута.
                 </p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {OFFER_TYPE_OPTIONS.map((option) => {
-                    const isActive = offerType === option.value;
+              </div>
+
+              {/* ── Группа 1: Район проведения ── */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    1
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Район проведения</p>
+                    <p className="text-xs text-olive/50">
+                      Выберите город, отметьте точку на карте и укажите место сбора
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-sm font-medium text-olive">
+                    Населённый пункт <span className="text-terra">*</span>
+                  </span>
+                  <div className="space-y-1">
+                    <Input
+                      value={locationInput}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        const exactMatch = findExactCrimeaLocationByName(nextValue);
+                        setLocationInput(nextValue);
+                        setLocationId(exactMatch?.id ?? "");
+                      }}
+                      list={`excursion-location-suggestions-${excursion.id}`}
+                      placeholder="Ялта, Судак, с. Добровское..."
+                      autoComplete="off"
+                    />
+                    <datalist id={`excursion-location-suggestions-${excursion.id}`}>
+                      {crimeaLocations.map((location) => (
+                        <option key={location.id} value={location.name} />
+                      ))}
+                    </datalist>
+                    <p className="text-xs text-olive/45">
+                      Начните вводить название — появится список городов
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-olive/12 bg-cream/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-olive/55 shadow-sm">
+                        <AppIcon icon={MapPin} className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-olive">Точка на карте</p>
+                        <p className="text-xs text-olive/50">Необязательно, но повышает доверие</p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={openMapDialog}
+                      className="shrink-0"
+                    >
+                      Открыть карту
+                    </Button>
+                  </div>
+
+                  <div className="excursion-inline-map rounded-xl border border-olive/12 bg-white p-2">
+                    <YandexMapPicker
+                      latitude={latitude}
+                      longitude={longitude}
+                      onCoordinatesChange={(nextLat, nextLng) => {
+                        setLatitude(nextLat);
+                        setLongitude(nextLng);
+                        setMapDraftLatitude(nextLat);
+                        setMapDraftLongitude(nextLng);
+                      }}
+                      initialSearchValue={locationInput}
+                      onLocationSearchResolved={(item) => {
+                        const exactMatch = findExactCrimeaLocationByName(item.name);
+                        setLocationInput(exactMatch?.name ?? item.name);
+                        setLocationId(exactMatch?.id ?? "");
+                        setMapDraftLocationName(exactMatch?.name ?? item.name);
+                        setMapDraftLocationId(exactMatch?.id ?? "");
+                      }}
+                      onAddressResolved={(resolvedItem: ReverseGeocodeItem) => {
+                        setAddress(resolvedItem.address);
+                        setMapDraftAddress(resolvedItem.address);
+                        const localityFromGeocode =
+                          resolvedItem.localityDisplayName?.trim() ??
+                          resolvedItem.localityName?.trim() ??
+                          "";
+
+                        if (localityFromGeocode) {
+                          setLocationInput(localityFromGeocode);
+                          setLocationId("");
+                          setMapDraftLocationName(localityFromGeocode);
+                          setMapDraftLocationId("");
+                        }
+
+                        const resolvedLocation = resolveCrimeaLocationFromAddress(
+                          resolvedItem.address,
+                          localityFromGeocode,
+                        );
+
+                        if (resolvedLocation) {
+                          setLocationInput(resolvedLocation.name);
+                          setLocationId(resolvedLocation.id);
+                          setMapDraftLocationName(resolvedLocation.name);
+                          setMapDraftLocationId(resolvedLocation.id);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-olive/60">Адрес или ориентир</span>
+                    <Input
+                      value={address}
+                      onChange={(event) => setAddress(event.target.value)}
+                      placeholder="ул. Ленина 1, рядом с набережной..."
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Стартовая точка</span>
+                  <Input
+                    value={startPoint}
+                    onChange={(event) => setStartPoint(event.target.value)}
+                    placeholder="Набережная, автовокзал, у входа в парк..."
+                  />
+                  <p className="flex items-center gap-1 text-xs text-olive/45">
+                    <AppIcon icon={Info} className="h-3 w-3 shrink-0" />
+                    Где именно собираются участники перед началом экскурсии
+                  </p>
+                </label>
+
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-olive">Точка завершения</span>
+                  <Input
+                    value={finishPoint}
+                    onChange={(event) => setFinishPoint(event.target.value)}
+                    placeholder="Если финиш отличается от старта, укажите это здесь"
+                  />
+                  <p className="text-xs text-olive/45">
+                    Этот текст показывается в блоке логистики на публичной карточке.
+                  </p>
+                </label>
+
+                <div className="space-y-3 rounded-xl border border-olive/15 bg-cream/30 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-medium text-olive">Трансфер включён</span>
+                      <p className="text-xs text-olive/50">
+                        Необязательно{" "}
+                        <span className="text-olive/35">— только если вы организуете доставку</span>
+                      </p>
+                    </div>
+                    <SeaToggle
+                      size="sm"
+                      pressed={transferEnabled}
+                      onPressedChange={setTransferEnabled}
+                      aria-label="Трансфер включён"
+                    />
+                  </div>
+
+                  {transferEnabled ? (
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-olive/60">Детали трансфера</span>
+                      <Input
+                        value={transferDetails}
+                        onChange={(event) => setTransferDetails(event.target.value)}
+                        placeholder="Откуда забираете, входит ли это в цену, нужна ли доплата..."
+                        maxLength={300}
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ===== STEP 2: ПРОГРАММА ===== */}
+          {currentStep === 2 && (
+            <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-olive md:text-xl">Программа</h2>
+                <p className="mt-1 text-sm text-olive/55">
+                  {isTour
+                    ? "Опишите маршрут, программу по пунктам и дополнительные опции."
+                    : "Опишите маршрут, таймлайн и дополнительные опции."}
+                </p>
+              </div>
+
+              {/* Highlight chips */}
+              <div className="space-y-3 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <p className="text-sm font-semibold text-olive">Хайлайты</p>
+                <p className="text-xs text-olive/50">
+                  Ключевые фишки, которые зацепят туриста (до 6)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {HIGHLIGHT_PRESETS.map((preset) => {
+                    const isSelected = highlights.includes(preset);
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() =>
+                          setHighlights((prev) =>
+                            isSelected
+                              ? prev.filter((h) => h !== preset)
+                              : prev.length < 6
+                                ? [...prev, preset]
+                                : prev,
+                          )
+                        }
+                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                          isSelected
+                            ? "border-primary bg-primary/8 text-primary shadow-sm"
+                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Маршрут и программа (duration/participants/physical moved to steps 3-4) ── */}
+              <div className="space-y-5 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    4
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Маршрут и программа</p>
+                    <p className="text-xs text-olive/50">
+                      Составьте пошаговый план или опишите маршрут текстом
+                    </p>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 text-terra">
+                        <AppIcon icon={ListChecks} className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-olive">
+                          {isTour
+                            ? getItineraryProgramTitle(itineraryItemLabel)
+                            : "Пошаговый план (таймлайн)"}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-olive/60">
+                          {isTour
+                            ? "Разложите программу по пунктам: это может быть план по дням, этапам, шагам или любым логичным блокам маршрута."
+                            : "Добавляйте шаги по порядку — укажите время и описание. Если пусто — на карточке отображается текстовый маршрут."}
+                        </p>
+                      </div>
+                    </div>
+                    {(isTour ? itineraryDays.length : timeline.length) > 0 && (
+                      <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                        {isTour
+                          ? formatItineraryItemCount(itineraryItemLabel, itineraryDays.length)
+                          : `${timeline.length} ${timeline.length === 1 ? "шаг" : timeline.length < 5 ? "шага" : "шагов"}`}
+                      </span>
+                    )}
+                  </div>
+                  {isTour ? (
+                    <TourDaysEditor
+                      days={itineraryDays}
+                      itemLabel={itineraryItemLabel}
+                      onChange={setItineraryDays}
+                      onItemLabelChange={setItineraryItemLabel}
+                      onUploadPhotos={(dayIndex, files) =>
+                        void uploadProgramPhotos("day", dayIndex, files)
+                      }
+                      onMovePhoto={(dayIndex, photoIndex, direction) =>
+                        void moveItineraryDayPhoto(dayIndex, photoIndex, direction)
+                      }
+                      onMakePhotoFirst={(dayIndex, photoIndex) =>
+                        void makeItineraryDayPhotoFirst(dayIndex, photoIndex)
+                      }
+                      onRemovePhoto={(dayIndex, photoIndex) =>
+                        void removeItineraryDayPhoto(dayIndex, photoIndex)
+                      }
+                      disabled={
+                        Boolean(programPhotoUploadKey) ||
+                        isUploadingPhotos ||
+                        isSaving ||
+                        isSavingSchedule ||
+                        isDeleting
+                      }
+                      uploadingDayIndex={
+                        programPhotoUploadKey?.startsWith("day-")
+                          ? Number.parseInt(programPhotoUploadKey.slice(4), 10)
+                          : null
+                      }
+                    />
+                  ) : (
+                    <TimelineEditor
+                      steps={timeline}
+                      onChange={setTimeline}
+                      onUploadPhotos={(stepIndex, files) =>
+                        void uploadProgramPhotos("step", stepIndex, files)
+                      }
+                      onMovePhoto={(stepIndex, photoIndex, direction) =>
+                        void moveTimelinePhoto(stepIndex, photoIndex, direction)
+                      }
+                      onMakePhotoFirst={(stepIndex, photoIndex) =>
+                        void makeTimelinePhotoFirst(stepIndex, photoIndex)
+                      }
+                      onRemovePhoto={(stepIndex, photoIndex) =>
+                        void removeTimelinePhoto(stepIndex, photoIndex)
+                      }
+                      disabled={
+                        Boolean(programPhotoUploadKey) ||
+                        isUploadingPhotos ||
+                        isSaving ||
+                        isSavingSchedule ||
+                        isDeleting
+                      }
+                      uploadingStepIndex={
+                        programPhotoUploadKey?.startsWith("step-")
+                          ? Number.parseInt(programPhotoUploadKey.slice(5), 10)
+                          : null
+                      }
+                    />
+                  )}
+                </div>
+
+                <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+                <div className="space-y-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-olive">Текстовый маршрут</h3>
+                    <p className="text-xs text-olive/55">
+                      Опишите маршрут своими словами — это будет видно на карточке и на публичной
+                      странице.
+                    </p>
+                  </div>
+                  <textarea
+                    value={routeDescription}
+                    onChange={(event) => setRouteDescription(event.target.value)}
+                    rows={4}
+                    maxLength={5000}
+                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder={
+                      isTour
+                        ? "Симферополь — Бахчисарай — Севастополь — Ялта. Коротко опишите маршрут и его ценность."
+                        : "Опишите маршрут экскурсии простым человеческим языком"
+                    }
+                  />
+                </div>
+
+                <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
+
+                <div className="space-y-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-olive">
+                      Дополнительные активности / опции
+                    </h3>
+                    <p className="text-xs text-olive/55">
+                      {isTour
+                        ? "Например: дегустация, СПА, фотосопровождение, одноместное размещение."
+                        : "Можно добавить морскую прогулку, фотосопровождение или другие опции."}
+                    </p>
+                  </div>
+                  <ExtraOptionsEditor items={extraOptions} onChange={setExtraOptions} />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ===== STEP 3: ДЛИТЕЛЬНОСТЬ И ДОСТУПНОСТЬ ===== */}
+          {currentStep === 3 && (
+            <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-olive md:text-xl">
+                  Длительность и доступность
+                </h2>
+                <p className="mt-1 text-sm text-olive/55">
+                  Укажите длительность и настройте, когда туристы смогут записаться.
+                </p>
+              </div>
+
+              {/* Duration block */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div>
+                  <p className="text-sm font-semibold text-olive">Длительность</p>
+                  <p className="mt-1 text-xs text-olive/55">
+                    {isTour
+                      ? "Для многодневного тура заполните дни и ночи. Для джип-тура, прогулки или короткого выезда можно указать только время в минутах."
+                      : "Укажите общую продолжительность экскурсии в минутах."}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                  {isTour ? (
+                    <div className="space-y-3 sm:col-span-2 md:col-span-3">
+                      <div
+                        className="inline-grid w-full grid-cols-2 gap-1 rounded-xl border border-olive/15 bg-cream/45 p-1 sm:w-auto"
+                        aria-label="Формат длительности тура"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setTourDurationMode("days")}
+                          className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            tourDurationMode === "days"
+                              ? "bg-white text-primary shadow-sm"
+                              : "text-olive/65 hover:text-olive"
+                          }`}
+                        >
+                          Дни и ночи
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTourDurationMode("time")}
+                          className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            tourDurationMode === "time"
+                              ? "bg-white text-primary shadow-sm"
+                              : "text-olive/65 hover:text-olive"
+                          }`}
+                        >
+                          Часы и минуты
+                        </button>
+                      </div>
+
+                      {tourDurationMode === "days" ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                            <div className="flex items-center gap-1.5">
+                              <AppIcon icon={Clock3} className="h-4 w-4" />
+                              <span className="text-sm font-medium text-olive">
+                                Дней <span className="text-terra">*</span>
+                              </span>
+                            </div>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={365}
+                              value={durationDays}
+                              onChange={(event) => {
+                                setTourDurationMode("days");
+                                setDurationDays(event.target.value);
+                              }}
+                              placeholder="3"
+                            />
+                            <p className="text-xs text-olive/40">для туров с ночёвками</p>
+                          </label>
+                          <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                            <div className="flex items-center gap-1.5">
+                              <AppIcon icon={Clock3} className="h-4 w-4" />
+                              <span className="text-sm font-medium text-olive">Ночей</span>
+                            </div>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={364}
+                              value={durationNights}
+                              onChange={(event) => {
+                                setTourDurationMode("days");
+                                setDurationNights(event.target.value);
+                              }}
+                              placeholder="2"
+                            />
+                            <p className="text-xs text-olive/40">0 - без ночёвок</p>
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                            <div className="flex items-center gap-1.5">
+                              <AppIcon icon={Clock3} className="h-4 w-4" />
+                              <span className="text-sm font-medium text-olive">
+                                Часов <span className="text-terra">*</span>
+                              </span>
+                            </div>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={168}
+                              value={durationHours}
+                              onChange={(event) => updateTourDurationHours(event.target.value)}
+                              placeholder="4"
+                            />
+                          </label>
+                          <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                            <div className="flex items-center gap-1.5">
+                              <AppIcon icon={Clock3} className="h-4 w-4" />
+                              <span className="text-sm font-medium text-olive">Минут</span>
+                            </div>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={59}
+                              value={durationClockMinutes}
+                              onChange={(event) =>
+                                updateTourDurationClockMinutes(event.target.value)
+                              }
+                              placeholder="30"
+                            />
+                            {durationMinutes ? (
+                              <p className="text-xs font-medium text-primary">
+                                {formatDuration(Number(durationMinutes) || null)}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-olive/40">например 4 часа для джип-тура</p>
+                            )}
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                      <div className="flex items-center gap-1.5">
+                        <AppIcon icon={Clock3} className="h-4 w-4" />
+                        <span className="text-sm font-medium text-olive">
+                          Длительность (мин) <span className="text-terra">*</span>
+                        </span>
+                      </div>
+                      <Input
+                        type="number"
+                        min={15}
+                        max={10080}
+                        value={durationMinutes}
+                        onChange={(e) => setDurationMinutes(e.target.value)}
+                        placeholder="90"
+                      />
+                      {durationMinutes ? (
+                        <p className="text-xs font-medium text-primary">
+                          {formatDuration(Number(durationMinutes) || null)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-olive/40">в минутах</p>
+                      )}
+                    </label>
+                  )}
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <div className="flex items-center gap-1.5">
+                      <AppIcon icon={Clock3} className="h-4 w-4" />
+                      <span className="text-sm font-medium text-olive">Мин. бронирование</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={720}
+                      value={minBookingNoticeHours}
+                      onChange={(e) => setMinBookingNoticeHours(e.target.value)}
+                      placeholder="24"
+                    />
+                    <p className="text-xs text-olive/40">часов до старта</p>
+                  </label>
+                </div>
+              </div>
+
+              {/* ── Группа 1: Режим доступности ── */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    1
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Режим доступности</p>
+                    <p className="text-xs text-olive/50">
+                      Выберите один из трёх вариантов — от него зависят настройки ниже
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-olive/60">
+                  {isTour
+                    ? "Для туров обычно подходят конкретные заезды или режим по запросу."
+                    : "Для экскурсий чаще всего подходит регулярное расписание."}
+                </p>
+                <div className="grid gap-2 md:grid-cols-3">
+                  {[
+                    {
+                      value: ExcursionAvailabilityMode.REGULAR,
+                      label: "Регулярно по расписанию",
+                      description: "Дни недели, время, сезонность и исключения.",
+                    },
+                    {
+                      value: ExcursionAvailabilityMode.DATED,
+                      label: "Конкретные даты / заезды",
+                      description: "Подходит для туров с фиксированными стартами.",
+                    },
+                    {
+                      value: ExcursionAvailabilityMode.ON_REQUEST,
+                      label: "По запросу",
+                      description: "Дату согласовываете после обращения туриста.",
+                    },
+                  ].map((option) => {
+                    const isActive = availabilityMode === option.value;
                     return (
                       <button
                         key={option.value}
                         type="button"
-                        onClick={() => setOfferType(option.value)}
+                        onClick={() => setAvailabilityMode(option.value)}
                         className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
                           isActive
                             ? "border-primary bg-primary text-white"
@@ -3240,2773 +4405,1791 @@ export function ExcursionEditor({
                         <span
                           className={`mt-1 block text-xs ${isActive ? "text-white/75" : "text-olive/60"}`}
                         >
-                          {option.value === "TOUR"
-                            ? "Заезды, программа по дням, проживание и туровая цена."
-                            : "Короткий маршрут, почасовая длительность и расписание."}
+                          {option.description}
                         </span>
                       </button>
                     );
                   })}
                 </div>
-              </section>
-
-              <label className="block space-y-1.5 rounded-xl border border-olive/15 bg-white p-3">
-                <span className="text-sm font-medium text-olive">Подтип / вид программы</span>
-                <Input
-                  value={subtypeLabel}
-                  onChange={(event) => setSubtypeLabel(event.target.value)}
-                  placeholder={
-                    isTour
-                      ? "Авторский, многодневный, джип-тур..."
-                      : "Пешеходная, морская, индивидуальная..."
-                  }
-                  list="offer-subtype-presets"
-                  maxLength={120}
-                />
-                <datalist id="offer-subtype-presets">
-                  {(isTour ? OFFER_SUBTYPE_PRESETS.TOUR : OFFER_SUBTYPE_PRESETS.EXCURSION).map(
-                    (item) => (
-                      <option key={item} value={item} />
-                    ),
-                  )}
-                </datalist>
-                <p className="text-xs text-olive/50">
-                  Подтип показывает характер программы, но не заменяет теги и тематику.
-                </p>
-              </label>
-            </div>
-
-            {/* Название */}
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-olive">
-                Название <span className="text-terra">*</span>
-              </span>
-              <Input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                maxLength={120}
-                placeholder={
-                  isTour ? "Авторский тур по Южному берегу" : "Обзорная экскурсия по Ялте"
-                }
-              />
-              <p className="text-xs text-olive/50">
-                Коротко и по делу, без эмодзи — до 120 символов
-              </p>
-            </label>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-olive">
-                  Описание <span className="text-terra">*</span>
-                </span>
-                <span className="tabular-nums text-xs text-olive/50">
-                  {description.length}/5000
-                </span>
               </div>
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={6}
-                maxLength={5000}
-                className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder={
-                  isTour
-                    ? "Опишите тур: маршрут, формат, длительность, ключевые точки программы и организационные детали."
-                    : "Опишите экскурсию: маршрут, формат, продолжительность, что входит в программу и как проходит выезд."
-                }
-              />
-              <p className="text-xs text-olive/50">
-                Краткое превью для карточек сформируется автоматически из этого текста.
-              </p>
-              <p className="mt-2 rounded-2xl border border-primary/10 bg-primary/5 px-3.5 py-3 text-xs leading-6 text-olive/72">
-                Основные фото используются в верхней галерее карточки. Для разделов страницы можно
-                назначить отдельные подборки в блоке «Медиа» ниже. Фото для программы по дням и
-                шагам маршрута по-прежнему добавляются прямо внутри соответствующего дня или шага.
-              </p>
-            </div>
-          </div>
 
-          {/* ── Группа 2: Особенности ── */}
-          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                2
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Преимущества и особенности</p>
-                <p className="text-xs text-olive/50">
-                  Укажите ключевые особенности программы без рекламных формулировок
-                </p>
-              </div>
-            </div>
+              {availabilityMode === ExcursionAvailabilityMode.REGULAR ? (
+                <>
+                  {/* ── Группа 2: Расписание (Regular) ── */}
+                  <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                        2
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-olive">Дни и время работы</p>
+                        <p className="text-xs text-olive/50">
+                          Выберите сезон, рабочие дни и укажите время для каждого дня
+                        </p>
+                      </div>
+                    </div>
 
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">Что вас ждёт</h3>
-                <p className="text-xs text-olive/55">
-                  3–6 коротких и конкретных пунктов. Выберите из готовых или добавьте свои. Этот
-                  блок показывается на публичной карточке отдельным списком.
-                </p>
-              </div>
-              <IncludedEditor
-                items={highlights}
-                onChange={setHighlights}
-                presets={HIGHLIGHT_PRESETS}
-                placeholder="Например: старт из Ялты, мини-группа до 8 человек"
-              />
-            </div>
-          </div>
-
-          {/* ── Группа 3: Категория и формат ── */}
-          <div className="space-y-5 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
-                3
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Категория и формат</p>
-                <p className="text-xs text-olive/50">
-                  Нажимайте на подходящие кнопки — это поможет туристам находить вас в поиске
-                </p>
-              </div>
-            </div>
-
-            {/* Теги */}
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-olive">Дополнительные теги</span>
-                {tags.length > 0 && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                    {tags.length}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-olive/45">
-                Нажмите на тег, чтобы выбрать его. Выбранные теги подсветятся.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {tagOptions.map((tag) => {
-                  const isSelected = tags.some((item) => item.toLowerCase() === tag.toLowerCase());
-                  const isRemovable = !defaultCategoryTagSet.has(tag.toLowerCase());
-                  return (
-                    <div key={tag} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => toggleTag(tag)}
-                        className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs font-medium transition-all ${
-                          isSelected
-                            ? "border-primary bg-primary/8 text-primary shadow-sm"
-                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                        }`}
-                      >
-                        {isSelected ? (
-                          <AppIcon icon={Check} className="h-3 w-3" />
-                        ) : (
-                          <AppIcon icon={Plus} className="h-3 w-3 opacity-50" />
-                        )}
-                        {tag}
-                      </button>
-                      {isSelected && isRemovable && (
+                    {/* Year-round vs season toggle */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-olive/12 bg-white px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-olive">Период доступности</p>
+                        <p className="text-xs text-olive/55 mt-0.5">
+                          {isYearRound
+                            ? "Экскурсия проводится круглый год"
+                            : "Укажите начало и конец сезона"}
+                        </p>
+                      </div>
+                      <div className="inline-flex rounded-xl border border-olive/15 bg-cream/60 p-1">
                         <button
                           type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            removeTagOption(tag);
-                          }}
-                          className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
-                          aria-label={`Удалить категорию ${tag}`}
-                          title="Удалить категорию"
+                          onClick={() => setIsYearRound(true)}
+                          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                            isYearRound
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-olive/60 hover:bg-cream"
+                          }`}
+                          aria-pressed={isYearRound}
                         >
-                          <AppIcon icon={X} className="h-2.5 w-2.5" />
+                          Круглый год
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => setIsYearRound(false)}
+                          className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                            isSeasonLimited
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-olive/60 hover:bg-cream"
+                          }`}
+                          aria-pressed={isSeasonLimited}
+                        >
+                          По сезону
+                        </button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              {isAddingTag ? (
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <Input
-                    ref={newTagInputRef}
-                    value={newTagDraft}
-                    onChange={(event) => setNewTagDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addTagOption();
-                      }
-                      if (event.key === "Escape") {
-                        setIsAddingTag(false);
-                        setNewTagDraft("");
-                      }
-                    }}
-                    placeholder="Добавить тег"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={addTagOption}
-                    disabled={!newTagDraft.trim()}
-                  >
-                    Добавить
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsAddingTag(false);
-                      setNewTagDraft("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
-                </div>
-              ) : (
-                <AddActionButton
-                  label="Добавить тег"
-                  onClick={() => {
-                    setIsAddingTag(true);
-                    setError("");
-                  }}
-                />
-              )}
-            </div>
 
-            <div className="border-t border-olive/8" />
+                    {/* Season date pickers */}
+                    {isSeasonLimited ? (
+                      <div className="grid gap-3 rounded-xl border border-primary/18 bg-primary/5 p-4 md:grid-cols-2">
+                        <label className="block space-y-1">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
+                            Начало сезона
+                          </span>
+                          <SingleDatePopoverField
+                            value={seasonDateFrom}
+                            onChange={setSeasonDateFrom}
+                            placeholder="Выберите дату"
+                            helperText="Выберите дату начала сезона"
+                            maxDate={seasonDateTo || undefined}
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
+                            Конец сезона
+                          </span>
+                          <SingleDatePopoverField
+                            value={seasonDateTo}
+                            onChange={setSeasonDateTo}
+                            placeholder="Выберите дату"
+                            helperText="Выберите дату окончания сезона"
+                            minDate={seasonDateFrom || undefined}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
 
-            {/* Формат участия */}
-            <div className="space-y-2.5">
-              <span className="text-sm font-medium text-olive">Формат участия</span>
-              <p className="text-xs text-olive/45">
-                Выберите один формат. Активный вариант выделен цветом.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {formatOptions.map(({ id, value, label }) => (
-                  <div key={id} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExcursionFormat(value);
-                        setSelectedFormatOptionId(id);
-                      }}
-                      className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
-                        selectedFormatOptionId === id
-                          ? "border-primary bg-primary/8 text-primary shadow-sm"
-                          : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                    {selectedFormatOptionId === id && !defaultFormatOptionIdSet.has(id) && (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          removeFormatOption(id);
-                        }}
-                        className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
-                        aria-label={`Удалить тип ${label}`}
-                        title="Удалить тип"
-                      >
-                        <AppIcon icon={X} className="h-2.5 w-2.5" />
-                      </button>
+                    {/* Days of week */}
+                    <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-4">
+                      {/* Header with presets */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-olive">Рабочие дни</p>
+                          <p className="text-xs text-olive/45">
+                            Нажмите на день недели, чтобы включить или выключить его
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scheduleDayPresets.map((preset) => {
+                            const isPresetActive = isSchedulePresetActive(preset.days);
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => setScheduleDaysEnabled(preset.days)}
+                                className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                  isPresetActive
+                                    ? "border-sage/45 bg-sage/20 text-olive"
+                                    : "border-olive/15 bg-white text-olive/60 hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={clearScheduleDays}
+                            className="rounded-lg border border-olive/15 bg-white px-2.5 py-1 text-xs font-semibold text-olive/55 transition hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
+                          >
+                            Сброс
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Compact 7-pill day bar */}
+                      <div className="grid grid-cols-7 gap-1.5">
+                        {weekdayOrder.map((day) => {
+                          const dayItem = daySchedule[day];
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() =>
+                                updateWeekdaySchedule(day, { enabled: !dayItem.enabled })
+                              }
+                              className={`flex flex-col items-center rounded-xl border py-2.5 px-1 transition ${
+                                dayItem.enabled
+                                  ? "border-sage bg-sage/15 text-olive ring-1 ring-sage/30 shadow-sm"
+                                  : "border-olive/12 bg-cream/50 text-olive/45 hover:border-olive/28 hover:bg-cream hover:text-olive/70"
+                              }`}
+                              aria-pressed={dayItem.enabled}
+                              title={weekdayLabels[day]}
+                            >
+                              <span className="text-xs font-bold">{weekdayShortLabels[day]}</span>
+                              {dayItem.enabled ? (
+                                <span className="mt-0.5 text-[9px] leading-tight text-olive/50 tabular-nums">
+                                  {dayItem.from.slice(0, 5)}
+                                </span>
+                              ) : (
+                                <span className="mt-0.5 h-3" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time settings - shown when at least one day is active */}
+                    {activeScheduleDays.length > 0 ? (
+                      <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
+                        {/* Header */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-olive">Время работы</p>
+                            <p className="text-xs text-olive/45">
+                              Задайте время для всех дней сразу или настройте каждый отдельно
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {activeScheduleDays.map((day) => (
+                              <span
+                                key={`chip-${day}`}
+                                className="inline-flex rounded-full border border-sage/35 bg-sage/15 px-2 py-0.5 text-[10px] font-semibold text-olive"
+                              >
+                                {weekdayShortLabels[day]}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Bulk time row */}
+                        <div className="flex items-center gap-3 rounded-lg border border-olive/10 bg-cream/50 px-3 py-2">
+                          <span className="text-xs font-medium text-olive/55 shrink-0">
+                            Для всех
+                          </span>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <input
+                              type="time"
+                              step={60}
+                              value={bulkTimeFrom}
+                              aria-label="Начало рабочего времени"
+                              onChange={(e) => {
+                                setBulkTimeFrom(e.target.value);
+                                setDaySchedule((prev) => {
+                                  const next = { ...prev };
+                                  for (const day of weekdayOrder) {
+                                    if (prev[day].enabled)
+                                      next[day] = { ...next[day], from: e.target.value };
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                            />
+                            <span className="text-sm text-olive/40">-</span>
+                            <input
+                              type="time"
+                              step={60}
+                              value={bulkTimeTo}
+                              aria-label="Конец рабочего времени"
+                              onChange={(e) => {
+                                setBulkTimeTo(e.target.value);
+                                setDaySchedule((prev) => {
+                                  const next = { ...prev };
+                                  for (const day of weekdayOrder) {
+                                    if (prev[day].enabled)
+                                      next[day] = { ...next[day], to: e.target.value };
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Per-day compact list */}
+                        <div className="overflow-hidden rounded-xl border border-olive/10 divide-y divide-olive/8">
+                          {activeScheduleDays.map((day) => {
+                            const dayItem = daySchedule[day];
+                            return (
+                              <div
+                                key={`time-${day}`}
+                                className="flex items-center gap-3 bg-white px-3 py-2 transition-colors hover:bg-sage/5"
+                              >
+                                <span className="w-24 shrink-0 text-sm font-semibold text-olive">
+                                  {weekdayLabels[day]}
+                                </span>
+                                <div className="flex items-center gap-2 ml-auto">
+                                  <input
+                                    type="time"
+                                    step={60}
+                                    value={dayItem.from}
+                                    aria-label={`Начало для ${weekdayLabels[day]}`}
+                                    onChange={(e) =>
+                                      updateWeekdaySchedule(day, { from: e.target.value })
+                                    }
+                                    className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                                  />
+                                  <span className="text-sm text-olive/40">-</span>
+                                  <input
+                                    type="time"
+                                    step={60}
+                                    value={dayItem.to}
+                                    aria-label={`Конец для ${weekdayLabels[day]}`}
+                                    onChange={(e) =>
+                                      updateWeekdaySchedule(day, { to: e.target.value })
+                                    }
+                                    className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-xl border border-dashed border-olive/20 bg-white px-4 py-3.5">
+                        <AppIcon icon={Clock3} className="h-4.5 w-4.5 shrink-0 opacity-55" />
+                        <p className="text-sm text-olive/45">
+                          Включите рабочие дни выше, чтобы задать время работы
+                        </p>
+                      </div>
                     )}
                   </div>
-                ))}
-              </div>
-              {isAddingFormat ? (
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <Input
-                    ref={newFormatInputRef}
-                    value={newFormatDraft}
-                    onChange={(event) => setNewFormatDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addFormatOption();
-                      }
-                      if (event.key === "Escape") {
-                        setIsAddingFormat(false);
-                        setNewFormatDraft("");
-                      }
-                    }}
-                    placeholder="Добавить тип"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={addFormatOption}
-                    disabled={!newFormatDraft.trim()}
-                  >
-                    Добавить
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsAddingFormat(false);
-                      setNewFormatDraft("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
-                </div>
-              ) : (
-                <AddActionButton
-                  label="Добавить тип"
-                  onClick={() => {
-                    setIsAddingFormat(true);
-                    setError("");
-                  }}
-                />
-              )}
-            </div>
 
-            <div className="border-t border-olive/8" />
-
-            {/* Язык проведения */}
-            <div className="space-y-2.5">
-              <span className="text-sm font-medium text-olive">Язык проведения</span>
-              <p className="text-xs text-olive/45">
-                Нажмите на язык, чтобы добавить или убрать его из списка.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {languageOptions.map(({ code, label }) => {
-                  const isSelected = languageCodes.includes(code);
-                  const isRemovable = !defaultLanguageCodeSet.has(code);
-                  return (
-                    <div key={code} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => toggleLanguage(code)}
-                        className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs font-medium transition-all ${
-                          isSelected
-                            ? "border-primary bg-primary/8 text-primary shadow-sm"
-                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                        }`}
-                      >
-                        {isSelected && <AppIcon icon={Check} className="h-3 w-3" />}
-                        {label}
-                      </button>
-                      {isSelected && isRemovable && (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            removeLanguageOption(code);
-                          }}
-                          className="absolute -right-1.5 -top-1.5 inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-olive/20 bg-white text-olive/60 shadow-sm transition hover:border-terra/40 hover:text-terra"
-                          aria-label={`Удалить язык ${label}`}
-                          title="Удалить язык"
-                        >
-                          <AppIcon icon={X} className="h-2.5 w-2.5" />
-                        </button>
-                      )}
+                  {/* ── Группа 3: Исключения и дополнительно ── */}
+                  <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
+                        3
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-olive">
+                          Исключения и дополнительно
+                        </p>
+                        <p className="text-xs text-olive/50">
+                          Нерабочие даты, комментарий и минимальный срок записи
+                        </p>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              {isAddingLanguage ? (
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <Input
-                    ref={newLanguageInputRef}
-                    value={newLanguageCodeDraft}
-                    onChange={(event) => setNewLanguageCodeDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addLanguageOption();
-                      }
-                      if (event.key === "Escape") {
-                        setIsAddingLanguage(false);
-                        setNewLanguageCodeDraft("");
-                      }
-                    }}
-                    placeholder="Код языка: ru, en, es, pt-br"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={addLanguageOption}
-                    disabled={!newLanguageCodeDraft.trim()}
-                  >
-                    Добавить
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsAddingLanguage(false);
-                      setNewLanguageCodeDraft("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
+
+                    {/* Closed dates / exceptions */}
+                    <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold text-olive">Нерабочие даты</p>
+                        <p className="text-xs text-olive/50 mt-0.5">
+                          Выберите конкретные дни, когда экскурсия не проводится (праздники,
+                          перерыв)
+                        </p>
+                      </div>
+                      <SingleDatePopoverField
+                        value=""
+                        onChange={(nextValue) => {
+                          if (nextValue) {
+                            setAdditionalClosedDates((prev) =>
+                              normalizeIsoDateList([...prev, nextValue]),
+                            );
+                          }
+                        }}
+                        placeholder="Выберите дату"
+                        helperText="Кликните по дате, чтобы добавить её как нерабочую"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        {additionalClosedDates.length === 0 ? (
+                          <span className="text-xs text-olive/40">Нет исключений</span>
+                        ) : (
+                          additionalClosedDates.map((dateValue) => (
+                            <span
+                              key={dateValue}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-olive/15 bg-cream px-3 py-1 text-xs text-olive"
+                            >
+                              {formatIsoToDayMonthYear(dateValue)}
+                              <button
+                                type="button"
+                                className="text-olive/50 transition hover:text-red-600"
+                                onClick={() => removeClosedDate(dateValue)}
+                                aria-label={`Удалить дату ${formatIsoToDayMonthYear(dateValue)}`}
+                              >
+                                Г—
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Schedule comment */}
+                    <label className="block space-y-1.5">
+                      <span className="text-sm font-medium text-olive">
+                        Комментарий к расписанию
+                      </span>
+                      <textarea
+                        value={scheduleComment}
+                        onChange={(event) => setScheduleComment(event.target.value)}
+                        rows={3}
+                        maxLength={400}
+                        className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        placeholder="Например: не работаем в государственные праздники..."
+                      />
+                    </label>
+
+                    {/* Schedule summary */}
+                    <div className="flex items-start gap-2.5 rounded-xl border border-olive/12 bg-cream/50 px-4 py-3">
+                      <AppIcon icon={Info} className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
+                      <p className="text-xs text-olive/60">
+                        {isLoadingScheduleRules
+                          ? "Загружаем сохраненные правила расписания..."
+                          : `Сводка: ${
+                              buildScheduleSummary({
+                                isYearRound,
+                                seasonDateFrom,
+                                seasonDateTo,
+                                daySchedule,
+                                additionalClosedDates,
+                                scheduleComment,
+                              }) ??
+                              (scheduleText || "не заполнено")
+                            }`}
+                      </p>
+                    </div>
+
+                    {/* Min booking notice */}
+                    <div className="space-y-2 rounded-xl border border-olive/12 bg-cream/40 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-olive">
+                          Минимальный срок записи{" "}
+                          <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                        </p>
+                        <p className="text-xs text-olive/55 mt-0.5">
+                          Нажмите на подходящий вариант — за сколько часов нужно записаться заранее
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: "", label: "Не указано" },
+                          { value: "0", label: "Сегодня" },
+                          { value: "24", label: "За 24 ч" },
+                          { value: "48", label: "За 48 ч" },
+                          { value: "72", label: "За 3 дня" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setMinBookingNoticeHours(opt.value)}
+                            className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition-all ${
+                              minBookingNoticeHours === opt.value
+                                ? "border-primary bg-primary/8 text-primary shadow-sm"
+                                : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : availabilityMode === ExcursionAvailabilityMode.DATED ? (
+                /* ── Группа 2: Заезды (Dated) ── */
+                <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                      2
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Заезды и конкретные даты</p>
+                      <p className="text-xs text-olive/50">
+                        Добавьте даты старта, укажите количество мест и, если нужно, отдельную цену
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-olive/15 bg-white p-3">
+                    <DepartureDatesEditor items={departureDates} onChange={setDepartureDates} />
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border border-olive/12 bg-white px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-olive">
+                        Минимальный срок записи{" "}
+                        <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                      </p>
+                      <p className="text-xs text-olive/55 mt-0.5">
+                        За сколько часов или дней до старта нужно успеть записаться
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={720}
+                      value={minBookingNoticeHours}
+                      onChange={(event) => setMinBookingNoticeHours(event.target.value)}
+                      placeholder="24"
+                    />
+                  </div>
                 </div>
               ) : (
-                <AddActionButton
-                  label="Добавить язык"
-                  onClick={() => {
-                    setIsAddingLanguage(true);
-                    setError("");
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* ── Tour-specific: вид тура, транспорт, режим заездов ── */}
-          {showTourLogistics && (
-            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                  T
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-olive">Параметры тура</p>
-                  <p className="text-xs text-olive/50">
-                    Укажите вид тура, транспорт и режим заездов
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Вид тура</span>
-                <div className="flex flex-wrap gap-2">
-                  {TOUR_KIND_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setTourKind(tourKind === option.value ? null : option.value)}
-                      className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                        tourKind === option.value
-                          ? "border-primary bg-primary/8 text-primary shadow-sm"
-                          : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Транспорт</span>
-                <p className="text-xs text-olive/50">Выберите все подходящие варианты</p>
-                <div className="flex flex-wrap gap-2">
-                  {TRANSPORT_MODE_OPTIONS.map((option) => {
-                    const isSelected = transportModes.includes(option.value);
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() =>
-                          setTransportModes((prev) =>
-                            isSelected
-                              ? prev.filter((m) => m !== option.value)
-                              : [...prev, option.value],
-                          )
-                        }
-                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                          isSelected
-                            ? "border-primary bg-primary/8 text-primary shadow-sm"
-                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-sm font-medium text-olive">Режим заездов</span>
-                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                  {DEPARTURE_MODE_OPTIONS.map((option) => {
-                    const isActive = departureMode === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setDepartureMode(isActive ? null : option.value)}
-                        className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
-                          isActive
-                            ? "border-primary bg-primary text-white"
-                            : "border-olive/20 bg-white text-olive hover:border-olive/40"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* ===== STEP 1: ГЕОГРАФИЯ И МАРШРУТ ===== */}
-      {currentStep === 1 && (
-        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">География и маршрут</h2>
-            <p className="mt-1 text-sm text-olive/55">
-              Укажите, где проходит {isTour ? "тур" : "экскурсия"}, место сбора и точки маршрута.
-            </p>
-          </div>
-
-          {/* ── Группа 1: Район проведения ── */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                1
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Район проведения</p>
-                <p className="text-xs text-olive/50">
-                  Выберите город, отметьте точку на карте и укажите место сбора
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <span className="text-sm font-medium text-olive">
-                Населённый пункт <span className="text-terra">*</span>
-              </span>
-              <div className="space-y-1">
-                <Input
-                  value={locationInput}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    const exactMatch = findExactCrimeaLocationByName(nextValue);
-                    setLocationInput(nextValue);
-                    setLocationId(exactMatch?.id ?? "");
-                  }}
-                  list={`excursion-location-suggestions-${excursion.id}`}
-                  placeholder="Ялта, Судак, с. Добровское..."
-                  autoComplete="off"
-                />
-                <datalist id={`excursion-location-suggestions-${excursion.id}`}>
-                  {crimeaLocations.map((location) => (
-                    <option key={location.id} value={location.name} />
-                  ))}
-                </datalist>
-                <p className="text-xs text-olive/45">
-                  Начните вводить название — появится список городов
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-olive/12 bg-cream/40 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-olive/55 shadow-sm">
-                    <AppIcon icon={MapPin} className="h-4 w-4" />
+                /* ── Группа 2: По запросу ── */
+                <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                      2
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-olive">Режим «по запросу»</p>
+                      <p className="text-xs text-olive/50">
+                        Объясните, как согласовывается дата и сколько времени нужно на подтверждение
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-olive">Точка на карте</p>
-                    <p className="text-xs text-olive/50">Необязательно, но повышает доверие</p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={openMapDialog}
-                  className="shrink-0"
-                >
-                  Открыть карту
-                </Button>
-              </div>
 
-              <div
-                className="relative overflow-hidden rounded-xl border border-olive/12 bg-cream"
-                style={{ height: 152 }}
-              >
-                <Image
-                  src="/crimea-map-preview.svg"
-                  alt="Превью карты Крыма"
-                  fill
-                  sizes="100vw"
-                  className="scale-110 object-cover object-center"
-                  priority={false}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-midnight/55 via-midnight/15 to-transparent" />
-                <div className="absolute inset-x-3 bottom-3">
-                  <p className="text-xs text-white/75">
-                    {latitude !== null && longitude !== null
-                      ? "Точка выбрана. Откройте карту, чтобы скорректировать координаты."
-                      : "Нажмите «Открыть карту», чтобы выбрать точку на карте Крыма"}
-                  </p>
-                </div>
-              </div>
-
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-olive/60">Адрес или ориентир</span>
-                <Input
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                  placeholder="ул. Ленина 1, рядом с набережной..."
-                />
-              </label>
-            </div>
-
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-olive">Стартовая точка</span>
-              <Input
-                value={startPoint}
-                onChange={(event) => setStartPoint(event.target.value)}
-                placeholder="Набережная, автовокзал, у входа в парк..."
-              />
-              <p className="flex items-center gap-1 text-xs text-olive/45">
-                <AppIcon icon={Info} className="h-3 w-3 shrink-0" />
-                Где именно собираются участники перед началом экскурсии
-              </p>
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-olive">Точка завершения</span>
-              <Input
-                value={finishPoint}
-                onChange={(event) => setFinishPoint(event.target.value)}
-                placeholder="Если финиш отличается от старта, укажите это здесь"
-              />
-              <p className="text-xs text-olive/45">
-                Этот текст показывается в блоке логистики на публичной карточке.
-              </p>
-            </label>
-
-            <div className="space-y-3 rounded-xl border border-olive/15 bg-cream/30 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <span className="text-sm font-medium text-olive">Трансфер включён</span>
-                  <p className="text-xs text-olive/50">
-                    Необязательно{" "}
-                    <span className="text-olive/35">— только если вы организуете доставку</span>
-                  </p>
-                </div>
-                <SeaToggle
-                  size="sm"
-                  pressed={transferEnabled}
-                  onPressedChange={setTransferEnabled}
-                  aria-label="Трансфер включён"
-                />
-              </div>
-
-              {transferEnabled ? (
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Детали трансфера</span>
-                  <Input
-                    value={transferDetails}
-                    onChange={(event) => setTransferDetails(event.target.value)}
-                    placeholder="Откуда забираете, входит ли это в цену, нужна ли доплата..."
-                    maxLength={300}
+                  <textarea
+                    value={availabilityNote}
+                    onChange={(event) => setAvailabilityNote(event.target.value)}
+                    rows={4}
+                    maxLength={1000}
+                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="Например: дату согласуем после обращения, подтверждаем в течение 24 часов."
                   />
-                </label>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ===== STEP 2: ПРОГРАММА ===== */}
-      {currentStep === 2 && (
-        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Программа</h2>
-            <p className="mt-1 text-sm text-olive/55">
-              {isTour
-                ? "Опишите маршрут, программу по пунктам и дополнительные опции."
-                : "Опишите маршрут, таймлайн и дополнительные опции."}
-            </p>
-          </div>
-
-          {/* Highlight chips */}
-          <div className="space-y-3 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <p className="text-sm font-semibold text-olive">Хайлайты</p>
-            <p className="text-xs text-olive/50">Ключевые фишки, которые зацепят туриста (до 6)</p>
-            <div className="flex flex-wrap gap-2">
-              {HIGHLIGHT_PRESETS.map((preset) => {
-                const isSelected = highlights.includes(preset);
-                return (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() =>
-                      setHighlights((prev) =>
-                        isSelected
-                          ? prev.filter((h) => h !== preset)
-                          : prev.length < 6
-                            ? [...prev, preset]
-                            : prev,
-                      )
-                    }
-                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                      isSelected
-                        ? "border-primary bg-primary/8 text-primary shadow-sm"
-                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Маршрут и программа (duration/participants/physical moved to steps 3-4) ── */}
-          <div className="space-y-5 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                4
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Маршрут и программа</p>
-                <p className="text-xs text-olive/50">
-                  Составьте пошаговый план или опишите маршрут текстом
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-olive">
+                      Минимальный срок до заявки
+                    </span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={720}
+                      value={minBookingNoticeHours}
+                      onChange={(event) => setMinBookingNoticeHours(event.target.value)}
+                      placeholder="48"
+                    />
+                  </label>
+                </div>
+              )}
+              {/* ── Группа и требования (inline in step 3) ── */}
+              <div className="mt-2 border-t border-olive/8 pt-6">
+                <h3 className="text-base font-semibold text-olive">Группа и требования</h3>
+                <p className="mt-1 text-sm text-olive/55">
+                  Формат проведения, размер группы, язык и физические требования.
                 </p>
               </div>
-            </div>
 
-            {/* Timeline */}
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 text-terra">
-                    <AppIcon icon={ListChecks} className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-olive">
-                      {isTour
-                        ? getItineraryProgramTitle(itineraryItemLabel)
-                        : "Пошаговый план (таймлайн)"}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-olive/60">
-                      {isTour
-                        ? "Разложите программу по пунктам: это может быть план по дням, этапам, шагам или любым логичным блокам маршрута."
-                        : "Добавляйте шаги по порядку — укажите время и описание. Если пусто — на карточке отображается текстовый маршрут."}
-                    </p>
+              {/* Format, participants, age */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <p className="text-sm font-semibold text-olive">Формат и размер группы</p>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <span className="text-sm font-medium text-olive">Мин. участников</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={minParticipants}
+                      onChange={(e) => setMinParticipants(e.target.value)}
+                      placeholder="1"
+                    />
+                  </label>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <span className="text-sm font-medium text-olive">Макс. участников</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={maxParticipants}
+                      onChange={(e) => setMaxParticipants(e.target.value)}
+                      placeholder="20"
+                    />
+                  </label>
+                  <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
+                    <span className="text-sm font-medium text-olive">Мин. возраст</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={120}
+                      value={minAge}
+                      onChange={(e) => setMinAge(e.target.value)}
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-olive/40">0 — без ограничений</p>
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-olive">Сложность</p>
+                  <div className="flex gap-2">
+                    {(["EASY", "MEDIUM", "HARD"] as ExcursionDifficulty[]).map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setDifficulty(difficulty === level ? null : level)}
+                        className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                          difficulty === level
+                            ? "border-primary bg-primary/8 text-primary"
+                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"
+                        }`}
+                      >
+                        {level === "EASY" ? "Лёгкая" : level === "MEDIUM" ? "Средняя" : "Сложная"}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                {(isTour ? itineraryDays.length : timeline.length) > 0 && (
-                  <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                    {isTour
-                      ? formatItineraryItemCount(itineraryItemLabel, itineraryDays.length)
-                      : `${timeline.length} ${timeline.length === 1 ? "шаг" : timeline.length < 5 ? "шага" : "шагов"}`}
-                  </span>
-                )}
               </div>
-              {isTour ? (
-                <TourDaysEditor
-                  days={itineraryDays}
-                  itemLabel={itineraryItemLabel}
-                  onChange={setItineraryDays}
-                  onItemLabelChange={setItineraryItemLabel}
-                  onUploadPhotos={(dayIndex, files) =>
-                    void uploadProgramPhotos("day", dayIndex, files)
-                  }
-                  onMovePhoto={(dayIndex, photoIndex, direction) =>
-                    void moveItineraryDayPhoto(dayIndex, photoIndex, direction)
-                  }
-                  onMakePhotoFirst={(dayIndex, photoIndex) =>
-                    void makeItineraryDayPhotoFirst(dayIndex, photoIndex)
-                  }
-                  onRemovePhoto={(dayIndex, photoIndex) =>
-                    void removeItineraryDayPhoto(dayIndex, photoIndex)
-                  }
-                  disabled={
-                    Boolean(programPhotoUploadKey) ||
-                    isUploadingPhotos ||
-                    isSaving ||
-                    isSavingSchedule ||
-                    isDeleting
-                  }
-                  uploadingDayIndex={
-                    programPhotoUploadKey?.startsWith("day-")
-                      ? Number.parseInt(programPhotoUploadKey.slice(4), 10)
-                      : null
-                  }
-                />
-              ) : (
-                <TimelineEditor
-                  steps={timeline}
-                  onChange={setTimeline}
-                  onUploadPhotos={(stepIndex, files) =>
-                    void uploadProgramPhotos("step", stepIndex, files)
-                  }
-                  onMovePhoto={(stepIndex, photoIndex, direction) =>
-                    void moveTimelinePhoto(stepIndex, photoIndex, direction)
-                  }
-                  onMakePhotoFirst={(stepIndex, photoIndex) =>
-                    void makeTimelinePhotoFirst(stepIndex, photoIndex)
-                  }
-                  onRemovePhoto={(stepIndex, photoIndex) =>
-                    void removeTimelinePhoto(stepIndex, photoIndex)
-                  }
-                  disabled={
-                    Boolean(programPhotoUploadKey) ||
-                    isUploadingPhotos ||
-                    isSaving ||
-                    isSavingSchedule ||
-                    isDeleting
-                  }
-                  uploadingStepIndex={
-                    programPhotoUploadKey?.startsWith("step-")
-                      ? Number.parseInt(programPhotoUploadKey.slice(5), 10)
-                      : null
-                  }
-                />
-              )}
-            </div>
 
-            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">Текстовый маршрут</h3>
+              {/* Physical requirements & what to bring */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <p className="text-sm font-semibold text-olive">Физические требования</p>
                 <p className="text-xs text-olive/55">
-                  Опишите маршрут своими словами — это будет видно на карточке и на публичной
-                  странице.
+                  Укажите, если есть ограничения по здоровью или физической форме.
                 </p>
+                <IncludedEditor
+                  items={physicalRequirements}
+                  onChange={setPhysicalRequirements}
+                  presets={PHYSICAL_REQUIREMENTS_PRESETS}
+                  placeholder="Хорошая физическая форма"
+                />
               </div>
-              <textarea
-                value={routeDescription}
-                onChange={(event) => setRouteDescription(event.target.value)}
-                rows={4}
-                maxLength={5000}
-                className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder={
-                  isTour
-                    ? "Симферополь — Бахчисарай — Севастополь — Ялта. Коротко опишите маршрут и его ценность."
-                    : "Опишите маршрут экскурсии простым человеческим языком"
-                }
-              />
-            </div>
 
-            <div className="h-px bg-gradient-to-r from-transparent via-olive/10 to-transparent" />
-
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">
-                  Дополнительные активности / опции
-                </h3>
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <p className="text-sm font-semibold text-olive">Что взять с собой</p>
                 <p className="text-xs text-olive/55">
-                  {isTour
-                    ? "Например: дегустация, СПА, фотосопровождение, одноместное размещение."
-                    : "Можно добавить морскую прогулку, фотосопровождение или другие опции."}
+                  Подскажите участникам, что пригодится в поездке.
                 </p>
+                <IncludedEditor
+                  items={whatToBring}
+                  onChange={setWhatToBring}
+                  presets={WHAT_TO_BRING_PRESETS}
+                  placeholder="Удобная обувь"
+                />
               </div>
-              <ExtraOptionsEditor items={extraOptions} onChange={setExtraOptions} />
-            </div>
-          </div>
-        </section>
-      )}
 
-      {/* ===== STEP 3: ДЛИТЕЛЬНОСТЬ И ДОСТУПНОСТЬ ===== */}
-      {currentStep === 3 && (
-        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">
-              Длительность и доступность
-            </h2>
-            <p className="mt-1 text-sm text-olive/55">
-              Укажите длительность и настройте, когда туристы смогут записаться.
-            </p>
-          </div>
-
-          {/* Duration block */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div>
-              <p className="text-sm font-semibold text-olive">Длительность</p>
-              <p className="mt-1 text-xs text-olive/55">
-                {isTour
-                  ? "Для многодневного тура заполните дни и ночи. Для джип-тура, прогулки или короткого выезда можно указать только время в минутах."
-                  : "Укажите общую продолжительность экскурсии в минутах."}
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              {isTour ? (
-                <div className="space-y-3 sm:col-span-2 md:col-span-3">
-                  <div
-                    className="inline-grid w-full grid-cols-2 gap-1 rounded-xl border border-olive/15 bg-cream/45 p-1 sm:w-auto"
-                    aria-label="Формат длительности тура"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setTourDurationMode("days")}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        tourDurationMode === "days"
-                          ? "bg-white text-primary shadow-sm"
-                          : "text-olive/65 hover:text-olive"
-                      }`}
-                    >
-                      Дни и ночи
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTourDurationMode("time")}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        tourDurationMode === "time"
-                          ? "bg-white text-primary shadow-sm"
-                          : "text-olive/65 hover:text-olive"
-                      }`}
-                    >
-                      Часы и минуты
-                    </button>
+              {/* Safety block for active tours */}
+              {showSafetyBlock && (
+                <div className="space-y-4 rounded-2xl border border-terra/20 bg-terra/5 p-4 shadow-sm sm:p-5">
+                  <p className="text-sm font-semibold text-olive">
+                    Безопасность и условия маршрута
+                  </p>
+                  <p className="text-xs text-olive/55">
+                    Для активных туров важно указать условия маршрута, снаряжение и правила
+                    безопасности.
+                  </p>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-olive">Условия маршрута</span>
+                    <textarea
+                      value={routeConditions}
+                      onChange={(e) => setRouteConditions(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Горная местность, грунтовые дороги, броды..."
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-olive">
+                      Информация о безопасности
+                    </span>
+                    <textarea
+                      value={safetyInfo}
+                      onChange={(e) => setSafetyInfo(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Обязательно наличие спасательного жилета, инструктаж перед выездом..."
+                    />
+                  </label>
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-olive">
+                      Предоставляемое снаряжение
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {EQUIPMENT_PROVIDED_PRESETS.map((item) => {
+                        const isSelected = equipmentProvided.includes(item);
+                        return (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() =>
+                              setEquipmentProvided((prev) =>
+                                isSelected ? prev.filter((e) => e !== item) : [...prev, item],
+                              )
+                            }
+                            className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+                </div>
+              )}
 
-                  {tourDurationMode === "days" ? (
+              {/* Documents & insurance for tours */}
+              {isTour && (
+                <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
+                  <p className="text-sm font-semibold text-olive">Документы и страховка</p>
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-olive">Необходимые документы</span>
+                    <div className="flex flex-wrap gap-2">
+                      {DOCUMENTS_REQUIRED_PRESETS.map((item) => {
+                        const isSelected = documentsRequired.includes(item);
+                        return (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() =>
+                              setDocumentsRequired((prev) =>
+                                isSelected ? prev.filter((d) => d !== item) : [...prev, item],
+                              )
+                            }
+                            className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <SeaToggle
+                      pressed={insuranceIncluded === true}
+                      onPressedChange={(val) => setInsuranceIncluded(val)}
+                    />
+                    <span className="text-sm font-medium text-olive">
+                      Страховка включена в стоимость
+                    </span>
+                  </div>
+                  {insuranceIncluded && (
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-olive/60">
+                        Комментарий к страховке
+                      </span>
+                      <Input
+                        value={insuranceComment}
+                        onChange={(e) => setInsuranceComment(e.target.value)}
+                        placeholder="Базовая медицинская, покрывает несчастные случаи..."
+                        maxLength={500}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Accommodation block for multi-day tours */}
+              {showAccommodationBlock && (
+                <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm sm:p-5">
+                  <p className="text-sm font-semibold text-olive">Проживание</p>
+                  <div className="flex items-center gap-3">
+                    <SeaToggle
+                      pressed={accommodationProvided === true}
+                      onPressedChange={(val) => setAccommodationProvided(val)}
+                    />
+                    <span className="text-sm font-medium text-olive">Проживание включено</span>
+                  </div>
+                  {accommodationProvided && (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                        <div className="flex items-center gap-1.5">
-                          <AppIcon icon={Clock3} className="h-4 w-4" />
-                          <span className="text-sm font-medium text-olive">
-                            Дней <span className="text-terra">*</span>
-                          </span>
+                      <div className="space-y-1.5">
+                        <span className="text-sm font-medium text-olive">Тип размещения</span>
+                        <div className="flex flex-wrap gap-2">
+                          {ACCOMMODATION_TYPE_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                setAccommodationType(
+                                  accommodationType === opt.value ? "" : opt.value,
+                                )
+                              }
+                              className={`rounded-xl border px-3 py-2 text-sm transition ${accommodationType === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
                         </div>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={durationDays}
-                          onChange={(event) => {
-                            setTourDurationMode("days");
-                            setDurationDays(event.target.value);
-                          }}
-                          placeholder="3"
-                        />
-                        <p className="text-xs text-olive/40">для туров с ночёвками</p>
-                      </label>
-                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                        <div className="flex items-center gap-1.5">
-                          <AppIcon icon={Clock3} className="h-4 w-4" />
-                          <span className="text-sm font-medium text-olive">Ночей</span>
-                        </div>
+                      </div>
+                      <label className="block space-y-1">
+                        <span className="text-sm font-medium text-olive">Количество ночей</span>
                         <Input
                           type="number"
                           min={0}
                           max={364}
-                          value={durationNights}
-                          onChange={(event) => {
-                            setTourDurationMode("days");
-                            setDurationNights(event.target.value);
-                          }}
+                          value={accommodationNights}
+                          onChange={(e) => setAccommodationNights(e.target.value)}
                           placeholder="2"
                         />
-                        <p className="text-xs text-olive/40">0 - без ночёвок</p>
                       </label>
+                      <label className="block space-y-1">
+                        <span className="text-sm font-medium text-olive">Уровень / звёзды</span>
+                        <Input
+                          value={accommodationStars}
+                          onChange={(e) => setAccommodationStars(e.target.value)}
+                          placeholder="3*, комфорт"
+                          maxLength={20}
+                        />
+                      </label>
+                      <div className="space-y-1.5">
+                        <span className="text-sm font-medium text-olive">Типы номеров</span>
+                        <div className="flex flex-wrap gap-2">
+                          {ROOM_TYPE_OPTIONS.map((opt) => {
+                            const sel = roomTypes.includes(opt.value);
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() =>
+                                  setRoomTypes((prev) =>
+                                    sel
+                                      ? prev.filter((r) => r !== opt.value)
+                                      : [...prev, opt.value],
+                                  )
+                                }
+                                className={`rounded-xl border px-3 py-2 text-sm transition ${sel ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                        <div className="flex items-center gap-1.5">
-                          <AppIcon icon={Clock3} className="h-4 w-4" />
-                          <span className="text-sm font-medium text-olive">
-                            Часов <span className="text-terra">*</span>
+                  )}
+                  {accommodationProvided && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <SeaToggle
+                          pressed={singleSupplementAvailable === true}
+                          onPressedChange={(val) => setSingleSupplementAvailable(val)}
+                        />
+                        <span className="text-sm text-olive">
+                          Доплата за одноместное размещение
+                        </span>
+                      </div>
+                      {singleSupplementAvailable && (
+                        <label className="block space-y-1">
+                          <span className="text-xs font-medium text-olive/60">
+                            Сумма доплаты (RUB)
                           </span>
-                        </div>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={singleSupplementPrice}
+                            onChange={(e) => setSingleSupplementPrice(e.target.value)}
+                            placeholder="3000"
+                          />
+                        </label>
+                      )}
+                      <label className="block space-y-1">
+                        <span className="text-xs font-medium text-olive/60">
+                          Комментарий к проживанию
+                        </span>
                         <Input
-                          type="number"
-                          min={0}
-                          max={168}
-                          value={durationHours}
-                          onChange={(event) => updateTourDurationHours(event.target.value)}
-                          placeholder="4"
+                          value={accommodationComment}
+                          onChange={(e) => setAccommodationComment(e.target.value)}
+                          placeholder="Размещение в гостевых домах Южного берега"
+                          maxLength={1000}
                         />
                       </label>
-                      <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                        <div className="flex items-center gap-1.5">
-                          <AppIcon icon={Clock3} className="h-4 w-4" />
-                          <span className="text-sm font-medium text-olive">Минут</span>
-                        </div>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={59}
-                          value={durationClockMinutes}
-                          onChange={(event) => updateTourDurationClockMinutes(event.target.value)}
-                          placeholder="30"
-                        />
-                        {durationMinutes ? (
-                          <p className="text-xs font-medium text-primary">
-                            {formatDuration(Number(durationMinutes) || null)}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-olive/40">например 4 часа для джип-тура</p>
-                        )}
-                      </label>
-                    </div>
+                    </>
                   )}
                 </div>
-              ) : (
-                <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                  <div className="flex items-center gap-1.5">
-                    <AppIcon icon={Clock3} className="h-4 w-4" />
-                    <span className="text-sm font-medium text-olive">
-                      Длительность (мин) <span className="text-terra">*</span>
-                    </span>
-                  </div>
-                  <Input
-                    type="number"
-                    min={15}
-                    max={10080}
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(e.target.value)}
-                    placeholder="90"
-                  />
-                  {durationMinutes ? (
-                    <p className="text-xs font-medium text-primary">
-                      {formatDuration(Number(durationMinutes) || null)}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-olive/40">в минутах</p>
-                  )}
-                </label>
               )}
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <div className="flex items-center gap-1.5">
-                  <AppIcon icon={Clock3} className="h-4 w-4" />
-                  <span className="text-sm font-medium text-olive">Мин. бронирование</span>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  max={720}
-                  value={minBookingNoticeHours}
-                  onChange={(e) => setMinBookingNoticeHours(e.target.value)}
-                  placeholder="24"
-                />
-                <p className="text-xs text-olive/40">часов до старта</p>
-              </label>
-            </div>
-          </div>
 
-          {/* ── Группа 1: Режим доступности ── */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                1
-              </span>
+              {/* Meal plan */}
+              {isTour && (
+                <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
+                  <p className="text-sm font-semibold text-olive">Питание</p>
+                  <div className="flex flex-wrap gap-2">
+                    {MEAL_PLAN_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setMealPlan(mealPlan === opt.value ? "" : opt.value)}
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${mealPlan === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {mealPlan === "CUSTOM" && (
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-olive/60">
+                        Подробности о питании
+                      </span>
+                      <textarea
+                        value={mealDetails}
+                        onChange={(e) => setMealDetails(e.target.value)}
+                        rows={2}
+                        maxLength={1000}
+                        className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        placeholder="Пункт 1 — обед в ресторане, пункт 2 — завтрак в отеле + пикник..."
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ===== STEP 4: ЦЕНА И УСЛОВИЯ (merged old steps 5+6) ===== */}
+          {currentStep === 4 && (
+            <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
               <div>
-                <p className="text-sm font-semibold text-olive">Режим доступности</p>
-                <p className="text-xs text-olive/50">
-                  Выберите один из трёх вариантов — от него зависят настройки ниже
+                <h2 className="text-lg font-semibold text-olive md:text-xl">Цена и условия</h2>
+                <p className="mt-1 text-sm text-olive/55">
+                  Укажите стоимость, что входит в цену, а что нет.
                 </p>
               </div>
-            </div>
 
-            <p className="text-xs text-olive/60">
-              {isTour
-                ? "Для туров обычно подходят конкретные заезды или режим по запросу."
-                : "Для экскурсий чаще всего подходит регулярное расписание."}
-            </p>
-            <div className="grid gap-2 md:grid-cols-3">
-              {[
-                {
-                  value: ExcursionAvailabilityMode.REGULAR,
-                  label: "Регулярно по расписанию",
-                  description: "Дни недели, время, сезонность и исключения.",
-                },
-                {
-                  value: ExcursionAvailabilityMode.DATED,
-                  label: "Конкретные даты / заезды",
-                  description: "Подходит для туров с фиксированными стартами.",
-                },
-                {
-                  value: ExcursionAvailabilityMode.ON_REQUEST,
-                  label: "По запросу",
-                  description: "Дату согласовываете после обращения туриста.",
-                },
-              ].map((option) => {
-                const isActive = availabilityMode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setAvailabilityMode(option.value)}
-                    className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
-                      isActive
-                        ? "border-primary bg-primary text-white"
-                        : "border-olive/20 bg-white text-olive hover:border-olive/40"
-                    }`}
-                  >
-                    <span className="block font-semibold">{option.label}</span>
-                    <span
-                      className={`mt-1 block text-xs ${isActive ? "text-white/75" : "text-olive/60"}`}
-                    >
-                      {option.description}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {availabilityMode === ExcursionAvailabilityMode.REGULAR ? (
-            <>
-              {/* ── Группа 2: Расписание (Regular) ── */}
-              <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+              {/* ── Группа 1: Стоимость ── */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                    2
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    1
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-olive">Дни и время работы</p>
+                    <p className="text-sm font-semibold text-olive">Стоимость</p>
                     <p className="text-xs text-olive/50">
-                      Выберите сезон, рабочие дни и укажите время для каждого дня
+                      Введите минимальную цену и выберите, за что она указана
                     </p>
                   </div>
                 </div>
 
-                {/* Year-round vs season toggle */}
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-olive/12 bg-white px-4 py-3">
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-olive">
+                    Цена от (RUB) <span className="text-terra">*</span>
+                  </span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1000000}
+                    value={priceFrom}
+                    onChange={(event) => setPriceFrom(event.target.value)}
+                    placeholder="2500"
+                  />
+                </label>
+
+                <div className="space-y-2">
                   <div>
-                    <p className="text-sm font-semibold text-olive">Период доступности</p>
-                    <p className="text-xs text-olive/55 mt-0.5">
-                      {isYearRound
-                        ? "Экскурсия проводится круглый год"
-                        : "Укажите начало и конец сезона"}
+                    <h3 className="text-base font-semibold text-olive">Единица цены</h3>
+                    <p className="text-xs text-olive/65">
+                      Нажмите на подходящий вариант или введите свой. Цена показывается вместе с
+                      единицей: «за чел», «за группу» и т.д.
                     </p>
                   </div>
-                  <div className="inline-flex rounded-xl border border-olive/15 bg-cream/60 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsYearRound(true)}
-                      className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                        isYearRound
-                          ? "bg-primary text-white shadow-sm"
-                          : "text-olive/60 hover:bg-cream"
-                      }`}
-                      aria-pressed={isYearRound}
-                    >
-                      Круглый год
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsYearRound(false)}
-                      className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                        isSeasonLimited
-                          ? "bg-primary text-white shadow-sm"
-                          : "text-olive/60 hover:bg-cream"
-                      }`}
-                      aria-pressed={isSeasonLimited}
-                    >
-                      По сезону
-                    </button>
-                  </div>
-                </div>
-
-                {/* Season date pickers */}
-                {isSeasonLimited ? (
-                  <div className="grid gap-3 rounded-xl border border-primary/18 bg-primary/5 p-4 md:grid-cols-2">
-                    <label className="block space-y-1">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
-                        Начало сезона
-                      </span>
-                      <SingleDatePopoverField
-                        value={seasonDateFrom}
-                        onChange={setSeasonDateFrom}
-                        placeholder="Выберите дату"
-                        helperText="Выберите дату начала сезона"
-                        maxDate={seasonDateTo || undefined}
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-olive/60">
-                        Конец сезона
-                      </span>
-                      <SingleDatePopoverField
-                        value={seasonDateTo}
-                        onChange={setSeasonDateTo}
-                        placeholder="Выберите дату"
-                        helperText="Выберите дату окончания сезона"
-                        minDate={seasonDateFrom || undefined}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-
-                {/* Days of week */}
-                <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-4">
-                  {/* Header with presets */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-olive">Рабочие дни</p>
-                      <p className="text-xs text-olive/45">
-                        Нажмите на день недели, чтобы включить или выключить его
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {scheduleDayPresets.map((preset) => {
-                        const isPresetActive = isSchedulePresetActive(preset.days);
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => setScheduleDaysEnabled(preset.days)}
-                            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
-                              isPresetActive
-                                ? "border-sage/45 bg-sage/20 text-olive"
-                                : "border-olive/15 bg-white text-olive/60 hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
-                            }`}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
+                  <div className="flex flex-wrap gap-2">
+                    {PRICE_UNIT_PRESETS.map((preset) => (
                       <button
+                        key={preset}
                         type="button"
-                        onClick={clearScheduleDays}
-                        className="rounded-lg border border-olive/15 bg-white px-2.5 py-1 text-xs font-semibold text-olive/55 transition hover:border-primary/30 hover:bg-primary/6 hover:text-primary"
+                        onClick={() => setPriceUnitLabel(preset)}
+                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                          priceUnitLabel === preset
+                            ? "border-primary bg-primary/8 text-primary shadow-sm"
+                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
+                        }`}
                       >
-                        Сброс
+                        {preset}
                       </button>
-                    </div>
+                    ))}
                   </div>
-
-                  {/* Compact 7-pill day bar */}
-                  <div className="grid grid-cols-7 gap-1.5">
-                    {weekdayOrder.map((day) => {
-                      const dayItem = daySchedule[day];
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => updateWeekdaySchedule(day, { enabled: !dayItem.enabled })}
-                          className={`flex flex-col items-center rounded-xl border py-2.5 px-1 transition ${
-                            dayItem.enabled
-                              ? "border-sage bg-sage/15 text-olive ring-1 ring-sage/30 shadow-sm"
-                              : "border-olive/12 bg-cream/50 text-olive/45 hover:border-olive/28 hover:bg-cream hover:text-olive/70"
-                          }`}
-                          aria-pressed={dayItem.enabled}
-                          title={weekdayLabels[day]}
-                        >
-                          <span className="text-xs font-bold">{weekdayShortLabels[day]}</span>
-                          {dayItem.enabled ? (
-                            <span className="mt-0.5 text-[9px] leading-tight text-olive/50 tabular-nums">
-                              {dayItem.from.slice(0, 5)}
-                            </span>
-                          ) : (
-                            <span className="mt-0.5 h-3" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <Input
+                    value={priceUnitLabel}
+                    onChange={(event) => setPriceUnitLabel(event.target.value)}
+                    placeholder={isTour ? "Например: тур" : "Например: чел"}
+                    maxLength={80}
+                  />
                 </div>
 
-                {/* Time settings - shown when at least one day is active */}
-                {activeScheduleDays.length > 0 ? (
-                  <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-olive">Время работы</p>
-                        <p className="text-xs text-olive/45">
-                          Задайте время для всех дней сразу или настройте каждый отдельно
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {activeScheduleDays.map((day) => (
-                          <span
-                            key={`chip-${day}`}
-                            className="inline-flex rounded-full border border-sage/35 bg-sage/15 px-2 py-0.5 text-[10px] font-semibold text-olive"
-                          >
-                            {weekdayShortLabels[day]}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bulk time row */}
-                    <div className="flex items-center gap-3 rounded-lg border border-olive/10 bg-cream/50 px-3 py-2">
-                      <span className="text-xs font-medium text-olive/55 shrink-0">Для всех</span>
-                      <div className="flex items-center gap-2 ml-auto">
-                        <input
-                          type="time"
-                          step={60}
-                          value={bulkTimeFrom}
-                          aria-label="Начало рабочего времени"
-                          onChange={(e) => {
-                            setBulkTimeFrom(e.target.value);
-                            setDaySchedule((prev) => {
-                              const next = { ...prev };
-                              for (const day of weekdayOrder) {
-                                if (prev[day].enabled)
-                                  next[day] = { ...next[day], from: e.target.value };
-                              }
-                              return next;
-                            });
-                          }}
-                          className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                        />
-                        <span className="text-sm text-olive/40">-</span>
-                        <input
-                          type="time"
-                          step={60}
-                          value={bulkTimeTo}
-                          aria-label="Конец рабочего времени"
-                          onChange={(e) => {
-                            setBulkTimeTo(e.target.value);
-                            setDaySchedule((prev) => {
-                              const next = { ...prev };
-                              for (const day of weekdayOrder) {
-                                if (prev[day].enabled)
-                                  next[day] = { ...next[day], to: e.target.value };
-                              }
-                              return next;
-                            });
-                          }}
-                          className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Per-day compact list */}
-                    <div className="overflow-hidden rounded-xl border border-olive/10 divide-y divide-olive/8">
-                      {activeScheduleDays.map((day) => {
-                        const dayItem = daySchedule[day];
-                        return (
-                          <div
-                            key={`time-${day}`}
-                            className="flex items-center gap-3 bg-white px-3 py-2 transition-colors hover:bg-sage/5"
-                          >
-                            <span className="w-24 shrink-0 text-sm font-semibold text-olive">
-                              {weekdayLabels[day]}
-                            </span>
-                            <div className="flex items-center gap-2 ml-auto">
-                              <input
-                                type="time"
-                                step={60}
-                                value={dayItem.from}
-                                aria-label={`Начало для ${weekdayLabels[day]}`}
-                                onChange={(e) =>
-                                  updateWeekdaySchedule(day, { from: e.target.value })
-                                }
-                                className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                              />
-                              <span className="text-sm text-olive/40">-</span>
-                              <input
-                                type="time"
-                                step={60}
-                                value={dayItem.to}
-                                aria-label={`Конец для ${weekdayLabels[day]}`}
-                                onChange={(e) => updateWeekdaySchedule(day, { to: e.target.value })}
-                                className="h-8 rounded-lg border border-olive/18 bg-white px-2 text-sm font-semibold text-olive [color-scheme:light] outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition"
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 rounded-xl border border-dashed border-olive/20 bg-white px-4 py-3.5">
-                    <AppIcon icon={Clock3} className="h-4.5 w-4.5 shrink-0 opacity-55" />
-                    <p className="text-sm text-olive/45">
-                      Включите рабочие дни выше, чтобы задать время работы
+                <div className="space-y-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-olive">Ценовые категории</h3>
+                    <p className="text-xs text-olive/65">
+                      Добавьте разные цены для категорий: взрослые, дети, группы и т.д.
                     </p>
                   </div>
-                )}
+                  <PricingTiersEditor tiers={pricingTiers} onChange={setPricingTiers} />
+                </div>
               </div>
 
-              {/* ── Группа 3: Исключения и дополнительно ── */}
+              {/* ── Группа 2: Условия отмены ── */}
               <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
                     3
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-olive">Исключения и дополнительно</p>
+                    <p className="text-sm font-semibold text-olive">Условия отмены</p>
                     <p className="text-xs text-olive/50">
-                      Нерабочие даты, комментарий и минимальный срок записи
+                      Необязательно — выберите политику из списка или опишите свою
                     </p>
                   </div>
                 </div>
 
-                {/* Closed dates / exceptions */}
-                <div className="rounded-xl border border-olive/12 bg-white p-4 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-olive">Нерабочие даты</p>
-                    <p className="text-xs text-olive/50 mt-0.5">
-                      Выберите конкретные дни, когда экскурсия не проводится (праздники, перерыв)
-                    </p>
-                  </div>
-                  <SingleDatePopoverField
-                    value=""
-                    onChange={(nextValue) => {
-                      if (nextValue) {
-                        setAdditionalClosedDates((prev) =>
-                          normalizeIsoDateList([...prev, nextValue]),
-                        );
-                      }
-                    }}
-                    placeholder="Выберите дату"
-                    helperText="Кликните по дате, чтобы добавить её как нерабочую"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {additionalClosedDates.length === 0 ? (
-                      <span className="text-xs text-olive/40">Нет исключений</span>
-                    ) : (
-                      additionalClosedDates.map((dateValue) => (
-                        <span
-                          key={dateValue}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-olive/15 bg-cream px-3 py-1 text-xs text-olive"
-                        >
-                          {formatIsoToDayMonthYear(dateValue)}
-                          <button
-                            type="button"
-                            className="text-olive/50 transition hover:text-red-600"
-                            onClick={() => removeClosedDate(dateValue)}
-                            aria-label={`Удалить дату ${formatIsoToDayMonthYear(dateValue)}`}
-                          >
-                            Г—
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Schedule comment */}
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-medium text-olive">Комментарий к расписанию</span>
-                  <textarea
-                    value={scheduleComment}
-                    onChange={(event) => setScheduleComment(event.target.value)}
-                    rows={3}
-                    maxLength={400}
-                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="Например: не работаем в государственные праздники..."
-                  />
-                </label>
-
-                {/* Schedule summary */}
-                <div className="flex items-start gap-2.5 rounded-xl border border-olive/12 bg-cream/50 px-4 py-3">
-                  <AppIcon icon={Info} className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
-                  <p className="text-xs text-olive/60">
-                    {isLoadingScheduleRules
-                      ? "Загружаем сохраненные правила расписания..."
-                      : `Сводка: ${
-                          buildScheduleSummary({
-                            isYearRound,
-                            seasonDateFrom,
-                            seasonDateTo,
-                            daySchedule,
-                            additionalClosedDates,
-                            scheduleComment,
-                          }) ??
-                          (scheduleText || "не заполнено")
-                        }`}
-                  </p>
-                </div>
-
-                {/* Min booking notice */}
-                <div className="space-y-2 rounded-xl border border-olive/12 bg-cream/40 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-olive">
-                      Минимальный срок записи{" "}
-                      <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-                    </p>
-                    <p className="text-xs text-olive/55 mt-0.5">
-                      Нажмите на подходящий вариант — за сколько часов нужно записаться заранее
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { value: "", label: "Не указано" },
-                      { value: "0", label: "Сегодня" },
-                      { value: "24", label: "За 24 ч" },
-                      { value: "48", label: "За 48 ч" },
-                      { value: "72", label: "За 3 дня" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setMinBookingNoticeHours(opt.value)}
-                        className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition-all ${
-                          minBookingNoticeHours === opt.value
-                            ? "border-primary bg-primary/8 text-primary shadow-sm"
-                            : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                        }`}
-                      >
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-olive">Условия отмены и возврата</span>
+                  <select
+                    value={cancellationPolicyType}
+                    onChange={(e) => setCancellationPolicyType(e.target.value)}
+                    className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="">Не указана</option>
+                    {CANCELLATION_POLICY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
                         {opt.label}
-                      </button>
+                      </option>
                     ))}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : availabilityMode === ExcursionAvailabilityMode.DATED ? (
-            /* ── Группа 2: Заезды (Dated) ── */
-            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                  2
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-olive">Заезды и конкретные даты</p>
-                  <p className="text-xs text-olive/50">
-                    Добавьте даты старта, укажите количество мест и, если нужно, отдельную цену
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-olive/15 bg-white p-3">
-                <DepartureDatesEditor items={departureDates} onChange={setDepartureDates} />
-              </div>
-
-              <div className="space-y-2 rounded-xl border border-olive/12 bg-white px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-olive">
-                    Минимальный срок записи{" "}
-                    <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-                  </p>
-                  <p className="text-xs text-olive/55 mt-0.5">
-                    За сколько часов или дней до старта нужно успеть записаться
-                  </p>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  max={720}
-                  value={minBookingNoticeHours}
-                  onChange={(event) => setMinBookingNoticeHours(event.target.value)}
-                  placeholder="24"
-                />
-              </div>
-            </div>
-          ) : (
-            /* ── Группа 2: По запросу ── */
-            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                  2
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-olive">Режим «по запросу»</p>
-                  <p className="text-xs text-olive/50">
-                    Объясните, как согласовывается дата и сколько времени нужно на подтверждение
-                  </p>
-                </div>
-              </div>
-
-              <textarea
-                value={availabilityNote}
-                onChange={(event) => setAvailabilityNote(event.target.value)}
-                rows={4}
-                maxLength={1000}
-                className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="Например: дату согласуем после обращения, подтверждаем в течение 24 часов."
-              />
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-olive">Минимальный срок до заявки</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={720}
-                  value={minBookingNoticeHours}
-                  onChange={(event) => setMinBookingNoticeHours(event.target.value)}
-                  placeholder="48"
-                />
-              </label>
-            </div>
-          )}
-          {/* ── Группа и требования (inline in step 3) ── */}
-          <div className="mt-2 border-t border-olive/8 pt-6">
-            <h3 className="text-base font-semibold text-olive">Группа и требования</h3>
-            <p className="mt-1 text-sm text-olive/55">
-              Формат проведения, размер группы, язык и физические требования.
-            </p>
-          </div>
-
-          {/* Format, participants, age */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <p className="text-sm font-semibold text-olive">Формат и размер группы</p>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <span className="text-sm font-medium text-olive">Мин. участников</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={minParticipants}
-                  onChange={(e) => setMinParticipants(e.target.value)}
-                  placeholder="1"
-                />
-              </label>
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <span className="text-sm font-medium text-olive">Макс. участников</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={maxParticipants}
-                  onChange={(e) => setMaxParticipants(e.target.value)}
-                  placeholder="20"
-                />
-              </label>
-              <label className="block cursor-pointer space-y-1.5 rounded-xl border border-olive/15 bg-white p-3 transition hover:border-olive/40">
-                <span className="text-sm font-medium text-olive">Мин. возраст</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={minAge}
-                  onChange={(e) => setMinAge(e.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-xs text-olive/40">0 — без ограничений</p>
-              </label>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-olive">Сложность</p>
-              <div className="flex gap-2">
-                {(["EASY", "MEDIUM", "HARD"] as ExcursionDifficulty[]).map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setDifficulty(difficulty === level ? null : level)}
-                    className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                      difficulty === level
-                        ? "border-primary bg-primary/8 text-primary"
-                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"
-                    }`}
-                  >
-                    {level === "EASY" ? "Лёгкая" : level === "MEDIUM" ? "Средняя" : "Сложная"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Physical requirements & what to bring */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <p className="text-sm font-semibold text-olive">Физические требования</p>
-            <p className="text-xs text-olive/55">
-              Укажите, если есть ограничения по здоровью или физической форме.
-            </p>
-            <IncludedEditor
-              items={physicalRequirements}
-              onChange={setPhysicalRequirements}
-              presets={PHYSICAL_REQUIREMENTS_PRESETS}
-              placeholder="Хорошая физическая форма"
-            />
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <p className="text-sm font-semibold text-olive">Что взять с собой</p>
-            <p className="text-xs text-olive/55">
-              Подскажите участникам, что пригодится в поездке.
-            </p>
-            <IncludedEditor
-              items={whatToBring}
-              onChange={setWhatToBring}
-              presets={WHAT_TO_BRING_PRESETS}
-              placeholder="Удобная обувь"
-            />
-          </div>
-
-          {/* Safety block for active tours */}
-          {showSafetyBlock && (
-            <div className="space-y-4 rounded-2xl border border-terra/20 bg-terra/5 p-4 shadow-sm sm:p-5">
-              <p className="text-sm font-semibold text-olive">Безопасность и условия маршрута</p>
-              <p className="text-xs text-olive/55">
-                Для активных туров важно указать условия маршрута, снаряжение и правила
-                безопасности.
-              </p>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Условия маршрута</span>
-                <textarea
-                  value={routeConditions}
-                  onChange={(e) => setRouteConditions(e.target.value)}
-                  rows={3}
-                  maxLength={2000}
-                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="Горная местность, грунтовые дороги, броды..."
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-olive">Информация о безопасности</span>
-                <textarea
-                  value={safetyInfo}
-                  onChange={(e) => setSafetyInfo(e.target.value)}
-                  rows={3}
-                  maxLength={2000}
-                  className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  placeholder="Обязательно наличие спасательного жилета, инструктаж перед выездом..."
-                />
-              </label>
-              <div className="space-y-2">
-                <span className="text-sm font-medium text-olive">Предоставляемое снаряжение</span>
-                <div className="flex flex-wrap gap-2">
-                  {EQUIPMENT_PROVIDED_PRESETS.map((item) => {
-                    const isSelected = equipmentProvided.includes(item);
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() =>
-                          setEquipmentProvided((prev) =>
-                            isSelected ? prev.filter((e) => e !== item) : [...prev, item],
-                          )
-                        }
-                        className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Documents & insurance for tours */}
-          {isTour && (
-            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
-              <p className="text-sm font-semibold text-olive">Документы и страховка</p>
-              <div className="space-y-2">
-                <span className="text-sm font-medium text-olive">Необходимые документы</span>
-                <div className="flex flex-wrap gap-2">
-                  {DOCUMENTS_REQUIRED_PRESETS.map((item) => {
-                    const isSelected = documentsRequired.includes(item);
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() =>
-                          setDocumentsRequired((prev) =>
-                            isSelected ? prev.filter((d) => d !== item) : [...prev, item],
-                          )
-                        }
-                        className={`rounded-xl border px-3 py-2 text-sm transition ${isSelected ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <SeaToggle
-                  pressed={insuranceIncluded === true}
-                  onPressedChange={(val) => setInsuranceIncluded(val)}
-                />
-                <span className="text-sm font-medium text-olive">
-                  Страховка включена в стоимость
-                </span>
-              </div>
-              {insuranceIncluded && (
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Комментарий к страховке</span>
-                  <Input
-                    value={insuranceComment}
-                    onChange={(e) => setInsuranceComment(e.target.value)}
-                    placeholder="Базовая медицинская, покрывает несчастные случаи..."
-                    maxLength={500}
-                  />
+                  </select>
                 </label>
-              )}
-            </div>
-          )}
-
-          {/* Accommodation block for multi-day tours */}
-          {showAccommodationBlock && (
-            <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm sm:p-5">
-              <p className="text-sm font-semibold text-olive">Проживание</p>
-              <div className="flex items-center gap-3">
-                <SeaToggle
-                  pressed={accommodationProvided === true}
-                  onPressedChange={(val) => setAccommodationProvided(val)}
-                />
-                <span className="text-sm font-medium text-olive">Проживание включено</span>
-              </div>
-              {accommodationProvided && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <span className="text-sm font-medium text-olive">Тип размещения</span>
-                    <div className="flex flex-wrap gap-2">
-                      {ACCOMMODATION_TYPE_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() =>
-                            setAccommodationType(accommodationType === opt.value ? "" : opt.value)
-                          }
-                          className={`rounded-xl border px-3 py-2 text-sm transition ${accommodationType === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <label className="block space-y-1">
-                    <span className="text-sm font-medium text-olive">Количество ночей</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={364}
-                      value={accommodationNights}
-                      onChange={(e) => setAccommodationNights(e.target.value)}
-                      placeholder="2"
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-sm font-medium text-olive">Уровень / звёзды</span>
-                    <Input
-                      value={accommodationStars}
-                      onChange={(e) => setAccommodationStars(e.target.value)}
-                      placeholder="3*, комфорт"
-                      maxLength={20}
-                    />
-                  </label>
-                  <div className="space-y-1.5">
-                    <span className="text-sm font-medium text-olive">Типы номеров</span>
-                    <div className="flex flex-wrap gap-2">
-                      {ROOM_TYPE_OPTIONS.map((opt) => {
-                        const sel = roomTypes.includes(opt.value);
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() =>
-                              setRoomTypes((prev) =>
-                                sel ? prev.filter((r) => r !== opt.value) : [...prev, opt.value],
-                              )
-                            }
-                            className={`rounded-xl border px-3 py-2 text-sm transition ${sel ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {accommodationProvided && (
-                <>
-                  <div className="flex items-center gap-3">
-                    <SeaToggle
-                      pressed={singleSupplementAvailable === true}
-                      onPressedChange={(val) => setSingleSupplementAvailable(val)}
-                    />
-                    <span className="text-sm text-olive">Доплата за одноместное размещение</span>
-                  </div>
-                  {singleSupplementAvailable && (
-                    <label className="block space-y-1">
-                      <span className="text-xs font-medium text-olive/60">Сумма доплаты (RUB)</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={singleSupplementPrice}
-                        onChange={(e) => setSingleSupplementPrice(e.target.value)}
-                        placeholder="3000"
-                      />
-                    </label>
-                  )}
-                  <label className="block space-y-1">
-                    <span className="text-xs font-medium text-olive/60">
-                      Комментарий к проживанию
-                    </span>
-                    <Input
-                      value={accommodationComment}
-                      onChange={(e) => setAccommodationComment(e.target.value)}
-                      placeholder="Размещение в гостевых домах Южного берега"
-                      maxLength={1000}
-                    />
-                  </label>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Meal plan */}
-          {isTour && (
-            <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm sm:p-5">
-              <p className="text-sm font-semibold text-olive">Питание</p>
-              <div className="flex flex-wrap gap-2">
-                {MEAL_PLAN_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setMealPlan(mealPlan === opt.value ? "" : opt.value)}
-                    className={`rounded-xl border px-3 py-2 text-sm transition ${mealPlan === opt.value ? "border-primary bg-primary/8 text-primary" : "border-olive/18 bg-white text-olive/65 hover:border-primary/40"}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {mealPlan === "CUSTOM" && (
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-olive/60">Подробности о питании</span>
+                {(cancellationPolicyType === "CUSTOM" || cancellationPolicyText) && (
                   <textarea
-                    value={mealDetails}
-                    onChange={(e) => setMealDetails(e.target.value)}
-                    rows={2}
+                    value={cancellationPolicyText}
+                    onChange={(e) => setCancellationPolicyText(e.target.value)}
+                    placeholder="Опишите условия отмены и возврата..."
                     maxLength={1000}
-                    className="w-full resize-none rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="Пункт 1 — обед в ресторане, пункт 2 — завтрак в отеле + пикник..."
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
-                </label>
-              )}
-            </div>
+                )}
+              </div>
+
+              {/* ── Что включено (inline in step 4) ── */}
+              <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    3
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Включено в стоимость</p>
+                    <p className="text-xs text-olive/50">
+                      Что турист получает по умолчанию: гид, билеты, трансфер и т.д.
+                    </p>
+                  </div>
+                </div>
+                <IncludedEditor
+                  items={includedItems}
+                  onChange={setIncludedItems}
+                  presets={INCLUDED_PRESETS}
+                  placeholder="Добавить услугу..."
+                />
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
+                    4
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-olive">Не включено</p>
+                    <p className="text-xs text-olive/50">
+                      Что оплачивается дополнительно: питание, сувениры, личные расходы
+                    </p>
+                  </div>
+                </div>
+                <IncludedEditor
+                  items={excludedItems}
+                  onChange={setExcludedItems}
+                  presets={EXCLUDED_PRESETS}
+                  placeholder="Добавить пункт..."
+                />
+              </div>
+            </section>
           )}
-        </section>
-      )}
 
-      {/* ===== STEP 4: ЦЕНА И УСЛОВИЯ (merged old steps 5+6) ===== */}
-      {currentStep === 4 && (
-        <section className="wizard-section-enter space-y-6 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-olive md:text-xl">Цена и условия</h2>
-            <p className="mt-1 text-sm text-olive/55">
-              Укажите стоимость, что входит в цену, а что нет.
-            </p>
-          </div>
+          {/* ===== STEP 5: МЕДИА И КОНТАКТЫ (merged old steps 7+8) ===== */}
+          {currentStep === 5 && (
+            <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+              <h2 className="text-lg font-semibold text-olive md:text-xl">Медиа и контакты</h2>
 
-          {/* ── Группа 1: Стоимость ── */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                1
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Стоимость</p>
-                <p className="text-xs text-olive/50">
-                  Введите минимальную цену и выберите, за что она указана
-                </p>
-              </div>
-            </div>
-
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-olive">
-                Цена от (RUB) <span className="text-terra">*</span>
-              </span>
-              <Input
-                type="number"
-                min={1}
-                max={1000000}
-                value={priceFrom}
-                onChange={(event) => setPriceFrom(event.target.value)}
-                placeholder="2500"
-              />
-            </label>
-
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">Единица цены</h3>
-                <p className="text-xs text-olive/65">
-                  Нажмите на подходящий вариант или введите свой. Цена показывается вместе с
-                  единицей: «за чел», «за группу» и т.д.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {PRICE_UNIT_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setPriceUnitLabel(preset)}
-                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                      priceUnitLabel === preset
-                        ? "border-primary bg-primary/8 text-primary shadow-sm"
-                        : "border-olive/18 bg-white text-olive/65 hover:border-primary/40 hover:text-olive"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-              <Input
-                value={priceUnitLabel}
-                onChange={(event) => setPriceUnitLabel(event.target.value)}
-                placeholder={isTour ? "Например: тур" : "Например: чел"}
-                maxLength={80}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div>
-                <h3 className="text-base font-semibold text-olive">Ценовые категории</h3>
-                <p className="text-xs text-olive/65">
-                  Добавьте разные цены для категорий: взрослые, дети, группы и т.д.
-                </p>
-              </div>
-              <PricingTiersEditor tiers={pricingTiers} onChange={setPricingTiers} />
-            </div>
-          </div>
-
-          {/* ── Группа 2: Условия отмены ── */}
-          <div className="space-y-4 rounded-2xl border border-olive/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terra text-xs font-bold text-white">
-                3
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Условия отмены</p>
-                <p className="text-xs text-olive/50">
-                  Необязательно — выберите политику из списка или опишите свою
-                </p>
-              </div>
-            </div>
-
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-olive">Условия отмены и возврата</span>
-              <select
-                value={cancellationPolicyType}
-                onChange={(e) => setCancellationPolicyType(e.target.value)}
-                className="w-full rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="">Не указана</option>
-                {CANCELLATION_POLICY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {(cancellationPolicyType === "CUSTOM" || cancellationPolicyText) && (
-              <textarea
-                value={cancellationPolicyText}
-                onChange={(e) => setCancellationPolicyText(e.target.value)}
-                placeholder="Опишите условия отмены и возврата..."
-                maxLength={1000}
-                rows={3}
-                className="w-full resize-none rounded-xl border border-olive/20 bg-white px-3.5 py-2.5 text-sm text-olive outline-none placeholder:text-olive/48 focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            )}
-          </div>
-
-          {/* ── Что включено (inline in step 4) ── */}
-          <div className="space-y-4 rounded-2xl border border-primary/12 bg-white/80 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                3
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Включено в стоимость</p>
-                <p className="text-xs text-olive/50">
-                  Что турист получает по умолчанию: гид, билеты, трансфер и т.д.
-                </p>
-              </div>
-            </div>
-            <IncludedEditor
-              items={includedItems}
-              onChange={setIncludedItems}
-              presets={INCLUDED_PRESETS}
-              placeholder="Добавить услугу..."
-            />
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-sage/25 bg-[#fffcf3]/60 p-4 shadow-sm shadow-olive/5 sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-olive">
-                4
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-olive">Не включено</p>
-                <p className="text-xs text-olive/50">
-                  Что оплачивается дополнительно: питание, сувениры, личные расходы
-                </p>
-              </div>
-            </div>
-            <IncludedEditor
-              items={excludedItems}
-              onChange={setExcludedItems}
-              presets={EXCLUDED_PRESETS}
-              placeholder="Добавить пункт..."
-            />
-          </div>
-        </section>
-      )}
-
-      {/* ===== STEP 5: МЕДИА И КОНТАКТЫ (merged old steps 7+8) ===== */}
-      {currentStep === 5 && (
-        <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
-          <h2 className="text-lg font-semibold text-olive md:text-xl">Медиа и контакты</h2>
-
-          {/* Contacts block */}
-          <div className="space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
-                <AppIcon icon={Phone} className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-olive">Контакты</h3>
-                <p className="mt-0.5 text-sm text-olive/55">
-                  Как гости и модерация смогут с вами связаться
-                </p>
-              </div>
-            </div>
-
-            <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-              Имя, фамилия и основной телефон нужны для модерации. Добавьте второй номер,
-              мессенджеры и соцсети, чтобы гостям было удобнее связаться с вами.
-            </p>
-
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-                Основные данные (обязательно)
-              </p>
-              <div className="space-y-2.5">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={contactFirstName}
-                    onChange={(event) => setContactFirstName(event.target.value)}
-                    placeholder="Имя *"
-                    aria-label="Имя"
-                    className="pl-10"
-                  />
-                </div>
-
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    value={contactLastName}
-                    onChange={(event) => setContactLastName(event.target.value)}
-                    placeholder="Фамилия *"
-                    aria-label="Фамилия"
-                    className="pl-10"
-                  />
-                </div>
-
-                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                      <AppIcon icon={Phone} className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="tel"
-                      value={contactPhone}
-                      onChange={(event) => setContactPhone(event.target.value)}
-                      placeholder="Телефон *"
-                      aria-label="Телефон"
-                      className="pl-10"
-                    />
+              {/* Contacts block */}
+              <div className="space-y-6 rounded-3xl border border-olive/10 bg-white p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                    <AppIcon icon={Phone} className="h-5 w-5" />
                   </div>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                      <AppIcon icon={UserRound} className="h-4 w-4" />
-                    </span>
-                    <Input
-                      value={contactPhoneName}
-                      onChange={(event) => setContactPhoneName(event.target.value)}
-                      placeholder="Имя у телефона"
-                      aria-label="Имя у телефона"
-                      className="pl-10"
-                    />
+                  <div>
+                    <h3 className="text-xl font-semibold text-olive">Контакты</h3>
+                    <p className="mt-0.5 text-sm text-olive/55">
+                      Как гости и модерация смогут с вами связаться
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                      <AppIcon icon={Phone} className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="tel"
-                      value={contactPhone2}
-                      onChange={(event) => setContactPhone2(event.target.value)}
-                      placeholder="Телефон 2"
-                      aria-label="Телефон 2"
-                      className="pl-10"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                      <AppIcon icon={UserRound} className="h-4 w-4" />
-                    </span>
-                    <Input
-                      value={contactPhone2Name}
-                      onChange={(event) => setContactPhone2Name(event.target.value)}
-                      placeholder="Имя у телефона 2"
-                      aria-label="Имя у телефона 2"
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
+                <p className="rounded-xl bg-primary/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
+                  Имя, фамилия и основной телефон нужны для модерации. Добавьте второй номер,
+                  мессенджеры и соцсети, чтобы гостям было удобнее связаться с вами.
+                </p>
 
-                {showContactPhone3 ? (
-                  <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                        <AppIcon icon={Phone} className="h-4 w-4" />
-                      </span>
-                      <Input
-                        type="tel"
-                        value={contactPhone3}
-                        onChange={(event) => setContactPhone3(event.target.value)}
-                        placeholder="Телефон 3"
-                        aria-label="Телефон 3"
-                        className="pl-10"
-                      />
-                    </div>
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                    Основные данные (обязательно)
+                  </p>
+                  <div className="space-y-2.5">
                     <div className="relative">
                       <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
                         <AppIcon icon={UserRound} className="h-4 w-4" />
                       </span>
                       <Input
-                        value={contactPhone3Name}
-                        onChange={(event) => setContactPhone3Name(event.target.value)}
-                        placeholder="Имя у телефона 3"
-                        aria-label="Имя у телефона 3"
-                        className="pl-10 pr-10"
+                        value={contactFirstName}
+                        onChange={(event) => setContactFirstName(event.target.value)}
+                        placeholder="Имя *"
+                        aria-label="Имя"
+                        className="pl-10"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setContactPhone3("");
-                          setContactPhone3Name("");
-                          setShowContactPhone3(false);
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                        aria-label="Убрать телефон 3"
-                      >
-                        <AppIcon icon={X} className="h-4 w-4" />
-                      </button>
                     </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowContactPhone3(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
-                  >
-                    <AppIcon icon={Plus} className="h-4 w-4" />
-                    Добавить телефон
-                  </button>
-                )}
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-                Дополнительно
-              </p>
-              <div className="space-y-2.5">
-                {showContactEmail ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
-                      <AppIcon icon={Mail} className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(event) => setContactEmail(event.target.value)}
-                      placeholder="Email"
-                      aria-label="Email"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setContactEmail("");
-                        setShowContactEmail(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить Email"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowContactEmail(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
-                    >
-                      <AppIcon icon={Mail} className="h-4 w-4" />
-                      Email
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        value={contactLastName}
+                        onChange={(event) => setContactLastName(event.target.value)}
+                        placeholder="Фамилия *"
+                        aria-label="Фамилия"
+                        className="pl-10"
+                      />
+                    </div>
 
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-                Мессенджеры и соцсети
-              </p>
-              <div className="space-y-2.5">
-                {showWebsite ? (
-                  <div className="relative">
-                    <span
-                      className={cn(
-                        "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2",
-                        shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]",
-                      )}
-                    >
-                      {shouldShowWebsiteFavicon ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={websiteFaviconUrl!}
-                          alt=""
-                          aria-hidden="true"
-                          className="h-4 w-4 rounded-sm object-contain"
-                          onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                    <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                          <AppIcon icon={Phone} className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="tel"
+                          value={contactPhone}
+                          onChange={(event) => setContactPhone(event.target.value)}
+                          placeholder="Телефон *"
+                          aria-label="Телефон"
+                          className="pl-10"
                         />
-                      ) : (
-                        <AppIcon icon={Globe} className="h-4 w-4" />
-                      )}
-                    </span>
-                    <Input
-                      type="url"
-                      value={websiteUrl}
-                      onChange={(event) => setWebsiteUrl(event.target.value)}
-                      placeholder="Сайт экскурсии"
-                      aria-label="Сайт экскурсии"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWebsiteUrl("");
-                        setShowWebsite(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить сайт экскурсии"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
+                      </div>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                          <AppIcon icon={UserRound} className="h-4 w-4" />
+                        </span>
+                        <Input
+                          value={contactPhoneName}
+                          onChange={(event) => setContactPhoneName(event.target.value)}
+                          placeholder="Имя у телефона"
+                          aria-label="Имя у телефона"
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
 
-                {showWhatsapp ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                      <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="text"
-                      value={whatsappUrl}
-                      onChange={(event) => setWhatsappUrl(event.target.value)}
-                      onBlur={() =>
-                        setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
-                      }
-                      placeholder="WhatsApp: номер или ссылка"
-                      aria-label="WhatsApp"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWhatsappUrl("");
-                        setShowWhatsapp(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить WhatsApp"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
+                    <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                          <AppIcon icon={Phone} className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="tel"
+                          value={contactPhone2}
+                          onChange={(event) => setContactPhone2(event.target.value)}
+                          placeholder="Телефон 2"
+                          aria-label="Телефон 2"
+                          className="pl-10"
+                        />
+                      </div>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                          <AppIcon icon={UserRound} className="h-4 w-4" />
+                        </span>
+                        <Input
+                          value={contactPhone2Name}
+                          onChange={(event) => setContactPhone2Name(event.target.value)}
+                          placeholder="Имя у телефона 2"
+                          aria-label="Имя у телефона 2"
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
 
-                {showTelegram ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                      <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="text"
-                      value={telegramUrl}
-                      onChange={(event) => setTelegramUrl(event.target.value)}
-                      onBlur={() =>
-                        setTelegramUrl(
-                          (value) => normalizeTelegramProfileUrl(value) ?? value.trim(),
-                        )
-                      }
-                      placeholder="Telegram: @username, username или телефон"
-                      aria-label="Telegram"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTelegramUrl("");
-                        setShowTelegram(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить Telegram"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
-
-                {showVk ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                      <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="url"
-                      value={vkUrl}
-                      onChange={(event) => setVkUrl(event.target.value)}
-                      placeholder="ВКонтакте URL"
-                      aria-label="ВКонтакте"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVkUrl("");
-                        setShowVk(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить ВКонтакте"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
-
-                {showMax ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                      <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="url"
-                      value={maxUrl}
-                      onChange={(event) => setMaxUrl(event.target.value)}
-                      placeholder="Max URL"
-                      aria-label="Max"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMaxUrl("");
-                        setShowMax(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить Max"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
-
-                {showOk ? (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-                      <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                    </span>
-                    <Input
-                      type="url"
-                      value={okUrl}
-                      onChange={(event) => setOkUrl(event.target.value)}
-                      placeholder="Одноклассники URL"
-                      aria-label="Одноклассники"
-                      className="pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOkUrl("");
-                        setShowOk(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
-                      aria-label="Очистить Одноклассники"
-                    >
-                      <AppIcon icon={X} className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null}
-
-                {(!showWebsite ||
-                  !showWhatsapp ||
-                  !showTelegram ||
-                  !showVk ||
-                  !showMax ||
-                  !showOk) && (
-                  <div className="flex flex-wrap gap-2">
-                    {!showWebsite && (
+                    {showContactPhone3 ? (
+                      <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                            <AppIcon icon={Phone} className="h-4 w-4" />
+                          </span>
+                          <Input
+                            type="tel"
+                            value={contactPhone3}
+                            onChange={(event) => setContactPhone3(event.target.value)}
+                            placeholder="Телефон 3"
+                            aria-label="Телефон 3"
+                            className="pl-10"
+                          />
+                        </div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                            <AppIcon icon={UserRound} className="h-4 w-4" />
+                          </span>
+                          <Input
+                            value={contactPhone3Name}
+                            onChange={(event) => setContactPhone3Name(event.target.value)}
+                            placeholder="Имя у телефона 3"
+                            aria-label="Имя у телефона 3"
+                            className="pl-10 pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setContactPhone3("");
+                              setContactPhone3Name("");
+                              setShowContactPhone3(false);
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                            aria-label="Убрать телефон 3"
+                          >
+                            <AppIcon icon={X} className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => setShowWebsite(true)}
+                        onClick={() => setShowContactPhone3(true)}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
                       >
-                        <AppIcon icon={Globe} className="h-4 w-4" />
-                        Сайт
-                      </button>
-                    )}
-                    {!showWhatsapp && (
-                      <button
-                        type="button"
-                        onClick={() => setShowWhatsapp(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10 focus:outline-none"
-                      >
-                        <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                        WhatsApp
-                      </button>
-                    )}
-                    {!showTelegram && (
-                      <button
-                        type="button"
-                        onClick={() => setShowTelegram(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10 focus:outline-none"
-                      >
-                        <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                        Telegram
-                      </button>
-                    )}
-                    {!showVk && (
-                      <button
-                        type="button"
-                        onClick={() => setShowVk(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10 focus:outline-none"
-                      >
-                        <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                        ВКонтакте
-                      </button>
-                    )}
-                    {!showMax && (
-                      <button
-                        type="button"
-                        onClick={() => setShowMax(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10 focus:outline-none"
-                      >
-                        <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                        Max
-                      </button>
-                    )}
-                    {!showOk && (
-                      <button
-                        type="button"
-                        onClick={() => setShowOk(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10 focus:outline-none"
-                      >
-                        <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                        Одноклассники
+                        <AppIcon icon={Plus} className="h-4 w-4" />
+                        Добавить телефон
                       </button>
                     )}
                   </div>
-                )}
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                    Дополнительно
+                  </p>
+                  <div className="space-y-2.5">
+                    {showContactEmail ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--icon-muted)]">
+                          <AppIcon icon={Mail} className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="email"
+                          value={contactEmail}
+                          onChange={(event) => setContactEmail(event.target.value)}
+                          placeholder="Email"
+                          aria-label="Email"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContactEmail("");
+                            setShowContactEmail(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить Email"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowContactEmail(true)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                        >
+                          <AppIcon icon={Mail} className="h-4 w-4" />
+                          Email
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                    Мессенджеры и соцсети
+                  </p>
+                  <div className="space-y-2.5">
+                    {showWebsite ? (
+                      <div className="relative">
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2",
+                            shouldShowWebsiteFavicon ? "" : "text-[color:var(--icon-muted)]",
+                          )}
+                        >
+                          {shouldShowWebsiteFavicon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={websiteFaviconUrl!}
+                              alt=""
+                              aria-hidden="true"
+                              className="h-4 w-4 rounded-sm object-contain"
+                              onError={() => setFailedWebsiteFaviconUrl(websiteFaviconUrl)}
+                            />
+                          ) : (
+                            <AppIcon icon={Globe} className="h-4 w-4" />
+                          )}
+                        </span>
+                        <Input
+                          type="url"
+                          value={websiteUrl}
+                          onChange={(event) => setWebsiteUrl(event.target.value)}
+                          placeholder="Сайт экскурсии"
+                          aria-label="Сайт экскурсии"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWebsiteUrl("");
+                            setShowWebsite(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить сайт экскурсии"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {showWhatsapp ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                          <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="text"
+                          value={whatsappUrl}
+                          onChange={(event) => setWhatsappUrl(event.target.value)}
+                          onBlur={() =>
+                            setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim())
+                          }
+                          placeholder="WhatsApp: номер или ссылка"
+                          aria-label="WhatsApp"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWhatsappUrl("");
+                            setShowWhatsapp(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить WhatsApp"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {showTelegram ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                          <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="text"
+                          value={telegramUrl}
+                          onChange={(event) => setTelegramUrl(event.target.value)}
+                          onBlur={() =>
+                            setTelegramUrl(
+                              (value) => normalizeTelegramProfileUrl(value) ?? value.trim(),
+                            )
+                          }
+                          placeholder="Telegram: @username, username или телефон"
+                          aria-label="Telegram"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTelegramUrl("");
+                            setShowTelegram(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить Telegram"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {showVk ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                          <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="url"
+                          value={vkUrl}
+                          onChange={(event) => setVkUrl(event.target.value)}
+                          placeholder="ВКонтакте URL"
+                          aria-label="ВКонтакте"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVkUrl("");
+                            setShowVk(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить ВКонтакте"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {showMax ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                          <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="url"
+                          value={maxUrl}
+                          onChange={(event) => setMaxUrl(event.target.value)}
+                          placeholder="Max URL"
+                          aria-label="Max"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMaxUrl("");
+                            setShowMax(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить Max"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {showOk ? (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                          <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                        </span>
+                        <Input
+                          type="url"
+                          value={okUrl}
+                          onChange={(event) => setOkUrl(event.target.value)}
+                          placeholder="Одноклассники URL"
+                          aria-label="Одноклассники"
+                          className="pl-10 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOkUrl("");
+                            setShowOk(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[color:var(--icon-nav)] transition hover:text-[color:var(--icon-default)]"
+                          aria-label="Очистить Одноклассники"
+                        >
+                          <AppIcon icon={X} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {(!showWebsite ||
+                      !showWhatsapp ||
+                      !showTelegram ||
+                      !showVk ||
+                      !showMax ||
+                      !showOk) && (
+                      <div className="flex flex-wrap gap-2">
+                        {!showWebsite && (
+                          <button
+                            type="button"
+                            onClick={() => setShowWebsite(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none"
+                          >
+                            <AppIcon icon={Globe} className="h-4 w-4" />
+                            Сайт
+                          </button>
+                        )}
+                        {!showWhatsapp && (
+                          <button
+                            type="button"
+                            onClick={() => setShowWhatsapp(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10 focus:outline-none"
+                          >
+                            <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                            WhatsApp
+                          </button>
+                        )}
+                        {!showTelegram && (
+                          <button
+                            type="button"
+                            onClick={() => setShowTelegram(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10 focus:outline-none"
+                          >
+                            <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                            Telegram
+                          </button>
+                        )}
+                        {!showVk && (
+                          <button
+                            type="button"
+                            onClick={() => setShowVk(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10 focus:outline-none"
+                          >
+                            <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                            ВКонтакте
+                          </button>
+                        )}
+                        {!showMax && (
+                          <button
+                            type="button"
+                            onClick={() => setShowMax(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10 focus:outline-none"
+                          >
+                            <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                            Max
+                          </button>
+                        )}
+                        {!showOk && (
+                          <button
+                            type="button"
+                            onClick={() => setShowOk(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10 focus:outline-none"
+                          >
+                            <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                            Одноклассники
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Guide credentials */}
-          <div className="space-y-3 rounded-xl border border-olive/15 bg-cream/30 p-4">
-            <h3 className="text-sm font-semibold text-olive">
-              Квалификация{" "}
-              <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-            </h3>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <span className="text-sm font-medium text-olive">Есть удостоверение гида</span>
-                <p className="text-xs text-olive/55">
-                  Официальная лицензия экскурсовода — повышает доверие к карточке
-                </p>
-              </div>
-              <SeaToggle
-                size="sm"
-                pressed={hasGuideLicense}
-                onPressedChange={setHasGuideLicense}
-                aria-label="Есть удостоверение гида"
-              />
-            </div>
-          </div>
-
-          {/* ── БЛОК: МЕДИА ── */}
-          <div className="border-t border-olive/8" />
-
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-base font-semibold text-olive">Медиа</h3>
-              <p className="text-sm text-olive/70">
-                Основные фото используются в верхней галерее карточки. Фото из программы, шагов и
-                разделов тоже сохраняются в карточке и могут стать обложкой, если верхняя галерея
-                пустая. Поддерживаются {accommodationPhotoUploadFormatsLabel}. Ограничения по
-                размеру: {accommodationPhotoUploadLimitsLabel}.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <ContentPhotoManager
-                title="Верхняя галерея карточки"
-                description="Первое фото используется как обложка. Порядок фото сохраняется."
-                photoUrls={photoUrls}
-                limit={excursionPhotoLimit}
-                addLabel="Добавить в галерею"
-                emptyText="Фото для верхней галереи пока не загружены."
-                disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
-                isUploading={isUploadingPhotos}
-                onUpload={(files) => void uploadPhotos(files)}
-                onMove={(photoIndex, direction) => void movePhoto(photoIndex, direction)}
-                onMakeFirst={(photoIndex) => void makePhotoCover(photoIndex)}
-                onRemove={(photoIndex) => void removePhoto(photoIndex)}
-                makeFirstLabel="Сделать обложкой"
-                firstBadgeLabel="Обложка"
-              />
-
-              <p className="text-xs text-olive/65">
-                В верхней галерее {photoUrls.length}/{excursionPhotoLimit}. Всего в карточке
-                учитывается {publicCardPhotoCount} фото. Для модерации нужно минимум{" "}
-                {excursionPhotoMinForModeration}.
-              </p>
-              {publicCardPhotoCount < excursionPhotoMinForModeration ? (
-                <p className="text-xs text-terra">
-                  Добавьте ещё {excursionPhotoMinForModeration - publicCardPhotoCount} фото в
-                  галерею, программу или разделы, чтобы отправить карточку на модерацию.
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-semibold text-olive">Фото по разделам</h4>
-                <p className="text-xs text-olive/60">
-                  Для каждого раздела можно загрузить отдельные фото или добавить их из уже
-                  загруженных.
-                </p>
+              {/* Guide credentials */}
+              <div className="space-y-3 rounded-xl border border-olive/15 bg-cream/30 p-4">
+                <h3 className="text-sm font-semibold text-olive">
+                  Квалификация{" "}
+                  <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-sm font-medium text-olive">Есть удостоверение гида</span>
+                    <p className="text-xs text-olive/55">
+                      Официальная лицензия экскурсовода — повышает доверие к карточке
+                    </p>
+                  </div>
+                  <SeaToggle
+                    size="sm"
+                    pressed={hasGuideLicense}
+                    onPressedChange={setHasGuideLicense}
+                    aria-label="Есть удостоверение гида"
+                  />
+                </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                {sectionPhotoFieldConfigs.map((sectionConfig) => {
-                  const selectedUrls = sectionPhotoGroups[sectionConfig.key];
-                  const reusablePhotos = reusableSectionPhotoLibrary.filter(
-                    (url) => !selectedUrls.includes(url),
-                  );
+              {/* ── БЛОК: МЕДИА ── */}
+              <div className="border-t border-olive/8" />
 
-                  return (
-                    <div
-                      key={sectionConfig.key}
-                      className="space-y-3 rounded-2xl border border-olive/10 bg-white/70 p-4"
-                    >
-                      <ContentPhotoManager
-                        title={sectionConfig.title}
-                        description={sectionConfig.description}
-                        photoUrls={selectedUrls}
-                        limit={EXCURSION_SECTION_PHOTO_LIMIT}
-                        addLabel={sectionConfig.addLabel}
-                        emptyText={sectionConfig.emptyText}
-                        disabled={
-                          Boolean(programPhotoUploadKey) ||
-                          Boolean(sectionPhotoUploadKey) ||
-                          isUploadingPhotos ||
-                          isSaving ||
-                          isSavingSchedule ||
-                          isDeleting
-                        }
-                        isUploading={sectionPhotoUploadKey === sectionConfig.key}
-                        onUpload={(files) => void uploadSectionPhotos(sectionConfig.key, files)}
-                        onMove={(photoIndex, direction) =>
-                          void moveSectionPhoto(sectionConfig.key, photoIndex, direction)
-                        }
-                        onMakeFirst={(photoIndex) =>
-                          void makeSectionPhotoFirst(sectionConfig.key, photoIndex)
-                        }
-                        onRemove={(photoIndex) =>
-                          void removeSectionPhoto(sectionConfig.key, photoIndex)
-                        }
-                      />
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-base font-semibold text-olive">Медиа</h3>
+                  <p className="text-sm text-olive/70">
+                    Основные фото используются в верхней галерее карточки. Фото из программы, шагов
+                    и разделов тоже сохраняются в карточке и могут стать обложкой, если верхняя
+                    галерея пустая. Поддерживаются {accommodationPhotoUploadFormatsLabel}.
+                    Ограничения по размеру: {accommodationPhotoUploadLimitsLabel}.
+                  </p>
+                </div>
 
-                      {reusablePhotos.length > 0 ? (
-                        <div className="rounded-2xl border border-dashed border-olive/15 bg-cream/25 p-3">
-                          <p className="text-xs font-medium text-olive/65">
-                            Использовать уже загруженные фото
-                          </p>
-                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                            {reusablePhotos.slice(0, 6).map((url, index) => (
-                              <button
-                                key={`${sectionConfig.key}-${url}-${index}`}
-                                type="button"
-                                onClick={() =>
-                                  void addExistingPhotoToSection(sectionConfig.key, url)
-                                }
-                                disabled={
-                                  Boolean(sectionPhotoUploadKey) ||
-                                  isUploadingPhotos ||
-                                  isSaving ||
-                                  isSavingSchedule ||
-                                  isDeleting
-                                }
-                                className="flex items-center gap-3 rounded-xl border border-olive/12 bg-white px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={url}
-                                  alt=""
-                                  className="h-12 w-12 rounded-lg object-cover"
-                                />
-                                <span className="text-xs font-medium text-olive/70">
-                                  Добавить фото
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                <div className="space-y-3">
+                  <ContentPhotoManager
+                    title="Верхняя галерея карточки"
+                    description="Первое фото используется как обложка. Порядок фото сохраняется."
+                    photoUrls={photoUrls}
+                    limit={excursionPhotoLimit}
+                    addLabel="Добавить в галерею"
+                    emptyText="Фото для верхней галереи пока не загружены."
+                    disabled={isUploadingPhotos || isSaving || isSavingSchedule || isDeleting}
+                    isUploading={isUploadingPhotos}
+                    onUpload={(files) => void uploadPhotos(files)}
+                    onMove={(photoIndex, direction) => void movePhoto(photoIndex, direction)}
+                    onMakeFirst={(photoIndex) => void makePhotoCover(photoIndex)}
+                    onRemove={(photoIndex) => void removePhoto(photoIndex)}
+                    makeFirstLabel="Сделать обложкой"
+                    firstBadgeLabel="Обложка"
+                  />
+
+                  <p className="text-xs text-olive/65">
+                    В верхней галерее {photoUrls.length}/{excursionPhotoLimit}. Всего в карточке
+                    учитывается {publicCardPhotoCount} фото. Для модерации нужно минимум{" "}
+                    {excursionPhotoMinForModeration}.
+                  </p>
+                  {publicCardPhotoCount < excursionPhotoMinForModeration ? (
+                    <p className="text-xs text-terra">
+                      Добавьте ещё {excursionPhotoMinForModeration - publicCardPhotoCount} фото в
+                      галерею, программу или разделы, чтобы отправить карточку на модерацию.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-olive">Фото по разделам</h4>
+                    <p className="text-xs text-olive/60">
+                      Для каждого раздела можно загрузить отдельные фото или добавить их из уже
+                      загруженных.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {sectionPhotoFieldConfigs.map((sectionConfig) => {
+                      const selectedUrls = sectionPhotoGroups[sectionConfig.key];
+                      const reusablePhotos = reusableSectionPhotoLibrary.filter(
+                        (url) => !selectedUrls.includes(url),
+                      );
+
+                      return (
+                        <div
+                          key={sectionConfig.key}
+                          className="space-y-3 rounded-2xl border border-olive/10 bg-white/70 p-4"
+                        >
+                          <ContentPhotoManager
+                            title={sectionConfig.title}
+                            description={sectionConfig.description}
+                            photoUrls={selectedUrls}
+                            limit={EXCURSION_SECTION_PHOTO_LIMIT}
+                            addLabel={sectionConfig.addLabel}
+                            emptyText={sectionConfig.emptyText}
+                            disabled={
+                              Boolean(programPhotoUploadKey) ||
+                              Boolean(sectionPhotoUploadKey) ||
+                              isUploadingPhotos ||
+                              isSaving ||
+                              isSavingSchedule ||
+                              isDeleting
+                            }
+                            isUploading={sectionPhotoUploadKey === sectionConfig.key}
+                            onUpload={(files) => void uploadSectionPhotos(sectionConfig.key, files)}
+                            onMove={(photoIndex, direction) =>
+                              void moveSectionPhoto(sectionConfig.key, photoIndex, direction)
+                            }
+                            onMakeFirst={(photoIndex) =>
+                              void makeSectionPhotoFirst(sectionConfig.key, photoIndex)
+                            }
+                            onRemove={(photoIndex) =>
+                              void removeSectionPhoto(sectionConfig.key, photoIndex)
+                            }
+                          />
+
+                          {reusablePhotos.length > 0 ? (
+                            <div className="rounded-2xl border border-dashed border-olive/15 bg-cream/25 p-3">
+                              <p className="text-xs font-medium text-olive/65">
+                                Использовать уже загруженные фото
+                              </p>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                {reusablePhotos.slice(0, 6).map((url, index) => (
+                                  <button
+                                    key={`${sectionConfig.key}-${url}-${index}`}
+                                    type="button"
+                                    onClick={() =>
+                                      void addExistingPhotoToSection(sectionConfig.key, url)
+                                    }
+                                    disabled={
+                                      Boolean(sectionPhotoUploadKey) ||
+                                      isUploadingPhotos ||
+                                      isSaving ||
+                                      isSavingSchedule ||
+                                      isDeleting
+                                    }
+                                    className="flex items-center gap-3 rounded-xl border border-olive/12 bg-white px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={url}
+                                      alt=""
+                                      className="h-12 w-12 rounded-lg object-cover"
+                                    />
+                                    <span className="text-xs font-medium text-olive/70">
+                                      Добавить фото
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-olive">
-              Видео (URL) <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={videoUrlInput}
-                onChange={(event) => setVideoUrlInput(event.target.value)}
-                placeholder="https://..."
-              />
-              <Button
-                variant="secondary"
-                onClick={addVideoUrl}
-                disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-              >
-                Добавить
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {videoUrls.map((url, index) => (
-                <span
-                  key={url}
-                  className="inline-flex max-w-full items-center gap-2 rounded-full bg-cream px-3 py-1 text-xs text-olive"
-                >
-                  <span className="truncate">Видео {index + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => setVideoUrls((prev) => prev.filter((item) => item !== url))}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-olive">
+                  Видео (URL){" "}
+                  <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={videoUrlInput}
+                    onChange={(event) => setVideoUrlInput(event.target.value)}
+                    placeholder="https://..."
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={addVideoUrl}
                     disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
-                    className="text-olive/70 hover:text-olive"
                   >
-                    x
-                  </button>
-                </span>
+                    Добавить
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {videoUrls.map((url, index) => (
+                    <span
+                      key={url}
+                      className="inline-flex max-w-full items-center gap-2 rounded-full bg-cream px-3 py-1 text-xs text-olive"
+                    >
+                      <span className="truncate">Видео {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setVideoUrls((prev) => prev.filter((item) => item !== url))}
+                        disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
+                        className="text-olive/70 hover:text-olive"
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="text-base font-semibold text-olive">
+                    Часто задаваемые вопросы{" "}
+                    <span className="text-xs font-normal text-olive/40">(необязательно)</span>
+                  </h3>
+                  <p className="text-xs text-olive/65">
+                    FAQ отображается на публичной странице программы.
+                  </p>
+                </div>
+                <FaqEditor items={faqItems} onChange={setFaqItems} />
+              </div>
+            </section>
+          )}
+        </div>
+
+        <aside className="excursion-editor-aside space-y-4">
+          <section className="excursion-editor-aside-card">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-olive">{asideTitle}</p>
+                <p className="mt-2 text-xs leading-5 text-olive/60">{asideLead}</p>
+              </div>
+              <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                {currentStep + 1}/6
+              </span>
+            </div>
+            <div className="mt-4 space-y-2">
+              {asideChecks.map((item) => (
+                <div
+                  key={item}
+                  className="flex items-center gap-2 text-xs font-medium text-olive/72"
+                >
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <AppIcon icon={Check} className="h-3 w-3" />
+                  </span>
+                  {item}
+                </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-2">
-            <div>
-              <h3 className="text-base font-semibold text-olive">
-                Часто задаваемые вопросы{" "}
-                <span className="text-xs font-normal text-olive/40">(необязательно)</span>
-              </h3>
-              <p className="text-xs text-olive/65">
-                FAQ отображается на публичной странице программы.
-              </p>
+          <section className="excursion-editor-aside-card">
+            <p className="text-sm font-semibold text-olive">Статус программы</p>
+            <div className="mt-4 grid gap-2 text-xs text-olive/62">
+              <div className="flex items-center justify-between gap-3">
+                <span>Текущий шаг</span>
+                <span className="font-semibold text-olive">{asideStatusText}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-olive/8">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{
+                    width: `${Math.round(
+                      (wizardSteps.filter((step) => step.status === "complete").length /
+                        wizardSteps.length) *
+                        100,
+                    )}%`,
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Готовность</span>
+                <span className="font-semibold text-primary">
+                  {wizardSteps.filter((step) => step.status === "complete").length}/
+                  {wizardSteps.length}
+                </span>
+              </div>
             </div>
-            <FaqEditor items={faqItems} onChange={setFaqItems} />
-          </div>
-        </section>
-      )}
+          </section>
+
+          <section className="excursion-editor-aside-card overflow-hidden p-0">
+            <div className="h-28 bg-[linear-gradient(135deg,rgba(15,118,110,0.18),rgba(242,196,77,0.22)),url('/crimea-map-preview.svg')] bg-cover bg-center" />
+            <div className="p-4">
+              <p className="text-sm font-semibold text-olive">
+                {title.trim() || "Программа без названия"}
+              </p>
+              <div className="mt-3 space-y-2 text-xs text-olive/62">
+                <div className="flex justify-between gap-3">
+                  <span>Локация</span>
+                  <span className="font-medium text-olive">
+                    {locationInput.trim() || "Не указана"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Фото</span>
+                  <span className="font-medium text-olive">
+                    {photoUrls.length}/{excursionPhotoLimit}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       {/* ===== STEP 5 (continued): ПУБЛИКАЦИЯ ===== */}
       {currentStep === 5 && (

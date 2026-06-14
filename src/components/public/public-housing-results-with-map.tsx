@@ -251,9 +251,6 @@ function isPointInsideViewportBounds(
 function buildMapPointsRequestQuery(mapQuery: string, boundsQuery: string): string {
   const params = new URLSearchParams(mapQuery);
   params.set("bounds", boundsQuery);
-  params.delete("location");
-  params.delete("locationId");
-  params.delete("location_id");
   return params.toString();
 }
 
@@ -470,7 +467,7 @@ export function PublicHousingResultsWithMap({
   const fallbackPoints = useMemo<MapPointResponse[]>(
     () =>
       items.map((item) => {
-        const hasSelectedStay = item.stayContext.mode === "selected" && item.stayPrice !== null;
+        const stayPrice = item.stayPrice;
 
         return sanitizePoint({
           id: item.id,
@@ -478,10 +475,10 @@ export function PublicHousingResultsWithMap({
           path: item.path,
           latitude: item.latitude,
           longitude: item.longitude,
-          pricePerNight: hasSelectedStay ? item.stayPrice?.totalNightly : item.minNightPrice,
-          priceType: hasSelectedStay ? "PER_ROOM" : item.minNightPriceType,
+          pricePerNight: stayPrice ? stayPrice.totalNightly : item.minNightPrice,
+          priceType: stayPrice ? "PER_ROOM" : item.minNightPriceType,
           priceFrom: item.minNightPrice,
-          currency: hasSelectedStay ? item.stayPrice?.currency : item.currency,
+          currency: stayPrice ? stayPrice.currency : item.currency,
           addressShort: item.locationName,
           photos:
             item.imageUrls.length > 0

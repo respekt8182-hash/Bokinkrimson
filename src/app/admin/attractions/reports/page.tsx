@@ -16,6 +16,7 @@ import {
   type AttractionReportStatusCode,
 } from "@/lib/attraction-reports";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/cn";
@@ -69,6 +70,9 @@ async function updateAttractionReportStatus(formData: FormData) {
 
   const admin = await verifyAdminSession();
   if (!admin) {
+    return;
+  }
+  if (!hasAdminPermission(admin.role, "content:manage")) {
     return;
   }
 

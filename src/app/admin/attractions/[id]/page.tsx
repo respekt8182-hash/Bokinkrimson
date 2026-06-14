@@ -10,6 +10,7 @@ import {
 import { AdminAttractionGalleryManager } from "@/components/admin/admin-attraction-gallery-manager";
 import { AdminAttractionLocationEditor } from "@/components/admin/admin-attraction-location-editor";
 import { verifyAdminSession } from "@/lib/admin-standalone-auth";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { buildPublicAttractionPath } from "@/lib/public-marketplace";
 import {
   getStaticAttractionById,
@@ -229,6 +230,9 @@ export default async function AdminAttractionEditPage({ params }: AdminAttractio
     const admin = await verifyAdminSession();
     if (!admin) {
       redirect("/admin/login");
+    }
+    if (!hasAdminPermission(admin.role, "content:manage")) {
+      redirect("/admin");
     }
 
     const current = await getStaticAttractionById(id);

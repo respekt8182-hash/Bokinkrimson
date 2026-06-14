@@ -1,11 +1,40 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import {
+  CircleAlert,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const adminInputClass =
-  "w-full rounded-2xl border border-olive/12 bg-white px-3.5 py-3 text-sm text-olive outline-none transition focus:border-primary/30 focus:ring-4 focus:ring-primary/10";
+  "w-full min-h-11 rounded-xl border border-[var(--admin-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--admin-text)] shadow-[var(--admin-shadow-xs)] outline-none transition placeholder:text-[var(--admin-faint)] focus:border-[var(--admin-primary-border)] focus:ring-4 focus:ring-[var(--admin-ring)]";
 
-export const adminTextareaClass = cn(adminInputClass, "min-h-[120px] resize-y");
+export const adminTextareaClass = cn(adminInputClass, "min-h-[120px] resize-y leading-6");
+
+type AdminButtonVariant = "primary" | "secondary" | "soft" | "danger" | "ghost";
+
+function getButtonClass(variant: AdminButtonVariant) {
+  if (variant === "primary") {
+    return "border border-[var(--admin-primary)] bg-[var(--admin-primary)] text-white shadow-[0_10px_24px_rgba(0,127,115,0.18)] hover:bg-[var(--admin-primary-hover)]";
+  }
+
+  if (variant === "soft") {
+    return "border border-[var(--admin-primary-border)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] hover:bg-[#dff2ef]";
+  }
+
+  if (variant === "danger") {
+    return "border border-[var(--admin-danger-border)] bg-[var(--admin-danger-soft)] text-[var(--admin-danger)] hover:bg-red-100";
+  }
+
+  if (variant === "ghost") {
+    return "border border-transparent bg-transparent text-[var(--admin-muted)] hover:bg-[var(--admin-muted-surface)] hover:text-[var(--admin-text)]";
+  }
+
+  return "border border-[var(--admin-border)] bg-white text-[var(--admin-text)] shadow-[var(--admin-shadow-xs)] hover:border-[var(--admin-primary-border)] hover:text-[var(--admin-primary)]";
+}
 
 type AdminPageHeaderProps = {
   title: string;
@@ -14,18 +43,6 @@ type AdminPageHeaderProps = {
   actions?: React.ReactNode;
   className?: string;
 };
-
-function getLinkButtonClass(variant: "primary" | "secondary" | "ghost") {
-  if (variant === "primary") {
-    return "bg-primary text-white hover:bg-primary-hover";
-  }
-
-  if (variant === "ghost") {
-    return "border border-olive/10 bg-cream/55 text-olive hover:border-primary/18 hover:bg-primary/7 hover:text-primary";
-  }
-
-  return "border border-olive/12 bg-white text-olive hover:border-primary/18 hover:text-primary";
-}
 
 export function AdminPageHeader({
   title,
@@ -37,30 +54,32 @@ export function AdminPageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-4 rounded-[30px] border border-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.92),rgba(244,250,248,0.84))] p-5 shadow-[0_20px_60px_rgba(58,43,35,0.08)] backdrop-blur-xl sm:p-6 lg:flex-row lg:items-end lg:justify-between",
+        "flex flex-col gap-5 rounded-[20px] border border-[var(--admin-border)] bg-white p-5 shadow-[var(--admin-shadow-sm)] sm:p-6 lg:flex-row lg:items-end lg:justify-between",
         className,
       )}
     >
       <div className="max-w-3xl">
         {eyebrow ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/55">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--admin-primary)]">
             {eyebrow}
           </p>
         ) : null}
         <h1
           className={cn(
-            "text-2xl font-semibold leading-tight text-olive sm:text-3xl",
-            eyebrow ? "mt-3" : "",
+            "text-[28px] font-semibold leading-tight tracking-normal text-[var(--admin-text)] sm:text-[32px]",
+            eyebrow ? "mt-2" : "",
           )}
         >
           {title}
         </h1>
         {description ? (
-          <p className="mt-2 text-sm leading-6 text-olive/62 sm:text-[15px]">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-[var(--admin-muted)] sm:text-[15px]">
+            {description}
+          </p>
         ) : null}
       </div>
 
-      {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
     </header>
   );
 }
@@ -68,9 +87,35 @@ export function AdminPageHeader({
 type AdminLinkButtonProps = {
   href: string;
   children: React.ReactNode;
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: AdminButtonVariant;
   className?: string;
 };
+
+type AdminButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: AdminButtonVariant;
+};
+
+export function AdminButton({
+  children,
+  variant = "secondary",
+  className,
+  type = "button",
+  ...props
+}: AdminButtonProps) {
+  return (
+    <button
+      type={type}
+      className={cn(
+        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none transition focus-visible:ring-4 focus-visible:ring-[var(--admin-ring)] disabled:cursor-not-allowed disabled:opacity-70",
+        getButtonClass(variant),
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function AdminLinkButton({
   href,
@@ -82,13 +127,44 @@ export function AdminLinkButton({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition",
-        getLinkButtonClass(variant),
+        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none transition focus-visible:ring-4 focus-visible:ring-[var(--admin-ring)]",
+        getButtonClass(variant),
         className,
       )}
     >
       {children}
     </Link>
+  );
+}
+
+type AdminIconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  label: string;
+  icon: LucideIcon;
+  variant?: AdminButtonVariant;
+};
+
+export function AdminIconButton({
+  label,
+  icon: Icon,
+  variant = "secondary",
+  className,
+  type = "button",
+  ...props
+}: AdminIconButtonProps) {
+  return (
+    <button
+      type={type}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-flex h-10 w-10 items-center justify-center rounded-xl outline-none transition focus-visible:ring-4 focus-visible:ring-[var(--admin-ring)] disabled:cursor-not-allowed disabled:opacity-70",
+        getButtonClass(variant),
+        className,
+      )}
+      {...props}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -112,19 +188,23 @@ export function AdminPanel({
   return (
     <section
       className={cn(
-        "rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_18px_55px_rgba(58,43,35,0.08)] backdrop-blur-xl sm:p-6",
+        "rounded-[20px] border border-[var(--admin-border)] bg-white p-5 shadow-[var(--admin-shadow-sm)] sm:p-6",
         className,
       )}
     >
       {title || description || actions ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-3xl">
-            {title ? <h2 className="text-lg font-semibold text-olive">{title}</h2> : null}
+            {title ? (
+              <h2 className="text-[17px] font-semibold leading-6 text-[var(--admin-text)]">
+                {title}
+              </h2>
+            ) : null}
             {description ? (
-              <p className="mt-1 text-sm leading-6 text-olive/60">{description}</p>
+              <p className="mt-1 text-sm leading-6 text-[var(--admin-muted)]">{description}</p>
             ) : null}
           </div>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
         </div>
       ) : null}
 
@@ -135,28 +215,104 @@ export function AdminPanel({
   );
 }
 
-type AdminNoticeProps = {
-  children: React.ReactNode;
-  tone?: "warning" | "info";
+type AdminSectionHeaderProps = {
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
   className?: string;
 };
 
-export function AdminNotice({
-  children,
-  tone = "warning",
+export function AdminSectionHeader({
+  title,
+  description,
+  actions,
   className,
-}: AdminNoticeProps) {
+}: AdminSectionHeaderProps) {
+  return (
+    <div
+      className={cn("flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", className)}
+    >
+      <div className="max-w-3xl">
+        <h2 className="text-[18px] font-semibold leading-6 text-[var(--admin-text)]">{title}</h2>
+        {description ? (
+          <p className="mt-1 text-sm leading-6 text-[var(--admin-muted)]">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
+    </div>
+  );
+}
+
+type AdminNoticeProps = {
+  children: React.ReactNode;
+  tone?: "warning" | "info" | "success" | "danger";
+  className?: string;
+};
+
+export function AdminNotice({ children, tone = "warning", className }: AdminNoticeProps) {
+  const toneClass =
+    tone === "info"
+      ? "border-[var(--admin-info-border)] bg-[var(--admin-info-soft)] text-[var(--admin-info)]"
+      : tone === "success"
+        ? "border-[var(--admin-success-border)] bg-[var(--admin-success-soft)] text-[var(--admin-success)]"
+        : tone === "danger"
+          ? "border-[var(--admin-danger-border)] bg-[var(--admin-danger-soft)] text-[var(--admin-danger)]"
+          : "border-[var(--admin-warning-border)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]";
+
+  return (
+    <div className={cn("rounded-2xl border px-4 py-3 text-sm leading-6", toneClass, className)}>
+      {children}
+    </div>
+  );
+}
+
+type AdminLoadingStateProps = {
+  label?: string;
+  className?: string;
+};
+
+export function AdminLoadingState({ label = "Загрузка...", className }: AdminLoadingStateProps) {
   return (
     <div
       className={cn(
-        "rounded-2xl border px-4 py-3 text-sm",
-        tone === "warning"
-          ? "border-amber-200 bg-amber-50/95 text-amber-900"
-          : "border-sky-200 bg-sky-50/95 text-sky-900",
+        "flex min-h-32 items-center justify-center gap-2 rounded-[20px] border border-[var(--admin-border)] bg-white p-6 text-sm font-semibold text-[var(--admin-muted)] shadow-[var(--admin-shadow-xs)]",
         className,
       )}
     >
-      {children}
+      <Loader2 className="h-4 w-4 animate-spin" />
+      {label}
+    </div>
+  );
+}
+
+type AdminErrorStateProps = {
+  title?: string;
+  description: string;
+  action?: React.ReactNode;
+  className?: string;
+};
+
+export function AdminErrorState({
+  title = "Не удалось загрузить данные",
+  description,
+  action,
+  className,
+}: AdminErrorStateProps) {
+  return (
+    <div
+      className={cn(
+        "rounded-[20px] border border-[var(--admin-danger-border)] bg-[var(--admin-danger-soft)] px-5 py-6 text-[var(--admin-danger)]",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+        <div>
+          <p className="font-semibold">{title}</p>
+          <p className="mt-1 text-sm leading-6">{description}</p>
+          {action ? <div className="mt-4">{action}</div> : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -177,14 +333,53 @@ export function AdminEmptyState({
   return (
     <div
       className={cn(
-        "rounded-[28px] border border-dashed border-olive/18 bg-white/80 px-5 py-8 text-center shadow-[0_14px_40px_rgba(58,43,35,0.05)]",
+        "rounded-[20px] border border-dashed border-[var(--admin-border-strong)] bg-white px-5 py-8 text-center shadow-[var(--admin-shadow-xs)]",
         className,
       )}
     >
-      <p className="text-base font-semibold text-olive">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-olive/62">{description}</p>
+      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--admin-muted-surface)] text-[var(--admin-muted)]">
+        <Search className="h-5 w-5" />
+      </div>
+      <p className="mt-3 text-base font-semibold text-[var(--admin-text)]">{title}</p>
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--admin-muted)]">
+        {description}
+      </p>
       {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
+  );
+}
+
+type AdminAvatarProps = {
+  src?: string | null;
+  name: string;
+  className?: string;
+};
+
+export function AdminAvatar({ src, name, className }: AdminAvatarProps) {
+  const initials =
+    name
+      .split(/\s+/)
+      .map((part) => part.charAt(0))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("") || "AD";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--admin-primary-soft)] text-sm font-bold text-[var(--admin-primary)] ring-1 ring-[var(--admin-primary-border)]",
+        className,
+      )}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center">
+          {initials ? initials : <UserRound className="h-4 w-4" />}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -204,7 +399,7 @@ export function AdminUnavailableState({
   return (
     <div className="space-y-4">
       <AdminLinkButton href={backHref}>{backLabel}</AdminLinkButton>
-      <AdminNotice>
+      <AdminNotice tone="info">
         <p className="font-semibold">{title}</p>
         <p className="mt-1 text-sm">{description}</p>
       </AdminNotice>
@@ -217,7 +412,7 @@ type AdminStatCardProps = {
   value: number | string;
   description?: string;
   icon?: LucideIcon;
-  tone?: "default" | "warning" | "info" | "success";
+  tone?: "default" | "warning" | "info" | "success" | "danger";
 };
 
 export function AdminStatCard({
@@ -229,31 +424,33 @@ export function AdminStatCard({
 }: AdminStatCardProps) {
   const toneClass =
     tone === "warning"
-      ? "bg-amber-50 text-amber-900 border-amber-200/70"
+      ? "bg-[var(--admin-warning-soft)] text-[var(--admin-warning)] border-[var(--admin-warning-border)]"
       : tone === "info"
-        ? "bg-sky-50 text-sky-900 border-sky-200/70"
+        ? "bg-[var(--admin-info-soft)] text-[var(--admin-info)] border-[var(--admin-info-border)]"
         : tone === "success"
-          ? "bg-emerald-50 text-emerald-900 border-emerald-200/70"
-          : "bg-white text-olive border-white/70";
+          ? "bg-[var(--admin-success-soft)] text-[var(--admin-success)] border-[var(--admin-success-border)]"
+          : tone === "danger"
+            ? "bg-[var(--admin-danger-soft)] text-[var(--admin-danger)] border-[var(--admin-danger-border)]"
+            : "bg-white text-[var(--admin-text)] border-[var(--admin-border)]";
 
   return (
     <article
       className={cn(
-        "rounded-[26px] border p-5 shadow-[0_16px_40px_rgba(58,43,35,0.06)]",
+        "min-h-[156px] rounded-[20px] border p-5 shadow-[var(--admin-shadow-sm)]",
         toneClass,
       )}
     >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] opacity-60">{label}</p>
-          <p className="mt-3 text-3xl font-semibold leading-none">{value}</p>
-          {description ? (
-            <p className="mt-2 text-sm leading-6 opacity-70">{description}</p>
-          ) : null}
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.12em] opacity-70">
+            {label}
+          </p>
+          <p className="mt-3 text-[32px] font-semibold leading-none tracking-normal">{value}</p>
+          {description ? <p className="mt-2 text-sm leading-6 opacity-72">{description}</p> : null}
         </div>
 
         {Icon ? (
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/85 shadow-[0_10px_24px_rgba(58,43,35,0.06)]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[var(--admin-primary)] shadow-[var(--admin-shadow-xs)] ring-1 ring-[var(--admin-border)]">
             <Icon className="h-5 w-5" />
           </div>
         ) : null}
@@ -273,13 +470,70 @@ export function AdminPillLink({ href, active, children }: AdminPillLinkProps) {
     <Link
       href={href}
       className={cn(
-        "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+        "inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--admin-ring)]",
         active
-          ? "bg-primary text-white"
-          : "bg-cream text-olive hover:bg-sand hover:text-olive",
+          ? "border-[var(--admin-primary-border)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]"
+          : "border-[var(--admin-border)] bg-white text-[var(--admin-muted)] hover:border-[var(--admin-primary-border)] hover:text-[var(--admin-primary)]",
       )}
     >
       {children}
     </Link>
+  );
+}
+
+type AdminStatusBadgeProps = {
+  children: React.ReactNode;
+  tone?: "neutral" | "success" | "warning" | "danger" | "info" | "primary";
+  className?: string;
+};
+
+export function AdminStatusBadge({ children, tone = "neutral", className }: AdminStatusBadgeProps) {
+  const toneClass =
+    tone === "success"
+      ? "border-[var(--admin-success-border)] bg-[var(--admin-success-soft)] text-[var(--admin-success)]"
+      : tone === "warning"
+        ? "border-[var(--admin-warning-border)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]"
+        : tone === "danger"
+          ? "border-[var(--admin-danger-border)] bg-[var(--admin-danger-soft)] text-[var(--admin-danger)]"
+          : tone === "info"
+            ? "border-[var(--admin-info-border)] bg-[var(--admin-info-soft)] text-[var(--admin-info)]"
+            : tone === "primary"
+              ? "border-[var(--admin-primary-border)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]"
+              : "border-[var(--admin-border)] bg-[var(--admin-muted-surface)] text-[var(--admin-muted)]";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold leading-none",
+        toneClass,
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export const AdminBadge = AdminStatusBadge;
+
+type AdminFilterBarProps = {
+  children: React.ReactNode;
+  className?: string;
+};
+
+export function AdminFilterBar({ children, className }: AdminFilterBarProps) {
+  return (
+    <div
+      className={cn(
+        "rounded-[20px] border border-[var(--admin-border)] bg-white p-4 shadow-[var(--admin-shadow-sm)]",
+        className,
+      )}
+    >
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--admin-text)]">
+        <SlidersHorizontal className="h-4 w-4 text-[var(--admin-primary)]" />
+        Фильтры
+      </div>
+      {children}
+    </div>
   );
 }

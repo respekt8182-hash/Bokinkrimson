@@ -155,11 +155,7 @@ async function resolveLocationCenter(location: string): Promise<LocationSearchIt
   }
 
   const body = (await response.json()) as { item?: LocationSearchItem | null };
-  if (
-    !body.item ||
-    !Number.isFinite(body.item.latitude) ||
-    !Number.isFinite(body.item.longitude)
-  ) {
+  if (!body.item || !Number.isFinite(body.item.latitude) || !Number.isFinite(body.item.longitude)) {
     return null;
   }
 
@@ -186,7 +182,11 @@ function buildAddressSearchQuery(query: string, hint: string): string {
     parts.push(normalizedHint);
   }
 
-  if (!/(?:крым|crimea|севастополь|simferopol|ялта|алушта|евпатория|керчь|феодосия|судак)/i.test(queryLower)) {
+  if (
+    !/(?:крым|crimea|севастополь|simferopol|ялта|алушта|евпатория|керчь|феодосия|судак)/i.test(
+      queryLower,
+    )
+  ) {
     parts.push("Республика Крым");
   }
 
@@ -539,7 +539,7 @@ export function YandexMapPicker({
           const marker = new window.ymaps.Placemark(
             initialCenter,
             {},
-            { draggable: true, preset: "islands#redDotIcon" },
+            { draggable: true, iconColor: "#0f766e", preset: "islands#circleDotIcon" },
           );
 
           marker.events.add("dragend", () => {
@@ -585,10 +585,8 @@ export function YandexMapPicker({
   }, [latitude, longitude]);
 
   return (
-    <div className="space-y-2">
-      <div
-        className="flex flex-col gap-2 rounded-xl border border-olive/12 bg-white/75 p-3 sm:flex-row"
-      >
+    <div className="yandex-map-picker space-y-2">
+      <div className="yandex-map-picker-search flex flex-col gap-2 rounded-xl border border-olive/12 bg-white/75 p-3 sm:flex-row">
         <Input
           value={locationQuery}
           onChange={(event) => {
@@ -621,13 +619,13 @@ export function YandexMapPicker({
       {locationSearchError ? <p className="text-xs text-red-600">{locationSearchError}</p> : null}
       <div
         ref={containerRef}
-        className="h-72 w-full overflow-hidden rounded-xl border border-olive/20 bg-sand/40 [touch-action:none]"
+        className="yandex-map-picker-canvas h-72 w-full overflow-hidden rounded-xl border border-olive/20 bg-sand/40 [touch-action:none]"
       />
       {keyError || loadError ? (
         <p className="text-xs text-amber-700">{keyError || loadError}</p>
       ) : null}
       {onAddressResolved ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-olive/12 bg-white/75 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="yandex-map-picker-confirm flex flex-col gap-2 rounded-xl border border-olive/12 bg-white/75 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-olive/65">{confirmHint}</p>
           <Button
             onClick={handleConfirmClick}

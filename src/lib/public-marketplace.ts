@@ -181,6 +181,7 @@ export type PublicTransferCatalogItem = {
     firstName: string;
     lastName: string;
     avatarUrl: string | null;
+    phoneVerifiedAt: string | null;
   };
 };
 
@@ -244,6 +245,7 @@ const transferInclude = {
       email: true,
       phone: true,
       avatarUrl: true,
+      phoneVerifiedAt: true,
     },
   },
   location: {
@@ -718,6 +720,7 @@ function mapTransferCatalogItem(
       firstName: row.owner.firstName,
       lastName: "",
       avatarUrl: row.owner.avatarUrl,
+      phoneVerifiedAt: row.owner.phoneVerifiedAt?.toISOString() ?? null,
     },
   };
 }

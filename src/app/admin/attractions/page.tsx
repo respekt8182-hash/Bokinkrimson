@@ -8,7 +8,9 @@ import {
   adminInputClass,
 } from "@/components/admin/admin-ui";
 import { AdminPagination } from "@/components/admin/admin-pagination";
+import { getAdminSession } from "@/lib/admin-auth";
 import { parseAdminPageParam, paginateAdminItems } from "@/lib/admin-pagination";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 import { db } from "@/lib/db";
 import { rankByTrigram } from "@/lib/fuzzy";
 import { buildPublicAttractionPath } from "@/lib/public-marketplace";
@@ -31,6 +33,10 @@ const STATUS_COLORS: Record<StaticAttractionStatus, string> = {
 };
 
 export default async function AdminAttractionsPage({ searchParams }: AdminAttractionsPageProps) {
+  const currentAdmin = await getAdminSession();
+  const canCreateContent = Boolean(
+    currentAdmin && hasAdminPermission(currentAdmin.role, "content:create"),
+  );
   const filters = await searchParams;
   const selectedStatus = filters.status?.trim() ?? "";
   const query = filters.q?.trim() ?? "";
@@ -108,13 +114,15 @@ export default async function AdminAttractionsPage({ searchParams }: AdminAttrac
                 </span>
               ) : null}
             </Link>
-            <Link
-              href="/admin/attractions/new"
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
-            >
-              <Plus className="h-4 w-4" />
-              Новое место
-            </Link>
+            {canCreateContent ? (
+              <Link
+                href="/admin/attractions/new"
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
+              >
+                <Plus className="h-4 w-4" />
+                Новое место
+              </Link>
+            ) : null}
           </>
         }
       />

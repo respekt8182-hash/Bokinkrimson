@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useCurrentAdmin } from "@/components/admin/admin-shell";
+import { hasAdminPermission } from "@/lib/admin-rbac";
 
 type AdminDeleteDraftButtonProps = {
   endpoint: string;
@@ -31,11 +33,16 @@ export function AdminDeleteDraftButton({
   buttonVariant = "ghost",
   buttonClassName,
 }: AdminDeleteDraftButtonProps) {
+  const currentAdmin = useCurrentAdmin();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAcknowledged, setIsAcknowledged] = useState(false);
   const [error, setError] = useState("");
+
+  if (!currentAdmin || !hasAdminPermission(currentAdmin.role, "content:delete")) {
+    return null;
+  }
 
   async function confirmDelete() {
     if (!isAcknowledged) {
