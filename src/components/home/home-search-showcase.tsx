@@ -50,6 +50,7 @@ import {
   transfersHubPath,
 } from "@/lib/seo/routes";
 import { buildDateRangeParam } from "@/lib/seo/url-normalize";
+import { setPublicMobileBottomNavForceHidden } from "@/lib/public-mobile-nav-visibility";
 
 const directionLabels = {
   housing: "Жильё",
@@ -2234,9 +2235,11 @@ export function HomeSearchShowcase({
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    setPublicMobileBottomNavForceHidden("home-mobile-search", true);
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      setPublicMobileBottomNavForceHidden("home-mobile-search", false);
     };
   }, [isMobileSearchOpen]);
 
@@ -3020,7 +3023,7 @@ export function HomeSearchShowcase({
     }
 
     return (
-      <div className="fixed inset-0 z-[90] flex flex-col bg-[#1c1c1c] text-white md:hidden">
+      <div className="fixed inset-0 z-[90] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-[#1c1c1c] text-white md:hidden">
         <div className="flex h-[76px] shrink-0 items-center gap-3 px-4 pt-[env(safe-area-inset-top)]">
           <button
             type="button"
@@ -3049,7 +3052,7 @@ export function HomeSearchShowcase({
           <span className="h-11 w-11" aria-hidden="true" />
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[24px] bg-white px-4 py-4 text-olive">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[24px] bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-olive">
           {mobileStep === "location" ? (
             <div className="flex h-full min-h-0 flex-col">
               <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-cream p-1 ring-1 ring-sand min-[420px]:grid-cols-4">

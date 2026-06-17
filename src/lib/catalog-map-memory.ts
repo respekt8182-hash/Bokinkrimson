@@ -10,8 +10,15 @@ export type CatalogMapViewportMemory = {
 
 const viewedStoragePrefix = "krymvokrug.catalogMap.viewed";
 const viewportStoragePrefix = "krymvokrug.catalogMap.viewport";
+const viewedStorageVersion = 2;
 const maxViewedItems = 500;
 const maxViewportAgeMs = 1000 * 60 * 90;
+
+type ViewedStoragePayload = {
+  version: typeof viewedStorageVersion;
+  day: string;
+  items: string[];
+};
 
 function getViewedStorageKey(catalogKey: CatalogMapMemoryKey): string {
   return `${viewedStoragePrefix}.${catalogKey}`;
@@ -23,6 +30,13 @@ function getViewportStorageKey(catalogKey: CatalogMapMemoryKey, scope: string): 
 
 function normalizeItemId(itemId: string): string {
   return itemId.trim();
+}
+
+function getLocalDayToken(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function isValidCoordinate(value: unknown): value is number {
@@ -125,23 +139,47 @@ function readViewedArray(catalogKey: CatalogMapMemoryKey): string[] {
     return [];
   }
 
+  const storageKey = getViewedStorageKey(catalogKey);
+
   try {
-    const raw = window.localStorage.getItem(getViewedStorageKey(catalogKey));
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
       return [];
     }
 
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) {
-      return [];
+      if (!parsed || typeof parsed !== "object") {
+        window.localStorage.removeItem(storageKey);
+        return [];
+      }
+
+      const payload = parsed as Partial<ViewedStoragePayload>;
+      if (
+        payload.version !== viewedStorageVersion ||
+        payload.day !== getLocalDayToken() ||
+        !Array.isArray(payload.items)
+      ) {
+        window.localStorage.removeItem(storageKey);
+        return [];
+      }
+
+      return payload.items
+        .filter((value): value is string => typeof value === "string")
+        .map(normalizeItemId)
+        .filter(Boolean)
+        .slice(0, maxViewedItems);
     }
 
-    return parsed
-      .filter((value): value is string => typeof value === "string")
-      .map(normalizeItemId)
-      .filter(Boolean)
-      .slice(0, maxViewedItems);
+    window.localStorage.removeItem(storageKey);
+    return [];
   } catch {
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+
     return [];
   }
 }
@@ -162,7 +200,14 @@ export function markCatalogMapItemViewed(
 
   if (typeof window !== "undefined" && normalizedId) {
     try {
-      window.localStorage.setItem(getViewedStorageKey(catalogKey), JSON.stringify(next));
+      window.localStorage.setItem(
+        getViewedStorageKey(catalogKey),
+        JSON.stringify({
+          version: viewedStorageVersion,
+          day: getLocalDayToken(),
+          items: next,
+        } satisfies ViewedStoragePayload),
+      );
     } catch {
       // Best-effort UI memory; navigation must keep working without storage.
     }

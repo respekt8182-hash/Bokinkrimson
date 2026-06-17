@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildCatalogMapViewportScope,
+  markCatalogMapItemViewed,
+  readCatalogMapViewedItems,
   readCatalogMapViewport,
   writeCatalogMapViewport,
 } from "@/lib/catalog-map-memory";
@@ -32,6 +34,7 @@ function installStorageWindow() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   Reflect.deleteProperty(globalThis, "window");
 });
 
@@ -62,5 +65,28 @@ describe("catalog map memory", () => {
       center: [44.6, 33.6],
       zoom: 11.5,
     });
+  });
+
+  it("keeps viewed map items only for the current local day", () => {
+    installStorageWindow();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-17T09:00:00"));
+
+    expect(markCatalogMapItemViewed("housing", "property-1")).toEqual(new Set(["property-1"]));
+    expect(readCatalogMapViewedItems("housing")).toEqual(new Set(["property-1"]));
+
+    vi.setSystemTime(new Date("2026-06-18T00:01:00"));
+
+    expect(readCatalogMapViewedItems("housing")).toEqual(new Set());
+  });
+
+  it("clears legacy viewed item arrays without carrying old views forward", () => {
+    installStorageWindow();
+    window.localStorage.setItem(
+      "krymvokrug.catalogMap.viewed.excursions",
+      JSON.stringify(["old-excursion"]),
+    );
+
+    expect(readCatalogMapViewedItems("excursions")).toEqual(new Set());
   });
 });
