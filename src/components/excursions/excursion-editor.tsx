@@ -6719,7 +6719,7 @@ export function ExcursionEditor({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
-              РЁР°Рі {currentStep + 1} РёР· {wizardSteps.length}
+              Шаг {currentStep + 1} из {wizardSteps.length}
             </p>
             <p className="truncate text-sm font-semibold text-olive">{currentStepTitle}</p>
           </div>
@@ -6741,7 +6741,7 @@ export function ExcursionEditor({
               disabled={isNavigationDisabled}
               className="min-h-11 w-full"
             >
-              РќР°Р·Р°Рґ
+              Назад
             </Button>
           ) : null}
           {nextStepIndex !== null ? (
@@ -6750,7 +6750,7 @@ export function ExcursionEditor({
               disabled={isNavigationDisabled}
               className="min-h-11 w-full"
             >
-              Р”Р°Р»РµРµ
+              Далее
             </Button>
           ) : (
             <Button
@@ -6764,7 +6764,7 @@ export function ExcursionEditor({
               disabled={isNavigationDisabled}
               className="min-h-11 w-full"
             >
-              Рљ РїСѓР±Р»РёРєР°С†РёРё
+              К публикации
             </Button>
           )}
         </div>
