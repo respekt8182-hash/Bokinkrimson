@@ -224,6 +224,7 @@ export function YandexMapPicker({
 }: YandexMapPickerProps) {
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const locationInputRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<InstanceType<NonNullable<typeof window.ymaps>["Map"]> | null>(null);
   const markerRef = useRef<InstanceType<NonNullable<typeof window.ymaps>["Placemark"]> | null>(
     null,
@@ -268,6 +269,29 @@ export function YandexMapPicker({
   useEffect(() => {
     onLocationSearchResolvedRef.current = onLocationSearchResolved;
   }, [onLocationSearchResolved]);
+
+  const scrollLocationInputToEndOnMobile = useCallback(() => {
+    if (typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const input = locationInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.scrollLeft = input.scrollWidth;
+    });
+  }, []);
+
+  const setResolvedLocationQuery = useCallback(
+    (value: string) => {
+      setLocationQuery(value);
+      scrollLocationInputToEndOnMobile();
+    },
+    [scrollLocationInputToEndOnMobile],
+  );
 
   useEffect(() => {
     const previous = initialSearchValueRef.current.trim();
@@ -319,12 +343,12 @@ export function YandexMapPicker({
   const applyAddressSearchItem = useCallback(
     (item: AddressSearchItem) => {
       const coordinates: [number, number] = [item.latitude, item.longitude];
-      setLocationQuery(item.address);
+      setResolvedLocationQuery(item.address);
       moveMarkerToCoordinates(coordinates, 16);
       setConfirmedCoordinates(coordinates);
       onAddressResolvedRef.current?.(item);
     },
-    [moveMarkerToCoordinates],
+    [moveMarkerToCoordinates, setResolvedLocationQuery],
   );
 
   const searchLocation = useCallback(async () => {
@@ -431,6 +455,7 @@ export function YandexMapPicker({
         return;
       }
 
+      setResolvedLocationQuery(geocodeItem.address);
       onAddressResolvedRef.current(geocodeItem);
       setConfirmedCoordinates(coordinates);
     } catch {
@@ -442,7 +467,7 @@ export function YandexMapPicker({
         setIsResolvingAddress(false);
       }
     }
-  }, []);
+  }, [setResolvedLocationQuery]);
 
   const hasSelectedCoordinates = selectedCoordinates !== null;
   const hasUnconfirmedSelection =
@@ -539,7 +564,7 @@ export function YandexMapPicker({
           const marker = new window.ymaps.Placemark(
             initialCenter,
             {},
-            { draggable: true, iconColor: "#0f766e", preset: "islands#circleDotIcon" },
+            { draggable: true, iconColor: "#e53935", preset: "islands#redIcon" },
           );
 
           marker.events.add("dragend", () => {
@@ -588,6 +613,7 @@ export function YandexMapPicker({
     <div className="yandex-map-picker space-y-2">
       <div className="yandex-map-picker-search flex flex-col gap-2 rounded-xl border border-olive/12 bg-white/75 p-3 sm:flex-row">
         <Input
+          ref={locationInputRef}
           value={locationQuery}
           onChange={(event) => {
             setLocationQuery(event.target.value);

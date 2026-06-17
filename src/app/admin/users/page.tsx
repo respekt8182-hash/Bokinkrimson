@@ -449,7 +449,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <Link
-                                  href={`/admin/objects/${property.id}`}
+                                  href={`/admin/objects/${property.id}/about`}
                                   className="font-semibold text-olive hover:text-primary"
                                 >
                                   {property.name ?? "Объект без названия"}

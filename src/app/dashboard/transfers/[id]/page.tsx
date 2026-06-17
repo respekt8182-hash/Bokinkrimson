@@ -477,9 +477,10 @@ export default async function DashboardTransferEditPage({
     const trialUntil = isPostLaunchTrialEligible({
       listingCreatedAt: current.createdAt,
       now,
+      category: "transfer",
       hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
     })
-      ? getPostLaunchTrialValidUntil(now)
+      ? getPostLaunchTrialValidUntil(current.createdAt)
       : null;
     const transferPlacementPricing = trialUntil
       ? applyPlacementFreePeriodToPricing(baseTransferPlacementPricing, { validUntil: trialUntil })
@@ -611,7 +612,7 @@ export default async function DashboardTransferEditPage({
               idempotenceKey: crypto.randomUUID(),
               paidFrom: now,
               paidAt: now,
-              placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(),
+              placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(current.createdAt),
               providerPayload: trialUntil
                 ? buildPostLaunchTrialPaymentPayload({
                     originalAmountRub: originalPublicationFeeRub,
@@ -623,6 +624,7 @@ export default async function DashboardTransferEditPage({
                 : buildFreePlacementPaymentPayload({
                     originalAmountRub: originalPublicationFeeRub,
                     now,
+                    validUntil: trialUntil ?? getPlacementPromoDemoValidUntil(current.createdAt),
                     context: freeTransferPaymentPayload,
                     placementPricing: transferPlacementPricing,
                   }),
@@ -856,9 +858,10 @@ export default async function DashboardTransferEditPage({
   const initialTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: transfer.createdAt,
     now: initialPricingNow,
+    category: "transfer",
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil(initialPricingNow)
+    ? getPostLaunchTrialValidUntil(transfer.createdAt)
     : null;
   const initialTransferPlacementPricing = initialTrialUntil
     ? applyPlacementFreePeriodToPricing(baseInitialTransferPlacementPricing, {

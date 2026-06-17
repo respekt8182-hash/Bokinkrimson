@@ -34,6 +34,7 @@ import {
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
 import { normalizeLocationName, searchLocationDirectory } from "@/lib/location-directory";
 import { normalizeLegacyFotoImageUrl, serializeMedia } from "@/lib/media";
+import { createSearchPerformanceTimer } from "@/lib/performance-logging";
 import {
   addDays,
   calculateRoomStayPrice,
@@ -43,6 +44,11 @@ import {
   type RoomPriceType,
 } from "@/lib/pricing";
 import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
+import { buildRedactedPublicContactFields } from "@/lib/public-contact-redaction";
+import {
+  buildPublicSlugCacheKey,
+  resolveCachedPublicSlugLookup,
+} from "@/lib/public-slug-cache";
 import {
   parsePublishedPropertySnapshot,
   shouldUsePublishedSnapshot,
@@ -65,6 +71,13 @@ import {
   scoreRankingCandidate,
 } from "@/lib/ranking-v2";
 import type { MapBounds } from "@/lib/search-contracts";
+import {
+  disabledCandidateStage,
+  getNowMs,
+  getSearchDbPrefilterLimit,
+  isSearchDbPrefilterEnabled,
+  type CandidateStageResult,
+} from "@/lib/search/prefilter-controls";
 import { filterExistingLocalPublicUploadUrls } from "@/lib/storage";
 import type { FaqItem } from "@/types/excursions";
 
@@ -197,6 +210,10 @@ export type PublicCatalogResult = {
   pageSize: number;
   total: number;
   totalPages: number;
+  priceBounds: {
+    min: number;
+    max: number;
+  };
   filters: {
     locationId: string | null;
     locationName: string | null;
@@ -227,6 +244,354 @@ const CATALOG_CANDIDATE_LIMIT = 5000;
 const CATALOG_CARD_IMAGE_LIMIT = 4;
 const CATALOG_MIN_PRICE_PERIOD_LIMIT = 12;
 const CATALOG_SELECTED_STAY_PRICE_PERIOD_LIMIT = 120;
+const PROPERTY_DB_PREFILTER_DEFAULT_LIMIT = 3000;
+const PROPERTY_TEXT_PREFILTER_FALLBACK_MIN = 50;
+const EARTH_RADIUS_KM = 6371;
+
+function areSearchImpressionWritesEnabled(): boolean {
+  const value = (process.env.SEARCH_IMPRESSION_WRITES ?? "true").trim().toLowerCase();
+  return value !== "0" && value !== "false" && value !== "off";
+}
+
+function normalizeLongitude(longitude: number): number {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+function buildCoordinateRadiusWhere(
+  center: CatalogGeoPoint | null,
+  radiusKm: number,
+): Prisma.PropertyWhereInput | null {
+  if (!center) {
+    return null;
+  }
+
+  const latitudeDelta = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI);
+  const latitude = Math.max(-90, Math.min(90, center.latitude));
+  const minLat = Math.max(-90, latitude - latitudeDelta);
+  const maxLat = Math.min(90, latitude + latitudeDelta);
+  const cosLatitude = Math.cos((latitude * Math.PI) / 180);
+  const coversAllLongitudes = Math.abs(cosLatitude) < 1e-8 || minLat <= -90 || maxLat >= 90;
+  const baseLatitudeWhere: Prisma.PropertyWhereInput = {
+    latitude: { gte: minLat, lte: maxLat },
+  };
+
+  if (coversAllLongitudes) {
+    return baseLatitudeWhere;
+  }
+
+  const longitudeDelta = (radiusKm / (EARTH_RADIUS_KM * cosLatitude)) * (180 / Math.PI);
+  if (longitudeDelta >= 180) {
+    return baseLatitudeWhere;
+  }
+
+  const minLng = normalizeLongitude(center.longitude - longitudeDelta);
+  const maxLng = normalizeLongitude(center.longitude + longitudeDelta);
+  const longitudeWhere: Prisma.PropertyWhereInput =
+    minLng <= maxLng
+      ? { longitude: { gte: minLng, lte: maxLng } }
+      : {
+          OR: [{ longitude: { gte: minLng } }, { longitude: { lte: maxLng } }],
+        };
+
+  return {
+    AND: [baseLatitudeWhere, longitudeWhere],
+  };
+}
+
+function buildPropertyLocationCandidateWhere(input: {
+  resolvedLocation: ResolvedLocation | null;
+  locationText: string;
+  locationCenterPoint: CatalogGeoPoint | null;
+}): Prisma.PropertyWhereInput | null {
+  const or: Prisma.PropertyWhereInput[] = [];
+  const locationText = input.locationText.trim();
+
+  if (input.resolvedLocation) {
+    or.push(
+      { locationId: input.resolvedLocation.id },
+      { locationName: { equals: input.resolvedLocation.name, mode: "insensitive" } },
+      { locationName: { contains: input.resolvedLocation.name, mode: "insensitive" } },
+    );
+  }
+
+  if (locationText.length >= 2) {
+    or.push(
+      { locationId: locationText },
+      { locationName: { contains: locationText, mode: "insensitive" } },
+      { address: { contains: locationText, mode: "insensitive" } },
+    );
+  }
+
+  const radiusWhere = buildCoordinateRadiusWhere(
+    input.locationCenterPoint,
+    NEARBY_CATALOG_RADIUS_KM,
+  );
+  if (radiusWhere) {
+    or.push(radiusWhere);
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  // Pending-edit rows may expose their public fields from publishedSnapshot.
+  // Keep them in the candidate set and let the existing JS display-state logic decide.
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildPropertyTextCandidateWhere(searchQuery: string): Prisma.PropertyWhereInput | null {
+  if (searchQuery.trim().length < 2) {
+    return null;
+  }
+
+  const variants = Array.from(new Set([searchQuery, ...toSearchVariants(searchQuery)]))
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 2)
+    .slice(0, 4);
+  const or: Prisma.PropertyWhereInput[] = [];
+
+  for (const variant of variants) {
+    or.push(
+      { name: { contains: variant, mode: "insensitive" } },
+      { locationName: { contains: variant, mode: "insensitive" } },
+      { address: { contains: variant, mode: "insensitive" } },
+      { description: { contains: variant, mode: "insensitive" } },
+      {
+        rooms: {
+          some: {
+            title: { contains: variant, mode: "insensitive" },
+          },
+        },
+      },
+    );
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildPropertyPriceCandidateWhere(input: {
+  minPrice: number | null;
+  maxPrice: number | null;
+}): Prisma.PropertyWhereInput | null {
+  if (input.minPrice === null && input.maxPrice === null) {
+    return null;
+  }
+
+  return {
+    OR: [
+      {
+        rooms: {
+          some: {
+            isActive: true,
+            prices: {
+              some: {
+                price: {
+                  ...(input.minPrice !== null ? { gte: input.minPrice } : {}),
+                  ...(input.maxPrice !== null ? { lte: input.maxPrice } : {}),
+                },
+              },
+            },
+          },
+        },
+      },
+      { pendingEditStatus: { not: null } },
+    ],
+  };
+}
+
+function buildPropertyDbPrefilterWhere(input: {
+  baseWhere: Prisma.PropertyWhereInput;
+  type: string | null;
+  searchQuery: string;
+  resolvedLocation: ResolvedLocation | null;
+  locationText: string;
+  locationCenterPoint: CatalogGeoPoint | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  hasPhotos: boolean;
+  familyFriendly: boolean;
+  petsAllowed: boolean;
+  smokingForbidden: boolean;
+  quietHours: boolean;
+}): Prisma.PropertyWhereInput {
+  const and: Prisma.PropertyWhereInput[] = [input.baseWhere];
+
+  if (input.type) {
+    and.push({
+      OR: [{ type: input.type }, { pendingEditStatus: { not: null } }],
+    });
+  }
+
+  const locationWhere = buildPropertyLocationCandidateWhere({
+    resolvedLocation: input.resolvedLocation,
+    locationText: input.locationText,
+    locationCenterPoint: input.locationCenterPoint,
+  });
+  if (locationWhere) {
+    and.push(locationWhere);
+  }
+
+  const textWhere = buildPropertyTextCandidateWhere(input.searchQuery);
+  if (textWhere) {
+    and.push(textWhere);
+  }
+
+  const priceWhere = buildPropertyPriceCandidateWhere({
+    minPrice: input.minPrice,
+    maxPrice: input.maxPrice,
+  });
+  if (priceWhere) {
+    and.push(priceWhere);
+  }
+
+  if (input.hasPhotos) {
+    and.push({
+      OR: [
+        { media: { some: { roomId: null, type: MediaType.IMAGE } } },
+        { pendingEditStatus: { not: null } },
+      ],
+    });
+  }
+
+  if (input.familyFriendly) {
+    and.push({
+      OR: [{ childrenAllowed: true }, { pendingEditStatus: { not: null } }],
+    });
+  }
+
+  if (input.petsAllowed) {
+    and.push({
+      OR: [
+        { petsPolicy: { in: [PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED] } },
+        { pendingEditStatus: { not: null } },
+      ],
+    });
+  }
+
+  if (input.smokingForbidden) {
+    and.push({
+      OR: [{ smokingPolicy: SmokingPolicy.FORBIDDEN }, { pendingEditStatus: { not: null } }],
+    });
+  }
+
+  if (input.quietHours) {
+    and.push({
+      OR: [{ quietHoursEnabled: true }, { pendingEditStatus: { not: null } }],
+    });
+  }
+
+  return { AND: and };
+}
+
+function shouldUsePropertyCandidateStage(input: {
+  type: string | null;
+  searchQuery: string;
+  hasLocationSearchScope: boolean;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minRating: number | null;
+  hasReviews: boolean;
+  hasPhotos: boolean;
+  familyFriendly: boolean;
+  petsAllowed: boolean;
+  smokingForbidden: boolean;
+  quietHours: boolean;
+  bounds: MapBounds | null;
+}): boolean {
+  return (
+    input.type !== null ||
+    input.searchQuery.trim().length >= 2 ||
+    input.hasLocationSearchScope ||
+    input.minPrice !== null ||
+    input.maxPrice !== null ||
+    input.minRating !== null ||
+    input.hasReviews ||
+    input.hasPhotos ||
+    input.familyFriendly ||
+    input.petsAllowed ||
+    input.smokingForbidden ||
+    input.quietHours ||
+    input.bounds !== null
+  );
+}
+
+async function getPropertyCandidateStage(input: {
+  baseWhere: Prisma.PropertyWhereInput;
+  pageSize: number;
+  candidateLimit: number;
+  type: string | null;
+  searchQuery: string;
+  resolvedLocation: ResolvedLocation | null;
+  locationText: string;
+  locationCenterPoint: CatalogGeoPoint | null;
+  hasLocationSearchScope: boolean;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minRating: number | null;
+  hasReviews: boolean;
+  hasPhotos: boolean;
+  familyFriendly: boolean;
+  petsAllowed: boolean;
+  smokingForbidden: boolean;
+  quietHours: boolean;
+  bounds: MapBounds | null;
+}): Promise<CandidateStageResult> {
+  if (
+    !isSearchDbPrefilterEnabled("SEARCH_PROPERTY_DB_PREFILTER") ||
+    !shouldUsePropertyCandidateStage(input)
+  ) {
+    return disabledCandidateStage();
+  }
+
+  const limit = getSearchDbPrefilterLimit({
+    envName: "SEARCH_PROPERTY_DB_PREFILTER_LIMIT",
+    fallback: PROPERTY_DB_PREFILTER_DEFAULT_LIMIT,
+    min: Math.min(100, input.candidateLimit),
+    max: input.candidateLimit,
+    pageSize: input.pageSize,
+    candidateLimit: input.candidateLimit,
+  });
+  const startedAt = getNowMs();
+
+  try {
+    const rows = await db.property.findMany({
+      where: buildPropertyDbPrefilterWhere(input),
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }],
+      take: limit,
+    });
+    const durationMs = Math.round(getNowMs() - startedAt);
+    const ids = rows.map((row) => row.id);
+    const shouldFallbackForSparseText =
+      input.searchQuery.trim().length >= 2 &&
+      ids.length < Math.min(PROPERTY_TEXT_PREFILTER_FALLBACK_MIN, limit);
+
+    return {
+      ids: shouldFallbackForSparseText ? null : ids,
+      enabled: true,
+      usedFallback: shouldFallbackForSparseText,
+      durationMs,
+      idsCount: ids.length,
+    };
+  } catch {
+    return {
+      ids: null,
+      enabled: true,
+      usedFallback: true,
+      durationMs: Math.round(getNowMs() - startedAt),
+      idsCount: null,
+    };
+  }
+}
 
 const catalogRoomPriceSelect = Prisma.validator<Prisma.RoomPriceSelect>()({
   dateFrom: true,
@@ -273,6 +638,8 @@ export type PublicPropertyCard = {
   };
   contacts: {
     phone: string | null;
+    phoneMasked: string | null;
+    phoneAvailable: boolean;
     phoneName: string | null;
     phone2: string | null;
     phone2Name: string | null;
@@ -280,11 +647,13 @@ export type PublicPropertyCard = {
     phone3Name: string | null;
     websiteUrl: string | null;
     email: string | null;
+    emailAvailable: boolean;
     whatsappUrl: string | null;
     telegramUrl: string | null;
     vkUrl: string | null;
     maxUrl: string | null;
     okUrl: string | null;
+    messengerAvailable: boolean;
     receiveRequests: boolean;
   };
   rules: {
@@ -925,7 +1294,7 @@ export function resolvePublicCatalogDisplayState(property: {
         areaSqm: room.areaSqm,
         prices:
           livePricesByRoomId.get(room.id) ??
-      room.prices.map((price) => ({
+          room.prices.map((price) => ({
             dateFrom: price.dateFrom,
             dateTo: price.dateTo,
             price: price.price,
@@ -1000,8 +1369,7 @@ export function resolvePublicCatalogDisplayState(property: {
     childrenAllowed: snapshot?.property.childrenAllowed ?? property.childrenAllowed,
     petsPolicy: snapshot?.property.petsPolicy ?? property.petsPolicy,
     smokingPolicy: snapshot?.property.smokingPolicy ?? property.smokingPolicy ?? null,
-    quietHoursEnabled:
-      snapshot?.property.quietHoursEnabled ?? property.quietHoursEnabled ?? null,
+    quietHoursEnabled: snapshot?.property.quietHoursEnabled ?? property.quietHoursEnabled ?? null,
     parkingInfo: snapshot?.property.parkingInfo ?? property.parkingInfo ?? null,
     mealOptions: snapshot?.property.mealOptions ?? property.mealOptions ?? null,
     starRating: snapshot?.property.starRating ?? property.starRating ?? 0,
@@ -1586,11 +1954,7 @@ const seaAmenityIds = new Set(["beach_access"]);
 const poolAmenityIds = new Set(["pool"]);
 const poolRoomFeatureIds = new Set(["pool"]);
 const kitchenAmenityIds = new Set(["shared_kitchen"]);
-const kitchenRoomFeatureIds = new Set([
-  "private_kitchen",
-  "kitchenette",
-  "shared_kitchen",
-]);
+const kitchenRoomFeatureIds = new Set(["private_kitchen", "kitchenette", "shared_kitchen"]);
 const airConditionerRoomFeatureIds = new Set(["air_conditioner"]);
 const parkingAmenityIds = new Set(["parking"]);
 
@@ -1700,6 +2064,10 @@ function buildEmptyPublicCatalogResult(input: {
     pageSize: input.pageSize,
     total: 0,
     totalPages: 1,
+    priceBounds: {
+      min: 0,
+      max: 0,
+    },
     filters: {
       locationId: input.resolvedLocation?.id ?? null,
       locationName: input.resolvedLocation?.name ?? null,
@@ -1737,6 +2105,18 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     Math.max(pageSize, query.candidateLimit ?? CATALOG_CANDIDATE_LIMIT),
   );
   const searchQuery = query.query?.trim() ?? "";
+  const finishPerf = createSearchPerformanceTimer("getPublicCatalog", {
+    direction: "housing",
+    page,
+    pageSize,
+    queryLength: searchQuery.length,
+    allowLargePageSize: query.allowLargePageSize === true,
+  });
+  let perfCandidateCount: number | null = null;
+  let perfCandidateStageDurationMs: number | null = null;
+  let perfCandidateIdsCount: number | null = null;
+  let perfUsedFallback = false;
+  let perfPrefilterEnabled = false;
   const stayRange = resolveCatalogStayRange(query.checkIn, query.checkOut);
   const catalogRoomPriceArgs = buildCatalogRoomPriceArgs(stayRange);
   const guestsCount =
@@ -1802,15 +2182,16 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
     : null;
   const hasLocationSearchScope = Boolean(resolvedLocation || locationCenterPoint);
 
-  return loadDataWithDatabaseFallback(
-    {
-      contextId: "public-housing-catalog",
-      unavailableMessage:
-        "Public housing catalog: database is unavailable. Returning empty search results.",
-      fallbackEligibleMessage:
-        "Public housing catalog: database is unavailable or credentials are invalid. Returning empty search results.",
-    },
-    async () => {
+  try {
+    const result = await loadDataWithDatabaseFallback(
+      {
+        contextId: "public-housing-catalog",
+        unavailableMessage:
+          "Public housing catalog: database is unavailable. Returning empty search results.",
+        fallbackEligibleMessage:
+          "Public housing catalog: database is unavailable or credentials are invalid. Returning empty search results.",
+      },
+      async () => {
       const where: Prisma.PropertyWhereInput = {
         ...buildPublicCatalogPropertyVisibilityWhere(),
         ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
@@ -1822,6 +2203,31 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
             }
           : {}),
       };
+      const propertyCandidateStage = await getPropertyCandidateStage({
+        baseWhere: where,
+        pageSize,
+        candidateLimit,
+        type,
+        searchQuery,
+        resolvedLocation,
+        locationText: resolvedLocation?.name ?? locationFilter ?? locationFilterId ?? "",
+        locationCenterPoint,
+        hasLocationSearchScope,
+        minPrice,
+        maxPrice,
+        minRating,
+        hasReviews,
+        hasPhotos,
+        familyFriendly,
+        petsAllowed,
+        smokingForbidden,
+        quietHours,
+        bounds,
+      });
+      perfCandidateStageDurationMs = propertyCandidateStage.durationMs;
+      perfCandidateIdsCount = propertyCandidateStage.idsCount;
+      perfUsedFallback = propertyCandidateStage.usedFallback;
+      perfPrefilterEnabled = propertyCandidateStage.enabled;
 
       const catalogSelect = Prisma.validator<Prisma.PropertySelect>()({
         id: true,
@@ -1915,12 +2321,27 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       }>;
       // Step 1: fetch broad candidate pool with lightweight joins.
       // Fine-grained ranking/sorting is applied in memory because it mixes trigram score + dynamic stay pricing.
-      const allProperties: CatalogPropertyRow[] = await db.property.findMany({
-        where,
-        orderBy: [{ updatedAt: "desc" }],
-        select: catalogSelect,
-        take: candidateLimit,
-      });
+      const allProperties: CatalogPropertyRow[] =
+        propertyCandidateStage.ids?.length === 0
+          ? []
+          : await db.property.findMany({
+              where: propertyCandidateStage.ids
+                ? {
+                    AND: [
+                      where,
+                      {
+                        id: {
+                          in: propertyCandidateStage.ids,
+                        },
+                      },
+                    ],
+                  }
+                : where,
+              orderBy: [{ updatedAt: "desc" }],
+              select: catalogSelect,
+              take: propertyCandidateStage.ids ? propertyCandidateStage.ids.length : candidateLimit,
+            });
+      perfCandidateCount = allProperties.length;
       const rankingStatsById = await getRankingStatsByEntity(
         "property",
         allProperties.map((property) => property.id),
@@ -1955,6 +2376,17 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       const catalogDisplayStateById = new Map(
         allProperties.map((property) => [property.id, resolvePublicCatalogDisplayState(property)]),
       );
+      let catalogMaxPrice = 0;
+      for (const displayState of catalogDisplayStateById.values()) {
+        for (const room of displayState.rooms) {
+          for (const price of room.prices) {
+            const value = Number(price.price);
+            if (Number.isFinite(value) && value > catalogMaxPrice) {
+              catalogMaxPrice = value;
+            }
+          }
+        }
+      }
 
       const queryVariants = toSearchVariants(searchQuery);
       const trigramScoreMap =
@@ -2286,10 +2718,11 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
       const safePage = Math.min(page, totalPages);
       const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
       const pagedPropertyIds = pagedRows.map((entry) => entry.property.id);
-      const shouldTrackSearchImpressions = query.trackSearchImpressions !== false;
+      const shouldTrackSearchImpressions =
+        query.trackSearchImpressions !== false && areSearchImpressionWritesEnabled();
 
-      // Fire-and-forget: track paginated exposure for CTR/exposure balancing.
-      // Impressions are never added as a positive ranking factor.
+      // Fire-and-forget writes inside a read path can amplify search traffic into DB writes;
+      // keep them behind SEARCH_IMPRESSION_WRITES=false for staging/load tests and incidents.
       if (shouldTrackSearchImpressions && pagedPropertyIds.length > 0) {
         db.property
           .updateMany({
@@ -2534,6 +2967,10 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
         pageSize,
         total,
         totalPages,
+        priceBounds: {
+          min: 0,
+          max: catalogMaxPrice,
+        },
         filters: {
           locationId: resolvedLocation?.id ?? null,
           locationName: resolvedLocation?.name ?? null,
@@ -2559,33 +2996,84 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           nearbyRadiusKm: hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
         },
       };
-    },
-    () =>
-      buildEmptyPublicCatalogResult({
-        pageSize,
-        resolvedLocation,
-        type,
-        searchQuery,
-        minPrice,
-        maxPrice,
-        minRating,
-        hasPhotos,
-        hasReviews,
-        familyFriendly,
-        petsAllowed,
-        nearSea,
-        hasPool,
-        hasKitchen,
-        hasAirConditioner,
-        hasParking,
-        smokingForbidden,
-        quietHours,
-        amenityIds,
-        roomFeatureIds,
-        sort,
-        hasLocationSearchScope,
-      }),
-  );
+      },
+      () =>
+        buildEmptyPublicCatalogResult({
+          pageSize,
+          resolvedLocation,
+          type,
+          searchQuery,
+          minPrice,
+          maxPrice,
+          minRating,
+          hasPhotos,
+          hasReviews,
+          familyFriendly,
+          petsAllowed,
+          nearSea,
+          hasPool,
+          hasKitchen,
+          hasAirConditioner,
+          hasParking,
+          smokingForbidden,
+          quietHours,
+          amenityIds,
+          roomFeatureIds,
+          sort,
+          hasLocationSearchScope,
+        }),
+    );
+
+    finishPerf({
+      returned: result.items.length,
+      count: result.total,
+      candidates: perfCandidateCount,
+      candidateStageDurationMs: perfCandidateStageDurationMs,
+      candidateIdsCount: perfCandidateIdsCount,
+      heavyRowsFetched: perfCandidateCount,
+      finalReturned: result.items.length,
+      usedFallback: perfUsedFallback,
+      prefilterEnabled: perfPrefilterEnabled,
+      candidateLimit,
+      hasFilters:
+        searchQuery.length > 0 ||
+        hasExplicitLocationFilter ||
+        type !== null ||
+        minPrice !== null ||
+        maxPrice !== null ||
+        minRating !== null ||
+        hasPhotos ||
+        hasReviews ||
+        familyFriendly ||
+        petsAllowed ||
+        nearSea ||
+        hasPool ||
+        hasKitchen ||
+        hasAirConditioner ||
+        hasParking ||
+        smokingForbidden ||
+        quietHours ||
+        amenityIds.length > 0 ||
+        roomFeatureIds.length > 0 ||
+        bounds !== null,
+      status: 200,
+    });
+
+    return result;
+  } catch (error) {
+    finishPerf({
+      candidates: perfCandidateCount,
+      candidateStageDurationMs: perfCandidateStageDurationMs,
+      candidateIdsCount: perfCandidateIdsCount,
+      heavyRowsFetched: perfCandidateCount,
+      usedFallback: perfUsedFallback,
+      prefilterEnabled: perfPrefilterEnabled,
+      candidateLimit,
+      status: 500,
+      errorStatus: 500,
+    });
+    throw error;
+  }
 }
 
 const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
@@ -2627,6 +3115,7 @@ const publicPropertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
       status: ReviewStatus.ACTIVE,
     },
     orderBy: [{ createdAt: "desc" }],
+    take: PUBLIC_REVIEWS_PAGE_SIZE,
     include: {
       user: {
         select: {
@@ -2693,7 +3182,7 @@ function getPropertyIdentifierState(
   };
 }
 
-async function findPropertyIdByPublicSlug(input: {
+async function findPropertyIdByPublicSlugUncached(input: {
   identifier: string;
   expectedLocationId?: string | null;
   ownerId?: string | null;
@@ -2728,6 +3217,45 @@ async function findPropertyIdByPublicSlug(input: {
   return match?.id ?? null;
 }
 
+export async function findPropertyIdByPublicSlug(input: {
+  identifier: string;
+  expectedLocationId?: string | null;
+  ownerId?: string | null;
+  usePublishedSnapshot?: boolean;
+}): Promise<string | null> {
+  const slug = slugify(input.identifier);
+  if (!slug) {
+    return null;
+  }
+
+  if (input.ownerId) {
+    return findPropertyIdByPublicSlugUncached(input);
+  }
+
+  const finishPerf = createSearchPerformanceTimer("propertySlugLookup", {
+    entityType: "property",
+  });
+  const result = await resolveCachedPublicSlugLookup({
+    cacheKey: buildPublicSlugCacheKey([
+      "property",
+      slug,
+      input.expectedLocationId ?? "",
+      input.usePublishedSnapshot === false ? "live" : "published",
+    ]),
+    lookup: () => findPropertyIdByPublicSlugUncached(input),
+  });
+
+  finishPerf({
+    slugCacheHit: result.cacheHit,
+    slugCacheMiss: !result.cacheHit,
+    lookupDurationMs: result.lookupDurationMs,
+    ttlMs: result.ttlMs,
+    status: result.value ? 200 : 404,
+  });
+
+  return result.value;
+}
+
 async function getReviewReactionById(
   property: Pick<PublicPropertyRecord, "reviews">,
   viewerUserId?: string | null,
@@ -2756,7 +3284,7 @@ async function getReviewReactionById(
 function buildPublicPropertyCardFromRecord(
   property: PublicPropertyRecord,
   reviewReactionById: Map<string, "LIKE" | "DISLIKE"> | null,
-  options?: { usePublishedSnapshot?: boolean },
+  options?: { usePublishedSnapshot?: boolean; redactContacts?: boolean },
 ): PublicPropertyCard {
   // When a published property has a pending owner edit under moderation, serve the
   // published snapshot (last approved version) instead of the live (unmoderated) data.
@@ -2843,6 +3371,52 @@ function buildPublicPropertyCardFromRecord(
 
   const displayContactEmail = sp !== null ? sp.contactEmail : property.contactEmail;
   const displayShowEmail = sp !== null ? sp.showEmail : property.showEmail;
+  const contacts = {
+    phone: sp?.phone ?? property.phone,
+    phoneName: sp?.phoneName ?? property.phoneName,
+    phone2: sp?.phone2 ?? property.phone2,
+    phone2Name: sp?.phone2Name ?? property.phone2Name,
+    phone3: sp?.phone3 ?? property.phone3,
+    phone3Name: sp?.phone3Name ?? property.phone3Name,
+    websiteUrl: sp?.websiteUrl ?? property.websiteUrl,
+    email: displayContactEmail ?? (displayShowEmail ? property.owner.email : null),
+    whatsappUrl: sp?.whatsappUrl ?? property.whatsappUrl,
+    telegramUrl: sp?.telegramUrl ?? property.telegramUrl,
+    vkUrl: sp?.vkUrl ?? property.vkUrl,
+    maxUrl: sp?.maxUrl ?? property.maxUrl,
+    okUrl: sp?.okUrl ?? property.okUrl,
+    receiveRequests: sp?.receiveRequests ?? property.receiveRequests,
+  };
+  const redactContacts = options?.redactContacts !== false;
+  const redactedContactFields = buildRedactedPublicContactFields(contacts);
+  const publicContacts = redactContacts
+    ? {
+        phone: null,
+        phoneMasked: redactedContactFields.phoneMasked,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        phoneName: null,
+        phone2: null,
+        phone2Name: null,
+        phone3: null,
+        phone3Name: null,
+        websiteUrl: contacts.websiteUrl,
+        email: null,
+        emailAvailable: redactedContactFields.emailAvailable,
+        whatsappUrl: null,
+        telegramUrl: null,
+        vkUrl: null,
+        maxUrl: null,
+        okUrl: null,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+        receiveRequests: contacts.receiveRequests,
+      }
+    : {
+        ...contacts,
+        phoneMasked: contacts.phone,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        emailAvailable: redactedContactFields.emailAvailable,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+      };
 
   return {
     id: property.id,
@@ -2870,22 +3444,7 @@ function buildPublicPropertyCardFromRecord(
     customAmenities: displayCustomAmenities,
     amenityHighlights,
     amenityGroups,
-    contacts: {
-      phone: sp?.phone ?? property.phone,
-      phoneName: sp?.phoneName ?? property.phoneName,
-      phone2: sp?.phone2 ?? property.phone2,
-      phone2Name: sp?.phone2Name ?? property.phone2Name,
-      phone3: sp?.phone3 ?? property.phone3,
-      phone3Name: sp?.phone3Name ?? property.phone3Name,
-      websiteUrl: sp?.websiteUrl ?? property.websiteUrl,
-      email: displayContactEmail ?? (displayShowEmail ? property.owner.email : null),
-      whatsappUrl: sp?.whatsappUrl ?? property.whatsappUrl,
-      telegramUrl: sp?.telegramUrl ?? property.telegramUrl,
-      vkUrl: sp?.vkUrl ?? property.vkUrl,
-      maxUrl: sp?.maxUrl ?? property.maxUrl,
-      okUrl: sp?.okUrl ?? property.okUrl,
-      receiveRequests: sp?.receiveRequests ?? property.receiveRequests,
-    },
+    contacts: publicContacts,
     rules: {
       checkInFrom: sp?.checkInFrom ?? property.checkInFrom,
       checkOutUntil: sp?.checkOutUntil ?? property.checkOutUntil,
@@ -2992,6 +3551,7 @@ export async function getPublicPropertyByIdentifier(
   const item = await applyExternalImportedReviewsToPropertyCard(
     buildPublicPropertyCardFromRecord(property, reviewReactionById, {
       usePublishedSnapshot: true,
+      redactContacts: true,
     }),
     property.id,
     viewerUserId,
@@ -3040,6 +3600,7 @@ export async function getOwnerPreviewPropertyByIdentifier(
   const item = await applyExternalImportedReviewsToPropertyCard(
     buildPublicPropertyCardFromRecord(property, reviewReactionById, {
       usePublishedSnapshot: false,
+      redactContacts: false,
     }),
     property.id,
     viewerUserId,

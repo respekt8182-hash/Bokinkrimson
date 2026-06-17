@@ -18,7 +18,7 @@ function getEnvAdminItem() {
     id: "env-admin",
     login: getAdminLoginValue(),
     email: null,
-    displayName: "Администратор",
+    displayName: "Главный администратор",
     avatarUrl: null,
     role: "SUPER_ADMIN" as AdminRoleValue,
     roleLabel: adminRoleLabels.SUPER_ADMIN,
@@ -168,6 +168,13 @@ export async function POST(request: Request) {
   if (temporaryPassword.length < 8) {
     return NextResponse.json(
       { error: "Пароль должен быть не короче 8 символов." },
+      { status: 400 },
+    );
+  }
+
+  if (role === "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Главный администратор уже существует и создаётся только из кода." },
       { status: 400 },
     );
   }

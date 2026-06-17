@@ -5,7 +5,12 @@ import { ExcursionSearchResults } from "@/components/public/excursion-search-res
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getExcursionSeoDirectoryData, getPublicExcursionCatalog } from "@/lib/public-excursions";
+import {
+  getPublicExcursionCatalogOverview,
+  getPublicHousingCatalogOverview,
+} from "@/lib/public-catalog-overview";
 import { getPublicCatalog } from "@/lib/public-properties";
+import { createSearchPerformanceTimer } from "@/lib/performance-logging";
 import {
   getPopularExcursionSuggestions,
   getPopularHousingSuggestions,
@@ -27,10 +32,8 @@ export const revalidate = 0;
 
 const getCachedExcursionCatalogOverview = unstable_cache(
   async (offerType: "excursion" | "tour") =>
-    getPublicExcursionCatalog({
+    getPublicExcursionCatalogOverview({
       offerType,
-      page: 1,
-      pageSize: 1,
     }),
   ["search-excursion-catalog-overview-v1"],
   {
@@ -41,13 +44,19 @@ const getCachedExcursionCatalogOverview = unstable_cache(
 
 const getCachedHousingLocationOverview = unstable_cache(
   async (location: string) =>
-    getPublicCatalog({
+    getPublicHousingCatalogOverview({
       location,
-      page: 1,
-      pageSize: 1,
-      trackSearchImpressions: false,
     }),
   ["search-housing-location-overview-v1"],
+  {
+    revalidate: 300,
+    tags: ["public-housing-catalog"],
+  },
+);
+
+const getCachedHousingCatalogOverview = unstable_cache(
+  async () => getPublicHousingCatalogOverview(),
+  ["search-housing-catalog-overview-v1"],
   {
     revalidate: 300,
     tags: ["public-housing-catalog"],
@@ -86,24 +95,6 @@ function pickList(value: string | string[] | undefined): string[] {
   return result;
 }
 
-function CatalogSeoHeader({
-  heading,
-}: {
-  heading: string;
-}) {
-  return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
-      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold leading-tight text-olive md:text-3xl">
-            {heading}
-          </h1>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function toLocationSuggestions(
   items: Array<{
     type: string;
@@ -136,6 +127,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const seoState = await getSearchSeoState(params);
   const normalizedDirection = seoState.direction;
   const direction = normalizedDirection === "housing" ? "housing" : "excursions";
+  const finishPerf = createSearchPerformanceTimer("/search", {
+    direction,
+  });
   const [
     locationDirectory,
     excursionSeoDirectory,
@@ -202,11 +196,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const nearSea = nearSeaRaw === "1" || nearSeaRaw === "true";
   const hasPool = hasPoolRaw === "1" || hasPoolRaw === "true";
   const hasKitchen = hasKitchenRaw === "1" || hasKitchenRaw === "true";
-  const hasAirConditioner =
-    hasAirConditionerRaw === "1" || hasAirConditionerRaw === "true";
+  const hasAirConditioner = hasAirConditionerRaw === "1" || hasAirConditionerRaw === "true";
   const hasParking = hasParkingRaw === "1" || hasParkingRaw === "true";
-  const smokingForbidden =
-    smokingForbiddenRaw === "1" || smokingForbiddenRaw === "true";
+  const smokingForbidden = smokingForbiddenRaw === "1" || smokingForbiddenRaw === "true";
   const quietHours = quietHoursRaw === "1" || quietHoursRaw === "true";
   const bounds = parseBoundsParam(pick(params.bounds));
   const pageRaw = Number.parseInt(pick(params.page) || "1", 10);
@@ -261,6 +253,28 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       }),
       getCachedExcursionCatalogOverview(catalogOfferType),
     ]);
+    finishPerf({
+      page,
+      pageSize: 30,
+      returned: result.items.length,
+      count: result.total,
+      queryLength: textQuery.trim().length,
+      hasFilters:
+        textQuery.trim().length > 0 ||
+        location.trim().length > 0 ||
+        district.trim().length > 0 ||
+        category.trim().length > 0 ||
+        format.trim().length > 0 ||
+        durationBucket.trim().length > 0 ||
+        language.trim().length > 0 ||
+        difficulty.trim().length > 0 ||
+        pickup === "1" ||
+        pickup === "true" ||
+        kids === "1" ||
+        kids === "true" ||
+        Boolean(minPrice || maxPrice || checkIn || checkOut || bounds),
+      status: 200,
+    });
     return (
       <>
         {canEmitSearchSchema ? (
@@ -281,8 +295,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </>
         ) : null}
 
-        <CatalogSeoHeader heading={seoState.heading} />
-
         <ExcursionSearchResults
           items={result.items}
           filters={result.filters}
@@ -293,6 +305,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           initialPopularLocationSuggestions={popularExcursionLocationSuggestions}
           catalogDirection={normalizedDirection === "tours" ? "tours" : "excursions"}
           catalogActiveTotal={catalogOverview.total}
+          catalogPriceMax={catalogOverview.priceBounds.max}
         />
       </>
     );
@@ -314,42 +327,71 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       : "";
 
   const shouldCheckLocationHousing = Boolean(location.trim());
-  const [initialHousingResult, locationHousingOverview] = await Promise.all([
-    getPublicCatalog({
-      query: textQuery,
-      location,
-      type: propertyType || undefined,
-      checkIn: checkIn || undefined,
-      checkOut: checkOut || undefined,
-      guests: Number.isFinite(guestsCountRaw) ? Math.max(1, guestsCountRaw) : 1,
-      minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
-      maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
-      minRating: normalizedMinRating,
-      hasPhotos,
-      hasReviews,
-      familyFriendly,
-      petsAllowed,
-      nearSea,
-      hasPool,
-      hasKitchen,
-      hasAirConditioner,
-      hasParking,
-      smokingForbidden,
-      quietHours,
-      amenityIds,
-      roomFeatureIds,
-      sort: normalizedSort || undefined,
-      bounds,
-      page,
-      pageSize: 30,
-    }),
-    shouldCheckLocationHousing
-      ? getCachedHousingLocationOverview(location)
-      : Promise.resolve(null),
-  ]);
+  const [initialHousingResult, locationHousingOverview, housingCatalogOverview] = await Promise.all(
+    [
+      getPublicCatalog({
+        query: textQuery,
+        location,
+        type: propertyType || undefined,
+        checkIn: checkIn || undefined,
+        checkOut: checkOut || undefined,
+        guests: Number.isFinite(guestsCountRaw) ? Math.max(1, guestsCountRaw) : 1,
+        minPrice: Number.parseFloat(minPrice) > 0 ? Number.parseFloat(minPrice) : undefined,
+        maxPrice: Number.parseFloat(maxPrice) > 0 ? Number.parseFloat(maxPrice) : undefined,
+        minRating: normalizedMinRating,
+        hasPhotos,
+        hasReviews,
+        familyFriendly,
+        petsAllowed,
+        nearSea,
+        hasPool,
+        hasKitchen,
+        hasAirConditioner,
+        hasParking,
+        smokingForbidden,
+        quietHours,
+        amenityIds,
+        roomFeatureIds,
+        sort: normalizedSort || undefined,
+        bounds,
+        page,
+        pageSize: 30,
+      }),
+      shouldCheckLocationHousing
+        ? getCachedHousingLocationOverview(location)
+        : Promise.resolve(null),
+      getCachedHousingCatalogOverview(),
+    ],
+  );
 
   const initialSortParam =
     initialHousingResult.filters.sort === "relevance" ? "" : initialHousingResult.filters.sort;
+  finishPerf({
+    page,
+    pageSize: 30,
+    returned: initialHousingResult.items.length,
+    count: initialHousingResult.total,
+    queryLength: textQuery.trim().length,
+    hasFilters:
+      textQuery.trim().length > 0 ||
+      location.trim().length > 0 ||
+      propertyType.trim().length > 0 ||
+      Boolean(checkIn || checkOut || minPrice || maxPrice || minRating || bounds) ||
+      hasPhotos ||
+      hasReviews ||
+      familyFriendly ||
+      petsAllowed ||
+      nearSea ||
+      hasPool ||
+      hasKitchen ||
+      hasAirConditioner ||
+      hasParking ||
+      smokingForbidden ||
+      quietHours ||
+      amenityIds.length > 0 ||
+      roomFeatureIds.length > 0,
+    status: 200,
+  });
   return (
     <>
       {canEmitSearchSchema ? (
@@ -369,8 +411,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           />
         </>
       ) : null}
-
-      <CatalogSeoHeader heading={seoState.heading} />
 
       <HousingCatalogClient
         initialResponse={{
@@ -416,6 +456,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           initialHousingResult.filters.locationName ?? (location || "весь Крым")
         }
         initialLocationActiveHousingCount={locationHousingOverview?.total ?? null}
+        initialPriceMax={housingCatalogOverview.priceBounds.max}
       />
     </>
   );

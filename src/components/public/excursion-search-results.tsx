@@ -100,6 +100,7 @@ export type ExcursionSearchResultsProps = {
   initialPopularLocationSuggestions: ExcursionLocationSuggestionItem[];
   catalogDirection?: "excursions" | "tours";
   catalogActiveTotal?: number;
+  catalogPriceMax?: number;
 };
 
 type ExcursionLocationSuggestionSection = "recent" | "popular" | "matches";
@@ -162,7 +163,7 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
-const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 320;
 const MAP_BOUNDS_PRECISION = 4;
 const SEARCH_LOCATION_MAP_ZOOM = 10;
 
@@ -200,6 +201,24 @@ function formatRuCount(value: number, one: string, few: string, many: string): s
 
 function formatMoney(value: number): string {
   return `${rubFormatter.format(Math.round(value))} ₽`;
+}
+
+function getExcursionPriceMaxBound(value: number | undefined): number {
+  const raw =
+    Number.isFinite(value) && value && value > 0 ? value : DEFAULT_EXCURSION_PRICE_MAX_BOUND;
+  return Math.max(
+    EXCURSION_PRICE_STEP,
+    Math.ceil(raw / EXCURSION_PRICE_STEP) * EXCURSION_PRICE_STEP,
+  );
+}
+
+function normalizePriceInput(value: string): string {
+  return value.replace(/[^\d]/g, "").slice(0, 8);
+}
+
+function parsePriceInput(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function pluralizeReviews(count: number): string {
@@ -414,7 +433,7 @@ const sortOptions = [
 ] as const;
 
 const EXCURSION_PRICE_MIN_BOUND = 0;
-const EXCURSION_PRICE_MAX_BOUND = 100_000;
+const DEFAULT_EXCURSION_PRICE_MAX_BOUND = 100_000;
 const EXCURSION_PRICE_STEP = 100;
 const DATE_PANEL_WIDTH = 840;
 const DATE_PANEL_MAX_HEIGHT = 720;
@@ -899,6 +918,7 @@ export function ExcursionSearchResults({
   initialPopularLocationSuggestions,
   catalogDirection = "excursions",
   catalogActiveTotal,
+  catalogPriceMax,
 }: ExcursionSearchResultsProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -921,6 +941,7 @@ export function ExcursionSearchResults({
   const [difficulty, setDifficulty] = useState(filters.difficulty ?? "");
   const [minPrice, setMinPrice] = useState(filters.minPrice ? String(filters.minPrice) : "");
   const [maxPrice, setMaxPrice] = useState(filters.maxPrice ? String(filters.maxPrice) : "");
+  const priceMaxBound = getExcursionPriceMaxBound(catalogPriceMax);
   const [radiusKm, setRadiusKm] = useState(String(filters.radiusKm));
   const [pickup, setPickup] = useState(filters.pickup ?? false);
   const [kids, setKids] = useState(filters.kids ?? false);
@@ -956,6 +977,9 @@ export function ExcursionSearchResults({
   const [totalCount, setTotalCount] = useState(pagination.total);
   const [totalPages, setTotalPages] = useState(pagination.totalPages);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
+  const loadMoreAbortControllerRef = useRef<AbortController | null>(null);
+  const loadMoreRequestSeqRef = useRef(0);
   const searchRequestSeqRef = useRef(0);
   const hasMore = loadedPage < totalPages;
   const remaining = Math.max(0, totalCount - displayItems.length);
@@ -1105,6 +1129,9 @@ export function ExcursionSearchResults({
     setTotalCount(pagination.total);
     setTotalPages(pagination.totalPages);
     setIsLoadingMore(false);
+    setLoadMoreError("");
+    loadMoreAbortControllerRef.current?.abort();
+    loadMoreAbortControllerRef.current = null;
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
@@ -1209,6 +1236,7 @@ export function ExcursionSearchResults({
       if (mapBoundsRefreshTimerRef.current !== null) {
         window.clearTimeout(mapBoundsRefreshTimerRef.current);
       }
+      loadMoreAbortControllerRef.current?.abort();
       mapBoundsAbortControllerRef.current?.abort();
     };
   }, []);
@@ -1964,7 +1992,14 @@ export function ExcursionSearchResults({
   // ── Load more ─────────────────────────────────────────────────────────────────
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
+    loadMoreAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadMoreAbortControllerRef.current = controller;
+    loadMoreRequestSeqRef.current += 1;
+    const requestId = loadMoreRequestSeqRef.current;
     setIsLoadingMore(true);
+    setLoadMoreError("");
+
     try {
       const p = buildExcursionSearchParams(filters, {
         page: loadedPage + 1,
@@ -1972,7 +2007,14 @@ export function ExcursionSearchResults({
         bounds: mapBoundsFilterRef.current,
       });
 
-      const response = await fetch(`/api/search/excursions?${p.toString()}`);
+      const response = await fetchWithRetry(`/api/search/excursions?${p.toString()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+        retries: 1,
+        retryDelayMs: 450,
+        timeoutMs: 9_000,
+      });
       if (!response.ok) throw new Error("fetch_failed");
       const data = (await response.json()) as {
         items: PublicExcursionCatalogItem[];
@@ -1980,14 +2022,26 @@ export function ExcursionSearchResults({
         total: number;
         total_pages: number;
       };
+
+      if (controller.signal.aborted || requestId !== loadMoreRequestSeqRef.current) {
+        return;
+      }
+
       setDisplayItems((prev) => [...prev, ...data.items]);
       setLoadedPage(data.page);
       setTotalCount(data.total);
       setTotalPages(data.total_pages);
     } catch {
-      // silent — keep button visible for retry
+      if (!controller.signal.aborted && requestId === loadMoreRequestSeqRef.current) {
+        setLoadMoreError("Не удалось загрузить следующую страницу. Попробуйте ещё раз.");
+      }
     } finally {
-      setIsLoadingMore(false);
+      if (requestId === loadMoreRequestSeqRef.current) {
+        setIsLoadingMore(false);
+        if (loadMoreAbortControllerRef.current === controller) {
+          loadMoreAbortControllerRef.current = null;
+        }
+      }
     }
   }, [isLoadingMore, hasMore, loadedPage, filters]);
 
@@ -2375,6 +2429,23 @@ export function ExcursionSearchResults({
   // ── Apply filters ─────────────────────────────────────────────────────────────
   const applyFilters = useCallback(
     (overrides: Record<string, string> = {}) => {
+      const rawMin = parsePriceInput(overrides.minPrice ?? minPrice);
+      const rawMax = parsePriceInput(overrides.maxPrice ?? maxPrice);
+      let safeMin =
+        rawMin === null
+          ? EXCURSION_PRICE_MIN_BOUND
+          : clamp(rawMin, EXCURSION_PRICE_MIN_BOUND, priceMaxBound);
+      let safeMax =
+        rawMax === null ? priceMaxBound : clamp(rawMax, EXCURSION_PRICE_MIN_BOUND, priceMaxBound);
+
+      if (safeMin > safeMax) {
+        if (rawMax !== null) {
+          safeMin = safeMax;
+        } else {
+          safeMax = safeMin;
+        }
+      }
+
       // URL is the source of truth: push a new search URL and let server return canonical filters.
       const params: Record<string, string> = {
         q: query,
@@ -2389,8 +2460,8 @@ export function ExcursionSearchResults({
         durationBucket,
         language,
         difficulty,
-        minPrice,
-        maxPrice,
+        minPrice: safeMin > EXCURSION_PRICE_MIN_BOUND ? String(safeMin) : "",
+        maxPrice: safeMax < priceMaxBound ? String(safeMax) : "",
         radiusKm,
         pickup: pickup ? "1" : "",
         kids: kids ? "1" : "",
@@ -2398,6 +2469,8 @@ export function ExcursionSearchResults({
         page: "1",
         ...overrides,
       };
+      params.minPrice = safeMin > EXCURSION_PRICE_MIN_BOUND ? String(safeMin) : "";
+      params.maxPrice = safeMax < priceMaxBound ? String(safeMax) : "";
       const nextDirection = params.offerType === "tour" ? "tours" : "excursions";
 
       if (
@@ -2426,6 +2499,7 @@ export function ExcursionSearchResults({
       difficulty,
       minPrice,
       maxPrice,
+      priceMaxBound,
       radiusKm,
       pickup,
       kids,
@@ -2638,19 +2712,24 @@ export function ExcursionSearchResults({
     ? Math.max(1, Math.min(40, Number.parseInt(guests, 10)))
     : 2;
   const radiusIsEnabled = Boolean(location.trim() || filters.locationName);
-  const leftPricePct =
-    ((Number(minPrice || EXCURSION_PRICE_MIN_BOUND) - EXCURSION_PRICE_MIN_BOUND) /
-      (EXCURSION_PRICE_MAX_BOUND - EXCURSION_PRICE_MIN_BOUND)) *
-    100;
-  const rightPricePct =
-    ((Number(maxPrice || EXCURSION_PRICE_MAX_BOUND) - EXCURSION_PRICE_MIN_BOUND) /
-      (EXCURSION_PRICE_MAX_BOUND - EXCURSION_PRICE_MIN_BOUND)) *
-    100;
+  const minPriceValue = clamp(
+    parsePriceInput(minPrice) ?? EXCURSION_PRICE_MIN_BOUND,
+    EXCURSION_PRICE_MIN_BOUND,
+    priceMaxBound,
+  );
+  const maxPriceValue = clamp(
+    parsePriceInput(maxPrice) ?? priceMaxBound,
+    EXCURSION_PRICE_MIN_BOUND,
+    priceMaxBound,
+  );
+  const priceSpan = Math.max(1, priceMaxBound - EXCURSION_PRICE_MIN_BOUND);
+  const leftPricePct = ((minPriceValue - EXCURSION_PRICE_MIN_BOUND) / priceSpan) * 100;
+  const rightPricePct = ((maxPriceValue - EXCURSION_PRICE_MIN_BOUND) / priceSpan) * 100;
 
   const updatePriceRange = useCallback(
     (patch: { minPrice?: number; maxPrice?: number }) => {
       const currentMin = Number(minPrice || EXCURSION_PRICE_MIN_BOUND);
-      const currentMax = Number(maxPrice || EXCURSION_PRICE_MAX_BOUND);
+      const currentMax = Number(maxPrice || priceMaxBound);
       const nextMin = patch.minPrice ?? currentMin;
       const nextMax = patch.maxPrice ?? currentMax;
       const safeMin = Math.min(
@@ -2662,16 +2741,13 @@ export function ExcursionSearchResults({
       );
       const safeMax = Math.max(
         safeMin,
-        Math.min(
-          EXCURSION_PRICE_MAX_BOUND,
-          Math.ceil(nextMax / EXCURSION_PRICE_STEP) * EXCURSION_PRICE_STEP,
-        ),
+        Math.min(priceMaxBound, Math.ceil(nextMax / EXCURSION_PRICE_STEP) * EXCURSION_PRICE_STEP),
       );
 
       setMinPrice(safeMin > EXCURSION_PRICE_MIN_BOUND ? String(safeMin) : "");
-      setMaxPrice(safeMax < EXCURSION_PRICE_MAX_BOUND ? String(safeMax) : "");
+      setMaxPrice(safeMax < priceMaxBound ? String(safeMax) : "");
     },
-    [maxPrice, minPrice],
+    [maxPrice, minPrice, priceMaxBound],
   );
 
   const emptyResultsContent = shouldShowConnectionEmptyState ? (
@@ -3167,16 +3243,13 @@ export function ExcursionSearchResults({
                   <CatalogFieldGroup label="От">
                     <input
                       name="minPrice"
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       min={EXCURSION_PRICE_MIN_BOUND}
-                      max={EXCURSION_PRICE_MAX_BOUND}
-                      step={EXCURSION_PRICE_STEP}
+                      max={priceMaxBound}
                       value={minPrice}
-                      onChange={(event) =>
-                        updatePriceRange({
-                          minPrice: Number(event.target.value || EXCURSION_PRICE_MIN_BOUND),
-                        })
-                      }
+                      onChange={(event) => setMinPrice(normalizePriceInput(event.target.value))}
                       className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                       placeholder="Без минимума"
                     />
@@ -3184,16 +3257,13 @@ export function ExcursionSearchResults({
                   <CatalogFieldGroup label="До">
                     <input
                       name="maxPrice"
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       min={EXCURSION_PRICE_MIN_BOUND}
-                      max={EXCURSION_PRICE_MAX_BOUND}
-                      step={EXCURSION_PRICE_STEP}
+                      max={priceMaxBound}
                       value={maxPrice}
-                      onChange={(event) =>
-                        updatePriceRange({
-                          maxPrice: Number(event.target.value || EXCURSION_PRICE_MAX_BOUND),
-                        })
-                      }
+                      onChange={(event) => setMaxPrice(normalizePriceInput(event.target.value))}
                       className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                       placeholder="Без лимита"
                     />
@@ -3213,9 +3283,9 @@ export function ExcursionSearchResults({
                       name="minPriceRange"
                       type="range"
                       min={EXCURSION_PRICE_MIN_BOUND}
-                      max={EXCURSION_PRICE_MAX_BOUND}
+                      max={priceMaxBound}
                       step={EXCURSION_PRICE_STEP}
-                      value={Number(minPrice || EXCURSION_PRICE_MIN_BOUND)}
+                      value={minPriceValue}
                       onChange={(event) =>
                         updatePriceRange({ minPrice: Number(event.target.value) })
                       }
@@ -3225,9 +3295,9 @@ export function ExcursionSearchResults({
                       name="maxPriceRange"
                       type="range"
                       min={EXCURSION_PRICE_MIN_BOUND}
-                      max={EXCURSION_PRICE_MAX_BOUND}
+                      max={priceMaxBound}
                       step={EXCURSION_PRICE_STEP}
-                      value={Number(maxPrice || EXCURSION_PRICE_MAX_BOUND)}
+                      value={maxPriceValue}
                       onChange={(event) =>
                         updatePriceRange({ maxPrice: Number(event.target.value) })
                       }
@@ -3236,8 +3306,8 @@ export function ExcursionSearchResults({
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs font-medium text-olive/55">
                     <span>0 ₽</span>
-                    <span>50 000 ₽</span>
-                    <span>100 000 ₽+</span>
+                    <span>{formatMoney(Math.round(priceMaxBound / 2))}</span>
+                    <span>{formatMoney(priceMaxBound)}</span>
                   </div>
                 </div>
               </div>
@@ -3516,7 +3586,12 @@ export function ExcursionSearchResults({
                   )}
 
                   {hasMore ? (
-                    <div className="pt-1">
+                    <div className="space-y-2 pt-1">
+                      {loadMoreError ? (
+                        <p role="alert" className="text-sm font-medium text-red-700">
+                          {loadMoreError}
+                        </p>
+                      ) : null}
                       <button
                         type="button"
                         onClick={handleLoadMore}
@@ -3715,7 +3790,12 @@ export function ExcursionSearchResults({
 
           {/* ── Load more ───────────────────────────────────────────────── */}
           {hasMore ? (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-6 flex flex-col items-center gap-2">
+              {loadMoreError ? (
+                <p role="alert" className="text-center text-sm font-medium text-red-700">
+                  {loadMoreError}
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={handleLoadMore}

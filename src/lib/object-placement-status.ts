@@ -71,11 +71,13 @@ function getStatusLabel(input: {
 }): string {
   switch (input.status) {
     case "demo":
-      return "Ранний доступ до 1 мая 2027";
+      return input.paidUntil
+        ? `Бесплатно до ${input.paidUntil.toLocaleDateString("ru-RU")}`
+        : "Бесплатный год размещения";
     case "paid":
       return "Оплачено";
     case "expired":
-      return "Истекло";
+      return "Требует оплаты";
     case "expiring":
       return "Скоро истекает";
     case "unpaid":
@@ -144,7 +146,7 @@ export function getObjectPaymentDisplay(input: {
   if (!paidUntil) {
     status = "unpaid";
   } else if (paidUntil.getTime() <= now.getTime()) {
-    status = "unpaid";
+    status = "expired";
   } else if (paidFrom && paidFrom.getTime() > now.getTime()) {
     status = "unpaid";
   } else if (

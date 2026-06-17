@@ -30,6 +30,7 @@ import { PropertyMediaManager } from "@/components/media/property-media-manager"
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PropertyTypeIcon } from "@/components/ui/property-type-icon";
 import { cn } from "@/lib/cn";
@@ -67,6 +68,7 @@ type ObjectAboutPageProps = {
   displayPropertyNumber: number;
   initialBlock?: AboutBlockId;
   basePath?: string;
+  hideHelpAside?: boolean;
 };
 
 type PatchStepResponse = {
@@ -416,9 +418,7 @@ function ObjectAboutHelpAside({
           </span>
           <div>
             <p className="text-base font-semibold text-primary">{contextualHelp.footerTitle}</p>
-            <p className="mt-2 text-sm leading-6 text-olive/62">
-              {contextualHelp.footerText}
-            </p>
+            <p className="mt-2 text-sm leading-6 text-olive/62">{contextualHelp.footerText}</p>
           </div>
         </div>
       </section>
@@ -431,6 +431,7 @@ export function ObjectAboutPage({
   displayPropertyNumber,
   initialBlock,
   basePath = "/dashboard/objects",
+  hideHelpAside = false,
 }: ObjectAboutPageProps) {
   const router = useRouter();
   const [property, setProperty] = useState(initialProperty);
@@ -442,6 +443,7 @@ export function ObjectAboutPage({
     return getInitialBlock(initialProperty);
   });
   const [isKsrWarningOpen, setIsKsrWarningOpen] = useState(false);
+  const [ksrSkipLiabilityConfirmed, setKsrSkipLiabilityConfirmed] = useState(false);
 
   const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [isSavingLocation, setIsSavingLocation] = useState(false);
@@ -481,6 +483,7 @@ export function ObjectAboutPage({
   );
   const [mapDraftLocationId, setMapDraftLocationId] = useState(initialProperty.locationId ?? "");
   const locationResolveTokenRef = useRef(0);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestionItem[]>(
     crimeaLocations.map((location) => ({ id: location.id, name: location.name })),
   );
@@ -616,6 +619,7 @@ export function ObjectAboutPage({
             return true;
           }
 
+          setKsrSkipLiabilityConfirmed(false);
           setIsKsrWarningOpen(true);
           setError("");
           setSuccess("");
@@ -791,6 +795,7 @@ export function ObjectAboutPage({
     setLatitude(mapDraftLatitude);
     setLongitude(mapDraftLongitude);
     setAddress(mapDraftAddress.trim());
+    scrollAddressInputToEndOnMobile();
     setLocationInput(mapDraftLocationName.trim());
     setSelectedLocationId(mapDraftLocationId.trim());
     setIsMapDialogOpen(false);
@@ -813,8 +818,24 @@ export function ObjectAboutPage({
     setFieldErrors({});
   }
 
+  function scrollAddressInputToEndOnMobile() {
+    if (typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const input = addressInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.scrollLeft = input.scrollWidth;
+    });
+  }
+
   function handleInlineMapAddressResolved(resolvedItem: ReverseGeocodeItem) {
     setAddress(resolvedItem.address);
+    scrollAddressInputToEndOnMobile();
     clearFieldError("address");
     clearFieldError("map");
     setError("");
@@ -1131,6 +1152,7 @@ export function ObjectAboutPage({
         return;
       }
 
+      setKsrSkipLiabilityConfirmed(false);
       setIsKsrWarningOpen(true);
       setError("");
       setSuccess("");
@@ -1156,6 +1178,11 @@ export function ObjectAboutPage({
   }
 
   async function continueWithoutKsr() {
+    if (!ksrSkipLiabilityConfirmed) {
+      setError("Подтвердите, что объект размещается без КСР и ответственность несет владелец.");
+      return;
+    }
+
     setIsSkippingKsr(true);
     setError("");
     setSuccess("");
@@ -1175,6 +1202,7 @@ export function ObjectAboutPage({
       }
 
       setRegistryNumber("");
+      setKsrSkipLiabilityConfirmed(false);
       setIsKsrWarningOpen(false);
       moveToNextBlock();
     } finally {
@@ -1294,7 +1322,7 @@ export function ObjectAboutPage({
 
   return (
     <>
-      <div className="min-w-0 pb-28 sm:pb-0">
+      <div className="min-w-0 pb-4 sm:pb-0">
         <div className="min-w-0 space-y-6">
           <section className="bg-white">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1782,6 +1810,7 @@ export function ObjectAboutPage({
                       <div className="space-y-1.5 rounded-2xl border border-olive/10 bg-white/70 p-3">
                         <span className="text-sm font-semibold text-olive">2. Адрес</span>
                         <Input
+                          ref={addressInputRef}
                           value={address}
                           onChange={(event) => {
                             setAddress(event.target.value);
@@ -2011,6 +2040,9 @@ export function ObjectAboutPage({
                   value={registryNumber}
                   onChange={(event) => {
                     setRegistryNumber(event.target.value);
+                    if (event.target.value.trim()) {
+                      setKsrSkipLiabilityConfirmed(false);
+                    }
                     clearFieldError("registryNumber");
                   }}
                   placeholder="Например: 012345678"
@@ -2589,7 +2621,7 @@ export function ObjectAboutPage({
           ) : null}
         </div>
 
-        <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
+        <div className="sticky-bottom-enter mobile-editor-bottom-bar -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
@@ -2624,7 +2656,9 @@ export function ObjectAboutPage({
         </div>
       </div>
 
-      <ObjectAboutHelpAside activeBlock={activeBlock} activeBlockTitle={activeBlockTitle} />
+      {!hideHelpAside ? (
+        <ObjectAboutHelpAside activeBlock={activeBlock} activeBlockTitle={activeBlockTitle} />
+      ) : null}
 
       {isMapDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-midnight/55 sm:items-center sm:p-4">
@@ -2731,20 +2765,47 @@ export function ObjectAboutPage({
           <div className="w-full max-h-[90vh] overflow-y-auto rounded-t-3xl border border-olive/15 bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-2xl">
             <h3 className="text-xl text-olive">Вы не добавили номер записи в реестре</h3>
             <p className="mt-2 text-sm text-olive/80">
-              Продолжив без номера записи, вы подтверждаете, что объект не является средством
-              размещения и передается как жилое помещение во временное владение и пользование. Для
-              гостиницы, гостевого дома, санатория, базы отдыха, кемпинга или похожего формата номер
-              записи в реестре обязателен.
+              Номер записи в КСР обязателен для средств размещения: гостиниц, отелей, хостелов,
+              апарт-отелей, санаториев, баз отдыха, турбаз, глэмпингов, кемпингов и похожих
+              объектов, которые оказывают услуги временного проживания.
+            </p>
+            <p className="mt-2 text-sm text-olive/80">
+              Отдельная квартира, комната, жилой дом или отдельные апартаменты обычно могут
+              размещаться без КСР, если они сдаются как самостоятельное жилое помещение и не
+              используются как гостиница, гостевой дом, база отдыха или иной объект размещения.
             </p>
             <p className="mt-2 text-xs text-olive/70">
-              Основание: ФЗ N 132-ФЗ от 24.11.1996, ФЗ N 436-ФЗ от 30.11.2024, постановления
-              Правительства РФ N 1951 и N 1952 от 27.12.2024, ФЗ N 127-ФЗ от 07.06.2025.
+              Основание: Федеральный закон N 132-ФЗ, постановления Правительства РФ N 1951 и N 1952
+              от 27.12.2024. За нарушения требований к услугам средств размещения предусмотрена
+              административная ответственность по ст. 14.39 КоАП РФ.
             </p>
+
+            <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-5 text-amber-900">
+              <Checkbox
+                checked={ksrSkipLiabilityConfirmed}
+                onChange={(event) => {
+                  setKsrSkipLiabilityConfirmed(event.target.checked);
+                  setError("");
+                }}
+                disabled={isSkippingKsr}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                Да, подтверждаю: объект будет размещен без номера КСР, потому что он не относится к
+                средствам размещения, подлежащим классификации. Я понимаю, что если сведения указаны
+                неверно, ответственность за размещение и оказание услуг без обязательной
+                классификации несет владелец объекта, в том числе по ст. 14.39 КоАП РФ.
+              </span>
+            </label>
 
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="ghost"
-                onClick={() => setIsKsrWarningOpen(false)}
+                onClick={() => {
+                  setIsKsrWarningOpen(false);
+                  setKsrSkipLiabilityConfirmed(false);
+                  setError("");
+                }}
                 disabled={isSkippingKsr}
                 className="w-full sm:w-auto"
               >
@@ -2752,10 +2813,10 @@ export function ObjectAboutPage({
               </Button>
               <Button
                 onClick={() => void continueWithoutKsr()}
-                disabled={isSkippingKsr}
+                disabled={isSkippingKsr || !ksrSkipLiabilityConfirmed}
                 className="w-full sm:w-auto"
               >
-                {isSkippingKsr ? "Сохранение..." : "Идти дальше"}
+                {isSkippingKsr ? "Сохранение..." : "Разместить без КСР"}
               </Button>
             </div>
           </div>

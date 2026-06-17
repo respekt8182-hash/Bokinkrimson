@@ -518,7 +518,8 @@ export function SupportChatWidget() {
     }
   }, []);
 
-  const isChatEnabled = data?.enabled !== false;
+  const hasLoadedChatData = data !== null;
+  const isChatEnabled = data?.enabled === true;
   const hasChatConsent = data?.chatConsentGiven === true;
 
   useEffect(() => {
@@ -526,7 +527,7 @@ export function SupportChatWidget() {
       return;
     }
 
-    if (!isChatEnabled) {
+    if (hasLoadedChatData && !isChatEnabled) {
       return;
     }
 
@@ -566,7 +567,7 @@ export function SupportChatWidget() {
       activeFetchControllerRef.current?.abort();
       activeFetchControllerRef.current = null;
     };
-  }, [fetchData, hasChatConsent, isChatEnabled, isDocumentVisible, open]);
+  }, [fetchData, hasChatConsent, hasLoadedChatData, isChatEnabled, isDocumentVisible, open]);
 
   // Auto-scroll
   useEffect(() => {
@@ -710,10 +711,9 @@ export function SupportChatWidget() {
     handleSend();
   }
 
-  // Don't render if chat is disabled and no data
-  if (data && !data.enabled) return null;
+  if (!data || !data.enabled) return null;
 
-  const hasManager = !!data?.manager;
+  const hasManager = !!data.manager;
 
   return (
     <>

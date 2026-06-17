@@ -32,7 +32,7 @@ import { propertyTypes } from "@/lib/constants";
 import type { SearchFilters } from "@/types/catalog";
 
 const PRICE_MIN_BOUND = 0;
-const PRICE_MAX_BOUND = 50_000;
+const DEFAULT_PRICE_MAX_BOUND = 50_000;
 const PRICE_STEP = 500;
 const DATE_PANEL_WIDTH = 840;
 const DATE_PANEL_MAX_HEIGHT = 720;
@@ -118,6 +118,7 @@ export type CatalogFilterBarProps = {
   locationLabel: string;
   locationNames: string[];
   initialPopularSuggestions: LocationSuggestionItem[];
+  priceMax?: number;
 };
 
 function pluralize(value: number, variants: [string, string, string]): string {
@@ -202,11 +203,29 @@ function formatLocationChipLabel(value: string): string {
   return normalizedValue;
 }
 
-function formatPriceChip(minPrice: string, maxPrice: string): string {
+function getPriceMaxBound(value: number | undefined): number {
+  const raw = Number.isFinite(value) && value && value > 0 ? value : DEFAULT_PRICE_MAX_BOUND;
+  return Math.max(PRICE_STEP, Math.ceil(raw / PRICE_STEP) * PRICE_STEP);
+}
+
+function normalizePriceInput(value: string): string {
+  return value.replace(/[^\d]/g, "").slice(0, 8);
+}
+
+function parsePriceInput(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatPriceChip(
+  minPrice: string,
+  maxPrice: string,
+  maxBound = DEFAULT_PRICE_MAX_BOUND,
+): string {
   const min = Number.parseInt(minPrice, 10);
   const max = Number.parseInt(maxPrice, 10);
   const hasMin = Number.isFinite(min) && min > PRICE_MIN_BOUND;
-  const hasMax = Number.isFinite(max) && max < PRICE_MAX_BOUND;
+  const hasMax = Number.isFinite(max) && max < maxBound;
   if (hasMin && hasMax) return `${formatCurrency(min)} - ${formatCurrency(max)}`;
   if (hasMin) return `от ${formatCurrency(min)}`;
   if (hasMax) return `до ${formatCurrency(max)}`;
@@ -574,6 +593,7 @@ export function CatalogFilterBar({
   locationLabel,
   locationNames,
   initialPopularSuggestions,
+  priceMax,
 }: CatalogFilterBarProps) {
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
   const [draftFilters, setDraftFilters] = useState<SearchFilters>(filters);
@@ -626,27 +646,59 @@ export function CatalogFilterBar({
   })();
 
   const extras = extrasCount(filters);
+  const priceMaxBound = getPriceMaxBound(priceMax);
   const draftAdults = clamp(
     Number.parseInt(draftFilters.guestsAdults || draftFilters.guests || "2", 10) || 2,
     1,
     12,
   );
   const draftChildren = clamp(Number.parseInt(draftFilters.guestsChildren || "0", 10) || 0, 0, 8);
-  const leftPct =
-    ((Number(draftFilters.minPrice || 0) - PRICE_MIN_BOUND) / (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) *
-    100;
-  const rightPct =
-    ((Number(draftFilters.maxPrice || PRICE_MAX_BOUND) - PRICE_MIN_BOUND) /
-      (PRICE_MAX_BOUND - PRICE_MIN_BOUND)) *
-    100;
+  const draftMinPriceValue = clamp(
+    parsePriceInput(draftFilters.minPrice) ?? PRICE_MIN_BOUND,
+    PRICE_MIN_BOUND,
+    priceMaxBound,
+  );
+  const draftMaxPriceValue = clamp(
+    parsePriceInput(draftFilters.maxPrice) ?? priceMaxBound,
+    PRICE_MIN_BOUND,
+    priceMaxBound,
+  );
+  const priceSpan = Math.max(1, priceMaxBound - PRICE_MIN_BOUND);
+  const leftPct = ((draftMinPriceValue - PRICE_MIN_BOUND) / priceSpan) * 100;
+  const rightPct = ((draftMaxPriceValue - PRICE_MIN_BOUND) / priceSpan) * 100;
   const nights = getNightsCount(draftFilters.checkIn, draftFilters.checkOut);
+
+  const normalizePriceFilters = useCallback(
+    (nextFilters: SearchFilters): SearchFilters => {
+      const rawMin = parsePriceInput(nextFilters.minPrice);
+      const rawMax = parsePriceInput(nextFilters.maxPrice);
+      let safeMin =
+        rawMin === null ? PRICE_MIN_BOUND : clamp(rawMin, PRICE_MIN_BOUND, priceMaxBound);
+      let safeMax = rawMax === null ? priceMaxBound : clamp(rawMax, PRICE_MIN_BOUND, priceMaxBound);
+
+      if (safeMin > safeMax) {
+        if (rawMax !== null) {
+          safeMin = safeMax;
+        } else {
+          safeMax = safeMin;
+        }
+      }
+
+      return {
+        ...nextFilters,
+        minPrice: safeMin > PRICE_MIN_BOUND ? String(safeMin) : "",
+        maxPrice: safeMax < priceMaxBound ? String(safeMax) : "",
+      };
+    },
+    [priceMaxBound],
+  );
 
   const commitPanel = useCallback(
     (patch?: Partial<SearchFilters>, toast?: string) => {
-      onApplyFilters({ ...filters, ...draftFilters, ...patch }, toast);
+      onApplyFilters(normalizePriceFilters({ ...filters, ...draftFilters, ...patch }), toast);
       closePanel();
     },
-    [closePanel, draftFilters, filters, onApplyFilters],
+    [closePanel, draftFilters, filters, normalizePriceFilters, onApplyFilters],
   );
 
   const updateDraftGuests = useCallback(
@@ -665,7 +717,7 @@ export function CatalogFilterBar({
   const updateDraftPrice = useCallback(
     (patch: { minPrice?: number; maxPrice?: number }) => {
       const currentMin = Number(draftFilters.minPrice || PRICE_MIN_BOUND);
-      const currentMax = Number(draftFilters.maxPrice || PRICE_MAX_BOUND);
+      const currentMax = Number(draftFilters.maxPrice || priceMaxBound);
       const nextMin = patch.minPrice ?? currentMin;
       const nextMax = patch.maxPrice ?? currentMax;
       const safeMin = clamp(
@@ -673,13 +725,13 @@ export function CatalogFilterBar({
         PRICE_MIN_BOUND,
         nextMax,
       );
-      const safeMax = clamp(Math.ceil(nextMax / PRICE_STEP) * PRICE_STEP, safeMin, PRICE_MAX_BOUND);
+      const safeMax = clamp(Math.ceil(nextMax / PRICE_STEP) * PRICE_STEP, safeMin, priceMaxBound);
       updateDraft({
         minPrice: safeMin > PRICE_MIN_BOUND ? String(safeMin) : "",
-        maxPrice: safeMax < PRICE_MAX_BOUND ? String(safeMax) : "",
+        maxPrice: safeMax < priceMaxBound ? String(safeMax) : "",
       });
     },
-    [draftFilters.maxPrice, draftFilters.minPrice, updateDraft],
+    [draftFilters.maxPrice, draftFilters.minPrice, priceMaxBound, updateDraft],
   );
 
   return (
@@ -884,7 +936,7 @@ export function CatalogFilterBar({
             trigger={
               <CatalogFilterChipButton
                 icon={WalletCards}
-                label={formatPriceChip(filters.minPrice, filters.maxPrice)}
+                label={formatPriceChip(filters.minPrice, filters.maxPrice, priceMaxBound)}
                 active={Boolean(filters.minPrice || filters.maxPrice)}
                 open={openPanel === "price"}
                 onClick={() => openDraftPanel("price")}
@@ -908,14 +960,16 @@ export function CatalogFilterBar({
                 <CatalogFieldGroup label="От">
                   <input
                     name="minPrice"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     min={PRICE_MIN_BOUND}
-                    max={PRICE_MAX_BOUND}
-                    step={PRICE_STEP}
+                    max={priceMaxBound}
                     value={draftFilters.minPrice}
                     onChange={(event) =>
-                      updateDraftPrice({ minPrice: Number(event.target.value || PRICE_MIN_BOUND) })
+                      updateDraft({ minPrice: normalizePriceInput(event.target.value) })
                     }
+                    onBlur={() => updateDraft(normalizePriceFilters(draftFilters))}
                     className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="Без минимума"
                   />
@@ -923,14 +977,16 @@ export function CatalogFilterBar({
                 <CatalogFieldGroup label="До">
                   <input
                     name="maxPrice"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     min={PRICE_MIN_BOUND}
-                    max={PRICE_MAX_BOUND}
-                    step={PRICE_STEP}
+                    max={priceMaxBound}
                     value={draftFilters.maxPrice}
                     onChange={(event) =>
-                      updateDraftPrice({ maxPrice: Number(event.target.value || PRICE_MAX_BOUND) })
+                      updateDraft({ maxPrice: normalizePriceInput(event.target.value) })
                     }
+                    onBlur={() => updateDraft(normalizePriceFilters(draftFilters))}
                     className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     placeholder="Без лимита"
                   />
@@ -947,9 +1003,9 @@ export function CatalogFilterBar({
                     name="minPriceRange"
                     type="range"
                     min={PRICE_MIN_BOUND}
-                    max={PRICE_MAX_BOUND}
+                    max={priceMaxBound}
                     step={PRICE_STEP}
-                    value={Number(draftFilters.minPrice || PRICE_MIN_BOUND)}
+                    value={draftMinPriceValue}
                     onChange={(event) => updateDraftPrice({ minPrice: Number(event.target.value) })}
                     className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
                   />
@@ -957,17 +1013,17 @@ export function CatalogFilterBar({
                     name="maxPriceRange"
                     type="range"
                     min={PRICE_MIN_BOUND}
-                    max={PRICE_MAX_BOUND}
+                    max={priceMaxBound}
                     step={PRICE_STEP}
-                    value={Number(draftFilters.maxPrice || PRICE_MAX_BOUND)}
+                    value={draftMaxPriceValue}
                     onChange={(event) => updateDraftPrice({ maxPrice: Number(event.target.value) })}
                     className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
                   />
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs font-medium text-olive/55">
                   <span>0 ₽</span>
-                  <span>25 000 ₽</span>
-                  <span>50 000 ₽+</span>
+                  <span>{formatCurrency(Math.round(priceMaxBound / 2))}</span>
+                  <span>{formatCurrency(priceMaxBound)}</span>
                 </div>
               </div>
             </div>

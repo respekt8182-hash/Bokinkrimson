@@ -1,6 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { getRateLimitMode } from "@/lib/security-config";
+import { getRateLimitMode, isProductionEnvironment } from "@/lib/security-config";
 
 type BucketEntry = {
   count: number;
@@ -114,7 +114,7 @@ function getFixedWindowDuration(windowMs: number): string {
   return `${Math.max(1, Math.ceil(windowMs / 1_000))} s`;
 }
 
-function hasUpstashConfiguration(): boolean {
+export function hasUpstashRateLimitConfiguration(): boolean {
   return Boolean(
     process.env.UPSTASH_REDIS_REST_URL?.trim() &&
       process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
@@ -122,7 +122,7 @@ function hasUpstashConfiguration(): boolean {
 }
 
 function getUpstashLimiter(options: RateLimiterOptions): RateLimiter {
-  if (!hasUpstashConfiguration()) {
+  if (!hasUpstashRateLimitConfiguration()) {
     throw new RateLimitConfigurationError();
   }
 
@@ -185,9 +185,25 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
     return getUpstashLimiter(options);
   }
 
-  if (hasUpstashConfiguration()) {
+  if (hasUpstashRateLimitConfiguration()) {
     return getUpstashLimiter(options);
   }
 
   return createInMemoryRateLimiter(options);
+}
+
+export function createSensitiveRateLimiter(options: RateLimiterOptions): RateLimiter {
+  const mode = getRateLimitMode();
+
+  if (isProductionEnvironment()) {
+    if (mode === "memory") {
+      throw new RateLimitConfigurationError(
+        "SENSITIVE_RATE_LIMIT_REQUIRES_SHARED_BACKEND",
+      );
+    }
+
+    return getUpstashLimiter(options);
+  }
+
+  return createRateLimiter(options);
 }

@@ -1,5 +1,6 @@
 // Search contract endpoint for housing catalog (TZ-compatible alias over public catalog domain service).
 import { NextResponse } from "next/server";
+import { createSearchPerformanceTimer, hasSearchFilters } from "@/lib/performance-logging";
 import { getPublicCatalog } from "@/lib/public-properties";
 import { SearchFiltersSchema } from "@/lib/schemas/search";
 import {
@@ -12,6 +13,9 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const interactiveBoundsCandidateBase = 240;
+const interactiveBoundsCandidateCap = 600;
 
 function parseSort(raw: string | null) {
   const value = (raw ?? "").trim().toLowerCase();
@@ -29,9 +33,15 @@ function parseSort(raw: string | null) {
 }
 
 export async function GET(request: Request) {
+  const finishPerf = createSearchPerformanceTimer("/api/search/accommodations");
   const { searchParams } = new URL(request.url);
   const parsed = SearchFiltersSchema.safeParse(Object.fromEntries(searchParams.entries()));
   if (!parsed.success) {
+    finishPerf({
+      direction: "housing",
+      status: 400,
+      errorStatus: 400,
+    });
     return NextResponse.json(
       {
         error: "invalid_search_params",
@@ -71,83 +81,133 @@ export async function GET(request: Request) {
   const familyFriendly = input.familyFriendly === true || input.kidsFriendly === true;
   const amenityIds = parseListParam(searchParams, "amenityIds", "amenityIds[]");
   const roomFeatureIds = parseListParam(searchParams, "roomFeatureIds", "roomFeatureIds[]");
+  const interactiveCandidateLimit = bounds
+    ? Math.min(
+        interactiveBoundsCandidateCap,
+        Math.max(interactiveBoundsCandidateBase, page * pageSize + pageSize),
+      )
+    : undefined;
 
-  const result = await getPublicCatalog({
-    // Contract adapter: normalize external API names to internal catalog query.
-    page,
-    pageSize,
-    locationId:
-      searchParams.get("location_id") ?? input.locationId ?? undefined,
-    location: input.location ?? undefined,
-    query: query ?? undefined,
-    checkIn: searchParams.get("checkin") ?? searchParams.get("checkIn") ?? undefined,
-    checkOut: searchParams.get("checkout") ?? searchParams.get("checkOut") ?? undefined,
-    guests,
-    minPrice,
-    maxPrice,
-    minRating,
-    sort,
-    hasPhotos: input.hasPhotos === true,
-    hasReviews: input.hasReviews === true,
-    familyFriendly,
-    petsAllowed: input.petsAllowed === true,
-    nearSea: input.nearSea === true,
-    hasPool: input.hasPool === true,
-    hasKitchen: input.hasKitchen === true,
-    hasAirConditioner: input.hasAirConditioner === true,
-    hasParking: input.hasParking === true,
-    smokingForbidden: input.smokingForbidden === true,
-    quietHours: input.quietHours === true,
-    amenityIds,
-    roomFeatureIds,
-    bounds,
-    candidateLimit: bounds ? 1500 : undefined,
-    type:
-      pickFirstListValue(searchParams.get("type")) ??
-      input.propertyType ??
-      pickFirstListValue(searchParams.get("type[]")) ??
-      input.type ??
-      undefined,
-  });
+  try {
+    const result = await getPublicCatalog({
+      // Contract adapter: normalize external API names to internal catalog query.
+      page,
+      pageSize,
+      locationId: searchParams.get("location_id") ?? input.locationId ?? undefined,
+      location: input.location ?? undefined,
+      query: query ?? undefined,
+      checkIn: searchParams.get("checkin") ?? searchParams.get("checkIn") ?? undefined,
+      checkOut: searchParams.get("checkout") ?? searchParams.get("checkOut") ?? undefined,
+      guests,
+      minPrice,
+      maxPrice,
+      minRating,
+      sort,
+      hasPhotos: input.hasPhotos === true,
+      hasReviews: input.hasReviews === true,
+      familyFriendly,
+      petsAllowed: input.petsAllowed === true,
+      nearSea: input.nearSea === true,
+      hasPool: input.hasPool === true,
+      hasKitchen: input.hasKitchen === true,
+      hasAirConditioner: input.hasAirConditioner === true,
+      hasParking: input.hasParking === true,
+      smokingForbidden: input.smokingForbidden === true,
+      quietHours: input.quietHours === true,
+      amenityIds,
+      roomFeatureIds,
+      bounds,
+      candidateLimit: interactiveCandidateLimit,
+      trackSearchImpressions: bounds ? false : undefined,
+      type:
+        pickFirstListValue(searchParams.get("type")) ??
+        input.propertyType ??
+        pickFirstListValue(searchParams.get("type[]")) ??
+        input.type ??
+        undefined,
+    });
 
-  const mapPoints = result.items
-    .filter((item) => isPointInsideBounds(item.latitude, item.longitude, bounds))
-    .map((item) => ({
-      id: item.id,
-      title: item.name,
-      path: item.path,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      priceFrom: item.minNightPrice,
-      currency: item.currency,
-      typeLabel: item.typeLabel,
-      avgRating: item.avgRating,
-      reviewsCount: item.reviewsCount,
-    }));
+    const mapPoints = result.items
+      .filter((item) => isPointInsideBounds(item.latitude, item.longitude, bounds))
+      .map((item) => ({
+        id: item.id,
+        title: item.name,
+        path: item.path,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        priceFrom: item.minNightPrice,
+        currency: item.currency,
+        typeLabel: item.typeLabel,
+        avgRating: item.avgRating,
+        reviewsCount: item.reviewsCount,
+      }));
 
-  return NextResponse.json(
-    {
-      items: result.items,
-      total: result.total,
-      page: result.page,
-      page_size: result.pageSize,
-      total_pages: result.totalPages,
-      map_points: mapPoints,
-      meta: {
-        filters: result.filters,
-        requested: {
-          checkin: searchParams.get("checkin"),
-          checkout: searchParams.get("checkout"),
-          adults,
-          children,
-          sort,
+    finishPerf({
+      direction: "housing",
+      page,
+      pageSize,
+      returned: result.items.length,
+      count: result.total,
+      queryLength: (query ?? "").trim().length,
+      hasFilters: hasSearchFilters({
+        location: input.location,
+        locationId: input.locationId,
+        minPrice,
+        maxPrice,
+        minRating,
+        sort,
+        hasPhotos: input.hasPhotos,
+        hasReviews: input.hasReviews,
+        familyFriendly,
+        petsAllowed: input.petsAllowed,
+        nearSea: input.nearSea,
+        hasPool: input.hasPool,
+        hasKitchen: input.hasKitchen,
+        hasAirConditioner: input.hasAirConditioner,
+        hasParking: input.hasParking,
+        smokingForbidden: input.smokingForbidden,
+        quietHours: input.quietHours,
+        amenityIds,
+        roomFeatureIds,
+        boundsApplied: bounds !== null,
+      }),
+      status: 200,
+    });
+
+    return NextResponse.json(
+      {
+        items: result.items,
+        total: result.total,
+        page: result.page,
+        page_size: result.pageSize,
+        total_pages: result.totalPages,
+        map_points: mapPoints,
+        meta: {
+          filters: result.filters,
+          requested: {
+            checkin: searchParams.get("checkin"),
+            checkout: searchParams.get("checkout"),
+            adults,
+            children,
+            sort,
+          },
         },
       },
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store, max-age=0, must-revalidate",
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    finishPerf({
+      direction: "housing",
+      page,
+      pageSize,
+      queryLength: (query ?? "").trim().length,
+      status: 500,
+      errorStatus: 500,
+    });
+    throw error;
+  }
 }

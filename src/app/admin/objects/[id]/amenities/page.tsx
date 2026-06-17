@@ -61,8 +61,8 @@ export default async function AdminObjectAmenitiesPage({ params }: AdminObjectAm
           propertyId={property.id}
           activeSection="amenities"
           basePath="/admin/objects"
-          backHref={`/admin/objects/${property.id}`}
-          backLabel="Быстрая админ-правка"
+          backHref={`/admin/objects/${property.id}/about`}
+          backLabel="Об объекте"
           includePayment={false}
           showChessboardTab
         />

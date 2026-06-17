@@ -15,12 +15,20 @@ import {
   MessageSquareText,
   Phone,
   Plus,
+  Save,
   ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { type TextareaHTMLAttributes, useEffect, useMemo, useState } from "react";
+import {
+  type TextareaHTMLAttributes,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { YandexMapPicker } from "@/components/maps/yandex-map-picker";
 import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { TransferFleetBuilder } from "@/components/transfers/transfer-fleet-builder";
@@ -107,6 +115,7 @@ type TransferEditorPageProps = {
   paymentNotice?: string | null;
   initialStep?: StepId | null;
   externalReviewsHref?: string | null;
+  hideHelpAside?: boolean;
 };
 
 const stepOrder: StepId[] = ["info", "location", "fleet", "contacts", "publish"];
@@ -124,6 +133,14 @@ const stepMeta: Array<{
   { id: "contacts", title: "Контакты", shortTitle: "Контакты", icon: Phone },
   { id: "publish", title: "Публикация", shortTitle: "Публикация", icon: ShieldCheck },
 ];
+
+const transferAsideVisuals: Record<StepId, { label: string; image: string }> = {
+  info: { label: "Описание услуги", image: "/dashboard-prof/sections-transfers.png" },
+  location: { label: "География маршрутов", image: "/crimea-map-preview-realistic.webp" },
+  fleet: { label: "Автопарк и фото", image: "/dashboard-prof/transfers.png" },
+  contacts: { label: "Каналы связи", image: "/dashboard-prof/main.png" },
+  publish: { label: "Готовность к публикации", image: "/dashboard-prof/sections-transfers.png" },
+};
 
 function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
@@ -320,6 +337,7 @@ export function TransferEditorPage({
   paymentNotice = null,
   initialStep = null,
   externalReviewsHref = null,
+  hideHelpAside = false,
 }: TransferEditorPageProps) {
   const initialSuggestedTitle = buildTransferTitleSuggestion({
     transferType: transfer.transferType,
@@ -472,6 +490,7 @@ export function TransferEditorPage({
     [contactsReady, fleetReady, infoReady, locationReady, publishReady],
   );
   const [activeStep, setActiveStep] = useState<StepId>(initialStep ?? defaultInitialStep);
+  const mobileStepperRef = useRef<HTMLDivElement | null>(null);
 
   const steps = [
     { id: "info" as const, title: "Карточка услуги", done: infoReady },
@@ -496,8 +515,24 @@ export function TransferEditorPage({
       ? stepOrder[activeStepIndex + 1]
       : null;
   const activeStepTitle = stepMeta.find((item) => item.id === activeStep)?.title ?? "Раздел";
+  const activeAsideVisual = transferAsideVisuals[activeStep];
   const completedStepsCount = steps.filter((item) => item.done).length;
   const progressPercent = Math.round((completedStepsCount / steps.length) * 100);
+
+  useLayoutEffect(() => {
+    const scroller = mobileStepperRef.current;
+    if (
+      !scroller ||
+      scroller.scrollWidth <= scroller.clientWidth ||
+      window.matchMedia("(min-width: 640px)").matches
+    ) {
+      return;
+    }
+
+    const activeButton = scroller.querySelector<HTMLElement>("[data-editor-step-active='true']");
+    activeButton?.scrollIntoView({ block: "nearest", inline: "center", behavior: "auto" });
+  }, [activeStep, steps.length]);
+
   const displayTitle = title.trim() || suggestedTitle || "Новый трансфер";
   const paymentNoticeText =
     paymentNotice === "manager"
@@ -514,13 +549,13 @@ export function TransferEditorPage({
                 ? "Выбранный способ оплаты временно недоступен."
                 : paymentNotice === "not-ready"
                   ? "Заполните обязательные поля перед оплатой и модерацией."
-              : paymentNotice === "online-payment-error"
+                  : paymentNotice === "online-payment-error"
                     ? "Не удалось создать онлайн-платеж. Отправьте заявку менеджеру или попробуйте позже."
                     : paymentNotice === "online-created"
                       ? "Онлайн-платеж создан. Если страница оплаты не открылась, продолжите оплату из блока последнего платежа."
-                    : paymentNotice === "schema-missing"
-                      ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
-                      : null;
+                      : paymentNotice === "schema-missing"
+                        ? "Оплата трансферов временно недоступна. Обновите страницу после завершения обслуживания."
+                        : null;
   const latestPayment = payments[0] ?? null;
   const latestPaymentIsOpen = latestPayment ? isOpenPayment(latestPayment.status) : false;
   const extraVehicleCount = Math.max(0, fleet.length - 1);
@@ -625,11 +660,43 @@ export function TransferEditorPage({
           : `Публичная карточка останется на сайте. После правок к доплате ${formatMoney(requiredPaymentAmount)}.`
         : hasFullPaymentCoverage
           ? livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement
-            ? "Размещение бесплатно до 1 мая 2027. Карточку можно отправить на модерацию без оплаты."
+            ? "Карточку можно отправить на модерацию без оплаты."
             : "Оплата подтверждена. Карточку можно отправить на модерацию без повторной оплаты."
           : latestPaymentIsOpen
             ? "По карточке уже есть незавершенный платеж. Завершите его или дождитесь менеджера."
             : "Карточка готова к публикации и последующей отправке на модерацию.";
+  const activeStepMeta = stepMeta.find((item) => item.id === activeStep) ?? stepMeta[0];
+  const activeStepIcon = activeStepMeta?.icon ?? FileText;
+  const transferAside =
+    activeStep === "location"
+      ? {
+          title: "Подсказки по географии",
+          lead: "Укажите город работы и поставьте точку на карте. Так клиент быстрее поймет, откуда начинается услуга и где вы работаете чаще всего.",
+          checks: ["Город работы", "Точка на карте", "Примеры маршрутов"],
+        }
+      : activeStep === "fleet"
+        ? {
+            title: "Подсказки по автопарку",
+            lead: "Фото, класс машины, вместимость и цена формируют доверие к трансферу сильнее всего. Добавьте хотя бы один полностью заполненный автомобиль.",
+            checks: ["Фото транспорта", "Класс и модель", "Цена от"],
+          }
+        : activeStep === "contacts"
+          ? {
+              title: "Контакты в карточке",
+              lead: "Основной телефон должен быть рабочим. Дополнительные каналы лучше добавлять только если они действительно открываются и ведут к вам.",
+              checks: ["Имя контактного лица", "Основной телефон", "Мессенджеры"],
+            }
+          : activeStep === "publish"
+            ? {
+                title: "Готовность к публикации",
+                lead: "Перед отправкой на модерацию проверьте обязательные разделы, оплату размещения и публичный предпросмотр карточки.",
+                checks: ["Все разделы готовы", "Оплата или заявка", "Предпросмотр"],
+              }
+            : {
+                title: "Как заполнить карточку",
+                lead: "Начните с понятного названия, типа услуги и описания. Это основа карточки, которую клиент увидит в каталоге трансферов.",
+                checks: ["Название", "Тип услуги", "Описание"],
+              };
 
   function switchStep(stepId: StepId) {
     setActiveStep(stepId);
@@ -716,7 +783,7 @@ export function TransferEditorPage({
   }
 
   return (
-    <form action={action} className="space-y-4 pb-28 sm:space-y-5 sm:pb-0">
+    <form action={action} className="transfer-editor-surface min-w-0 pb-4 sm:pb-0">
       <input type="hidden" name="locationId" value={locationId} />
       <input type="hidden" name="latitude" value={latitude !== null ? String(latitude) : ""} />
       <input type="hidden" name="longitude" value={longitude !== null ? String(longitude) : ""} />
@@ -741,47 +808,41 @@ export function TransferEditorPage({
       {!showMax ? <input type="hidden" name="maxUrl" value={maxUrl} /> : null}
       {!showOk ? <input type="hidden" name="okUrl" value={okUrl} /> : null}
 
-      <div className="space-y-4 overflow-hidden rounded-3xl border border-primary/18 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_18px_34px_-26px_rgba(15,118,110,0.95)] sm:p-6">
-        <div className="sm:hidden">
-          <div className="rounded-[24px] border border-primary/12 bg-white/88 p-3 shadow-[0_20px_38px_-26px_rgba(15,118,110,0.55)]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/60">
-                  Этап {activeStepIndex + 1}/{steps.length}
-                </p>
-                <p className="mt-1 truncate text-lg font-semibold text-olive">{activeStepTitle}</p>
-              </div>
-              <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                {completedStepsCount}/{steps.length}
-              </span>
+      <section className="bg-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-primary">
+              <Link href="/dashboard/transfers" className="transition hover:text-primary-hover">
+                Все трансферы
+              </Link>
+              <span className="text-olive/24">/</span>
+              <span className="text-olive/54">Карточка трансфера</span>
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
-          <div className="space-y-2">
-            <Link
-              href="/dashboard/transfers"
-              className="text-xs font-semibold uppercase tracking-[0.18em] text-olive/55 transition hover:text-primary"
-            >
-              Все трансферы
-            </Link>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl text-olive sm:text-3xl">{displayTitle}</h1>
-              <span className="inline-flex items-center rounded-full border border-primary/20 bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                этап {activeStepIndex + 1} из {steps.length}
-              </span>
-            </div>
+            <h1 className="mt-3 font-heading text-3xl font-semibold leading-tight text-olive md:text-[34px]">
+              Создание трансфера
+            </h1>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-olive/62">
+              Заполните карточку по шагам: услуга, география, автопарк, контакты и публикация.
+              Единая структура помогает клиенту быстрее понять маршрут, машину и условия поездки.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-olive">{displayTitle}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-primary/20 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary shadow-sm shadow-primary/10">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
+                statusMeta.bg,
+                statusMeta.text,
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta.dot)} />
               {transfer.statusLabel}
             </span>
             {publicPath ? (
               <Link
                 href={publicPath}
-                className="inline-flex items-center rounded-full border border-olive/12 bg-white/85 px-3 py-1 text-xs font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
+                className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64 transition hover:text-primary"
               >
                 Публичная страница
               </Link>
@@ -789,171 +850,85 @@ export function TransferEditorPage({
             {externalReviewsHref ? (
               <Link
                 href={externalReviewsHref}
-                className="inline-flex items-center gap-1.5 rounded-full border border-olive/12 bg-white/85 px-3 py-1 text-xs font-semibold text-olive transition hover:border-primary/25 hover:text-primary"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-olive/14 bg-white px-3 py-1.5 text-xs font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
               >
                 <AppIcon icon={MessageSquareText} className="h-3.5 w-3.5" />
-                Отзывы с других сайтов
+                Отзывы
               </Link>
             ) : null}
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/75 p-3 backdrop-blur-sm sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-olive/55">
-                Прогресс заполнения
-              </span>
-              <span className="text-xs font-semibold tabular-nums text-primary">
-                {progressPercent}%
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-primary/12">
+        <div
+          ref={mobileStepperRef}
+          className="editor-stepper mt-7 overflow-hidden rounded-[8px] border border-olive/12 bg-white shadow-[0_4px_18px_rgba(15,23,42,0.03)] sm:grid sm:grid-cols-2 lg:grid-cols-5"
+        >
+          {steps.map((item, index) => {
+            const isCurrent = activeStep === item.id;
+            const meta = stepMeta.find((step) => step.id === item.id);
+            const StepIcon = meta?.icon ?? FileText;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                title={item.title}
+                onClick={() => switchStep(item.id)}
+                data-editor-step-active={isCurrent ? "true" : undefined}
+                className={cn(
+                  "relative flex min-h-[96px] items-center gap-3 border-b border-olive/8 bg-white px-5 py-4 text-left transition last:border-b-0 sm:[&:nth-child(odd)]:border-r lg:border-b-0 lg:border-r lg:last:border-r-0",
+                  isCurrent ? "bg-primary/5" : "hover:bg-primary/3",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                    isCurrent
+                      ? "bg-primary text-white"
+                      : item.done
+                        ? "bg-sage/24 text-primary ring-1 ring-primary/12"
+                        : "bg-olive/6 text-olive/70",
+                  )}
+                >
+                  {item.done && !isCurrent ? (
+                    <AppIcon icon={Check} className="h-5 w-5" />
+                  ) : (
+                    <AppIcon icon={StepIcon} className="h-5 w-5" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-olive">
+                    {item.title}
+                  </span>
+                  <span className="mt-1 block text-xs font-medium text-olive/48">
+                    {index + 1} из {steps.length}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "absolute bottom-0 left-0 h-1 w-full rounded-full",
+                    isCurrent ? "bg-primary" : item.done ? "bg-sage" : "bg-olive/8",
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center gap-4">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
               <div
-                className="wizard-progress-bar h-full rounded-full bg-gradient-to-r from-primary via-teal-600 to-sun transition-all duration-500"
+                className="wizard-progress-bar h-full rounded-full bg-primary transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-olive/70">
-            <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-primary">
-              {completedStepsCount}
+            <span className="text-xs font-semibold text-olive/55">
+              {completedStepsCount}/{steps.length}
             </span>
-            <span>из {steps.length} этапов</span>
           </div>
         </div>
-
-        <div className="relative">
-          <div className="grid grid-cols-2 gap-2 sm:hidden">
-            {steps.map((item, index) => {
-              const isCurrent = activeStep === item.id;
-              const statusLabel = isCurrent ? "Текущий" : item.done ? "Готово" : "Ожидает";
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => switchStep(item.id)}
-                  className={cn(
-                    "group rounded-2xl border px-3 py-3 text-left transition-all duration-200",
-                    index === steps.length - 1 && "col-span-2",
-                    isCurrent &&
-                      "border-sun/50 bg-gradient-to-br from-sun/[0.10] to-sun/[0.04] shadow-[0_10px_18px_-14px_rgba(14,116,144,0.5)] ring-1 ring-sun/20",
-                    !isCurrent &&
-                      item.done &&
-                      "border-primary/20 bg-white/95 hover:border-primary/30 hover:bg-primary/[0.04]",
-                    !isCurrent &&
-                      !item.done &&
-                      "border-olive/12 bg-white/80 hover:border-olive/20 hover:bg-white",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex h-8 min-w-8 items-center justify-center rounded-xl px-1.5 text-xs font-bold transition-colors",
-                        isCurrent
-                          ? "bg-sun text-white shadow-sm shadow-sun/30 ring-1 ring-white/80"
-                          : item.done
-                            ? "bg-primary/10 text-primary/85"
-                            : "bg-olive/8 text-olive/60",
-                      )}
-                    >
-                      {item.done && !isCurrent ? (
-                        <AppIcon icon={Check} className="h-4 w-4 wizard-check-enter" />
-                      ) : (
-                        <span>{index + 1}</span>
-                      )}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wide",
-                        isCurrent ? "text-sun/95" : item.done ? "text-primary/65" : "text-olive/45",
-                      )}
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <p
-                    className={cn(
-                      "mt-2 text-sm font-semibold leading-tight",
-                      isCurrent ? "font-bold text-olive" : "text-olive/80",
-                    )}
-                  >
-                    {item.title}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="custom-scrollbar hidden overflow-x-auto pb-2 sm:block">
-            <div className="mx-auto flex min-w-max items-stretch justify-center gap-2">
-              {steps.map((item, index) => {
-                const isCurrent = activeStep === item.id;
-                const statusLabel = isCurrent ? "Текущий" : item.done ? "Готово" : "Ожидает";
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => switchStep(item.id)}
-                    className={cn(
-                      "group min-w-[132px] rounded-2xl border px-3 py-3 text-left transition-all duration-200 sm:min-w-[148px]",
-                      isCurrent &&
-                        "border-sun/50 bg-gradient-to-br from-sun/[0.10] to-sun/[0.04] shadow-[0_10px_18px_-14px_rgba(14,116,144,0.5)] ring-1 ring-sun/20",
-                      !isCurrent &&
-                        item.done &&
-                        "border-primary/20 bg-white/95 hover:border-primary/30 hover:bg-primary/[0.04]",
-                      !isCurrent &&
-                        !item.done &&
-                        "border-olive/12 bg-white/80 hover:border-olive/20 hover:bg-white",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-1.5 text-xs font-bold transition-colors",
-                          isCurrent
-                            ? "bg-sun text-white shadow-sm shadow-sun/30 ring-1 ring-white/80"
-                            : item.done
-                              ? "bg-primary/10 text-primary/85"
-                              : "bg-olive/8 text-olive/60",
-                        )}
-                      >
-                        {item.done && !isCurrent ? (
-                          <AppIcon icon={Check} className="h-4 w-4 wizard-check-enter" />
-                        ) : (
-                          <span>{index + 1}</span>
-                        )}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[10px] font-semibold uppercase tracking-wide",
-                          isCurrent
-                            ? "text-sun/95"
-                            : item.done
-                              ? "text-primary/65"
-                              : "text-olive/45",
-                        )}
-                      >
-                        {statusLabel}
-                      </span>
-                    </div>
-                    <p
-                      className={cn(
-                        "mt-2 text-sm font-semibold leading-tight",
-                        isCurrent ? "font-bold text-olive" : "text-olive/80",
-                      )}
-                    >
-                      {item.title}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
 
       {saved && !paymentNoticeText ? (
         <p className="rounded-xl bg-sage/20 px-3 py-2 text-sm text-olive">
@@ -971,1086 +946,1295 @@ export function TransferEditorPage({
         </div>
       ) : null}
 
-      <section
-        className={cn(
-          "wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]",
-          activeStep === "info" ? "block" : "hidden",
-        )}
-      >
-        <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
-              <AppIcon icon={FileText} className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-olive">Карточка услуги</h2>
-              <p className="mt-0.5 text-sm text-olive/55">
-                Название трансфера, основной тип услуги и описание
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-5 p-4 sm:p-5">
-          <div className="space-y-2">
-            <span className="text-sm font-semibold text-olive">1. Название карточки</span>
-            <Input
-              name="title"
-              value={title}
-              onChange={(event) => {
-                setManualTitle(event.target.value);
-                setTitleTouched(true);
-              }}
-              placeholder="Например: Такси по Ялте"
-            />
-          </div>
-
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-olive">2. Основной тип услуги</span>
-            <select
-              name="transferType"
-              value={transferType}
-              onChange={(event) => setTransferType(event.target.value)}
-              className="w-full rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none focus:border-primary focus:ring-2 focus:ring-primary/22"
-            >
-              <option value="">Выберите тип услуги</option>
-              {transferTypeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-olive">3. Описание</span>
-              <span className="text-xs tabular-nums text-olive/45">{description.length}/5000</span>
-            </div>
-            <TextArea
-              name="description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value.slice(0, 5000))}
-              rows={8}
-              placeholder="Опишите, как проходит подача машины, какие есть форматы поездок, чем удобен ваш трансфер, что входит в сервис и в каких случаях к вам обращаются чаще всего."
-            />
-          </div>
-
-          <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
-            <p className="text-xs text-olive/50">Шаг 1 из 5</p>
-            <Button onClick={goToNextStep}>Далее →</Button>
-          </div>
-        </div>
-      </section>
-
-      <section
-        className={cn(
-          "wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]",
-          activeStep === "location" ? "block" : "hidden",
-        )}
-      >
-        <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
-              <AppIcon icon={MapPin} className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-olive">География поездок</h2>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-5 p-4 sm:p-5">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-olive">1. Город или поселок</span>
-            <Input
-              name="locationName"
-              value={locationName}
-              onChange={(event) => {
-                setLocationName(event.target.value);
-                setSelectedLocationId("");
-              }}
-              placeholder="Например: Ялта"
-            />
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-olive">2. Маршруты и примеры поездок</span>
-            <TextArea
-              name="routeExamples"
-              defaultValue={transfer.routeExamples}
-              rows={5}
-              placeholder="Аэропорт - Ялта, Ялта - Севастополь, трансфер на экскурсии по Южному берегу Крыма"
-            />
-          </label>
-
-          <div className="rounded-2xl border border-olive/10 bg-white/75 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className={cn("transfer-editor-stage", hideHelpAside && "editor-stage-no-aside")}>
+        <nav className="editor-side-stepper" aria-label="Разделы карточки трансфера">
+          <div className="editor-side-stepper-card">
+            <div className="flex items-center justify-between gap-3 border-b border-olive/8 pb-5">
               <div>
-                <p className="text-sm font-semibold text-olive">3. Метка на карте</p>
-                <p className="mt-1 text-xs text-olive/55">
-                  Кликните по карте или перетащите точку, затем подтвердите геопозицию.
+                <p className="text-base font-semibold text-olive">Создание трансфера</p>
+                <p className="mt-1 text-xs text-olive/52">
+                  Заполнено {completedStepsCount}/{steps.length} · {progressPercent}%
                 </p>
-              </div>
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                {latitude !== null && longitude !== null ? "Точка выбрана" : "Необязательно"}
-              </span>
-            </div>
-
-            <div className="mt-4">
-              <YandexMapPicker
-                latitude={latitude}
-                longitude={longitude}
-                onCoordinatesChange={(nextLatitude, nextLongitude) => {
-                  setLatitude(nextLatitude);
-                  setLongitude(nextLongitude);
-                }}
-                onAddressResolved={handleMapResolved}
-                initialSearchValue={locationName}
-                onLocationSearchResolved={(item) => {
-                  setLocationName(item.name);
-                  const exactMatch =
-                    findLocationSuggestion(item.name, locationSuggestions) ??
-                    findLocationSuggestion(item.name, locations);
-                  setSelectedLocationId(exactMatch?.id ?? "");
-                }}
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/58">
-              {effectiveLocationName ? (
-                <span className="rounded-full border border-olive/12 bg-cream/60 px-2.5 py-1">
-                  Город: {effectiveLocationName}
-                </span>
-              ) : null}
-              {latitude !== null && longitude !== null ? (
-                <span className="rounded-full border border-olive/12 bg-cream/60 px-2.5 py-1">
-                  {latitude.toFixed(5)}, {longitude.toFixed(5)}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
-            <Button variant="ghost" onClick={goToPreviousStep}>
-              ← Назад
-            </Button>
-            <Button onClick={goToNextStep}>Далее →</Button>
-          </div>
-        </div>
-      </section>
-
-      <section
-        className={cn(
-          "wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
-          activeStep === "fleet" ? "block" : "hidden",
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
-            <AppIcon icon={Car} className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-olive">Автопарк</h2>
-          </div>
-        </div>
-
-        <TransferFleetBuilder
-          transferId={transfer.id}
-          initialFleet={initialFleet}
-          initialServiceTags={initialServiceTags}
-          onChange={(nextFleet, nextServiceTags) => {
-            setFleet(nextFleet);
-            setServiceTags(nextServiceTags);
-          }}
-        />
-
-        <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
-          <Button variant="ghost" onClick={goToPreviousStep}>
-            Назад
-          </Button>
-          <Button onClick={goToNextStep}>Далее</Button>
-        </div>
-      </section>
-
-      <section
-        className={cn(
-          "wizard-section-enter space-y-6 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
-          activeStep === "contacts" ? "block" : "hidden",
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
-            <AppIcon icon={Phone} className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-olive">Контакты</h2>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-            Основные данные
-          </p>
-          <div className="space-y-2.5">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                <AppIcon icon={UserRound} className="h-4 w-4" />
-              </span>
-              <Input
-                name="contactName"
-                value={contactName}
-                onChange={(event) => setContactName(event.target.value)}
-                placeholder="Имя для связи"
-                className="pl-10"
-              />
-            </div>
-            <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                  <AppIcon icon={Phone} className="h-4 w-4" />
-                </span>
-                <Input
-                  name="phone"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="+7 (978) 000-00-00"
-                  className="pl-10"
-                />
-              </div>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                  <AppIcon icon={UserRound} className="h-4 w-4" />
-                </span>
-                <Input
-                  name="phoneName"
-                  value={phoneName}
-                  onChange={(event) => setPhoneName(event.target.value)}
-                  placeholder="Имя у телефона"
-                  className="pl-10"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-            Дополнительно
-          </p>
-          <div className="space-y-2.5">
-            {showPhone2 ? (
-              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    name="phone2"
-                    value={phone2}
-                    onChange={(event) => setPhone2(event.target.value)}
-                    placeholder="Второй телефон"
-                    className="pl-10"
-                  />
-                </div>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    name="phone2Name"
-                    value={phone2Name}
-                    onChange={(event) => setPhone2Name(event.target.value)}
-                    placeholder="Имя у телефона 2"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPhone2("");
-                      setPhone2Name("");
-                      setShowPhone2(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
-                    aria-label="Убрать второй телефон"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {showPhone3 ? (
-              <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    name="phone3"
-                    value={phone3}
-                    onChange={(event) => setPhone3(event.target.value)}
-                    placeholder="Третий телефон"
-                    className="pl-10"
-                  />
-                </div>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
-                    <AppIcon icon={UserRound} className="h-4 w-4" />
-                  </span>
-                  <Input
-                    name="phone3Name"
-                    value={phone3Name}
-                    onChange={(event) => setPhone3Name(event.target.value)}
-                    placeholder="Имя у телефона 3"
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPhone3("");
-                      setPhone3Name("");
-                      setShowPhone3(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
-                    aria-label="Убрать третий телефон"
-                  >
-                    <AppIcon icon={X} className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {removableField({
-              shown: showWebsite,
-              onHide: () => {
-                setWebsiteUrl("");
-                setShowWebsite(false);
-              },
-              icon: Globe,
-              placeholder: "Сайт",
-              name: "websiteUrl",
-              value: websiteUrl,
-              onChange: setWebsiteUrl,
-            })}
-
-            {removableField({
-              shown: showContactEmail,
-              onHide: () => {
-                setContactEmail("");
-                setShowContactEmail(false);
-              },
-              icon: Mail,
-              placeholder: "Email",
-              name: "contactEmail",
-              value: contactEmail,
-              onChange: setContactEmail,
-            })}
-
-            {!showPhone2 || !showPhone3 || !showWebsite || !showContactEmail ? (
-              <div className="flex flex-wrap gap-2">
-                {!showPhone2 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowPhone2(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-                  >
-                    <AppIcon icon={Phone} className="h-4 w-4" />
-                    Второй телефон
-                  </button>
-                ) : null}
-                {!showPhone3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowPhone3(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-                  >
-                    <AppIcon icon={Plus} className="h-4 w-4" />
-                    Третий телефон
-                  </button>
-                ) : null}
-                {!showWebsite ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowWebsite(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-                  >
-                    <AppIcon icon={Globe} className="h-4 w-4" />
-                    Сайт
-                  </button>
-                ) : null}
-                {!showContactEmail ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowContactEmail(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:border-amber-500/55 hover:bg-amber-500/10"
-                  >
-                    <AppIcon icon={Mail} className="h-4 w-4" />
-                    Email
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
-            Мессенджеры и соцсети
-          </p>
-          <div className="space-y-2.5">
-            {removableField({
-              shown: showWhatsapp,
-              onHide: () => {
-                setWhatsappUrl("");
-                setShowWhatsapp(false);
-              },
-              brand: "whatsapp",
-              placeholder: "WhatsApp: номер или ссылка",
-              name: "whatsappUrl",
-              value: whatsappUrl,
-              onChange: setWhatsappUrl,
-              onBlur: () => setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim()),
-            })}
-            {removableField({
-              shown: showTelegram,
-              onHide: () => {
-                setTelegramUrl("");
-                setShowTelegram(false);
-              },
-              brand: "telegram",
-              placeholder: "Telegram: @username или телефон",
-              name: "telegramUrl",
-              value: telegramUrl,
-              onChange: setTelegramUrl,
-              onBlur: () =>
-                setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim()),
-            })}
-            {removableField({
-              shown: showVk,
-              onHide: () => {
-                setVkUrl("");
-                setShowVk(false);
-              },
-              brand: "vk",
-              placeholder: "VK: ссылка на профиль",
-              name: "vkUrl",
-              value: vkUrl,
-              onChange: setVkUrl,
-            })}
-            {removableField({
-              shown: showMax,
-              onHide: () => {
-                setMaxUrl("");
-                setShowMax(false);
-              },
-              brand: "max",
-              placeholder: "Max: ссылка на профиль",
-              name: "maxUrl",
-              value: maxUrl,
-              onChange: setMaxUrl,
-            })}
-            {removableField({
-              shown: showOk,
-              onHide: () => {
-                setOkUrl("");
-                setShowOk(false);
-              },
-              brand: "ok",
-              placeholder: "Одноклассники: ссылка",
-              name: "okUrl",
-              value: okUrl,
-              onChange: setOkUrl,
-            })}
-
-            {!showWhatsapp || !showTelegram || !showVk || !showMax || !showOk ? (
-              <div className="flex flex-wrap gap-2">
-                {!showWhatsapp ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowWhatsapp(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10"
-                  >
-                    <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
-                    WhatsApp
-                  </button>
-                ) : null}
-                {!showTelegram ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowTelegram(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10"
-                  >
-                    <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
-                    Telegram
-                  </button>
-                ) : null}
-                {!showVk ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowVk(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10"
-                  >
-                    <ContactBrandMark brand="vk" bare className="h-4 w-4" />
-                    ВКонтакте
-                  </button>
-                ) : null}
-                {!showMax ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowMax(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10"
-                  >
-                    <ContactBrandMark brand="max" bare className="h-4 w-4" />
-                    Max
-                  </button>
-                ) : null}
-                {!showOk ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowOk(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10"
-                  >
-                    <ContactBrandMark brand="ok" bare className="h-4 w-4" />
-                    Одноклассники
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
-          <Button variant="ghost" onClick={goToPreviousStep}>
-            Назад
-          </Button>
-          <Button onClick={goToNextStep}>Далее</Button>
-        </div>
-      </section>
-
-      <section
-        className={cn(
-          "wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
-          activeStep === "publish" ? "block" : "hidden",
-        )}
-      >
-        <section className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
-          <div className="border-b border-olive/8 bg-cream/60 px-5 py-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-olive">
-                  {livePublicationFeeRub <= 0 ? "Публикация размещения" : "Оплата размещения"}
-                </h2>
-                <p className="mt-0.5 text-sm text-olive/55">
-                  Последний шаг перед публикацией трансфера
-                </p>
-                <p className="mt-0.5 text-xs text-olive/45">
-                  <span className="font-medium text-olive/60">{displayTitle}</span>
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
-                  statusMeta.bg,
-                  statusMeta.text,
-                )}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta.dot)} />
-                {statusMeta.label}
-              </span>
-            </div>
-
-            <p className={cn("mt-3 text-sm", publishReady ? "text-emerald-700" : "text-olive/70")}>
-              <span className="flex items-center gap-1.5">
-                <AppIcon
-                  icon={publishReady ? CircleCheckBig : CircleAlert}
-                  className={cn("h-4 w-4", publishReady ? "text-emerald-500" : "text-amber-500")}
-                />
-                {paymentReadinessHint}
-              </span>
-            </p>
-          </div>
-
-          <div className="space-y-4 px-5 py-4">
-            <div className="rounded-xl border border-olive/10 bg-cream/70 p-4 text-sm text-olive/75">
-              <p className="mb-2 font-semibold text-olive">Как это работает?</p>
-              <ol className="list-inside list-decimal space-y-1.5 text-[13px]">
-                <li>Проверьте, что карточка, география, автопарк и контакты заполнены.</li>
-                <li>
-                  {livePublicationFeeRub <= 0
-                    ? "До 1 мая 2027 размещение бесплатно, оплата не требуется."
-                    : "Выберите онлайн-оплату или заявку менеджеру."}
-                </li>
-                <li>Отправьте карточку на модерацию.</li>
-                <li>После модерации трансфер появится в каталоге.</li>
-              </ol>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl bg-cream p-3.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                  Город работы
-                </p>
-                <p className="mt-1.5 text-base font-semibold leading-tight text-olive">
-                  {effectiveLocationName || "Не указан"}
-                </p>
-                <p className="mt-1 text-[11px] text-olive/50">Показывается в каталоге и поиске</p>
-              </div>
-              <div className="rounded-xl bg-cream p-3.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                  Автопарк
-                </p>
-                <p
-                  className={cn(
-                    "mt-1.5 text-base font-semibold leading-tight",
-                    fleet.length > 0 ? "text-olive" : "text-olive/45",
-                  )}
-                >
-                  {fleet.length > 0 ? `${fleet.length} вариантов` : "Пока пусто"}
-                </p>
-                <p className="mt-1 text-[11px] text-olive/50">Фото, транспорт и цены обязательны</p>
-              </div>
-              <div className="rounded-xl bg-cream p-3.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
-                  Цена в карточке
-                </p>
-                <p
-                  className={cn(
-                    "mt-1.5 text-base font-semibold leading-tight",
-                    fleetSummary.priceFrom ? "text-olive" : "text-olive/45",
-                  )}
-                >
-                  {fleetSummary.priceFrom
-                    ? `${Number(fleetSummary.priceFrom).toLocaleString("ru-RU")} ₽${fleetSummary.priceUnitLabel ?? ""}`
-                    : "Не указана"}
-                </p>
-                <p className="mt-1 text-[11px] text-olive/50">Минимальная цена из автопарка</p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="mb-3 text-sm font-semibold text-olive">
-                {livePublicationFeeRub <= 0 ? "Стоимость размещения" : "Счет к оплате"}
-              </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Услуга</span>
-                  <span className="text-right font-medium text-olive">
-                    Публикация карточки трансфера
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Срок размещения</span>
-                  <span className="text-right font-medium text-olive">
-                    {TRANSFER_PAYMENT_VALIDITY_DAYS} дней
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Карточка</span>
-                  <span className="text-right font-medium text-olive">{displayTitle}</span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">Базовое размещение</span>
-                  <PlacementPromoPrice
-                    originalAmountRub={originalPublicationFeeRub}
-                    finalAmountRub={publicationFeeRub}
-                    align="right"
-                  />
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">
-                    Дополнительные автомобили
-                    {extraVehicleCount > 0 ? ` (${extraVehicleCount})` : ""}
-                  </span>
-                  <span className="text-right font-medium text-olive">
-                    {extraVehicleCount > 0
-                      ? isLaunchFreePlacement
-                        ? `0 ₽, после бесплатного периода ${formatMoney(
-                            extraVehicleCount * extraVehicleFeeRub,
-                          )}`
-                        : `${formatMoney(extraVehicleFeeDueRub)}`
-                      : `0 ₽, после бесплатного периода каждый следующий +${formatMoney(extraVehicleFeeRub)}`}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
-                  <span className="font-semibold text-olive">Итого</span>
-                  <PlacementPromoPrice
-                    originalAmountRub={originalLivePublicationFeeRub}
-                    finalAmountRub={livePublicationFeeRub}
-                    align="right"
-                    finalClassName="text-2xl"
-                  />
-                </div>
-                {paymentCoverage.hasActivePlacement ? (
-                  <>
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-olive/65">Уже подтверждено</span>
-                      <span className="text-right font-medium text-emerald-700">
-                        {formatMoney(paymentCoverage.coveredAmount)}
-                      </span>
-                    </div>
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-olive/65">К доплате</span>
-                      <PlacementPromoPrice
-                        originalAmountRub={requiredOriginalPaymentAmount}
-                        finalAmountRub={requiredPaymentAmount}
-                        align="right"
-                        finalClassName={cn(
-                          requiredPaymentAmount > 0 ? "text-amber-700" : "text-emerald-700",
-                        )}
-                      />
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
-            <PlacementPromoNotice compact />
+            <div className="mt-5 space-y-3">
+              {steps.map((item, index) => {
+                const isCurrent = activeStep === item.id;
+                const meta = stepMeta.find((step) => step.id === item.id);
+                const StepIcon = meta?.icon ?? FileText;
 
-            {paidUntil ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                <AppIcon icon={CalendarDays} className="h-4 w-4 shrink-0" />
-                <span>
-                  Размещение оплачено до <strong>{formatDate(paidUntil)}</strong>
-                </span>
-              </div>
-            ) : null}
-
-            {!publishReady ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                <p className="mb-1 flex items-center gap-1.5 font-semibold text-red-800">
-                  <AppIcon icon={CircleAlert} className="h-4 w-4" />
-                  Что нужно сделать перед публикацией
-                </p>
-                <p className="mb-3 text-xs text-red-600/70">
-                  Перейдите в нужные шаги, заполните данные и вернитесь к публикации.
-                </p>
-                <ul className="space-y-2">
-                  {readinessIssues.length > 0 ? (
-                    readinessIssues.map((issue) => (
-                      <li key={issue.label} className="flex items-start justify-between gap-3">
-                        <span>{issue.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => switchStep(issue.step)}
-                          className="shrink-0 text-xs font-semibold text-red-700 underline underline-offset-2 hover:text-red-900"
-                        >
-                          Исправить
-                        </button>
-                      </li>
-                    ))
-                  ) : (
-                    <li>Проверьте фото, цену, контакты и описание карточки.</li>
-                  )}
-                </ul>
-              </div>
-            ) : null}
-
-            {alreadyOnModeration ? (
-              <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm text-primary">
-                <p className="font-semibold">
-                  {transfer.status === "PUBLISHED"
-                    ? "Карточка уже опубликована."
-                    : "Карточка сейчас на модерации."}
-                </p>
-                <p className="mt-1 text-primary/75">
-                  Когда статус изменится, он обновится в личном кабинете.
-                </p>
-              </div>
-            ) : null}
-
-            {hasFullPaymentCoverage && !alreadyOnModeration ? (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                {livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement ? (
-                  <>
-                    <p className="font-semibold">Размещение бесплатно</p>
-                    <p className="mt-1">
-                      До 1 мая 2027 карточку трансфера можно отправить на модерацию без оплаты.
-                      Размещение перейдет в режим раннего доступа до конца бесплатного периода.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-semibold">Оплата подтверждена</p>
-                    <p className="mt-1">
-                      Стоимость текущего автопарка покрыта. Нажмите «Отправить на модерацию», чтобы
-                      продолжить.
-                    </p>
-                  </>
-                )}
-              </div>
-            ) : null}
-
-            {needsTransferTopUp && !latestPaymentIsOpen && !alreadyOnModeration ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                <p className="font-semibold">Нужна доплата {formatMoney(requiredPaymentAmount)}</p>
-                <p className="mt-1 text-amber-700/80">
-                  Вы увеличили стоимость размещения, например добавили машину в автопарк. После
-                  подтверждения доплаты карточка уйдет на модерацию автоматически.
-                </p>
-              </div>
-            ) : null}
-
-            {managerPaymentPending ? (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <div className="flex items-start gap-3">
-                  <AppIcon icon={CircleCheckBig} className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                  <div>
-                    <p className="font-semibold text-olive">Заявка на оплату отправлена</p>
-                    <p className="mt-1 text-sm text-olive/70">
-                      Менеджер свяжется с вами и подтвердит оплату. После подтверждения карточка
-                      автоматически уйдет на модерацию.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {onlinePaymentPending ? (
-              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
-                <div className="flex items-start gap-3">
-                  <AppIcon icon={CreditCard} className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
-                  <div>
-                    <p className="font-semibold text-sky-900">Ожидает оплаты в YooKassa</p>
-                    <p className="mt-1 text-sm text-sky-800/75">
-                      После оплаты карточка автоматически уйдет на модерацию.
-                    </p>
-                    {latestPayment?.confirmationUrl ? (
-                      <a
-                        href={latestPayment.confirmationUrl}
-                        className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
-                      >
-                        Продолжить оплату
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {canCreatePayment ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPaymentProvider("MANAGER")}
-                  className={cn(
-                    "flex items-start gap-3 rounded-xl border p-4 text-left transition",
-                    selectedPaymentProvider === "MANAGER"
-                      ? "border-primary/30 bg-primary/5"
-                      : "border-olive/12 bg-white hover:border-primary/25",
-                  )}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-                    <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-primary">
-                      Через менеджера
-                    </span>
-                    <span className="mt-0.5 block text-xs text-olive/60">
-                      Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
-                    </span>
-                  </span>
-                </button>
-                {onlinePaymentAvailable ? (
+                return (
                   <button
+                    key={item.id}
                     type="button"
-                    onClick={() => setSelectedPaymentProvider("YOOKASSA")}
+                    onClick={() => switchStep(item.id)}
+                    aria-current={isCurrent ? "step" : undefined}
                     className={cn(
-                      "flex items-start gap-3 rounded-xl border p-4 text-left transition",
-                      selectedPaymentProvider === "YOOKASSA"
-                        ? "border-primary/30 bg-primary/5"
-                        : "border-olive/12 bg-white hover:border-primary/25",
+                      "group relative flex w-full items-center gap-4 rounded-[8px] border px-4 py-4 text-left transition",
+                      isCurrent
+                        ? "border-primary/28 bg-[linear-gradient(90deg,rgba(15,118,110,0.1),rgba(255,255,255,0.92))] text-primary shadow-[0_12px_36px_rgba(15,118,110,0.08)] ring-1 ring-primary/12"
+                        : "border-transparent bg-white text-olive hover:border-primary/18 hover:bg-foam/45",
                     )}
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100">
-                      <AppIcon icon={CreditCard} className="h-5 w-5 text-sky-700" />
+                    <span
+                      className={cn(
+                        "relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                        isCurrent
+                          ? "border-primary bg-primary text-white"
+                          : item.done
+                            ? "border-primary/22 bg-primary/10 text-primary"
+                            : "border-olive/12 bg-white text-olive/65 group-hover:border-primary/22 group-hover:text-primary",
+                      )}
+                    >
+                      {item.done && !isCurrent ? (
+                        <AppIcon icon={Check} className="h-4 w-4" />
+                      ) : (
+                        index + 1
+                      )}
                     </span>
-                    <span>
-                      <span className="block text-sm font-semibold text-sky-800">YooKassa</span>
-                      <span className="mt-0.5 block text-xs text-olive/60">
-                        Оплатите онлайн на защищенной странице YooKassa.
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <AppIcon
+                          icon={StepIcon}
+                          className={cn(
+                            "h-4 w-4 shrink-0",
+                            isCurrent ? "text-primary" : "text-primary/72",
+                          )}
+                        />
+                        <span className="truncate text-base font-semibold text-olive">
+                          {item.title}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-sm leading-snug text-olive/54">
+                        Шаг {index + 1} из {steps.length}
                       </span>
                     </span>
                   </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {!latestPaymentIsOpen && !alreadyOnModeration ? (
-                <Button
-                  type="submit"
-                  name="intent"
-                  value="submit"
-                  disabled={!canUsePrimaryPaymentSubmit}
-                >
-                  {primaryPaymentLabel}
-                </Button>
-              ) : null}
-
-              <Button type="submit" name="intent" value="preview" variant="ghost">
-                Предпросмотр
-              </Button>
-
-              <Button type="button" variant="ghost" onClick={goToPreviousStep}>
-                Назад
-              </Button>
+                );
+              })}
             </div>
           </div>
-        </section>
+        </nav>
 
-        {latestPayment ? (
-          <section className="rounded-2xl border border-olive/10 bg-white p-4">
-            <h3 className="text-lg font-semibold text-olive">Последний платеж</h3>
-            <div className="mt-2 grid gap-1.5 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-olive/55">Статус</span>
-                <span className="font-semibold text-olive">{latestPayment.statusLabel}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-olive/55">Сумма</span>
-                <span className="font-semibold text-olive">
-                  {formatMoney(latestPayment.amount)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-olive/55">Способ</span>
-                <span className="text-olive">
-                  {getPaymentProviderLabel(latestPayment.provider)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-olive/55">Дата</span>
-                <span className="text-olive">{formatDateTime(latestPayment.createdAt)}</span>
+        <div className="transfer-editor-stage-main space-y-4 sm:space-y-5">
+          <section
+            className={cn(
+              "wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]",
+              activeStep === "info" ? "block" : "hidden",
+            )}
+          >
+            <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
+                  <AppIcon icon={FileText} className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-olive">Карточка услуги</h2>
+                  <p className="mt-0.5 text-sm text-olive/55">
+                    Название трансфера, основной тип услуги и описание
+                  </p>
+                </div>
               </div>
             </div>
 
-            {latestPaymentIsOpen ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {latestPayment.provider === "MANAGER" ? (
-                  <div className="w-full rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-                    <p className="font-medium">Ожидает подтверждения менеджером</p>
-                    <p className="mt-0.5 text-xs text-amber-700/70">
-                      После подтверждения карточка будет отправлена на модерацию автоматически.
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="space-y-2">
+                <span className="text-sm font-semibold text-olive">1. Название карточки</span>
+                <Input
+                  name="title"
+                  value={title}
+                  onChange={(event) => {
+                    setManualTitle(event.target.value);
+                    setTitleTouched(true);
+                  }}
+                  placeholder="Например: Такси по Ялте"
+                />
+              </div>
+
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-olive">2. Основной тип услуги</span>
+                <select
+                  name="transferType"
+                  value={transferType}
+                  onChange={(event) => setTransferType(event.target.value)}
+                  className="w-full rounded-xl border border-olive/18 bg-white px-3.5 py-2.5 text-sm text-olive outline-none focus:border-primary focus:ring-2 focus:ring-primary/22"
+                >
+                  <option value="">Выберите тип услуги</option>
+                  {transferTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-olive">3. Описание</span>
+                  <span className="text-xs tabular-nums text-olive/45">
+                    {description.length}/5000
+                  </span>
+                </div>
+                <TextArea
+                  name="description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value.slice(0, 5000))}
+                  rows={8}
+                  placeholder="Опишите, как проходит подача машины, какие есть форматы поездок, чем удобен ваш трансфер, что входит в сервис и в каких случаях к вам обращаются чаще всего."
+                />
+              </div>
+
+              <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
+                <p className="text-xs text-olive/50">Шаг 1 из 5</p>
+                <Button onClick={goToNextStep}>Далее →</Button>
+              </div>
+            </div>
+          </section>
+
+          <section
+            className={cn(
+              "wizard-section-enter overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)]",
+              activeStep === "location" ? "block" : "hidden",
+            )}
+          >
+            <div className="border-b border-olive/8 bg-white/50 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
+                  <AppIcon icon={MapPin} className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-olive">География поездок</h2>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-4 sm:p-5">
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-olive">1. Город или поселок</span>
+                <Input
+                  name="locationName"
+                  value={locationName}
+                  onChange={(event) => {
+                    setLocationName(event.target.value);
+                    setSelectedLocationId("");
+                  }}
+                  placeholder="Например: Ялта"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-olive">
+                  2. Маршруты и примеры поездок
+                </span>
+                <TextArea
+                  name="routeExamples"
+                  defaultValue={transfer.routeExamples}
+                  rows={5}
+                  placeholder="Аэропорт - Ялта, Ялта - Севастополь, трансфер на экскурсии по Южному берегу Крыма"
+                />
+              </label>
+
+              <div className="rounded-2xl border border-olive/10 bg-white/75 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-olive">3. Метка на карте</p>
+                    <p className="mt-1 text-xs text-olive/55">
+                      Кликните по карте или перетащите точку, затем подтвердите геопозицию.
                     </p>
                   </div>
-                ) : latestPayment.provider === "YOOKASSA" ? (
-                  <div className="w-full rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
-                    <p className="font-medium">Ожидает оплаты в YooKassa</p>
-                    <p className="mt-0.5 text-xs text-sky-700/75">
-                      После оплаты статус обновится автоматически.
-                    </p>
-                    {latestPayment.confirmationUrl ? (
-                      <a
-                        href={latestPayment.confirmationUrl}
-                        className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                    {latitude !== null && longitude !== null ? "Точка выбрана" : "Необязательно"}
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <YandexMapPicker
+                    latitude={latitude}
+                    longitude={longitude}
+                    onCoordinatesChange={(nextLatitude, nextLongitude) => {
+                      setLatitude(nextLatitude);
+                      setLongitude(nextLongitude);
+                    }}
+                    onAddressResolved={handleMapResolved}
+                    initialSearchValue={locationName}
+                    onLocationSearchResolved={(item) => {
+                      setLocationName(item.name);
+                      const exactMatch =
+                        findLocationSuggestion(item.name, locationSuggestions) ??
+                        findLocationSuggestion(item.name, locations);
+                      setSelectedLocationId(exactMatch?.id ?? "");
+                    }}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-olive/58">
+                  {effectiveLocationName ? (
+                    <span className="rounded-full border border-olive/12 bg-cream/60 px-2.5 py-1">
+                      Город: {effectiveLocationName}
+                    </span>
+                  ) : null}
+                  {latitude !== null && longitude !== null ? (
+                    <span className="rounded-full border border-olive/12 bg-cream/60 px-2.5 py-1">
+                      {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="hidden flex-wrap items-center justify-between gap-3 rounded-2xl border border-olive/8 bg-white/60 px-4 py-3 sm:flex">
+                <Button variant="ghost" onClick={goToPreviousStep}>
+                  ← Назад
+                </Button>
+                <Button onClick={goToNextStep}>Далее →</Button>
+              </div>
+            </div>
+          </section>
+
+          <section
+            className={cn(
+              "wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
+              activeStep === "fleet" ? "block" : "hidden",
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                <AppIcon icon={Car} className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-olive">Автопарк</h2>
+              </div>
+            </div>
+
+            <TransferFleetBuilder
+              transferId={transfer.id}
+              initialFleet={initialFleet}
+              initialServiceTags={initialServiceTags}
+              onChange={(nextFleet, nextServiceTags) => {
+                setFleet(nextFleet);
+                setServiceTags(nextServiceTags);
+              }}
+            />
+
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
+              <Button variant="ghost" onClick={goToPreviousStep}>
+                Назад
+              </Button>
+              <Button onClick={goToNextStep}>Далее</Button>
+            </div>
+          </section>
+
+          <section
+            className={cn(
+              "wizard-section-enter space-y-6 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
+              activeStep === "contacts" ? "block" : "hidden",
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                <AppIcon icon={Phone} className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-olive">Контакты</h2>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Основные данные
+              </p>
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                    <AppIcon icon={UserRound} className="h-4 w-4" />
+                  </span>
+                  <Input
+                    name="contactName"
+                    value={contactName}
+                    onChange={(event) => setContactName(event.target.value)}
+                    placeholder="Имя для связи"
+                    className="pl-10"
+                  />
+                </div>
+                <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                      <AppIcon icon={Phone} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      name="phone"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      placeholder="+7 (978) 000-00-00"
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                      <AppIcon icon={UserRound} className="h-4 w-4" />
+                    </span>
+                    <Input
+                      name="phoneName"
+                      value={phoneName}
+                      onChange={(event) => setPhoneName(event.target.value)}
+                      placeholder="Имя у телефона"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Дополнительно
+              </p>
+              <div className="space-y-2.5">
+                {showPhone2 ? (
+                  <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        name="phone2"
+                        value={phone2}
+                        onChange={(event) => setPhone2(event.target.value)}
+                        placeholder="Второй телефон"
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        name="phone2Name"
+                        value={phone2Name}
+                        onChange={(event) => setPhone2Name(event.target.value)}
+                        placeholder="Имя у телефона 2"
+                        className="pl-10 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhone2("");
+                          setPhone2Name("");
+                          setShowPhone2(false);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
+                        aria-label="Убрать второй телефон"
                       >
-                        Продолжить оплату
-                      </a>
+                        <AppIcon icon={X} className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {showPhone3 ? (
+                  <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        name="phone3"
+                        value={phone3}
+                        onChange={(event) => setPhone3(event.target.value)}
+                        placeholder="Третий телефон"
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-olive/45">
+                        <AppIcon icon={UserRound} className="h-4 w-4" />
+                      </span>
+                      <Input
+                        name="phone3Name"
+                        value={phone3Name}
+                        onChange={(event) => setPhone3Name(event.target.value)}
+                        placeholder="Имя у телефона 3"
+                        className="pl-10 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhone3("");
+                          setPhone3Name("");
+                          setShowPhone3(false);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-olive/45 transition hover:text-olive"
+                        aria-label="Убрать третий телефон"
+                      >
+                        <AppIcon icon={X} className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {removableField({
+                  shown: showWebsite,
+                  onHide: () => {
+                    setWebsiteUrl("");
+                    setShowWebsite(false);
+                  },
+                  icon: Globe,
+                  placeholder: "Сайт",
+                  name: "websiteUrl",
+                  value: websiteUrl,
+                  onChange: setWebsiteUrl,
+                })}
+
+                {removableField({
+                  shown: showContactEmail,
+                  onHide: () => {
+                    setContactEmail("");
+                    setShowContactEmail(false);
+                  },
+                  icon: Mail,
+                  placeholder: "Email",
+                  name: "contactEmail",
+                  value: contactEmail,
+                  onChange: setContactEmail,
+                })}
+
+                {!showPhone2 || !showPhone3 || !showWebsite || !showContactEmail ? (
+                  <div className="flex flex-wrap gap-2">
+                    {!showPhone2 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPhone2(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <AppIcon icon={Phone} className="h-4 w-4" />
+                        Второй телефон
+                      </button>
+                    ) : null}
+                    {!showPhone3 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPhone3(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <AppIcon icon={Plus} className="h-4 w-4" />
+                        Третий телефон
+                      </button>
+                    ) : null}
+                    {!showWebsite ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowWebsite(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-olive/20 bg-cream/40 px-3 py-1.5 text-xs font-medium text-olive/60 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                      >
+                        <AppIcon icon={Globe} className="h-4 w-4" />
+                        Сайт
+                      </button>
+                    ) : null}
+                    {!showContactEmail ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowContactEmail(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:border-amber-500/55 hover:bg-amber-500/10"
+                      >
+                        <AppIcon icon={Mail} className="h-4 w-4" />
+                        Email
+                      </button>
                     ) : null}
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            </div>
 
-            {latestPayment.status === "SUCCEEDED" ? (
-              <div className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-700">
-                Оплата подтверждена.
-              </div>
-            ) : null}
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-olive/40">
+                Мессенджеры и соцсети
+              </p>
+              <div className="space-y-2.5">
+                {removableField({
+                  shown: showWhatsapp,
+                  onHide: () => {
+                    setWhatsappUrl("");
+                    setShowWhatsapp(false);
+                  },
+                  brand: "whatsapp",
+                  placeholder: "WhatsApp: номер или ссылка",
+                  name: "whatsappUrl",
+                  value: whatsappUrl,
+                  onChange: setWhatsappUrl,
+                  onBlur: () =>
+                    setWhatsappUrl((value) => normalizeWhatsappUrl(value) ?? value.trim()),
+                })}
+                {removableField({
+                  shown: showTelegram,
+                  onHide: () => {
+                    setTelegramUrl("");
+                    setShowTelegram(false);
+                  },
+                  brand: "telegram",
+                  placeholder: "Telegram: @username или телефон",
+                  name: "telegramUrl",
+                  value: telegramUrl,
+                  onChange: setTelegramUrl,
+                  onBlur: () =>
+                    setTelegramUrl((value) => normalizeTelegramProfileUrl(value) ?? value.trim()),
+                })}
+                {removableField({
+                  shown: showVk,
+                  onHide: () => {
+                    setVkUrl("");
+                    setShowVk(false);
+                  },
+                  brand: "vk",
+                  placeholder: "VK: ссылка на профиль",
+                  name: "vkUrl",
+                  value: vkUrl,
+                  onChange: setVkUrl,
+                })}
+                {removableField({
+                  shown: showMax,
+                  onHide: () => {
+                    setMaxUrl("");
+                    setShowMax(false);
+                  },
+                  brand: "max",
+                  placeholder: "Max: ссылка на профиль",
+                  name: "maxUrl",
+                  value: maxUrl,
+                  onChange: setMaxUrl,
+                })}
+                {removableField({
+                  shown: showOk,
+                  onHide: () => {
+                    setOkUrl("");
+                    setShowOk(false);
+                  },
+                  brand: "ok",
+                  placeholder: "Одноклассники: ссылка",
+                  name: "okUrl",
+                  value: okUrl,
+                  onChange: setOkUrl,
+                })}
 
-            {latestPayment.status === "CANCELED" ? (
-              <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
-                <AppIcon icon={CircleX} className="mt-0.5 h-4 w-4 shrink-0" />
-                Платеж отменен или не прошел. Можно повторить оплату.
+                {!showWhatsapp || !showTelegram || !showVk || !showMax || !showOk ? (
+                  <div className="flex flex-wrap gap-2">
+                    {!showWhatsapp ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhatsapp(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#25D366]/35 bg-[#25D366]/5 px-3 py-1.5 text-xs font-medium text-[#25D366] transition hover:border-[#25D366]/60 hover:bg-[#25D366]/10"
+                      >
+                        <ContactBrandMark brand="whatsapp" bare className="h-4 w-4" />
+                        WhatsApp
+                      </button>
+                    ) : null}
+                    {!showTelegram ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowTelegram(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#2AABEE]/35 bg-[#2AABEE]/5 px-3 py-1.5 text-xs font-medium text-[#2AABEE] transition hover:border-[#2AABEE]/60 hover:bg-[#2AABEE]/10"
+                      >
+                        <ContactBrandMark brand="telegram" bare className="h-4 w-4" />
+                        Telegram
+                      </button>
+                    ) : null}
+                    {!showVk ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowVk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#0077FF]/35 bg-[#0077FF]/5 px-3 py-1.5 text-xs font-medium text-[#0077FF] transition hover:border-[#0077FF]/60 hover:bg-[#0077FF]/10"
+                      >
+                        <ContactBrandMark brand="vk" bare className="h-4 w-4" />
+                        ВКонтакте
+                      </button>
+                    ) : null}
+                    {!showMax ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowMax(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#FF6600]/35 bg-[#FF6600]/5 px-3 py-1.5 text-xs font-medium text-[#FF6600] transition hover:border-[#FF6600]/60 hover:bg-[#FF6600]/10"
+                      >
+                        <ContactBrandMark brand="max" bare className="h-4 w-4" />
+                        Max
+                      </button>
+                    ) : null}
+                    {!showOk ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowOk(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[#EE8208]/35 bg-[#EE8208]/5 px-3 py-1.5 text-xs font-medium text-[#EE8208] transition hover:border-[#EE8208]/60 hover:bg-[#EE8208]/10"
+                      >
+                        <ContactBrandMark brand="ok" bare className="h-4 w-4" />
+                        Одноклассники
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
+
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-t border-olive/10 pt-4 sm:flex">
+              <Button variant="ghost" onClick={goToPreviousStep}>
+                Назад
+              </Button>
+              <Button onClick={goToNextStep}>Далее</Button>
+            </div>
           </section>
-        ) : null}
 
-        {payments.length > 0 ? (
-          <section className="rounded-2xl border border-olive/10 bg-white p-4">
-            <h3 className="text-lg font-semibold text-olive">История платежей</h3>
-            <p className="mt-0.5 text-xs text-olive/50">
-              Все операции по оплате публикации трансфера
-            </p>
+          <section
+            className={cn(
+              "wizard-section-enter space-y-4 rounded-3xl border border-olive/10 bg-white p-4 shadow-[0_14px_36px_-18px_rgba(58,43,35,0.08)] sm:p-5",
+              activeStep === "publish" ? "block" : "hidden",
+            )}
+          >
+            <section className="overflow-hidden rounded-2xl border border-olive/10 bg-white shadow-sm">
+              <div className="border-b border-olive/8 bg-cream/60 px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold text-olive">
+                      {livePublicationFeeRub <= 0 ? "Публикация размещения" : "Оплата размещения"}
+                    </h2>
+                    <p className="mt-0.5 text-sm text-olive/55">
+                      Последний шаг перед публикацией трансфера
+                    </p>
+                    <p className="mt-0.5 text-xs text-olive/45">
+                      <span className="font-medium text-olive/60">{displayTitle}</span>
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+                      statusMeta.bg,
+                      statusMeta.text,
+                    )}
+                  >
+                    <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta.dot)} />
+                    {statusMeta.label}
+                  </span>
+                </div>
 
-            <div className="mt-3 space-y-2 sm:hidden">
-              {payments.map((payment) => (
-                <div key={payment.id} className="rounded-xl border border-olive/10 bg-cream/50 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-olive">
-                      {formatMoney(payment.amount)}
-                    </span>
-                    <span className="rounded-full bg-olive/8 px-2 py-0.5 text-[11px] font-semibold text-olive/70">
-                      {payment.statusLabel}
+                <p
+                  className={cn(
+                    "mt-3 text-sm",
+                    publishReady ? "text-emerald-700" : "text-olive/70",
+                  )}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <AppIcon
+                      icon={publishReady ? CircleCheckBig : CircleAlert}
+                      className={cn(
+                        "h-4 w-4",
+                        publishReady ? "text-emerald-500" : "text-amber-500",
+                      )}
+                    />
+                    {paymentReadinessHint}
+                  </span>
+                </p>
+              </div>
+
+              <div className="space-y-4 px-5 py-4">
+                <div className="rounded-xl border border-olive/10 bg-cream/70 p-4 text-sm text-olive/75">
+                  <p className="mb-2 font-semibold text-olive">Как это работает?</p>
+                  <ol className="list-inside list-decimal space-y-1.5 text-[13px]">
+                    <li>Проверьте, что карточка, география, автопарк и контакты заполнены.</li>
+                    <li>
+                      {livePublicationFeeRub <= 0
+                        ? "Размещение бесплатно, оплата не требуется."
+                        : "Выберите онлайн-оплату или заявку менеджеру."}
+                    </li>
+                    <li>Отправьте карточку на модерацию.</li>
+                    <li>После модерации трансфер появится в каталоге.</li>
+                  </ol>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl bg-cream p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
+                      Город работы
+                    </p>
+                    <p className="mt-1.5 text-base font-semibold leading-tight text-olive">
+                      {effectiveLocationName || "Не указан"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-olive/50">
+                      Показывается в каталоге и поиске
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-cream p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
+                      Автопарк
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1.5 text-base font-semibold leading-tight",
+                        fleet.length > 0 ? "text-olive" : "text-olive/45",
+                      )}
+                    >
+                      {fleet.length > 0 ? `${fleet.length} вариантов` : "Пока пусто"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-olive/50">
+                      Фото, транспорт и цены обязательны
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-cream p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-olive/50">
+                      Цена в карточке
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1.5 text-base font-semibold leading-tight",
+                        fleetSummary.priceFrom ? "text-olive" : "text-olive/45",
+                      )}
+                    >
+                      {fleetSummary.priceFrom
+                        ? `${Number(fleetSummary.priceFrom).toLocaleString("ru-RU")} ₽${fleetSummary.priceUnitLabel ?? ""}`
+                        : "Не указана"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-olive/50">Минимальная цена из автопарка</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="mb-3 text-sm font-semibold text-olive">
+                    {livePublicationFeeRub <= 0 ? "Стоимость размещения" : "Счет к оплате"}
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">Услуга</span>
+                      <span className="text-right font-medium text-olive">
+                        Публикация карточки трансфера
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">Срок размещения</span>
+                      <span className="text-right font-medium text-olive">
+                        {TRANSFER_PAYMENT_VALIDITY_DAYS} дней
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">Карточка</span>
+                      <span className="text-right font-medium text-olive">{displayTitle}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">Базовое размещение</span>
+                      <PlacementPromoPrice
+                        originalAmountRub={originalPublicationFeeRub}
+                        finalAmountRub={publicationFeeRub}
+                        align="right"
+                      />
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-olive/65">
+                        Дополнительные автомобили
+                        {extraVehicleCount > 0 ? ` (${extraVehicleCount})` : ""}
+                      </span>
+                      <span className="text-right font-medium text-olive">
+                        {extraVehicleCount > 0
+                          ? isLaunchFreePlacement
+                            ? `0 ₽, после бесплатного периода ${formatMoney(
+                                extraVehicleCount * extraVehicleFeeRub,
+                              )}`
+                            : `${formatMoney(extraVehicleFeeDueRub)}`
+                          : `0 ₽, после бесплатного периода каждый следующий +${formatMoney(extraVehicleFeeRub)}`}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
+                      <span className="font-semibold text-olive">Итого</span>
+                      <PlacementPromoPrice
+                        originalAmountRub={originalLivePublicationFeeRub}
+                        finalAmountRub={livePublicationFeeRub}
+                        align="right"
+                        finalClassName="text-2xl"
+                      />
+                    </div>
+                    {paymentCoverage.hasActivePlacement ? (
+                      <>
+                        <div className="flex items-start justify-between gap-4">
+                          <span className="text-olive/65">Уже подтверждено</span>
+                          <span className="text-right font-medium text-emerald-700">
+                            {formatMoney(paymentCoverage.coveredAmount)}
+                          </span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                          <span className="text-olive/65">К доплате</span>
+                          <PlacementPromoPrice
+                            originalAmountRub={requiredOriginalPaymentAmount}
+                            finalAmountRub={requiredPaymentAmount}
+                            align="right"
+                            finalClassName={cn(
+                              requiredPaymentAmount > 0 ? "text-amber-700" : "text-emerald-700",
+                            )}
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <PlacementPromoNotice compact />
+
+                {paidUntil ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    <AppIcon icon={CalendarDays} className="h-4 w-4 shrink-0" />
+                    <span>
+                      Размещение оплачено до <strong>{formatDate(paidUntil)}</strong>
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-olive/55">
-                    {getTransferPaymentTariffLabel(payment.tariffCode)}
-                  </p>
-                  <p className="text-xs text-olive/45">{formatDateTime(payment.createdAt)}</p>
+                ) : null}
+
+                {!publishReady ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <p className="mb-1 flex items-center gap-1.5 font-semibold text-red-800">
+                      <AppIcon icon={CircleAlert} className="h-4 w-4" />
+                      Что нужно сделать перед публикацией
+                    </p>
+                    <p className="mb-3 text-xs text-red-600/70">
+                      Перейдите в нужные шаги, заполните данные и вернитесь к публикации.
+                    </p>
+                    <ul className="space-y-2">
+                      {readinessIssues.length > 0 ? (
+                        readinessIssues.map((issue) => (
+                          <li key={issue.label} className="flex items-start justify-between gap-3">
+                            <span>{issue.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => switchStep(issue.step)}
+                              className="shrink-0 text-xs font-semibold text-red-700 underline underline-offset-2 hover:text-red-900"
+                            >
+                              Исправить
+                            </button>
+                          </li>
+                        ))
+                      ) : (
+                        <li>Проверьте фото, цену, контакты и описание карточки.</li>
+                      )}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {alreadyOnModeration ? (
+                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm text-primary">
+                    <p className="font-semibold">
+                      {transfer.status === "PUBLISHED"
+                        ? "Карточка уже опубликована."
+                        : "Карточка сейчас на модерации."}
+                    </p>
+                    <p className="mt-1 text-primary/75">
+                      Когда статус изменится, он обновится в личном кабинете.
+                    </p>
+                  </div>
+                ) : null}
+
+                {hasFullPaymentCoverage && !alreadyOnModeration ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                    {livePublicationFeeRub <= 0 && !paymentCoverage.hasActivePlacement ? (
+                      <>
+                        <p className="font-semibold">Размещение бесплатно</p>
+                        <p className="mt-1">
+                          Карточку трансфера можно отправить на модерацию без оплаты. Размещение
+                          перейдет в режим раннего доступа до конца бесплатного периода.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-semibold">Оплата подтверждена</p>
+                        <p className="mt-1">
+                          Стоимость текущего автопарка покрыта. Нажмите «Отправить на модерацию»,
+                          чтобы продолжить.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+
+                {needsTransferTopUp && !latestPaymentIsOpen && !alreadyOnModeration ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    <p className="font-semibold">
+                      Нужна доплата {formatMoney(requiredPaymentAmount)}
+                    </p>
+                    <p className="mt-1 text-amber-700/80">
+                      Вы увеличили стоимость размещения, например добавили машину в автопарк. После
+                      подтверждения доплаты карточка уйдет на модерацию автоматически.
+                    </p>
+                  </div>
+                ) : null}
+
+                {managerPaymentPending ? (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <AppIcon
+                        icon={CircleCheckBig}
+                        className="mt-0.5 h-5 w-5 shrink-0 text-primary"
+                      />
+                      <div>
+                        <p className="font-semibold text-olive">Заявка на оплату отправлена</p>
+                        <p className="mt-1 text-sm text-olive/70">
+                          Менеджер свяжется с вами и подтвердит оплату. После подтверждения карточка
+                          автоматически уйдет на модерацию.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {onlinePaymentPending ? (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <AppIcon icon={CreditCard} className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
+                      <div>
+                        <p className="font-semibold text-sky-900">Ожидает оплаты в YooKassa</p>
+                        <p className="mt-1 text-sm text-sky-800/75">
+                          После оплаты карточка автоматически уйдет на модерацию.
+                        </p>
+                        {latestPayment?.confirmationUrl ? (
+                          <a
+                            href={latestPayment.confirmationUrl}
+                            className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                          >
+                            Продолжить оплату
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {canCreatePayment ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPaymentProvider("MANAGER")}
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                        selectedPaymentProvider === "MANAGER"
+                          ? "border-primary/30 bg-primary/5"
+                          : "border-olive/12 bg-white hover:border-primary/25",
+                      )}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                        <AppIcon icon={Phone} className="h-5 w-5 text-primary" />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold text-primary">
+                          Через менеджера
+                        </span>
+                        <span className="mt-0.5 block text-xs text-olive/60">
+                          Отправьте заявку, менеджер свяжется с вами и подтвердит оплату вручную.
+                        </span>
+                      </span>
+                    </button>
+                    {onlinePaymentAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPaymentProvider("YOOKASSA")}
+                        className={cn(
+                          "flex items-start gap-3 rounded-xl border p-4 text-left transition",
+                          selectedPaymentProvider === "YOOKASSA"
+                            ? "border-primary/30 bg-primary/5"
+                            : "border-olive/12 bg-white hover:border-primary/25",
+                        )}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100">
+                          <AppIcon icon={CreditCard} className="h-5 w-5 text-sky-700" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-sky-800">YooKassa</span>
+                          <span className="mt-0.5 block text-xs text-olive/60">
+                            Оплатите онлайн на защищенной странице YooKassa.
+                          </span>
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {!latestPaymentIsOpen && !alreadyOnModeration ? (
+                    <Button
+                      type="submit"
+                      name="intent"
+                      value="submit"
+                      disabled={!canUsePrimaryPaymentSubmit}
+                    >
+                      {primaryPaymentLabel}
+                    </Button>
+                  ) : null}
+
+                  <Button type="submit" name="intent" value="preview" variant="ghost">
+                    Предпросмотр
+                  </Button>
+
+                  <Button type="button" variant="ghost" onClick={goToPreviousStep}>
+                    Назад
+                  </Button>
                 </div>
-              ))}
-            </div>
+              </div>
+            </section>
 
-            <div className="mt-3 hidden overflow-x-auto sm:block">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-olive/65">
-                    <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
-                      Тариф
-                    </th>
-                    <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
-                      Сумма
-                    </th>
-                    <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
-                      Статус
-                    </th>
-                    <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
-                      Способ
-                    </th>
-                    <th className="py-1.5 text-xs font-semibold uppercase tracking-wide">Дата</th>
-                  </tr>
-                </thead>
-                <tbody>
+            {latestPayment ? (
+              <section className="rounded-2xl border border-olive/10 bg-white p-4">
+                <h3 className="text-lg font-semibold text-olive">Последний платеж</h3>
+                <div className="mt-2 grid gap-1.5 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-olive/55">Статус</span>
+                    <span className="font-semibold text-olive">{latestPayment.statusLabel}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-olive/55">Сумма</span>
+                    <span className="font-semibold text-olive">
+                      {formatMoney(latestPayment.amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-olive/55">Способ</span>
+                    <span className="text-olive">
+                      {getPaymentProviderLabel(latestPayment.provider)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-olive/55">Дата</span>
+                    <span className="text-olive">{formatDateTime(latestPayment.createdAt)}</span>
+                  </div>
+                </div>
+
+                {latestPaymentIsOpen ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {latestPayment.provider === "MANAGER" ? (
+                      <div className="w-full rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                        <p className="font-medium">Ожидает подтверждения менеджером</p>
+                        <p className="mt-0.5 text-xs text-amber-700/70">
+                          После подтверждения карточка будет отправлена на модерацию автоматически.
+                        </p>
+                      </div>
+                    ) : latestPayment.provider === "YOOKASSA" ? (
+                      <div className="w-full rounded-xl bg-sky-50 p-3 text-sm text-sky-800">
+                        <p className="font-medium">Ожидает оплаты в YooKassa</p>
+                        <p className="mt-0.5 text-xs text-sky-700/75">
+                          После оплаты статус обновится автоматически.
+                        </p>
+                        {latestPayment.confirmationUrl ? (
+                          <a
+                            href={latestPayment.confirmationUrl}
+                            className="mt-2 inline-flex rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                          >
+                            Продолжить оплату
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {latestPayment.status === "SUCCEEDED" ? (
+                  <div className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-700">
+                    Оплата подтверждена.
+                  </div>
+                ) : null}
+
+                {latestPayment.status === "CANCELED" ? (
+                  <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                    <AppIcon icon={CircleX} className="mt-0.5 h-4 w-4 shrink-0" />
+                    Платеж отменен или не прошел. Можно повторить оплату.
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {payments.length > 0 ? (
+              <section className="rounded-2xl border border-olive/10 bg-white p-4">
+                <h3 className="text-lg font-semibold text-olive">История платежей</h3>
+                <p className="mt-0.5 text-xs text-olive/50">
+                  Все операции по оплате публикации трансфера
+                </p>
+
+                <div className="mt-3 space-y-2 sm:hidden">
                   {payments.map((payment) => (
-                    <tr key={payment.id} className="border-t border-olive/10">
-                      <td className="py-2 pr-4 text-olive">
+                    <div
+                      key={payment.id}
+                      className="rounded-xl border border-olive/10 bg-cream/50 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-olive">
+                          {formatMoney(payment.amount)}
+                        </span>
+                        <span className="rounded-full bg-olive/8 px-2 py-0.5 text-[11px] font-semibold text-olive/70">
+                          {payment.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-olive/55">
                         {getTransferPaymentTariffLabel(payment.tariffCode)}
-                      </td>
-                      <td className="py-2 pr-4 font-medium text-olive">
-                        {formatMoney(payment.amount)}
-                      </td>
-                      <td className="py-2 pr-4 text-olive">{payment.statusLabel}</td>
-                      <td className="py-2 pr-4 text-olive">
-                        {getPaymentProviderLabel(payment.provider)}
-                      </td>
-                      <td className="py-2 text-olive">{formatDateTime(payment.createdAt)}</td>
-                    </tr>
+                      </p>
+                      <p className="text-xs text-olive/45">{formatDateTime(payment.createdAt)}</p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                <div className="mt-3 hidden overflow-x-auto sm:block">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-olive/65">
+                        <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                          Тариф
+                        </th>
+                        <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                          Сумма
+                        </th>
+                        <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                          Статус
+                        </th>
+                        <th className="py-1.5 pr-4 text-xs font-semibold uppercase tracking-wide">
+                          Способ
+                        </th>
+                        <th className="py-1.5 text-xs font-semibold uppercase tracking-wide">
+                          Дата
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((payment) => (
+                        <tr key={payment.id} className="border-t border-olive/10">
+                          <td className="py-2 pr-4 text-olive">
+                            {getTransferPaymentTariffLabel(payment.tariffCode)}
+                          </td>
+                          <td className="py-2 pr-4 font-medium text-olive">
+                            {formatMoney(payment.amount)}
+                          </td>
+                          <td className="py-2 pr-4 text-olive">{payment.statusLabel}</td>
+                          <td className="py-2 pr-4 text-olive">
+                            {getPaymentProviderLabel(payment.provider)}
+                          </td>
+                          <td className="py-2 text-olive">{formatDateTime(payment.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+
+            {paymentError ? (
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+                <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4 shrink-0" />
+                {paymentError}
+              </div>
+            ) : null}
+
+            {paymentMessage ? (
+              <div className="flex items-start gap-2 rounded-xl bg-primary/8 p-3 text-sm text-primary">
+                <AppIcon icon={CircleCheckBig} className="mt-0.5 h-4 w-4 shrink-0" />
+                {paymentMessage}
+              </div>
+            ) : null}
           </section>
-        ) : null}
+        </div>
 
-        {paymentError ? (
-          <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-600">
-            <AppIcon icon={CircleAlert} className="mt-0.5 h-4 w-4 shrink-0" />
-            {paymentError}
-          </div>
-        ) : null}
+        {!hideHelpAside ? (
+          <aside className="transfer-editor-aside space-y-7">
+            <section className="transfer-editor-aside-card">
+              <div className="flex items-center gap-4">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/8 text-primary">
+                  <AppIcon icon={activeStepIcon} className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-base font-semibold text-primary">{transferAside.title}</p>
+                  <p className="mt-1 text-xs font-semibold text-olive/42">
+                    Шаг {activeStepIndex + 1} из {steps.length}
+                  </p>
+                </div>
+              </div>
 
-        {paymentMessage ? (
-          <div className="flex items-start gap-2 rounded-xl bg-primary/8 p-3 text-sm text-primary">
-            <AppIcon icon={CircleCheckBig} className="mt-0.5 h-4 w-4 shrink-0" />
-            {paymentMessage}
-          </div>
-        ) : null}
-      </section>
+              <p className="mt-6 text-sm leading-6 text-olive/62">{transferAside.lead}</p>
 
-      <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
+              <div className="mt-7 space-y-5">
+                {transferAside.checks.map((item) => (
+                  <div key={item} className="flex gap-4 text-sm leading-6 text-olive/62">
+                    <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/8 text-primary ring-1 ring-primary/10">
+                      <AppIcon icon={Check} className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block font-semibold text-olive">{item}</span>
+                      <span className="mt-1 block text-xs leading-5 text-olive/50">
+                        Проверьте этот пункт перед переходом дальше.
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="transfer-editor-aside-card">
+              <div className="flex items-start gap-4">
+                <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-[8px] bg-primary text-white shadow-[0_12px_28px_rgba(15,118,110,0.22)]">
+                  <AppIcon icon={Save} className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-base font-semibold text-primary">Готовность карточки</p>
+                  <p className="mt-2 text-sm leading-6 text-olive/62">
+                    Карточка готовится по тем же шагам, что и другие объекты: заполненные блоки
+                    сразу отражаются в общем прогрессе.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 text-sm text-olive/62">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Текущий шаг</span>
+                  <span className="font-semibold text-olive">{activeStepTitle}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-olive/8">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Готовность</span>
+                  <span className="font-semibold text-primary">
+                    {completedStepsCount}/{steps.length}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section className="transfer-editor-aside-card transfer-editor-preview-card">
+              <div
+                className="h-28 bg-cover bg-center"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, rgba(15,118,110,0.18), rgba(242,196,77,0.22)), url('${activeAsideVisual.image}')`,
+                }}
+              />
+              <div className="p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-olive/38">
+                  Мини-превью
+                </p>
+                <p className="mt-2 text-base font-semibold text-olive">{displayTitle}</p>
+                <div className="mt-4 space-y-3 text-sm text-olive/62">
+                  <div className="flex justify-between gap-3">
+                    <span>Город</span>
+                    <span className="font-medium text-olive">
+                      {effectiveLocationName || "Не указан"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Автопарк</span>
+                    <span className="font-medium text-olive">{fleet.length}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Цена от</span>
+                    <span className="font-medium text-olive">
+                      {fleetSummary.priceFrom ? formatMoney(fleetSummary.priceFrom) : "Не указана"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Контакт</span>
+                    <span className="font-medium text-olive">
+                      {contactName.trim() || "Не указан"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        ) : null}
+      </div>
+
+      <div className="sticky-bottom-enter mobile-editor-bottom-bar -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">

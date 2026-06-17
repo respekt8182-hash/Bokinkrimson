@@ -68,8 +68,8 @@ export default async function AdminObjectChessboardPage({
           propertyId={property.id}
           activeSection="chessboard"
           basePath="/admin/objects"
-          backHref={`/admin/objects/${property.id}`}
-          backLabel="Быстрая админ-правка"
+          backHref={`/admin/objects/${property.id}/about`}
+          backLabel="Об объекте"
           includePayment={false}
           showChessboardTab
         />

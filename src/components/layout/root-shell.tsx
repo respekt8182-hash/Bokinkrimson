@@ -10,6 +10,7 @@ type RootShellProps = {
   children: React.ReactNode;
   header: React.ReactNode;
   footer: React.ReactNode;
+  supportChatEnabled: boolean;
 };
 
 function shouldShowSupportChat(pathname: string) {
@@ -44,13 +45,13 @@ function isPublicCatalogRoute(pathname: string, direction: string | null) {
   return segments.length === 2 && segments[0] === "crimea" && segments[1] !== "excursions";
 }
 
-export function RootShell({ children, header, footer }: RootShellProps) {
+export function RootShell({ children, header, footer, supportChatEnabled }: RootShellProps) {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAdminRoute = pathname.startsWith("/admin");
   const showSiteChrome = !isDashboardRoute && !isAdminRoute;
-  const showChatWidget = shouldShowSupportChat(pathname);
+  const showChatWidget = supportChatEnabled && shouldShowSupportChat(pathname);
   const showPublicMobileBottomNav = showSiteChrome && shouldShowPublicMobileBottomNav(pathname);
   const useStaticSiteHeader =
     showSiteChrome && isPublicCatalogRoute(pathname, searchParams.get("direction"));

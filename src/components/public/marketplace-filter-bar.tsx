@@ -37,6 +37,7 @@ type MarketplaceFilterBarProps =
       transferTypes: string[];
       locationSuggestions: PublicMarketplaceLocationSuggestion[];
       onNavigate?: (href: string) => void;
+      priceMax?: number;
     };
 
 type PanelKey = "search" | "location" | "entity" | "price" | "sort";
@@ -62,7 +63,7 @@ type LocationSuggestionItem = {
 
 const DEFAULT_RADIUS_KM = "20";
 const PRICE_MIN_BOUND = 0;
-const PRICE_MAX_BOUND = 100_000;
+const DEFAULT_PRICE_MAX_BOUND = 100_000;
 const PRICE_STEP = 500;
 const LOCATION_RECENT_STORAGE_KEY = "boking.home_search_recent_v1";
 const LOCATION_RECENT_LIMIT = 4;
@@ -82,6 +83,20 @@ const TRANSFER_SORT_OPTIONS = [
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function getPriceMaxBound(value: number | undefined): number {
+  const raw = Number.isFinite(value) && value && value > 0 ? value : DEFAULT_PRICE_MAX_BOUND;
+  return Math.max(PRICE_STEP, Math.ceil(raw / PRICE_STEP) * PRICE_STEP);
+}
+
+function normalizePriceInput(value: string): string {
+  return value.replace(/[^\d]/g, "").slice(0, 8);
+}
+
+function parsePriceInput(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeLocationKey(value: string | null | undefined): string {
@@ -129,11 +144,12 @@ function formatPlural(value: number, one: string, few: string, many: string): st
 function formatPriceChip(
   minPrice: string | number | null,
   maxPrice: string | number | null,
+  maxBound = DEFAULT_PRICE_MAX_BOUND,
 ): string {
   const min = Number(minPrice);
   const max = Number(maxPrice);
   const hasMin = Number.isFinite(min) && min > PRICE_MIN_BOUND;
-  const hasMax = Number.isFinite(max) && max > PRICE_MIN_BOUND;
+  const hasMax = Number.isFinite(max) && max > PRICE_MIN_BOUND && max < maxBound;
 
   if (hasMin && hasMax) {
     return `${formatCurrency(min)} - ${formatCurrency(max)}`;
@@ -436,6 +452,7 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
   const appliedMinPrice = isTransfer ? filters.minPrice : null;
   const appliedMaxPrice = isTransfer ? filters.maxPrice : null;
   const appliedSort = filters.sort === "relevance" ? "" : filters.sort;
+  const priceMaxBound = getPriceMaxBound(isTransfer ? props.priceMax : undefined);
 
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
   const [query, setQuery] = useState(normalizeText(filters.query));
@@ -459,20 +476,20 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
     Boolean(appliedSort);
 
   const pricePercentages = useMemo(() => {
-    const min = Number(minPrice || PRICE_MIN_BOUND);
-    const max = Number(maxPrice || PRICE_MAX_BOUND);
-    const left = ((Number.isFinite(min) ? min : PRICE_MIN_BOUND) / PRICE_MAX_BOUND) * 100;
-    const right = ((Number.isFinite(max) ? max : PRICE_MAX_BOUND) / PRICE_MAX_BOUND) * 100;
+    const min = parsePriceInput(minPrice) ?? PRICE_MIN_BOUND;
+    const max = parsePriceInput(maxPrice) ?? priceMaxBound;
+    const left = ((Number.isFinite(min) ? min : PRICE_MIN_BOUND) / priceMaxBound) * 100;
+    const right = ((Number.isFinite(max) ? max : priceMaxBound) / priceMaxBound) * 100;
     return {
       left: clamp(left, 0, 100),
       right: clamp(right, 0, 100),
     };
-  }, [maxPrice, minPrice]);
+  }, [maxPrice, minPrice, priceMaxBound]);
 
   const updatePriceRange = useCallback(
     (patch: { minPrice?: number; maxPrice?: number }) => {
       const currentMin = Number(minPrice || PRICE_MIN_BOUND);
-      const currentMax = Number(maxPrice || PRICE_MAX_BOUND);
+      const currentMax = Number(maxPrice || priceMaxBound);
       const nextMin = patch.minPrice ?? currentMin;
       const nextMax = patch.maxPrice ?? currentMax;
       const safeMin = clamp(
@@ -480,12 +497,12 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
         PRICE_MIN_BOUND,
         nextMax,
       );
-      const safeMax = clamp(Math.ceil(nextMax / PRICE_STEP) * PRICE_STEP, safeMin, PRICE_MAX_BOUND);
+      const safeMax = clamp(Math.ceil(nextMax / PRICE_STEP) * PRICE_STEP, safeMin, priceMaxBound);
 
       setMinPrice(safeMin > PRICE_MIN_BOUND ? String(safeMin) : "");
-      setMaxPrice(safeMax < PRICE_MAX_BOUND ? String(safeMax) : "");
+      setMaxPrice(safeMax < priceMaxBound ? String(safeMax) : "");
     },
-    [maxPrice, minPrice],
+    [maxPrice, minPrice, priceMaxBound],
   );
 
   const buildPath = useCallback(
@@ -496,8 +513,21 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
       const nextEntity = normalizeText(
         isTransfer ? (patch.transferType ?? entity) : (patch.category ?? entity),
       );
-      const nextMinPrice = normalizeText(patch.minPrice ?? minPrice);
-      const nextMaxPrice = normalizeText(patch.maxPrice ?? maxPrice);
+      const rawMinPrice = parsePriceInput(normalizeText(patch.minPrice ?? minPrice));
+      const rawMaxPrice = parsePriceInput(normalizeText(patch.maxPrice ?? maxPrice));
+      let safeMinPrice =
+        rawMinPrice === null ? PRICE_MIN_BOUND : clamp(rawMinPrice, PRICE_MIN_BOUND, priceMaxBound);
+      let safeMaxPrice =
+        rawMaxPrice === null ? priceMaxBound : clamp(rawMaxPrice, PRICE_MIN_BOUND, priceMaxBound);
+      if (safeMinPrice > safeMaxPrice) {
+        if (rawMaxPrice !== null) {
+          safeMinPrice = safeMaxPrice;
+        } else {
+          safeMaxPrice = safeMinPrice;
+        }
+      }
+      const nextMinPrice = safeMinPrice > PRICE_MIN_BOUND ? String(safeMinPrice) : "";
+      const nextMaxPrice = safeMaxPrice < priceMaxBound ? String(safeMaxPrice) : "";
       const nextSort = normalizeText(patch.sort ?? sort);
       const params = new URLSearchParams();
 
@@ -512,7 +542,18 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
       const search = params.toString();
       return search ? `${basePath}?${search}` : basePath;
     },
-    [basePath, entity, isTransfer, location, maxPrice, minPrice, query, radiusKm, sort],
+    [
+      basePath,
+      entity,
+      isTransfer,
+      location,
+      maxPrice,
+      minPrice,
+      priceMaxBound,
+      query,
+      radiusKm,
+      sort,
+    ],
   );
 
   const navigateTo = useCallback(
@@ -755,7 +796,7 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
           trigger={
             <CatalogFilterChipButton
               icon={WalletCards}
-              label={formatPriceChip(filters.minPrice, filters.maxPrice)}
+              label={formatPriceChip(filters.minPrice, filters.maxPrice, priceMaxBound)}
               active={Boolean(filters.minPrice || filters.maxPrice)}
               open={openPanel === "price"}
               onClick={() => togglePanel("price")}
@@ -786,16 +827,13 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
               <CatalogFieldGroup label="От">
                 <input
                   name="minPrice"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min={PRICE_MIN_BOUND}
-                  max={PRICE_MAX_BOUND}
-                  step={PRICE_STEP}
+                  max={priceMaxBound}
                   value={minPrice}
-                  onChange={(event) =>
-                    updatePriceRange({
-                      minPrice: Number(event.target.value || PRICE_MIN_BOUND),
-                    })
-                  }
+                  onChange={(event) => setMinPrice(normalizePriceInput(event.target.value))}
                   placeholder="Без минимума"
                   className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
@@ -803,16 +841,13 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
               <CatalogFieldGroup label="До">
                 <input
                   name="maxPrice"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min={PRICE_MIN_BOUND}
-                  max={PRICE_MAX_BOUND}
-                  step={PRICE_STEP}
+                  max={priceMaxBound}
                   value={maxPrice}
-                  onChange={(event) =>
-                    updatePriceRange({
-                      maxPrice: Number(event.target.value || PRICE_MAX_BOUND),
-                    })
-                  }
+                  onChange={(event) => setMaxPrice(normalizePriceInput(event.target.value))}
                   placeholder="Без лимита"
                   className="h-12 w-full rounded-2xl border border-olive/16 bg-white px-4 text-sm text-olive outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
@@ -832,9 +867,9 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
                   name="minPriceRange"
                   type="range"
                   min={PRICE_MIN_BOUND}
-                  max={PRICE_MAX_BOUND}
+                  max={priceMaxBound}
                   step={PRICE_STEP}
-                  value={Number(minPrice || PRICE_MIN_BOUND)}
+                  value={parsePriceInput(minPrice) ?? PRICE_MIN_BOUND}
                   onChange={(event) => updatePriceRange({ minPrice: Number(event.target.value) })}
                   className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
                 />
@@ -842,17 +877,17 @@ export function MarketplaceFilterBar(props: MarketplaceFilterBarProps) {
                   name="maxPriceRange"
                   type="range"
                   min={PRICE_MIN_BOUND}
-                  max={PRICE_MAX_BOUND}
+                  max={priceMaxBound}
                   step={PRICE_STEP}
-                  value={Number(maxPrice || PRICE_MAX_BOUND)}
+                  value={parsePriceInput(maxPrice) ?? priceMaxBound}
                   onChange={(event) => updatePriceRange({ maxPrice: Number(event.target.value) })}
                   className="pointer-events-none absolute inset-x-0 top-1/2 h-8 w-full -translate-y-1/2 appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-white"
                 />
               </div>
               <div className="mt-3 flex items-center justify-between text-xs font-medium text-olive/55">
                 <span>0 ₽</span>
-                <span>50 000 ₽</span>
-                <span>100 000 ₽+</span>
+                <span>{formatCurrency(Math.round(priceMaxBound / 2))}</span>
+                <span>{formatCurrency(priceMaxBound)}</span>
               </div>
             </div>
           </div>

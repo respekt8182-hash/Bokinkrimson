@@ -161,9 +161,10 @@ export async function GET(request: Request, context: RouteContext) {
   const { searchParams } = new URL(request.url);
   const freeTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: property.createdAt,
+    category: "object",
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil()
+    ? getPostLaunchTrialValidUntil(property.createdAt)
     : null;
   const readiness = await buildReadiness(
     property,
@@ -225,9 +226,10 @@ export async function POST(request: Request, context: RouteContext) {
   const freeTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: property.createdAt,
     now,
+    category: "object",
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil(now)
+    ? getPostLaunchTrialValidUntil(property.createdAt)
     : null;
   const readiness = await buildReadiness(property, session.id, body.tariffType, freeTrialUntil);
 
@@ -306,7 +308,7 @@ export async function POST(request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom: now,
         paidAt: now,
-        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(),
+        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(property.createdAt),
         providerPayload: freeTrialUntil
           ? buildPostLaunchTrialPaymentPayload({
               originalAmountRub: originalAmount,
@@ -317,6 +319,7 @@ export async function POST(request: Request, context: RouteContext) {
           : buildFreePlacementPaymentPayload({
               originalAmountRub: originalAmount,
               now,
+              validUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(property.createdAt),
               placementPricing: readiness.quote.placementPricing,
             }),
       },

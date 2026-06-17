@@ -6,6 +6,7 @@ import {
 import { normalizeStorageKey } from "../../src/lib/storage";
 import {
   createRateLimiter,
+  createSensitiveRateLimiter,
   RateLimitConfigurationError,
 } from "../../src/lib/rate-limit";
 import { collectPublicStorageKeysFromUnknown } from "../../src/lib/storage-cleanup";
@@ -139,6 +140,21 @@ describe("production rate limiting configuration", () => {
     expect(() =>
       createRateLimiter({
         id: "security-test-upstash",
+        windowMs: 60_000,
+        maxRequests: 5,
+      }),
+    ).toThrow(RateLimitConfigurationError);
+  });
+
+  it("fails closed for sensitive production endpoints without shared rate-limit backend", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.RATE_LIMIT_MODE;
+
+    expect(() =>
+      createSensitiveRateLimiter({
+        id: "security-test-sensitive",
         windowMs: 60_000,
         maxRequests: 5,
       }),

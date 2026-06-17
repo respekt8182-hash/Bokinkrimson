@@ -1035,7 +1035,7 @@ export function resolvePropertyPaymentStatus(input: {
   }
 
   if (input.paidUntil.getTime() <= now.getTime()) {
-    return ObjectPaymentStatus.UNPAID;
+    return ObjectPaymentStatus.EXPIRED;
   }
 
   if (input.paidFrom && input.paidFrom.getTime() > now.getTime()) {

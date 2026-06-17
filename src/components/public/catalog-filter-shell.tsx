@@ -223,7 +223,7 @@ export function CatalogFilterChipButton({
   const showClearButton = Boolean(onClear && active);
 
   return (
-    <div className="relative shrink-0 snap-start">
+    <div className="group/chip relative shrink-0 snap-start">
       <button
         type="button"
         onClick={onClick}
@@ -232,7 +232,7 @@ export function CatalogFilterChipButton({
         className={cn(
           "group inline-flex items-center gap-3 rounded-[24px] border text-left transition-all duration-200",
           compact ? "min-h-10 px-3 py-2" : "min-h-[52px] px-3.5 py-2.5 md:min-h-12 md:px-3 md:py-2",
-          showClearButton && "pr-11",
+          showClearButton && "pr-11 md:pr-3",
           open
             ? "border-primary/26 bg-white text-primary ring-2 ring-primary/12 shadow-[0_18px_38px_-26px_rgba(15,118,110,0.45)]"
             : active
@@ -286,7 +286,7 @@ export function CatalogFilterChipButton({
             event.stopPropagation();
             onClear?.();
           }}
-          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary/12 text-primary transition hover:bg-primary hover:text-white"
+          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary/12 text-primary transition hover:bg-primary hover:text-white md:opacity-0 md:shadow-sm md:scale-95 md:group-hover/chip:scale-100 md:group-hover/chip:opacity-100 md:focus-visible:scale-100 md:focus-visible:opacity-100"
           aria-label={`Сбросить ${label}`}
         >
           <X className="h-3.5 w-3.5" />

@@ -1182,6 +1182,9 @@ export default async function PublicExcursionPage({
   const directContactActions = Boolean(
     item.contacts.phone ||
     item.contacts.phone2 ||
+    item.contacts.phoneAvailable ||
+    item.contacts.emailAvailable ||
+    item.contacts.messengerAvailable ||
     whatsappUrl ||
     telegramUrl ||
     vkUrl ||
@@ -2278,6 +2281,8 @@ export default async function PublicExcursionPage({
                         durationLabel={durationLabel}
                         locationName={item.locationName}
                         phone={item.contacts.phone}
+                        phoneMasked={item.contacts.phoneMasked}
+                        phoneAvailable={item.contacts.phoneAvailable}
                         phoneName={item.contacts.phoneName}
                         phone2={item.contacts.phone2}
                         phone2Name={item.contacts.phone2Name}
@@ -2286,11 +2291,13 @@ export default async function PublicExcursionPage({
                         entityPublicId={item.publicId}
                         websiteUrl={item.contacts.websiteUrl}
                         email={item.contacts.email}
+                        emailAvailable={item.contacts.emailAvailable}
                         whatsappUrl={whatsappUrl}
                         telegramUrl={telegramUrl}
                         vkUrl={vkUrl}
                         maxUrl={maxUrl}
                         okUrl={okUrl}
+                        messengerAvailable={item.contacts.messengerAvailable}
                         organizerName={organizerName}
                         organizerAvatarUrl={item.owner.avatarUrl}
                         isInstantConfirmation={item.instantConfirmation}
@@ -2321,8 +2328,7 @@ export default async function PublicExcursionPage({
             initialReviews={item.reviews}
             initialHasMore={item.reviewsCount > item.reviews.length}
             isAuthenticated={Boolean(session)}
-            currentUserId={session?.id ?? null}
-            ownerUserId={item.owner.id}
+            isOwnerViewer={Boolean(session?.id && session.id === item.owner.id)}
             title="Отзывы об экскурсии"
             promptTitle="Были на этой экскурсии? Поделитесь впечатлениями."
             promptText="Короткий честный отзыв помогает другим путешественникам быстрее выбрать маршрут и организатора."
@@ -3515,6 +3521,8 @@ export default async function PublicExcursionPage({
                       durationLabel={durationLabel}
                       locationName={item.locationName}
                       phone={item.contacts.phone}
+                      phoneMasked={item.contacts.phoneMasked}
+                      phoneAvailable={item.contacts.phoneAvailable}
                       phoneName={item.contacts.phoneName}
                       phone2={item.contacts.phone2}
                       phone2Name={item.contacts.phone2Name}
@@ -3523,11 +3531,13 @@ export default async function PublicExcursionPage({
                       entityPublicId={item.publicId}
                       websiteUrl={item.contacts.websiteUrl}
                       email={item.contacts.email}
+                      emailAvailable={item.contacts.emailAvailable}
                       whatsappUrl={whatsappUrl}
                       telegramUrl={telegramUrl}
                       vkUrl={vkUrl}
                       maxUrl={maxUrl}
                       okUrl={okUrl}
+                      messengerAvailable={item.contacts.messengerAvailable}
                       organizerName={organizerName}
                       organizerAvatarUrl={item.owner.avatarUrl}
                       isInstantConfirmation={item.instantConfirmation}
@@ -3558,8 +3568,7 @@ export default async function PublicExcursionPage({
           initialReviews={item.reviews}
           initialHasMore={item.reviewsCount > item.reviews.length}
           isAuthenticated={Boolean(session)}
-          currentUserId={session?.id ?? null}
-          ownerUserId={item.owner.id}
+          isOwnerViewer={Boolean(session?.id && session.id === item.owner.id)}
           title="Отзывы о туре"
           promptTitle="Были в этом туре? Поделитесь впечатлениями."
           promptText="Короткий честный отзыв помогает другим путешественникам быстрее выбрать программу и организатора."

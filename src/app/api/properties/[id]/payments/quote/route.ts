@@ -1,8 +1,10 @@
 // Owner payment quote endpoint: computes tariff preview and readiness snapshot without creating a payment.
 import { NextResponse } from "next/server";
+import { PaymentStatus } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
+import { getPostLaunchTrialValidUntil, isPostLaunchTrialEligible } from "@/lib/placement-promo";
 import { getPropertyProgress } from "@/lib/properties";
 
 type RouteContext = {
@@ -41,6 +43,14 @@ export async function GET(request: Request, context: RouteContext) {
       customAmenities: {
         select: { name: true },
       },
+      payments: {
+        where: {
+          ownerId: session.id,
+          status: PaymentStatus.SUCCEEDED,
+        },
+        select: { id: true },
+        take: 1,
+      },
     },
   });
 
@@ -51,6 +61,13 @@ export async function GET(request: Request, context: RouteContext) {
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
   const { searchParams } = new URL(request.url);
+  const freeTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: property.createdAt,
+    category: "object",
+    hasSuccessfulPlacement: property.payments.length > 0,
+  })
+    ? getPostLaunchTrialValidUntil(property.createdAt)
+    : null;
   const quote =
     roomCount > 0
       ? await getPersonalTariffQuote({
@@ -58,6 +75,7 @@ export async function GET(request: Request, context: RouteContext) {
           roomCount,
           propertyType: property.type,
           tariffType: searchParams.get("tariffType"),
+          freeTrialUntil,
         })
       : null;
 

@@ -1,22 +1,30 @@
-import type { PlacementPriceResult } from "@/lib/placement-tariffs";
+import type { PlacementCategory, PlacementPriceResult } from "@/lib/placement-tariffs";
 
 export const PLACEMENT_PROMO_CODE = "launch-free-placement-2026";
-export const PLACEMENT_PROMO_CAMPAIGN_TYPE = "free_placement_until_2027_05_01";
+export const PLACEMENT_PROMO_CAMPAIGN_TYPE = "free_placement_first_year";
+export const PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE_2027 = "free_placement_until_2027_05_01";
 export const PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE = "free_placement_until_2026_06_20";
 export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 100;
 export const PLACEMENT_PROMO_ENDS_AT_ISO = "2027-05-01T00:00:00.000+03:00";
-export const PLACEMENT_PROMO_END_LABEL = "1 мая 2027";
-export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 мая 2027";
-export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ до мая 2027";
+export const PLACEMENT_PROMO_END_LABEL = "1 год с даты создания объявления";
+export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 год бесплатно";
+export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ на 1 год";
 export const PLACEMENT_PROMO_NOTICE =
-  "Идёт набор в программу раннего доступа: размещение объектов, экскурсий, туров и трансферов бесплатно до 1 мая 2027 года.";
+  "Идёт набор в программу раннего доступа: первое размещение объектов, экскурсий и туров бесплатно на 1 год с даты создания объявления.";
 export const PLACEMENT_PROMO_DEMO_MODE = "demo";
-export const PLACEMENT_PROMO_DEMO_LABEL = "Ранний доступ";
+export const PLACEMENT_PROMO_DEMO_LABEL = "Бесплатный год";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
 export const PLACEMENT_PROMO_DEMO_RENEWAL_LOOKAHEAD_DAYS = 7;
 export const PLACEMENT_POST_LAUNCH_TRIAL_CODE = "post-launch-new-listing-trial-2026";
-export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE = "post_launch_new_listing_trial_1_month";
-export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 месяц";
+export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE = "post_launch_new_listing_trial_1_year";
+export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 год";
+
+const FREE_PLACEMENT_TRIAL_ENABLED_BY_CATEGORY: Record<PlacementCategory, boolean> = {
+  object: true,
+  excursion: true,
+  tour: true,
+  transfer: false,
+};
 
 const LEGACY_PLACEMENT_PROMO_CODES = new Map<string, number>([["season-start-2026-20", 20]]);
 
@@ -51,8 +59,6 @@ export type PlacementPostLaunchTrialPayload = {
   endsAtIso: string;
   createdAtIso: string;
 };
-
-const promoEndsAtMs = Date.parse(PLACEMENT_PROMO_ENDS_AT_ISO);
 
 function isKnownPlacementPromo(code: string | null, discountPercent: number | null): boolean {
   if (code === PLACEMENT_PROMO_CODE && discountPercent === PLACEMENT_PROMO_DISCOUNT_PERCENT) {
@@ -92,7 +98,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isPlacementPromoActive(now = new Date()): boolean {
-  return now.getTime() < promoEndsAtMs;
+  void now;
+  return false;
 }
 
 function formatRuDate(value: Date): string {
@@ -103,34 +110,43 @@ function formatRuDate(value: Date): string {
   });
 }
 
-export function getPlacementPromoDemoValidUntil(): Date {
-  return new Date(PLACEMENT_PROMO_DEMO_ENDS_AT_ISO);
-}
-
-export function getPostLaunchTrialValidUntil(now = new Date()): Date {
-  const validUntil = new Date(now);
-  validUntil.setMonth(validUntil.getMonth() + 1);
+export function getFreePlacementTrialValidUntil(anchorDate = new Date()): Date {
+  const validUntil = new Date(anchorDate);
+  validUntil.setFullYear(validUntil.getFullYear() + 1);
   return validUntil;
 }
 
+export function getPlacementPromoDemoValidUntil(anchorDate = new Date()): Date {
+  return getFreePlacementTrialValidUntil(anchorDate);
+}
+
+export function getPostLaunchTrialValidUntil(anchorDate = new Date()): Date {
+  return getFreePlacementTrialValidUntil(anchorDate);
+}
+
 export function getPostLaunchTrialEndLabel(validUntil: Date): string {
-  return `пробный период до ${formatRuDate(validUntil)}`;
+  return `бесплатно до ${formatRuDate(validUntil)}`;
+}
+
+export function isFreePlacementTrialEnabledForCategory(category: PlacementCategory): boolean {
+  return FREE_PLACEMENT_TRIAL_ENABLED_BY_CATEGORY[category];
 }
 
 export function isPostLaunchTrialEligible(input: {
   listingCreatedAt: Date | string | null | undefined;
   now?: Date;
   hasSuccessfulPlacement?: boolean;
+  category?: PlacementCategory;
 }): boolean {
   if (input.hasSuccessfulPlacement) {
     return false;
   }
 
-  const now = input.now ?? new Date();
-  if (now.getTime() < promoEndsAtMs) {
+  if (input.category && !isFreePlacementTrialEnabledForCategory(input.category)) {
     return false;
   }
 
+  const now = input.now ?? new Date();
   if (!input.listingCreatedAt) {
     return false;
   }
@@ -140,7 +156,11 @@ export function isPostLaunchTrialEligible(input: {
       ? input.listingCreatedAt
       : new Date(input.listingCreatedAt);
 
-  return Number.isFinite(listingCreatedAt.getTime()) && listingCreatedAt.getTime() >= promoEndsAtMs;
+  if (!Number.isFinite(listingCreatedAt.getTime())) {
+    return false;
+  }
+
+  return getFreePlacementTrialValidUntil(listingCreatedAt).getTime() > now.getTime();
 }
 
 export function getPlacementPromoPrice(
@@ -240,10 +260,6 @@ export function buildPostLaunchTrialPayload(input: {
   validUntil?: Date;
 }): PlacementPostLaunchTrialPayload | null {
   const now = input.now ?? new Date();
-  if (now.getTime() < promoEndsAtMs) {
-    return null;
-  }
-
   const originalAmountRub = normalizeRubAmount(input.originalAmountRub);
   const discountedAmountRub = normalizeRubAmount(input.discountedAmountRub ?? 0);
   if (originalAmountRub <= 0 || discountedAmountRub >= originalAmountRub) {
@@ -434,6 +450,7 @@ export function isLaunchPlacementDemoPayload(value: unknown): boolean {
 
   if (
     value.placementCampaignType === PLACEMENT_PROMO_CAMPAIGN_TYPE ||
+    value.placementCampaignType === PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE_2027 ||
     value.placementCampaignType === PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE
   ) {
     return true;
@@ -451,7 +468,10 @@ export function isFreePlacementDemoPayload(value: unknown): boolean {
   return isLaunchPlacementDemoPayload(value) || isPostLaunchTrialPayload(value);
 }
 
-export function getFreePlacementDemoValidUntil(value: unknown): Date {
+export function getFreePlacementDemoValidUntil(
+  value: unknown,
+  fallbackAnchorDate = new Date(),
+): Date {
   const postLaunchTrial = getPostLaunchTrialPayload(value);
   if (postLaunchTrial) {
     const validUntil = new Date(postLaunchTrial.endsAtIso);
@@ -460,7 +480,7 @@ export function getFreePlacementDemoValidUntil(value: unknown): Date {
     }
   }
 
-  return getPlacementPromoDemoValidUntil();
+  return getPlacementPromoDemoValidUntil(fallbackAnchorDate);
 }
 
 export function getPlacementPromoOriginalCoverageAmount(

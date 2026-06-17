@@ -252,8 +252,7 @@ export default async function TransferDetailPage({
           initialReviews={reviews.items}
           initialHasMore={!isPreview && reviews.total > reviews.items.length}
           isAuthenticated={Boolean(session)}
-          currentUserId={session?.id ?? null}
-          ownerUserId={item.owner.id}
+          isOwnerViewer={Boolean(session?.id && session.id === item.owner.id)}
           title="Отзывы о поездках"
           promptTitle="Ездили с этим водителем? Поделитесь впечатлениями."
           promptText="Короткий честный отзыв помогает другим пассажирам быстрее выбрать трансфер."

@@ -21,7 +21,7 @@ import type { SearchFilters, SearchResponse } from "@/types/catalog";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30;
-const MAP_BOUNDS_REFRESH_DELAY_MS = 540;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 300;
 
 const SORT_OPTIONS = [
   { value: "", label: "Рекомендуемые" },
@@ -45,6 +45,7 @@ type HousingCatalogClientProps = {
   }>;
   initialLocationLabel: string;
   initialLocationActiveHousingCount: number | null;
+  initialPriceMax: number;
 };
 
 type ToastType = "success" | "error" | "info";
@@ -256,13 +257,7 @@ function getHousingActiveFilterLabels(filters: SearchFilters): string[] {
   return labels;
 }
 
-function EmptyActionButton({
-  children,
-  onClick,
-}: {
-  children: string;
-  onClick: () => void;
-}) {
+function EmptyActionButton({ children, onClick }: { children: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -283,6 +278,7 @@ export function HousingCatalogClient({
   initialPopularLocationSuggestions,
   initialLocationLabel,
   initialLocationActiveHousingCount,
+  initialPriceMax,
 }: HousingCatalogClientProps) {
   const [filters, setFilters] = useState(initialFilters);
   const view = "list" as const;
@@ -699,10 +695,7 @@ export function HousingCatalogClient({
           {filters.minPrice || filters.maxPrice ? (
             <EmptyActionButton
               onClick={() =>
-                void applyFilters(
-                  { ...filters, minPrice: "", maxPrice: "" },
-                  "Цена сброшена",
-                )
+                void applyFilters({ ...filters, minPrice: "", maxPrice: "" }, "Цена сброшена")
               }
             >
               Сбросить цену
@@ -711,10 +704,7 @@ export function HousingCatalogClient({
           {filters.checkIn || filters.checkOut ? (
             <EmptyActionButton
               onClick={() =>
-                void applyFilters(
-                  { ...filters, checkIn: "", checkOut: "" },
-                  "Даты убраны",
-                )
+                void applyFilters({ ...filters, checkIn: "", checkOut: "" }, "Даты убраны")
               }
             >
               Убрать даты
@@ -735,10 +725,7 @@ export function HousingCatalogClient({
           {filters.hasReviews ? (
             <EmptyActionButton
               onClick={() =>
-                void applyFilters(
-                  { ...filters, hasReviews: false },
-                  "Фильтр по отзывам убран",
-                )
+                void applyFilters({ ...filters, hasReviews: false }, "Фильтр по отзывам убран")
               }
             >
               Показать без отзывов
@@ -771,6 +758,7 @@ export function HousingCatalogClient({
         locationLabel={locationLabel}
         locationNames={locationNames}
         initialPopularSuggestions={initialPopularLocationSuggestions}
+        priceMax={initialPriceMax}
       />
 
       <div className="mx-auto w-full max-w-[1680px] px-4 py-6 pb-28 md:px-6 md:py-8 md:pb-8 lg:max-w-none lg:px-0 lg:pb-8">

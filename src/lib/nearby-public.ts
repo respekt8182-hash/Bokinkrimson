@@ -13,11 +13,22 @@ import {
   buildPublishedExcursionVisibilityWhere,
   buildPublishedPropertyVisibilityWhere,
 } from "@/lib/public-visibility";
+import { createSearchPerformanceTimer } from "@/lib/performance-logging";
 import { getStaticAttractions, type StaticAttraction } from "@/lib/static-attractions";
 
 const ROAD_DISTANCE_FACTOR = 1.3;
+const EARTH_RADIUS_KM = 6371;
 
 export const DEFAULT_NEARBY_RADIUS_KM = 10;
+
+export type NearbyBoundingBox = {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+  crossesAntimeridian: boolean;
+  coversAllLongitudes: boolean;
+};
 
 export type NearbyExcursionItem = {
   id: string;
@@ -57,6 +68,123 @@ export type NearbyAttractionItem = {
 
 function toRoadDistanceKm(haversineKm: number): number {
   return Number((haversineKm * ROAD_DISTANCE_FACTOR).toFixed(1));
+}
+
+function normalizeLongitude(longitude: number): number {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+export function getBoundingBoxForRadiusKm(input: {
+  latitude: number;
+  longitude: number;
+  radiusKm: number;
+}): NearbyBoundingBox | null {
+  if (
+    !Number.isFinite(input.latitude) ||
+    !Number.isFinite(input.longitude) ||
+    !Number.isFinite(input.radiusKm) ||
+    input.latitude < -90 ||
+    input.latitude > 90
+  ) {
+    return null;
+  }
+
+  const radiusKm = Math.max(0, input.radiusKm);
+  const latitude = input.latitude;
+  const longitude = normalizeLongitude(input.longitude);
+  const angularDistance = radiusKm / EARTH_RADIUS_KM;
+  const latDelta = (angularDistance * 180) / Math.PI;
+  const minLat = Math.max(-90, latitude - latDelta);
+  const maxLat = Math.min(90, latitude + latDelta);
+
+  if (minLat <= -90 || maxLat >= 90) {
+    return {
+      minLat,
+      maxLat,
+      minLng: -180,
+      maxLng: 180,
+      crossesAntimeridian: false,
+      coversAllLongitudes: true,
+    };
+  }
+
+  const latRad = (latitude * Math.PI) / 180;
+  const cosLat = Math.cos(latRad);
+  if (Math.abs(cosLat) < 1e-12) {
+    return {
+      minLat,
+      maxLat,
+      minLng: -180,
+      maxLng: 180,
+      crossesAntimeridian: false,
+      coversAllLongitudes: true,
+    };
+  }
+
+  const lngDelta = (Math.asin(Math.min(1, Math.sin(angularDistance) / cosLat)) * 180) / Math.PI;
+  if (!Number.isFinite(lngDelta) || lngDelta >= 180) {
+    return {
+      minLat,
+      maxLat,
+      minLng: -180,
+      maxLng: 180,
+      crossesAntimeridian: false,
+      coversAllLongitudes: true,
+    };
+  }
+
+  const minLng = normalizeLongitude(longitude - lngDelta);
+  const maxLng = normalizeLongitude(longitude + lngDelta);
+
+  return {
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+    crossesAntimeridian: minLng > maxLng,
+    coversAllLongitudes: false,
+  };
+}
+
+function buildCoordinateBoundingWhere(
+  boundingBox: NearbyBoundingBox | null,
+): Prisma.PropertyWhereInput {
+  if (!boundingBox) {
+    return {
+      latitude: { not: null },
+      longitude: { not: null },
+    };
+  }
+
+  const latitudeWhere = {
+    latitude: {
+      gte: boundingBox.minLat,
+      lte: boundingBox.maxLat,
+    },
+  };
+
+  if (boundingBox.coversAllLongitudes) {
+    return latitudeWhere;
+  }
+
+  const longitudeWhere = boundingBox.crossesAntimeridian
+    ? {
+        OR: [
+          { longitude: { gte: boundingBox.minLng } },
+          { longitude: { lte: boundingBox.maxLng } },
+        ],
+      }
+    : {
+        longitude: {
+          gte: boundingBox.minLng,
+          lte: boundingBox.maxLng,
+        },
+      };
+
+  return {
+    AND: [latitudeWhere, longitudeWhere],
+  };
 }
 
 function normalizePublicAssetUrls(urls: string[]): string[] {
@@ -324,18 +452,34 @@ export async function getNearbyExcursions(input: {
     longitude: input.longitude,
   };
   const radiusKm = input.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
+  const boundingBox = getBoundingBoxForRadiusKm({
+    latitude: input.latitude,
+    longitude: input.longitude,
+    radiusKm,
+  });
+  const finishPerf = createSearchPerformanceTimer("getNearbyExcursions", {
+    direction: "excursions",
+    radiusKm,
+  });
   const rows = await db.excursion.findMany({
     where: {
-      ...buildPublishedExcursionVisibilityWhere(),
-      ...(input.excludeId ? { id: { not: input.excludeId } } : {}),
-      latitude: { not: null },
-      longitude: { not: null },
+      AND: [
+        buildPublishedExcursionVisibilityWhere(),
+        input.excludeId ? { id: { not: input.excludeId } } : {},
+        {
+          OR: [
+            buildCoordinateBoundingWhere(boundingBox) as Prisma.ExcursionWhereInput,
+            // Pending published snapshots may contain the visible coordinates.
+            { pendingEditStatus: { not: null } },
+          ],
+        },
+      ],
     },
     select: nearbyExcursionSelect,
     take: 5000,
   });
 
-  return rows
+  const result = rows
     .map((row) => {
       const latitude = row.latitude === null ? null : Number(row.latitude);
       const longitude = row.longitude === null ? null : Number(row.longitude);
@@ -355,6 +499,14 @@ export async function getNearbyExcursions(input: {
     .filter((item): item is NearbyExcursionItem => Boolean(item))
     .sort((left, right) => left.distanceKm - right.distanceKm)
     .slice(0, input.limit ?? 4);
+
+  finishPerf({
+    returned: result.length,
+    candidates: rows.length,
+    status: 200,
+  });
+
+  return result;
 }
 
 export async function getNearbyProperties(input: {
@@ -374,10 +526,28 @@ export async function getNearbyProperties(input: {
     longitude: input.longitude,
   };
   const radiusKm = input.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
+  const boundingBox = getBoundingBoxForRadiusKm({
+    latitude: input.latitude,
+    longitude: input.longitude,
+    radiusKm,
+  });
+  const finishPerf = createSearchPerformanceTimer("getNearbyProperties", {
+    direction: "housing",
+    radiusKm,
+  });
   const rows = await db.property.findMany({
     where: {
-      ...buildPublishedPropertyVisibilityWhere(),
-      ...(input.excludeId ? { id: { not: input.excludeId } } : {}),
+      AND: [
+        buildPublishedPropertyVisibilityWhere(),
+        input.excludeId ? { id: { not: input.excludeId } } : {},
+        {
+          OR: [
+            buildCoordinateBoundingWhere(boundingBox) as Prisma.PropertyWhereInput,
+            // Pending published snapshots may contain the visible coordinates.
+            { pendingEditStatus: { not: null } },
+          ],
+        },
+      ],
     },
     select: nearbyPropertySelect,
     take: 5000,
@@ -407,9 +577,17 @@ export async function getNearbyProperties(input: {
 
   const picked = input.randomize === true ? shuffleItems(candidates) : [...candidates];
 
-  return picked
+  const result = picked
     .slice(0, input.limit ?? 4)
     .sort((left, right) => left.distanceKm - right.distanceKm);
+
+  finishPerf({
+    returned: result.length,
+    candidates: rows.length,
+    status: 200,
+  });
+
+  return result;
 }
 
 export async function getNearbyAttractions(input: {

@@ -409,7 +409,7 @@ function createPropertyRenewalItem(input: {
       { label: row.phone3Name?.trim() || "Доп. телефон", phone: row.phone3 },
     ]),
     websiteUrl: trimToNull(row.websiteUrl),
-    adminHref: `/admin/objects/${row.id}`,
+    adminHref: `/admin/objects/${row.id}/about`,
     publicHref: buildPublicPropertyPath({
       id: row.id,
       locationId: row.locationId,
@@ -725,22 +725,12 @@ export async function hideExpiredPublishedListings(input?: {
       ? client.property.updateMany({
           where: { id: { in: expiredPropertyIds } },
           data: {
-            paymentStatus: ObjectPaymentStatus.UNPAID,
+            paymentStatus: ObjectPaymentStatus.EXPIRED,
           },
         })
       : Promise.resolve({ count: 0 }),
-    expiredExcursionIds.length > 0
-      ? client.excursion.updateMany({
-          where: { id: { in: expiredExcursionIds } },
-          data: { isPublishedVisible: false },
-        })
-      : Promise.resolve({ count: 0 }),
-    expiredTransferIds.length > 0
-      ? client.transfer.updateMany({
-          where: { id: { in: expiredTransferIds } },
-          data: { isPublishedVisible: false },
-        })
-      : Promise.resolve({ count: 0 }),
+    Promise.resolve({ count: expiredExcursionIds.length }),
+    Promise.resolve({ count: expiredTransferIds.length }),
   ]);
 
   return {

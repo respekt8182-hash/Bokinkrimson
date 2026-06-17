@@ -92,8 +92,8 @@ export default async function AdminObjectRoomCategoriesPage({
         propertyId={property.id}
         activeSection="room-categories"
         basePath="/admin/objects"
-        backHref={`/admin/objects/${property.id}`}
-        backLabel="Быстрая админ-правка"
+        backHref={`/admin/objects/${property.id}/about`}
+        backLabel="Об объекте"
         includePayment={false}
         showChessboardTab
       />

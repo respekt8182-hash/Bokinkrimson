@@ -12,6 +12,7 @@ import {
   buildOrganizationStructuredData,
   buildWebsiteStructuredData,
 } from "@/lib/seo/structured-data";
+import { getSupportChatSettings } from "@/lib/support-chat";
 import "./globals.css";
 
 const YANDEX_METRIKA_ID = 108582509;
@@ -98,7 +99,9 @@ export const metadata: Metadata = {
       { url: versionedFavicon("/favicon-120x120.png"), type: "image/png", sizes: "120x120" },
     ],
     shortcut: [{ url: versionedFavicon("/favicon.ico"), type: "image/x-icon" }],
-    apple: [{ url: versionedFavicon("/apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
+    apple: [
+      { url: versionedFavicon("/apple-touch-icon.png"), sizes: "180x180", type: "image/png" },
+    ],
   },
   robots: {
     index: true,
@@ -112,11 +115,13 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supportChatSettings = await getSupportChatSettings();
+
   return (
     <html
       lang="ru"
@@ -155,7 +160,11 @@ export default function RootLayout({
           </defs>
         </svg>
         <Suspense fallback={null}>
-          <RootShell header={<SiteHeader />} footer={<SiteFooter />}>
+          <RootShell
+            header={<SiteHeader />}
+            footer={<SiteFooter />}
+            supportChatEnabled={supportChatSettings.enabled}
+          >
             {children}
           </RootShell>
         </Suspense>

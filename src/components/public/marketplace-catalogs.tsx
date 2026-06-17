@@ -1163,6 +1163,7 @@ export function LegacyAttractionCatalog({
         ]}
         eyebrow="Каталог"
         title="Досуг в Крыму"
+        hideHeader
       >
         <MarketplaceFilterBar
           key={[
@@ -1264,6 +1265,7 @@ export function TransferCatalog({
         ]}
         eyebrow="Каталог"
         title="Трансферы по Крыму"
+        hideHeader
       >
         <MarketplaceFilterBar
           key={[
@@ -1280,6 +1282,7 @@ export function TransferCatalog({
           total={result.total}
           transferTypes={transferTypes}
           locationSuggestions={locationSuggestions}
+          priceMax={result.priceBounds.max}
         />
 
         <MarketplaceCatalogMap
@@ -2215,16 +2218,20 @@ export function TransferDetails({ item }: { item: PublicTransferCatalogItem }) {
             <div className="mt-4" data-transfer-contacts-panel>
               <PropertyContactsPanel
                 phone={item.contacts.phone}
+                phoneMasked={item.contacts.phoneMasked}
+                phoneAvailable={item.contacts.phoneAvailable}
                 phoneLabel={primaryPhoneLabel}
                 phoneName={item.contacts.phoneName}
                 extraPhones={extraPhones}
                 websiteUrl={item.contacts.websiteUrl}
                 email={item.contacts.email}
+                emailAvailable={item.contacts.emailAvailable}
                 whatsappUrl={item.contacts.whatsappUrl}
                 telegramUrl={item.contacts.telegramUrl}
                 vkUrl={item.contacts.vkUrl}
                 maxUrl={item.contacts.maxUrl}
                 okUrl={item.contacts.okUrl}
+                messengerAvailable={item.contacts.messengerAvailable}
                 text={transferContactPanelText}
                 secondaryContactsCompact
                 tracking={contactTracking}

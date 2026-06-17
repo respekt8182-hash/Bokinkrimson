@@ -32,6 +32,7 @@ type PropertyReviewsSectionProps = {
   isAuthenticated: boolean;
   currentUserId?: string | null;
   ownerUserId?: string | null;
+  isOwnerViewer?: boolean;
   title?: string;
   promptTitle?: string;
   promptText?: string;
@@ -321,6 +322,7 @@ export function PropertyReviewsSection({
   isAuthenticated,
   currentUserId = null,
   ownerUserId = null,
+  isOwnerViewer: initialIsOwnerViewer,
   title = "Отзывы гостей",
   promptTitle = "Отдыхали здесь? Поделитесь впечатлениями",
   promptText = "Короткий честный отзыв помогает другим гостям быстрее понять, подходит ли им это предложение.",
@@ -358,7 +360,8 @@ export function PropertyReviewsSection({
   const suppressCategoryClickRef = useRef(false);
   const [isCategoryDragging, setIsCategoryDragging] = useState(false);
 
-  const isOwnerViewer = Boolean(currentUserId && ownerUserId && currentUserId === ownerUserId);
+  const isOwnerViewer =
+    initialIsOwnerViewer ?? Boolean(currentUserId && ownerUserId && currentUserId === ownerUserId);
   const canWriteReview = isAuthenticated && !isOwnerViewer;
   const hasPublishedReviews = summary.reviewsCount > 0;
   const visiblePreviewItems = previewItems.slice(0, PREVIEW_REVIEWS_COUNT);

@@ -1,6 +1,7 @@
 import { TransferStatus } from "@prisma/client";
 import { ArrowUpRight, Car } from "lucide-react";
 import Link from "next/link";
+import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminListingVisibilityToggle } from "@/components/admin/admin-listing-visibility-toggle";
 import { AdminPagination } from "@/components/admin/admin-pagination";
 import {
@@ -267,6 +268,14 @@ export default async function AdminTransfersPage({ searchParams }: AdminTransfer
                     >
                       Проверить
                     </Link>
+                    {item.status === TransferStatus.DRAFT ? (
+                      <AdminDeleteDraftButton
+                        endpoint={`/api/admin/transfers/${item.id}`}
+                        draftLabel="Черновик трансфера"
+                        entityName={item.title ?? "Трансфер без названия"}
+                        buttonClassName="border border-red-200 bg-red-50 px-4 py-2.5 text-red-700 hover:bg-red-100 hover:text-red-800"
+                      />
+                    ) : null}
                     {item.status === TransferStatus.PUBLISHED ? (
                       <AdminListingVisibilityToggle
                         endpoint={`/api/admin/transfers/${item.id}`}

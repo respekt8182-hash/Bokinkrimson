@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminMediaPreview } from "@/components/admin/admin-media-preview";
+import { AdminExcursionModerationPreview } from "@/components/admin/admin-moderation-preview";
 import { ExcursionModerationActions } from "@/components/admin/excursion-moderation-actions";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
 import { AdminUnavailableState } from "@/components/admin/admin-ui";
@@ -142,6 +143,8 @@ export default async function AdminModerationExcursionPage({
           </Link>
         </div>
       </div>
+
+      <AdminExcursionModerationPreview excursion={excursion} />
 
       <section className="rounded-2xl border border-olive/10 bg-white p-4">
         <h2 className="text-xl text-olive">Основные данные</h2>

@@ -132,9 +132,10 @@ export async function POST(_request: Request, context: RouteContext) {
   const freeTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: property.createdAt,
     now,
+    category: "object",
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil(now)
+    ? getPostLaunchTrialValidUntil(property.createdAt)
     : null;
   const readiness = await buildReadiness(property, session.id, freeTrialUntil);
   if (!readiness.ready || !readiness.quote) {
@@ -168,7 +169,7 @@ export async function POST(_request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom: now,
         paidAt: now,
-        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(),
+        placementValidUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(property.createdAt),
         providerPayload: freeTrialUntil
           ? buildPostLaunchTrialPaymentPayload({
               originalAmountRub: readiness.quote.originalAmount,
@@ -179,6 +180,7 @@ export async function POST(_request: Request, context: RouteContext) {
           : buildFreePlacementPaymentPayload({
               originalAmountRub: readiness.quote.originalAmount,
               now,
+              validUntil: freeTrialUntil ?? getPlacementPromoDemoValidUntil(property.createdAt),
               placementPricing: readiness.quote.placementPricing,
             }),
       },
@@ -210,8 +212,7 @@ export async function POST(_request: Request, context: RouteContext) {
   if (!placement.fullyCovered) {
     return NextResponse.json(
       {
-        error:
-          "Оплатите выбранный период размещения и после этого отправьте объект на модерацию.",
+        error: "Оплатите выбранный период размещения и после этого отправьте объект на модерацию.",
         requiredPaymentAmount: placement.requiredPaymentAmount,
         paidUntil: placement.paidUntil,
       },

@@ -109,6 +109,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const disablesTarget = target.status === "ACTIVE" && nextStatus === "DISABLED";
   const changesSuperRole =
     normalizeAdminRole(target.role) === "SUPER_ADMIN" && nextRole !== "SUPER_ADMIN";
+  const promotesToSuperRole =
+    normalizeAdminRole(target.role) !== "SUPER_ADMIN" && nextRole === "SUPER_ADMIN";
 
   if (
     !canManageAdminRole(admin.role, normalizeAdminRole(target.role)) ||
@@ -123,6 +125,13 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (isSelf && (disablesTarget || changesSuperRole)) {
     return NextResponse.json(
       { error: "Нельзя отключить или понизить собственную учетную запись." },
+      { status: 400 },
+    );
+  }
+
+  if (promotesToSuperRole) {
+    return NextResponse.json(
+      { error: "Главный администратор уже существует и создаётся только из кода." },
       { status: 400 },
     );
   }

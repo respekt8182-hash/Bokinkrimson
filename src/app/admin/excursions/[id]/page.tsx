@@ -179,12 +179,6 @@ export default async function AdminExcursionEditPage({ params }: AdminExcursionE
             >
               К каталогу экскурсий
             </Link>
-            <Link
-              href={`/admin/excursions/${excursion.id}/settings`}
-              className="inline-flex items-center rounded-2xl border border-olive/12 bg-white px-4 py-3 text-sm font-semibold text-olive transition hover:border-primary/18 hover:text-primary"
-            >
-              Быстрая правка
-            </Link>
             {workflowStatus === ExcursionStatus.PENDING_MODERATION ? (
               <Link
                 href={`/admin/moderation/excursions/${excursion.id}`}
@@ -253,6 +247,7 @@ export default async function AdminExcursionEditPage({ params }: AdminExcursionE
         initialExcursion={serializeExcursion(excursion)}
         displayExcursionNumber={displayExcursionNumber}
         adminMode
+        hideHelpAside
         backHref="/admin/excursions"
         backLabel="Все экскурсии"
         listHref="/admin/excursions"

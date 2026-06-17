@@ -106,10 +106,10 @@ export default async function AdminObjectRulesPage({ params }: AdminObjectRulesP
             К списку
           </Link>
           <Link
-            href={`/admin/objects/${property.id}`}
+            href={`/admin/objects/${property.id}/about`}
             className="rounded-xl border border-olive/20 px-3 py-2 text-sm font-semibold text-olive hover:bg-cream"
           >
-            Быстрая админ-правка
+            Об объекте
           </Link>
           {property.status === PropertyStatus.PENDING_MODERATION ? (
             <Link
@@ -127,8 +127,8 @@ export default async function AdminObjectRulesPage({ params }: AdminObjectRulesP
           propertyId={property.id}
           activeSection="rules"
           basePath="/admin/objects"
-          backHref={`/admin/objects/${property.id}`}
-          backLabel="Быстрая админ-правка"
+          backHref={`/admin/objects/${property.id}/about`}
+          backLabel="Об объекте"
           includePayment={false}
           showChessboardTab
         />

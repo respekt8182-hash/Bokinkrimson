@@ -155,7 +155,7 @@ function getTariffLabel(tariffCode: string): string {
     object_season: "Сезонное размещение до 31 октября",
     object_offseason: "Межсезонное размещение",
     object_yearly: "Годовое размещение",
-    object_demo: "Ранний доступ до 1 мая 2027",
+    object_demo: "Бесплатный год размещения",
     excursion_standard: "Публикация карточки экскурсии",
     excursion_year: "Годовое размещение экскурсии",
     excursion_season: "Сезонное размещение экскурсии",
@@ -338,9 +338,9 @@ function PaymentCard({ payment, onAction }: { payment: ManagerPayment; onAction?
                 ? "Ожидает оплаты онлайн"
                 : isPending
                   ? "Ожидает подтверждения"
-                : payment.status === "SUCCEEDED"
-                  ? "Подтверждено"
-                  : "Отклонено"}
+                  : payment.status === "SUCCEEDED"
+                    ? "Подтверждено"
+                    : "Отклонено"}
             </span>
             {payment.provider === "YOOKASSA" ? (
               <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">

@@ -60,7 +60,7 @@ export function ContactBrandMark({
   );
 
   if (bare) {
-    return <span className={cn("inline-flex shrink-0", className)}>{image}</span>;
+    return <span className={cn("inline-flex shrink-0 items-center justify-center", className)}>{image}</span>;
   }
 
   return (

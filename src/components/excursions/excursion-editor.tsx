@@ -13,6 +13,7 @@ import {
   CircleX,
   Clock3,
   Globe,
+  ImageIcon,
   Info,
   ListChecks,
   Mail,
@@ -20,13 +21,19 @@ import {
   MessageSquareText,
   Phone,
   Plus,
+  Route,
+  Save,
+  ShieldCheck,
+  Sparkles,
   TriangleAlert,
   UserRound,
+  WalletCards,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   DepartureDatesEditor,
   type DepartureDateItem,
@@ -40,7 +47,6 @@ import { ContactBrandMark } from "@/components/ui/contact-brand-mark";
 import { Input } from "@/components/ui/input";
 import { SingleDatePopoverField } from "@/components/ui/single-date-popover-field";
 import { SeaToggle } from "@/components/ui/sea-toggle";
-import { WizardStepper } from "@/components/excursions/editor/wizard-stepper";
 import { TimelineEditor } from "@/components/excursions/editor/timeline-editor";
 import { PricingTiersEditor } from "@/components/excursions/editor/pricing-tiers-editor";
 import { IncludedEditor } from "@/components/excursions/editor/included-editor";
@@ -112,6 +118,7 @@ type ExcursionEditorProps = {
   initialExcursion: SerializedExcursion;
   displayExcursionNumber: number;
   adminMode?: boolean;
+  hideHelpAside?: boolean;
   backHref?: string;
   backLabel?: string;
   listHref?: string;
@@ -202,6 +209,15 @@ function getSectionPhotoFieldConfigs(input: {
     },
   ];
 }
+
+const excursionAsideVisuals = [
+  { label: "Описание программы", image: "/dashboard-prof/sections-excursions.png" },
+  { label: "География и маршрут", image: "/crimea-map-preview-realistic.webp" },
+  { label: "Программа по шагам", image: "/dashboard-prof/excursions.png" },
+  { label: "Расписание и группа", image: "/dashboard-prof/sections-excursions.png" },
+  { label: "Цена и условия", image: "/dashboard-prof/main.png" },
+  { label: "Публикация карточки", image: "/dashboard-prof/sections-excursions.png" },
+];
 
 function movePhotoUrlToFirst(photoUrls: string[], photoIndex: number): string[] {
   if (photoIndex <= 0 || photoIndex >= photoUrls.length) {
@@ -640,6 +656,7 @@ export function ExcursionEditor({
   initialExcursion,
   displayExcursionNumber,
   adminMode = false,
+  hideHelpAside = false,
   backHref = "/dashboard/excursions",
   backLabel = "Все программы",
   listHref = "/dashboard/excursions",
@@ -660,6 +677,7 @@ export function ExcursionEditor({
   const [locationId, setLocationId] = useState(initialExcursion.locationId ?? "");
   const [locationInput, setLocationInput] = useState(initialExcursion.locationName ?? "");
   const [address, setAddress] = useState(initialExcursion.address ?? "");
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const [latitude, setLatitude] = useState<number | null>(initialExcursion.latitude);
   const [longitude, setLongitude] = useState<number | null>(initialExcursion.longitude);
   const [mapDraftLatitude, setMapDraftLatitude] = useState<number | null>(
@@ -763,6 +781,7 @@ export function ExcursionEditor({
   const [videoUrlInput, setVideoUrlInput] = useState("");
   // --- Wizard state ---
   const [currentStep, setCurrentStep] = useState(0);
+  const mobileStepperRef = useRef<HTMLDivElement | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   // --- New fields ---
   const [tags, setTags] = useState<string[]>(initialExcursion.tags ?? []);
@@ -1616,6 +1635,16 @@ export function ExcursionEditor({
     },
   ];
 
+  const step6Checks: StepFieldCheck[] = [
+    {
+      label: "Публикация на сайте",
+      done:
+        excursion.status === ExcursionStatus.PENDING_MODERATION ||
+        excursion.status === ExcursionStatus.PUBLISHED,
+      required: false,
+    },
+  ];
+
   const wizardStepStates: WizardStepState[] = [
     buildWizardStepState("Тип и описание", step0Checks),
     buildWizardStepState("География", step1Checks),
@@ -1623,12 +1652,57 @@ export function ExcursionEditor({
     buildWizardStepState("Расписание и группа", step3Checks),
     buildWizardStepState("Цена и условия", step4Checks),
     buildWizardStepState("Медиа и контакты", step5Checks),
+    buildWizardStepState("Публикация", step6Checks),
   ];
 
   const wizardSteps = wizardStepStates.map((step) => ({
     label: step.label,
     status: step.status,
   }));
+  const wizardStepIcons: LucideIcon[] = [
+    Info,
+    MapPin,
+    Route,
+    Clock3,
+    WalletCards,
+    ImageIcon,
+    ShieldCheck,
+  ];
+  const completedStepCount = wizardSteps.filter((step) => step.status === "complete").length;
+  const creationProgressPercent =
+    wizardSteps.length === 0 ? 0 : Math.round((completedStepCount / wizardSteps.length) * 100);
+
+  useLayoutEffect(() => {
+    const scroller = mobileStepperRef.current;
+    if (
+      !scroller ||
+      scroller.scrollWidth <= scroller.clientWidth ||
+      window.matchMedia("(min-width: 640px)").matches
+    ) {
+      return;
+    }
+
+    const activeButton = scroller.querySelector<HTMLElement>("[data-editor-step-active='true']");
+    activeButton?.scrollIntoView({ block: "nearest", inline: "center", behavior: "auto" });
+  }, [currentStep, wizardSteps.length]);
+
+  const saveStatusLabel =
+    saveStatus === "saving"
+      ? "Сохраняем..."
+      : saveStatus === "error"
+        ? "Нужна проверка"
+        : saveStatus === "saved"
+          ? "Сохранено"
+          : "Черновик";
+  const saveStatusClass =
+    saveStatus === "saving"
+      ? "bg-primary/10 text-primary"
+      : saveStatus === "error"
+        ? "bg-amber-50 text-amber-800"
+        : saveStatus === "saved"
+          ? "bg-sage/20 text-olive"
+          : "bg-cream text-olive/64";
+  const currentStepTitle = wizardSteps[currentStep]?.label ?? "Заполнение";
 
   const missingRequiredByStep = wizardStepStates
     .map((step, index) => ({
@@ -1637,6 +1711,21 @@ export function ExcursionEditor({
       items: step.missingRequired,
     }))
     .filter((step) => step.items.length > 0);
+
+  function scrollAddressInputToEndOnMobile() {
+    if (typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const input = addressInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.scrollLeft = input.scrollWidth;
+    });
+  }
 
   function openMapDialog() {
     setMapDraftLatitude(latitude);
@@ -1663,6 +1752,7 @@ export function ExcursionEditor({
     setLatitude(mapDraftLatitude);
     setLongitude(mapDraftLongitude);
     setAddress(mapDraftAddress.trim());
+    scrollAddressInputToEndOnMobile();
 
     const normalizedLocationName = mapDraftLocationName.trim();
     const normalizedLocationId = mapDraftLocationId.trim();
@@ -3155,6 +3245,7 @@ export function ExcursionEditor({
       "Подсказки по расписанию",
       "Предпросмотр цены",
       "Готовность к публикации",
+      "Публикация",
     ][currentStep] ?? "Подсказки";
   const asideLead =
     [
@@ -3164,6 +3255,7 @@ export function ExcursionEditor({
       "Покажите длительность, режим проведения, состав группы и ограничения для участников.",
       "Цена должна быть прозрачной: что входит, что оплачивается отдельно и как работает отмена.",
       "Финальный шаг: контакты, фото, FAQ и публикация после проверки обязательных разделов.",
+      "Оплатите размещение и отправьте карточку на модерацию. После проверки она появится на сайте.",
     ][currentStep] ?? "";
   const asideChecks =
     [
@@ -3173,6 +3265,7 @@ export function ExcursionEditor({
       ["Длительность", "Даты или режим", "Размер группы"],
       ["Цена от", "Включено в стоимость", "Условия отмены"],
       ["Контакты", "Основные фото", "FAQ и готовность"],
+      ["Готовность разделов", "Оплата публикации", "Модерация карточки"],
     ][currentStep] ?? [];
   const asideStatusLabel = wizardSteps[currentStep]?.status ?? "incomplete";
   const asideStatusText =
@@ -3182,10 +3275,49 @@ export function ExcursionEditor({
         ? "Есть часть данных"
         : "Нужно заполнить";
 
+  const activeAsideIcon = wizardStepIcons[currentStep] ?? Sparkles;
+  const activeAsideVisual = excursionAsideVisuals[currentStep] ?? excursionAsideVisuals[0];
+  const previousStepIndex = currentStep > 0 ? currentStep - 1 : null;
+  const nextStepIndex = currentStep < wizardSteps.length - 1 ? currentStep + 1 : null;
+  const isNavigationDisabled = isSaving || isSavingSchedule || isDeleting || isUploadingPhotos;
+  const publicationPaymentPanel = (
+    <ExcursionPaymentPanel
+      excursionId={excursion.id}
+      offerType={offerType}
+      excursionTitle={title || excursion.title || ""}
+      status={
+        excursion.status as "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "NEEDS_FIX" | "REJECTED"
+      }
+      pendingEditStatus={
+        excursion.pendingEditStatus as
+          | "DRAFT"
+          | "PENDING_MODERATION"
+          | "PUBLISHED"
+          | "NEEDS_FIX"
+          | "REJECTED"
+          | null
+      }
+      isReady={wizardSteps.slice(0, 6).every((s) => s.status === "complete")}
+      readinessReasons={missingRequiredByStep
+        .filter((step) => step.index < 6)
+        .map((step) => `Раздел «${step.label}»: ${step.items.join(", ")}`)}
+      adminMode={adminMode}
+      moderationHref={moderationHref}
+      listHref={adminMode ? listHref : undefined}
+      listLabel={adminMode ? "К списку экскурсий" : undefined}
+      previewHref={previewHref}
+      onBeforePay={prepareExcursionForPayment}
+      onSubmitModeration={submitForModerationFromPayment}
+      onStatusChange={() => {
+        router.refresh();
+      }}
+    />
+  );
+
   return (
-    <div className="excursion-editor-surface space-y-4 sm:space-y-5">
+    <div className="excursion-editor-surface min-w-0 pb-4 sm:pb-0">
       {excursion.moderationNotes ? (
-        <section className="rounded-[28px] border border-olive/8 bg-white/95 p-2.5 shadow-[0_18px_36px_-28px_rgba(15,74,64,0.35)] sm:p-4">
+        <section className="mb-6 rounded-[8px] border border-olive/10 bg-white p-4 shadow-[0_8px_28px_rgba(15,23,42,0.04)]">
           <div className="flex gap-2 rounded-xl bg-terra/8 p-3">
             <AppIcon icon={TriangleAlert} className="mt-0.5 h-4 w-4 shrink-0 text-terra" />
             <div className="text-sm text-olive/85">
@@ -3196,36 +3328,208 @@ export function ExcursionEditor({
         </section>
       ) : null}
 
-      <div className="flex flex-col gap-3 rounded-[24px] border border-olive/8 bg-white/95 p-4 shadow-[0_14px_30px_-24px_rgba(15,74,64,0.32)] sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-olive/42">
-            ID программы: {displayExcursionNumber}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-olive">
-            {title.trim() || "Программа без названия"}
-          </p>
+      <section className="bg-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-primary">
+              <Link href={backHref} className="transition hover:text-primary-hover">
+                {backLabel}
+              </Link>
+              <span className="text-olive/24">/</span>
+              <span className="text-olive/54">Карточка #{displayExcursionNumber}</span>
+            </div>
+            <h1 className="mt-3 font-heading text-3xl font-semibold leading-tight text-olive md:text-[34px]">
+              Создание экскурсии или тура
+            </h1>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-olive/62">
+              Заполните программу по шагам: описание, маршрут, расписание, цену, медиа и контакты.
+              Так карточка будет выглядеть цельно в каталоге и на публичной странице.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-olive">
+              {title.trim() || "Программа без названия"}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold",
+                saveStatusClass,
+              )}
+            >
+              {saveStatusLabel}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-olive/64">
+              {offerType === ExcursionOfferType.TOUR ? "Тур" : "Экскурсия"}
+            </span>
+            {externalReviewsHref ? (
+              <Link
+                href={externalReviewsHref}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
+              >
+                <AppIcon icon={MessageSquareText} className="h-4 w-4" />
+                Отзывы
+              </Link>
+            ) : null}
+          </div>
         </div>
-        {externalReviewsHref ? (
-          <Link
-            href={externalReviewsHref}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
-          >
-            <AppIcon icon={MessageSquareText} className="h-4 w-4" />
-            Отзывы с других сайтов
-          </Link>
+
+        <div
+          ref={mobileStepperRef}
+          className="editor-stepper mt-7 overflow-hidden rounded-[8px] border border-olive/12 bg-white shadow-[0_4px_18px_rgba(15,23,42,0.03)] sm:grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+        >
+          {wizardSteps.map((step, index) => {
+            const isCurrent = currentStep === index;
+            const StepIcon = wizardStepIcons[index] ?? Sparkles;
+            const isDone = step.status === "complete";
+
+            return (
+              <button
+                key={step.label}
+                type="button"
+                title={step.label}
+                onClick={() => setCurrentStep(index)}
+                disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
+                data-editor-step-active={isCurrent ? "true" : undefined}
+                className={cn(
+                  "relative flex min-h-[96px] items-center gap-3 border-b border-olive/8 bg-white px-5 py-4 text-left transition last:border-b-0 sm:[&:nth-child(odd)]:border-r lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-child(n+4)]:border-b-0 2xl:border-b-0 2xl:[&:nth-child(3n)]:border-r 2xl:last:border-r-0",
+                  isCurrent ? "bg-primary/5" : "hover:bg-primary/3",
+                  (isSaving || isSavingSchedule || isDeleting || isUploadingPhotos) &&
+                    "cursor-not-allowed opacity-70",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                    isCurrent
+                      ? "bg-primary text-white"
+                      : isDone
+                        ? "bg-sage/24 text-primary ring-1 ring-primary/12"
+                        : "bg-olive/6 text-olive/70",
+                  )}
+                >
+                  {isDone && !isCurrent ? (
+                    <AppIcon icon={Check} className="h-5 w-5" />
+                  ) : (
+                    <AppIcon icon={StepIcon} className="h-5 w-5" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-olive">
+                    {step.label}
+                  </span>
+                  <span className="mt-1 block text-xs font-medium text-olive/48">
+                    {index + 1} из {wizardSteps.length}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "absolute bottom-0 left-0 h-1 w-full rounded-full",
+                    isCurrent ? "bg-primary" : isDone ? "bg-sage" : "bg-olive/8",
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center gap-4">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-olive/8">
+              <div
+                className="wizard-progress-bar h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${creationProgressPercent}%` }}
+              />
+            </div>
+            <span className="text-xs font-semibold text-olive/55">
+              {completedStepCount}/{wizardSteps.length}
+            </span>
+          </div>
+        </div>
+
+        {error ? (
+          <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {error}
+          </p>
+        ) : success ? (
+          <p className="mt-3 rounded-2xl border border-sage/30 bg-sage/15 px-3 py-2 text-sm text-olive/75">
+            {success}
+          </p>
         ) : null}
-      </div>
+      </section>
 
-      <WizardStepper
-        steps={wizardSteps}
-        currentStep={currentStep}
-        onStepClick={setCurrentStep}
-        saveStatus={saveStatus}
-        backHref={backHref}
-        backLabel={backLabel}
-      />
+      <div className={cn("excursion-editor-stage", hideHelpAside && "editor-stage-no-aside")}>
+        <nav className="editor-side-stepper" aria-label="Разделы карточки экскурсии или тура">
+          <div className="editor-side-stepper-card">
+            <div className="flex items-center justify-between gap-3 border-b border-olive/8 pb-5">
+              <div>
+                <p className="text-base font-semibold text-olive">Создание программы</p>
+                <p className="mt-1 text-xs text-olive/52">
+                  Заполнено {completedStepCount}/{wizardSteps.length} · {creationProgressPercent}%
+                </p>
+              </div>
+            </div>
 
-      <div className="excursion-editor-stage">
+            <div className="mt-5 space-y-3">
+              {wizardSteps.map((step, index) => {
+                const isCurrent = currentStep === index;
+                const StepIcon = wizardStepIcons[index] ?? Sparkles;
+                const isDone = step.status === "complete";
+
+                return (
+                  <button
+                    key={step.label}
+                    type="button"
+                    onClick={() => setCurrentStep(index)}
+                    disabled={isSaving || isSavingSchedule || isDeleting || isUploadingPhotos}
+                    aria-current={isCurrent ? "step" : undefined}
+                    className={cn(
+                      "group relative flex w-full items-center gap-4 rounded-[8px] border px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70",
+                      isCurrent
+                        ? "border-primary/28 bg-[linear-gradient(90deg,rgba(15,118,110,0.1),rgba(255,255,255,0.92))] text-primary shadow-[0_12px_36px_rgba(15,118,110,0.08)] ring-1 ring-primary/12"
+                        : "border-transparent bg-white text-olive hover:border-primary/18 hover:bg-foam/45",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                        isCurrent
+                          ? "border-primary bg-primary text-white"
+                          : isDone
+                            ? "border-primary/22 bg-primary/10 text-primary"
+                            : "border-olive/12 bg-white text-olive/65 group-hover:border-primary/22 group-hover:text-primary",
+                      )}
+                    >
+                      {isDone && !isCurrent ? (
+                        <AppIcon icon={Check} className="h-4 w-4" />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <AppIcon
+                          icon={StepIcon}
+                          className={cn(
+                            "h-4 w-4 shrink-0",
+                            isCurrent ? "text-primary" : "text-primary/72",
+                          )}
+                        />
+                        <span className="truncate text-base font-semibold text-olive">
+                          {step.label}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-sm leading-snug text-olive/54">
+                        Шаг {index + 1} из {wizardSteps.length}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </nav>
+
         <div className="excursion-editor-stage-main space-y-4 sm:space-y-5">
           {/* ===== STEP 0: ОПИСАНИЕ ===== */}
           {currentStep === 0 && (
@@ -3881,6 +4185,7 @@ export function ExcursionEditor({
                       onAddressResolved={(resolvedItem: ReverseGeocodeItem) => {
                         setAddress(resolvedItem.address);
                         setMapDraftAddress(resolvedItem.address);
+                        scrollAddressInputToEndOnMobile();
                         const localityFromGeocode =
                           resolvedItem.localityDisplayName?.trim() ??
                           resolvedItem.localityName?.trim() ??
@@ -3911,6 +4216,7 @@ export function ExcursionEditor({
                   <label className="block space-y-1">
                     <span className="text-xs font-medium text-olive/60">Адрес или ориентир</span>
                     <Input
+                      ref={addressInputRef}
                       value={address}
                       onChange={(event) => setAddress(event.target.value)}
                       placeholder="ул. Ленина 1, рядом с набережной..."
@@ -6109,127 +6415,129 @@ export function ExcursionEditor({
               </div>
             </section>
           )}
+
+          {currentStep === 6 ? (
+            <section className="wizard-section-enter space-y-5 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-foam via-white to-cream p-4 shadow-[0_14px_36px_-18px_rgba(15,118,110,0.20)] sm:p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                  <AppIcon icon={ShieldCheck} className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-olive md:text-xl">Публикация</h2>
+                  <p className="mt-0.5 text-sm text-olive/55">
+                    Оплата размещения и отправка карточки на модерацию.
+                  </p>
+                </div>
+              </div>
+              {publicationPaymentPanel}
+            </section>
+          ) : null}
         </div>
 
-        <aside className="excursion-editor-aside space-y-4">
-          <section className="excursion-editor-aside-card">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-olive">{asideTitle}</p>
-                <p className="mt-2 text-xs leading-5 text-olive/60">{asideLead}</p>
-              </div>
-              <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                {currentStep + 1}/6
-              </span>
-            </div>
-            <div className="mt-4 space-y-2">
-              {asideChecks.map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-2 text-xs font-medium text-olive/72"
-                >
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <AppIcon icon={Check} className="h-3 w-3" />
-                  </span>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="excursion-editor-aside-card">
-            <p className="text-sm font-semibold text-olive">Статус программы</p>
-            <div className="mt-4 grid gap-2 text-xs text-olive/62">
-              <div className="flex items-center justify-between gap-3">
-                <span>Текущий шаг</span>
-                <span className="font-semibold text-olive">{asideStatusText}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-olive/8">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{
-                    width: `${Math.round(
-                      (wizardSteps.filter((step) => step.status === "complete").length /
-                        wizardSteps.length) *
-                        100,
-                    )}%`,
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Готовность</span>
-                <span className="font-semibold text-primary">
-                  {wizardSteps.filter((step) => step.status === "complete").length}/
-                  {wizardSteps.length}
+        {!hideHelpAside ? (
+          <aside className="excursion-editor-aside space-y-7">
+            <section className="excursion-editor-aside-card">
+              <div className="flex items-center gap-4">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/8 text-primary">
+                  <AppIcon icon={activeAsideIcon} className="h-5 w-5" />
                 </span>
+                <div>
+                  <p className="text-base font-semibold text-primary">{asideTitle}</p>
+                  <p className="mt-1 text-xs font-semibold text-olive/42">
+                    Шаг {currentStep + 1} из {wizardSteps.length}
+                  </p>
+                </div>
               </div>
-            </div>
-          </section>
 
-          <section className="excursion-editor-aside-card overflow-hidden p-0">
-            <div className="h-28 bg-[linear-gradient(135deg,rgba(15,118,110,0.18),rgba(242,196,77,0.22)),url('/crimea-map-preview.svg')] bg-cover bg-center" />
-            <div className="p-4">
-              <p className="text-sm font-semibold text-olive">
-                {title.trim() || "Программа без названия"}
-              </p>
-              <div className="mt-3 space-y-2 text-xs text-olive/62">
-                <div className="flex justify-between gap-3">
-                  <span>Локация</span>
-                  <span className="font-medium text-olive">
-                    {locationInput.trim() || "Не указана"}
-                  </span>
+              <p className="mt-6 text-sm leading-6 text-olive/62">{asideLead}</p>
+
+              <div className="mt-7 space-y-5">
+                {asideChecks.map((item) => (
+                  <div key={item} className="flex gap-4 text-sm leading-6 text-olive/62">
+                    <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/8 text-primary ring-1 ring-primary/10">
+                      <AppIcon icon={Check} className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block font-semibold text-olive">{item}</span>
+                      <span className="mt-1 block text-xs leading-5 text-olive/50">
+                        Проверьте этот пункт перед переходом к следующему шагу.
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="excursion-editor-aside-card">
+              <div className="flex items-start gap-4">
+                <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-[8px] bg-primary text-white shadow-[0_12px_28px_rgba(15,118,110,0.22)]">
+                  <AppIcon icon={Save} className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-base font-semibold text-primary">Готовность карточки</p>
+                  <p className="mt-2 text-sm leading-6 text-olive/62">
+                    Заполненные разделы сразу отражаются в прогрессе. Черновик можно сохранить и
+                    вернуться позже.
+                  </p>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <span>Фото</span>
-                  <span className="font-medium text-olive">
-                    {photoUrls.length}/{excursionPhotoLimit}
+              </div>
+              <div className="mt-5 grid gap-3 text-sm text-olive/62">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Текущий шаг</span>
+                  <span className="font-semibold text-olive">{asideStatusText}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-olive/8">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${creationProgressPercent}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Готовность</span>
+                  <span className="font-semibold text-primary">
+                    {completedStepCount}/{wizardSteps.length}
                   </span>
                 </div>
               </div>
-            </div>
-          </section>
-        </aside>
+            </section>
+
+            <section className="excursion-editor-aside-card excursion-editor-preview-card">
+              <div
+                className="h-28 bg-cover bg-center"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, rgba(15,118,110,0.18), rgba(242,196,77,0.22)), url('${activeAsideVisual.image}')`,
+                }}
+              />
+              <div className="p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-olive/38">
+                  Мини-превью
+                </p>
+                <p className="mt-2 text-base font-semibold text-olive">
+                  {title.trim() || "Программа без названия"}
+                </p>
+                <div className="mt-4 space-y-3 text-sm text-olive/62">
+                  <div className="flex justify-between gap-3">
+                    <span>Локация</span>
+                    <span className="font-medium text-olive">
+                      {locationInput.trim() || "Не указана"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Раздел</span>
+                    <span className="font-medium text-olive">{currentStepTitle}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Фото</span>
+                    <span className="font-medium text-olive">
+                      {photoUrls.length}/{excursionPhotoLimit}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        ) : null}
       </div>
-
-      {/* ===== STEP 5 (continued): ПУБЛИКАЦИЯ ===== */}
-      {currentStep === 5 && (
-        <ExcursionPaymentPanel
-          excursionId={excursion.id}
-          offerType={offerType}
-          excursionTitle={title || excursion.title || ""}
-          status={
-            excursion.status as
-              | "DRAFT"
-              | "PENDING_MODERATION"
-              | "PUBLISHED"
-              | "NEEDS_FIX"
-              | "REJECTED"
-          }
-          pendingEditStatus={
-            excursion.pendingEditStatus as
-              | "DRAFT"
-              | "PENDING_MODERATION"
-              | "PUBLISHED"
-              | "NEEDS_FIX"
-              | "REJECTED"
-              | null
-          }
-          isReady={wizardSteps.slice(0, 5).every((s) => s.status === "complete")}
-          readinessReasons={missingRequiredByStep
-            .filter((step) => step.index < 5)
-            .map((step) => `Раздел «${step.label}»: ${step.items.join(", ")}`)}
-          adminMode={adminMode}
-          moderationHref={moderationHref}
-          listHref={adminMode ? listHref : undefined}
-          listLabel={adminMode ? "К списку экскурсий" : undefined}
-          previewHref={previewHref}
-          onBeforePay={prepareExcursionForPayment}
-          onSubmitModeration={submitForModerationFromPayment}
-          onStatusChange={() => {
-            router.refresh();
-          }}
-        />
-      )}
 
       {/* Delete action */}
       <div className="flex justify-end px-1">
@@ -6241,6 +6549,61 @@ export function ExcursionEditor({
         >
           {isDeleting ? "Удаление..." : "Удалить программу"}
         </button>
+      </div>
+
+      <div className="hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
+              Шаг {currentStep + 1} из {wizardSteps.length}
+            </p>
+            <p className="truncate text-sm font-semibold text-olive">{currentStepTitle}</p>
+          </div>
+          <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            {completedStepCount}/{wizardSteps.length}
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            "mt-3 grid gap-2",
+            previousStepIndex !== null ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {previousStepIndex !== null ? (
+            <Button
+              variant="ghost"
+              onClick={() => setCurrentStep(previousStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              Назад
+            </Button>
+          ) : null}
+          {nextStepIndex !== null ? (
+            <Button
+              onClick={() => setCurrentStep(nextStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              Далее
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                document.querySelector(".excursion-editor-stage-main")?.scrollIntoView({
+                  block: "start",
+                  behavior: "smooth",
+                });
+              }}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              К публикации
+            </Button>
+          )}
+        </div>
       </div>
 
       {isMapDialogOpen ? (
@@ -6350,6 +6713,116 @@ export function ExcursionEditor({
         </span>
         <span>Фото в карточке {publicCardPhotoCount}</span>
         <span>Видео {videoUrls.length}/2</span>
+      </div>
+
+      <div className="hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
+              РЁР°Рі {currentStep + 1} РёР· {wizardSteps.length}
+            </p>
+            <p className="truncate text-sm font-semibold text-olive">{currentStepTitle}</p>
+          </div>
+          <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            {completedStepCount}/{wizardSteps.length}
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            "mt-3 grid gap-2",
+            previousStepIndex !== null ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {previousStepIndex !== null ? (
+            <Button
+              variant="ghost"
+              onClick={() => setCurrentStep(previousStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              РќР°Р·Р°Рґ
+            </Button>
+          ) : null}
+          {nextStepIndex !== null ? (
+            <Button
+              onClick={() => setCurrentStep(nextStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              Р”Р°Р»РµРµ
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                document.querySelector(".excursion-editor-stage-main")?.scrollIntoView({
+                  block: "start",
+                  behavior: "smooth",
+                });
+              }}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              Рљ РїСѓР±Р»РёРєР°С†РёРё
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="sticky-bottom-enter mobile-editor-bottom-bar -mx-4 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
+              {"\u0428\u0430\u0433"} {currentStep + 1} {"\u0438\u0437"} {wizardSteps.length}
+            </p>
+            <p className="truncate text-sm font-semibold text-olive">{currentStepTitle}</p>
+          </div>
+          <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            {completedStepCount}/{wizardSteps.length}
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            "mt-3 grid gap-2",
+            previousStepIndex !== null ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {previousStepIndex !== null ? (
+            <Button
+              variant="ghost"
+              onClick={() => setCurrentStep(previousStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              {"\u041d\u0430\u0437\u0430\u0434"}
+            </Button>
+          ) : null}
+          {nextStepIndex !== null ? (
+            <Button
+              onClick={() => setCurrentStep(nextStepIndex)}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              {"\u0414\u0430\u043b\u0435\u0435"}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                document.querySelector(".excursion-editor-stage-main")?.scrollIntoView({
+                  block: "start",
+                  behavior: "smooth",
+                });
+              }}
+              disabled={isNavigationDisabled}
+              className="min-h-11 w-full"
+            >
+              {"\u041a \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u0438"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

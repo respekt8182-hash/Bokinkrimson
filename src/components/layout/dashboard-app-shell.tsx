@@ -147,7 +147,8 @@ function shouldShowDashboardBottomNav(pathname: string) {
 function shouldUseWideDashboardFrame(pathname: string) {
   return (
     /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
-    /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname)
+    /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/transfers\/[^/?#]+(?:$|[/?#])/.test(pathname)
   );
 }
 
@@ -206,12 +207,16 @@ export function DashboardAppShell({ user, children }: DashboardAppShellProps) {
   const activeKey = useMemo(() => resolveActiveMenuKey(pathname), [pathname]);
   const showBottomNav = shouldShowDashboardBottomNav(pathname);
   const useWideFrame = shouldUseWideDashboardFrame(pathname);
-  const useObjectEditorFrame = /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname);
+  const useObjectEditorFrame =
+    /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/transfers\/[^/?#]+(?:$|[/?#])/.test(pathname);
   const useVisualFrame =
     pathname === "/dashboard" ||
     pathname === "/dashboard/objects" ||
     /^\/dashboard\/objects\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
     /^\/dashboard\/excursions\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
+    /^\/dashboard\/transfers\/[^/?#]+(?:$|[/?#])/.test(pathname) ||
     pathname === "/dashboard/excursions" ||
     pathname === "/dashboard/transfers" ||
     pathname === "/dashboard/profile";

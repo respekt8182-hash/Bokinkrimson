@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { AdminMediaPreview } from "@/components/admin/admin-media-preview";
+import { AdminPropertyModerationPreview } from "@/components/admin/admin-moderation-preview";
 import { RegistryModerationActions } from "@/components/admin/registry-moderation-actions";
 import { ModerationActions } from "@/components/admin/moderation-actions";
 import { ReviewModerationList } from "@/components/admin/review-moderation-list";
@@ -233,6 +234,8 @@ export default async function AdminModerationObjectPage({
           </Link>
         </div>
       </div>
+
+      <AdminPropertyModerationPreview property={property} rooms={rooms} />
 
       <section className="rounded-2xl border border-olive/10 bg-white p-4">
         <h2 className="text-xl text-olive">Основные данные</h2>

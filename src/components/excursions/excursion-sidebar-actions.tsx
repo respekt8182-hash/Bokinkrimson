@@ -21,6 +21,8 @@ type ExcursionSidebarActionsProps = {
   durationLabel: string;
   locationName: string | null;
   phone: string | null;
+  phoneMasked?: string | null;
+  phoneAvailable?: boolean;
   phoneName: string | null;
   phone2: string | null;
   phone2Name: string | null;
@@ -29,11 +31,13 @@ type ExcursionSidebarActionsProps = {
   entityPublicId?: number | null;
   websiteUrl: string | null;
   email: string | null;
+  emailAvailable?: boolean;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
   maxUrl: string | null;
   okUrl: string | null;
+  messengerAvailable?: boolean;
   organizerName: string;
   organizerAvatarUrl?: string | null;
   isInstantConfirmation?: boolean;
@@ -101,6 +105,8 @@ export function ExcursionSidebarActions({
   durationLabel,
   locationName,
   phone,
+  phoneMasked = null,
+  phoneAvailable = false,
   phoneName,
   phone2,
   phone2Name,
@@ -109,11 +115,13 @@ export function ExcursionSidebarActions({
   entityPublicId = null,
   websiteUrl,
   email,
+  emailAvailable = false,
   whatsappUrl,
   telegramUrl,
   vkUrl,
   maxUrl,
   okUrl,
+  messengerAvailable = false,
   organizerName,
   organizerAvatarUrl = null,
   isInstantConfirmation = false,
@@ -148,7 +156,11 @@ export function ExcursionSidebarActions({
     vkUrl,
     maxUrl,
     okUrl,
-  ].some((value) => (value?.trim() ?? "").length > 0);
+  ].some((value) => (value?.trim() ?? "").length > 0) ||
+    phoneAvailable ||
+    emailAvailable ||
+    messengerAvailable ||
+    Boolean(phoneMasked?.trim());
 
   return (
     <>
@@ -187,16 +199,20 @@ export function ExcursionSidebarActions({
           <div className="mt-3">
             <PropertyContactsPanel
               phone={phone}
+              phoneMasked={phoneMasked}
+              phoneAvailable={phoneAvailable}
               phoneLabel={primaryPhoneLabel}
               phoneName={phoneName}
               extraPhones={extraPhones}
               websiteUrl={websiteUrl}
               email={email}
+              emailAvailable={emailAvailable}
               whatsappUrl={whatsappUrl}
               telegramUrl={telegramUrl}
               vkUrl={vkUrl}
               maxUrl={maxUrl}
               okUrl={okUrl}
+              messengerAvailable={messengerAvailable}
               text={excursionContactPanelText}
               variant="compact"
               tracking={tracking}

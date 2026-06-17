@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import {
   PLACEMENT_PROMO_ENDS_AT_ISO,
   PLACEMENT_PROMO_END_LABEL,
+  isFreePlacementTrialEnabledForCategory,
   isPlacementPromoActive,
 } from "@/lib/placement-promo";
 import {
@@ -135,7 +136,8 @@ export async function getPlacementPrice(input: {
   const discountReason = "Не применяется.";
   const isDiscountApplied = false;
   const totalPrice = finalPrice + additionalOptionsPrice;
-  const freePeriodActive = isPlacementPromoActive(now);
+  const freePeriodActive =
+    isFreePlacementTrialEnabledForCategory(input.category) && isPlacementPromoActive(now);
 
   return {
     category: input.category,

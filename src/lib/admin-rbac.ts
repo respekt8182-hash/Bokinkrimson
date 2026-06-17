@@ -7,7 +7,7 @@ export const adminRoleLabels: Record<AdminRoleValue, string> = {
   ADMIN: "Администратор",
   MODERATOR: "Модератор",
   SUPPORT: "Поддержка",
-  FINANCE: "Финансы",
+  FINANCE: "Оплата",
 };
 
 export const adminPermissions = [
@@ -36,7 +36,7 @@ export const adminPermissions = [
 export type AdminPermission = (typeof adminPermissions)[number];
 
 const rolePermissions: Record<AdminRoleValue, readonly AdminPermission[]> = {
-  SUPER_ADMIN: adminPermissions,
+  SUPER_ADMIN: adminPermissions.filter((permission) => permission !== "profile:manage"),
   ADMIN: [
     "dashboard:read",
     "content:manage",
@@ -179,7 +179,9 @@ export function getAdminApiRequestPermission(
     return "password-resets:manage";
   }
   if (path.startsWith("/api/admin/users/")) {
-    return requestMethod === "DELETE" || path.endsWith("/restore") ? "users:delete" : "users:manage";
+    return requestMethod === "DELETE" || path.endsWith("/restore")
+      ? "users:delete"
+      : "users:manage";
   }
   if (path.startsWith("/api/admin/users")) return "users:manage";
   if (path.startsWith("/api/admin/payments") || path.startsWith("/api/admin/listing-payments")) {
@@ -214,6 +216,9 @@ export function getAdminApiRequestPermission(
       : "content:manage";
   }
   if (path.startsWith("/api/admin/excursions")) return "content:manage";
+  if (path.startsWith("/api/admin/transfers/")) {
+    return requestMethod === "DELETE" ? "content:delete" : "content:manage";
+  }
   if (path.startsWith("/api/admin/transfers")) return "content:manage";
 
   return "dashboard:read";

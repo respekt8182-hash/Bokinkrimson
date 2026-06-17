@@ -73,8 +73,8 @@ export default async function AdminObjectExternalReviewsPage({
           propertyId={property.id}
           activeSection="external-reviews"
           basePath="/admin/objects"
-          backHref={`/admin/objects/${property.id}`}
-          backLabel="Быстрая админ-правка"
+          backHref={`/admin/objects/${property.id}/about`}
+          backLabel="Об объекте"
           includePayment={false}
           showChessboardTab
         />
@@ -103,10 +103,10 @@ export default async function AdminObjectExternalReviewsPage({
                   </div>
                 </div>
                 <Link
-                  href={`/admin/objects/${property.id}`}
+                  href={`/admin/objects/${property.id}/about`}
                   className="inline-flex items-center justify-center rounded-xl border border-olive/14 bg-white px-4 py-2.5 text-sm font-semibold text-olive transition hover:border-primary/20 hover:text-primary"
                 >
-                  К карточке
+                  Об объекте
                 </Link>
               </div>
             </div>

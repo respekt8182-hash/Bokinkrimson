@@ -5,19 +5,8 @@ import {
   TransferStatus,
   UserRole,
 } from "@prisma/client";
+import { Car, Clock3, Compass, House, MessageSquareText, Users } from "lucide-react";
 import {
-  Car,
-  Clock3,
-  Compass,
-  FileText,
-  House,
-  MessageSquareText,
-  Plus,
-  ShieldCheck,
-  Users,
-} from "lucide-react";
-import {
-  AdminLinkButton,
   AdminNotice,
   AdminPageHeader,
   AdminPanel,
@@ -42,9 +31,6 @@ function StatusRow({ label, value, tone }: { label: string; value: number; tone:
 
 export default async function AdminHomePage() {
   const currentAdmin = await getAdminSession();
-  const canCreateContent = Boolean(
-    currentAdmin && hasAdminPermission(currentAdmin.role, "content:create"),
-  );
   const canManageContent = Boolean(
     currentAdmin && hasAdminPermission(currentAdmin.role, "content:manage"),
   );
@@ -65,7 +51,6 @@ export default async function AdminHomePage() {
   );
   const canSeeContentQueues = canManageContent || canManageModeration;
   const canSeeSupportQueues = canManageMessages || canManageApplications;
-  const canSeeQuickActions = canSeeContentQueues || canManageFinance || canSeeSupportQueues;
   const {
     usersCount,
     propertiesCount,
@@ -295,21 +280,7 @@ export default async function AdminHomePage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Обзор"
-        description="Главные очереди и быстрый вход в рабочие разделы."
-        actions={
-          canCreateContent ? (
-            <>
-            <AdminLinkButton href="/admin/objects/new" variant="primary">
-              <Plus className="h-4 w-4" />
-              Новое жильё
-            </AdminLinkButton>
-            <AdminLinkButton href="/admin/excursions/new">
-              <Plus className="h-4 w-4" />
-              Новая экскурсия
-            </AdminLinkButton>
-            </>
-          ) : undefined
-        }
+        description="Рабочая сводка по очередям, публикациям, черновикам и обращениям."
       />
 
       {isDatabaseFallback ? (
@@ -368,184 +339,68 @@ export default async function AdminHomePage() {
         ) : null}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-        {canSeeQuickActions ? (
-          <AdminPanel
-            title="Быстрые действия"
-            description="Только самые частые задачи для ежедневной работы."
-          >
-            <div className="grid gap-3 md:grid-cols-2">
+      <section className="grid gap-6 xl:grid-cols-3">
+        {canSeeContentQueues ? (
+          <AdminPanel title="Требует проверки" description="Очереди, где нужен ручной разбор.">
+            <div className="space-y-3">
               {canManageModeration ? (
                 <>
-                  <AdminLinkButton
-                    href="/admin/moderation"
-                    variant="ghost"
-                    className="justify-start rounded-[22px] px-4 py-4"
-                  >
-                    <ShieldCheck className="h-4 w-4" />
-                    Проверка жилья
-                  </AdminLinkButton>
-                  <AdminLinkButton
-                    href="/admin/moderation/excursions"
-                    variant="ghost"
-                    className="justify-start rounded-[22px] px-4 py-4"
-                  >
-                    <Compass className="h-4 w-4" />
-                    Модерация экскурсий
-                  </AdminLinkButton>
+                  <StatusRow
+                    label="Жильё на модерации"
+                    value={pendingCount}
+                    tone="bg-amber-100 text-amber-800"
+                  />
+                  <StatusRow
+                    label="Экскурсии и туры на модерации"
+                    value={pendingExcursionsCount}
+                    tone="bg-sky-100 text-sky-800"
+                  />
                 </>
               ) : null}
               {canManageContent ? (
-                <AdminLinkButton
-                  href="/admin/transfers?status=PENDING_MODERATION"
-                  variant="ghost"
-                  className="justify-start rounded-[22px] px-4 py-4"
-                >
-                  <Car className="h-4 w-4" />
-                  Трансферы на модерации
-                </AdminLinkButton>
-              ) : null}
-              {canManageFinance ? (
-                <AdminLinkButton
-                  href="/admin/renewals"
-                  variant="ghost"
-                  className="justify-start rounded-[22px] px-4 py-4"
-                >
-                  <Clock3 className="h-4 w-4" />
-                  Продление размещения
-                </AdminLinkButton>
-              ) : null}
-              {canManageMessages ? (
-                <AdminLinkButton
-                  href="/admin/messages"
-                  variant="ghost"
-                  className="justify-start rounded-[22px] px-4 py-4"
-                >
-                  <MessageSquareText className="h-4 w-4" />
-                  Сообщения
-                </AdminLinkButton>
-              ) : null}
-              {canManageApplications ? (
-                <AdminLinkButton
-                  href="/admin/applications"
-                  variant="ghost"
-                  className="justify-start rounded-[22px] px-4 py-4"
-                >
-                  <FileText className="h-4 w-4" />
-                  Заявки
-                </AdminLinkButton>
+                <StatusRow
+                  label="Трансферы на модерации"
+                  value={pendingTransfersCount}
+                  tone="bg-cyan-100 text-cyan-800"
+                />
               ) : null}
             </div>
           </AdminPanel>
         ) : null}
 
-        <AdminPanel title="Рабочие очереди" description="То, что требует внимания прямо сейчас.">
-          <div className="space-y-3">
-            {canManageModeration ? (
-              <>
-                <StatusRow
-                  label="Жильё на модерации"
-                  value={pendingCount}
-                  tone="bg-amber-100 text-amber-800"
-                />
-                <StatusRow
-                  label="Экскурсии на модерации"
-                  value={pendingExcursionsCount}
-                  tone="bg-sky-100 text-sky-800"
-                />
-              </>
-            ) : null}
-            {canManageContent ? (
+        {canManageContent ? (
+          <AdminPanel title="Публикации" description="Состояние каталогов без черновиков.">
+            <div className="space-y-3">
               <StatusRow
-                label="Трансферы на модерации"
-                value={pendingTransfersCount}
-                tone="bg-cyan-100 text-cyan-800"
-              />
-            ) : null}
-            {canManageFinance ? (
-              <StatusRow
-                label="Заканчивается размещение"
-                value={placementRenewalsCount}
-                tone="bg-lime-100 text-lime-800"
-              />
-            ) : null}
-            {canManageApplications ? (
-              <StatusRow
-                label="Новые заявки"
-                value={applicationsCount}
+                label="Опубликовано жилья"
+                value={publishedCount}
                 tone="bg-emerald-100 text-emerald-800"
               />
-            ) : null}
-          </div>
-        </AdminPanel>
-      </section>
+              <StatusRow
+                label="Опубликовано экскурсий и туров"
+                value={excursionsCount}
+                tone="bg-emerald-100 text-emerald-800"
+              />
+              <StatusRow
+                label="Опубликовано трансферов"
+                value={transfersCount}
+                tone="bg-emerald-100 text-emerald-800"
+              />
+              <StatusRow
+                label="Отклонено всего"
+                value={rejectedCount + rejectedExcursionsCount + rejectedTransfersCount}
+                tone="bg-red-100 text-red-700"
+              />
+            </div>
+          </AdminPanel>
+        ) : null}
 
-      {canManageContent ? (
-        <>
-          <section className="grid gap-6 xl:grid-cols-2">
-            <AdminPanel title="Жильё и размещение">
-              <div className="space-y-3">
-                <StatusRow
-                  label="На модерации"
-                  value={pendingCount}
-                  tone="bg-amber-100 text-amber-800"
-                />
-                <StatusRow
-                  label="Опубликовано"
-                  value={publishedCount}
-                  tone="bg-emerald-100 text-emerald-800"
-                />
-                <StatusRow
-                  label="Отклонено"
-                  value={rejectedCount}
-                  tone="bg-red-100 text-red-700"
-                />
-              </div>
-            </AdminPanel>
-
-            <AdminPanel title="Каталог экскурсий">
-              <div className="space-y-3">
-                <StatusRow
-                  label="На модерации"
-                  value={pendingExcursionsCount}
-                  tone="bg-sky-100 text-sky-800"
-                />
-                <StatusRow
-                  label="Отклонено"
-                  value={rejectedExcursionsCount}
-                  tone="bg-red-100 text-red-700"
-                />
-                {canManageMessages ? (
-                  <StatusRow
-                    label="Сообщения"
-                    value={adminMessagesCount}
-                    tone="bg-rose-100 text-rose-800"
-                  />
-                ) : null}
-              </div>
-            </AdminPanel>
-
-            <AdminPanel title="Трансферы">
-              <div className="space-y-3">
-                <StatusRow
-                  label="На модерации"
-                  value={pendingTransfersCount}
-                  tone="bg-cyan-100 text-cyan-800"
-                />
-                <StatusRow
-                  label="Отклонено"
-                  value={rejectedTransfersCount}
-                  tone="bg-red-100 text-red-700"
-                />
-              </div>
-            </AdminPanel>
-          </section>
-
+        {canManageContent ? (
           <AdminPanel
             title="Черновики"
-            description="Сколько неопубликованных карточек сейчас сохранено на сайте."
+            description="Карточки, которые пока не дошли до публикации."
           >
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-3">
               <StatusRow
                 label="Жильё"
                 value={propertyDraftsCount}
@@ -556,7 +411,11 @@ export default async function AdminHomePage() {
                 value={excursionDraftsCount}
                 tone="bg-sky-100 text-sky-800"
               />
-              <StatusRow label="Туры" value={tourDraftsCount} tone="bg-indigo-100 text-indigo-800" />
+              <StatusRow
+                label="Туры"
+                value={tourDraftsCount}
+                tone="bg-indigo-100 text-indigo-800"
+              />
               <StatusRow
                 label="Трансферы"
                 value={transferDraftsCount}
@@ -564,8 +423,36 @@ export default async function AdminHomePage() {
               />
             </div>
           </AdminPanel>
-        </>
-      ) : null}
+        ) : null}
+
+        {canSeeSupportQueues || canManageFinance ? (
+          <AdminPanel title="Операционные сигналы" description="Обращения, заявки и оплата.">
+            <div className="space-y-3">
+              {canManageFinance ? (
+                <StatusRow
+                  label="Заканчивается размещение"
+                  value={placementRenewalsCount}
+                  tone="bg-lime-100 text-lime-800"
+                />
+              ) : null}
+              {canManageApplications ? (
+                <StatusRow
+                  label="Новые заявки"
+                  value={applicationsCount}
+                  tone="bg-emerald-100 text-emerald-800"
+                />
+              ) : null}
+              {canManageMessages ? (
+                <StatusRow
+                  label="Сообщения владельцев"
+                  value={adminMessagesCount}
+                  tone="bg-rose-100 text-rose-800"
+                />
+              ) : null}
+            </div>
+          </AdminPanel>
+        ) : null}
+      </section>
     </div>
   );
 }

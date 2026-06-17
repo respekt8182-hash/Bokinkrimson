@@ -56,6 +56,10 @@ function formatDate(value: string | null): string {
   }
 }
 
+function getEditableRoleEntries(roles: Record<string, string>): Array<[string, string]> {
+  return Object.entries(roles).filter(([role]) => role !== "SUPER_ADMIN");
+}
+
 export default function AdminAccountsPage() {
   const [items, setItems] = useState<AdminAccountItem[]>([]);
   const [roles, setRoles] = useState<Record<string, string>>({});
@@ -73,6 +77,7 @@ export default function AdminAccountsPage() {
     role: "ADMIN",
     password: "",
   });
+  const editableRoleEntries = getEditableRoleEntries(roles);
 
   async function loadAdmins() {
     setLoading(true);
@@ -251,7 +256,7 @@ export default function AdminAccountsPage() {
             className={adminInputClass}
             disabled={!schemaReady || saving}
           >
-            {Object.entries(roles).map(([role, label]) => (
+            {editableRoleEntries.map(([role, label]) => (
               <option key={role} value={role}>
                 {label}
               </option>
@@ -283,7 +288,11 @@ export default function AdminAccountsPage() {
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid gap-3 rounded-2xl border border-[var(--admin-border)] bg-white p-4 shadow-[var(--admin-shadow-xs)] xl:grid-cols-[minmax(220px,1fr)_180px_180px_160px_140px_auto]"
+                className={`grid gap-3 rounded-2xl border border-[var(--admin-border)] bg-white p-4 shadow-[var(--admin-shadow-xs)] ${
+                  item.immutable
+                    ? "xl:grid-cols-[minmax(220px,1fr)_140px_auto]"
+                    : "xl:grid-cols-[minmax(220px,1fr)_180px_180px_160px_140px_auto]"
+                }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <AdminAvatar src={item.avatarUrl} name={item.displayName} />
@@ -299,54 +308,60 @@ export default function AdminAccountsPage() {
                     </p>
                   </div>
                 </div>
-                <input
-                  type="email"
-                  value={item.email ?? ""}
-                  onChange={(event) => updateItem(item.id, { email: event.target.value })}
-                  className={adminInputClass}
-                  placeholder="Email"
-                  disabled={item.immutable || saving}
-                />
-                <select
-                  value={item.role}
-                  onChange={(event) => updateItem(item.id, { role: event.target.value })}
-                  className={adminInputClass}
-                  disabled={item.immutable || saving}
-                >
-                  {Object.entries(roles).map(([role, label]) => (
-                    <option key={role} value={role}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={item.status}
-                  onChange={(event) =>
-                    updateItem(item.id, { status: event.target.value as "ACTIVE" | "DISABLED" })
-                  }
-                  className={adminInputClass}
-                  disabled={item.immutable || saving}
-                >
-                  <option value="ACTIVE">Активен</option>
-                  <option value="DISABLED">Отключён</option>
-                </select>
+                {!item.immutable ? (
+                  <>
+                    <input
+                      type="email"
+                      value={item.email ?? ""}
+                      onChange={(event) => updateItem(item.id, { email: event.target.value })}
+                      className={adminInputClass}
+                      placeholder="Email"
+                      disabled={saving}
+                    />
+                    <select
+                      value={item.role}
+                      onChange={(event) => updateItem(item.id, { role: event.target.value })}
+                      className={adminInputClass}
+                      disabled={saving}
+                    >
+                      {editableRoleEntries.map(([role, label]) => (
+                        <option key={role} value={role}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
+                {!item.immutable ? (
+                  <select
+                    value={item.status}
+                    onChange={(event) =>
+                      updateItem(item.id, { status: event.target.value as "ACTIVE" | "DISABLED" })
+                    }
+                    className={adminInputClass}
+                    disabled={saving}
+                  >
+                    <option value="ACTIVE">Активен</option>
+                    <option value="DISABLED">Отключён</option>
+                  </select>
+                ) : null}
                 <div className="space-y-2 text-sm">
                   <AdminStatusBadge tone={item.status === "ACTIVE" ? "success" : "danger"}>
                     {item.status === "ACTIVE" ? "Активен" : "Отключён"}
                   </AdminStatusBadge>
-                  <p className="text-[12px] text-[var(--admin-muted)]">
-                    Вход: {formatDate(item.lastLoginAt)}
-                  </p>
+                  {!item.immutable ? (
+                    <p className="text-[12px] text-[var(--admin-muted)]">
+                      Вход: {formatDate(item.lastLoginAt)}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center justify-end gap-2">
-                  {item.immutable ? (
-                    <AdminStatusBadge tone="primary">Env fallback</AdminStatusBadge>
-                  ) : (
+                  {!item.immutable ? (
                     <AdminButton onClick={() => void saveAdmin(item)} disabled={saving}>
                       <Save className="h-4 w-4" />
                       Сохранить
                     </AdminButton>
-                  )}
+                  ) : null}
                 </div>
                 {!item.immutable ? (
                   <input

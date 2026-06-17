@@ -9,7 +9,7 @@ import {
 } from "@/lib/rate-limit";
 import { getRequestIp } from "@/lib/security";
 import { uploadToStorage } from "@/lib/storage";
-import { MAX_IMAGE_SIZE } from "@/lib/support-chat";
+import { getSupportChatSettings, MAX_IMAGE_SIZE } from "@/lib/support-chat";
 import { validateUploadFile } from "@/lib/upload-validation";
 
 const supportChatUploadLimiter = createRateLimiter({
@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
+  const settings = await getSupportChatSettings();
+  if (!settings.enabled) {
+    return NextResponse.json({ error: "Support chat is disabled" }, { status: 403 });
+  }
+
   const ip = getRequestIp(req);
 
   try {
@@ -60,7 +65,10 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (error) {
-    if (error instanceof RateLimitConfigurationError || error instanceof RateLimitBackendUnavailableError) {
+    if (
+      error instanceof RateLimitConfigurationError ||
+      error instanceof RateLimitBackendUnavailableError
+    ) {
       return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
     }
 

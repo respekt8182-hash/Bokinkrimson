@@ -4105,8 +4105,8 @@ export function HomeSearchShowcase({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-                <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ до
-                мая 2027
+                <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ на
+                1 год
               </span>
               <p className="mt-2 text-sm font-semibold leading-6 text-olive">
                 Программа первых партнёров

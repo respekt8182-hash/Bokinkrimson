@@ -102,7 +102,7 @@ const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
 const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
-const MAP_BOUNDS_UPDATE_DELAY_MS = 1200;
+const MAP_BOUNDS_UPDATE_DELAY_MS = 350;
 const MAP_BOUNDS_PRECISION = 4;
 const MAP_RADIUS_VIEWPORT_PADDING = 1.18;
 
@@ -1841,7 +1841,7 @@ export function MarketplaceCatalogMap({
         router.replace(nextQuery ? `${nextPathname}?${nextQuery}` : nextPathname, {
           scroll: false,
         });
-      }, MAP_BOUNDS_UPDATE_DELAY_MS);
+      }, boundsQueryChangeDelayMs);
     },
     [
       hasStrictAttractionRadiusScope,

@@ -1,9 +1,10 @@
 "use client";
 
 import { ChevronDown, ChevronRight, ChevronUp, Globe, Mail, Phone } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { AppIcon } from "@/components/ui/app-icon";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
+import { getAnalyticsVisitorId } from "@/lib/client-analytics-visitor";
 import { trackListingAction } from "@/lib/client-listing-actions";
 import { cn } from "@/lib/cn";
 import {
@@ -27,6 +28,8 @@ import {
 
 type PropertyContactsPanelProps = {
   phone: string | null;
+  phoneMasked?: string | null;
+  phoneAvailable?: boolean;
   phoneLabel?: string | null;
   phoneName?: string | null;
   extraPhones?: Array<{
@@ -36,11 +39,13 @@ type PropertyContactsPanelProps = {
   }>;
   websiteUrl: string | null;
   email: string | null;
+  emailAvailable?: boolean;
   whatsappUrl: string | null;
   telegramUrl: string | null;
   vkUrl: string | null;
   maxUrl: string | null;
   okUrl: string | null;
+  messengerAvailable?: boolean;
   text?: PropertyContactsPanelText;
   variant?: "default" | "compact";
   secondaryContactsCompact?: boolean;
@@ -85,6 +90,22 @@ type PhoneItem = {
   href: string | null;
   label: string;
   name: string | null;
+};
+
+type RevealedContactPayload = {
+  phone: string | null;
+  phoneName: string | null;
+  phone2: string | null;
+  phone2Name: string | null;
+  phone3: string | null;
+  phone3Name: string | null;
+  email: string | null;
+  websiteUrl: string | null;
+  whatsappUrl: string | null;
+  telegramUrl: string | null;
+  vkUrl: string | null;
+  maxUrl: string | null;
+  okUrl: string | null;
 };
 
 function PhoneIcon() {
@@ -231,16 +252,20 @@ function ContactChannelLink(props: {
 
 export function PropertyContactsPanel({
   phone,
+  phoneMasked = null,
+  phoneAvailable = false,
   phoneLabel = null,
   phoneName = null,
   extraPhones = [],
   websiteUrl,
   email,
+  emailAvailable = false,
   whatsappUrl,
   telegramUrl,
   vkUrl,
   maxUrl,
   okUrl,
+  messengerAvailable = false,
   text,
   variant = "default",
   secondaryContactsCompact = false,
@@ -250,23 +275,108 @@ export function PropertyContactsPanel({
   tracking = null,
 }: PropertyContactsPanelProps) {
   const [isPhoneExpanded, setIsPhoneExpanded] = useState(false);
+  const [revealedContacts, setRevealedContacts] = useState<RevealedContactPayload | null>(null);
+  const [isRevealLoading, setIsRevealLoading] = useState(false);
+  const [revealError, setRevealError] = useState<string | null>(null);
+  const effectivePhone = revealedContacts?.phone ?? phone;
+  const effectivePhoneName = revealedContacts?.phoneName ?? phoneName;
+  const effectiveExtraPhones = revealedContacts
+    ? [
+        { phone: revealedContacts.phone2, name: revealedContacts.phone2Name },
+        { phone: revealedContacts.phone3, name: revealedContacts.phone3Name },
+      ]
+        .map((item) => {
+          const preparedPhone = item.phone?.trim() ?? "";
+          return preparedPhone
+            ? { phone: preparedPhone, label: preparedPhone, name: item.name }
+            : null;
+        })
+        .filter(
+          (item): item is { phone: string; label: string; name: string | null } => item !== null,
+        )
+    : extraPhones;
+  const effectiveWebsiteUrl = revealedContacts?.websiteUrl ?? websiteUrl;
+  const effectiveEmail = revealedContacts?.email ?? email;
+  const effectiveWhatsappUrl = revealedContacts?.whatsappUrl ?? whatsappUrl;
+  const effectiveTelegramUrl = revealedContacts?.telegramUrl ?? telegramUrl;
+  const effectiveVkUrl = revealedContacts?.vkUrl ?? vkUrl;
+  const effectiveMaxUrl = revealedContacts?.maxUrl ?? maxUrl;
+  const effectiveOkUrl = revealedContacts?.okUrl ?? okUrl;
+  const canRevealContacts = Boolean(
+    tracking &&
+      !revealedContacts &&
+      (phoneAvailable || emailAvailable || messengerAvailable || phoneMasked),
+  );
   const isCompact = variant === "compact";
   const isSecondaryContactsCompact = isCompact || secondaryContactsCompact;
-  const preparedPhone = phone?.trim() ? phone.trim() : null;
-  const preparedExtraPhones = extraPhones
+  useEffect(() => {
+    setRevealedContacts(null);
+    setRevealError(null);
+    setIsRevealLoading(false);
+  }, [tracking?.entityType, tracking?.entityId]);
+
+  async function revealContacts() {
+    if (!tracking || isRevealLoading) {
+      return;
+    }
+
+    setIsRevealLoading(true);
+    setRevealError(null);
+
+    try {
+      const response = await fetch("/api/listing-contacts/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entityType: tracking.entityType,
+          entityId: tracking.entityId,
+          visitorId: getAnalyticsVisitorId(),
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        contacts?: RevealedContactPayload;
+        error?: string;
+        retryAfterSeconds?: number;
+      } | null;
+
+      if (!response.ok || !payload?.contacts) {
+        if (response.status === 429) {
+          throw new Error(
+            payload?.retryAfterSeconds
+              ? `Слишком много запросов. Попробуйте через ${payload.retryAfterSeconds} сек.`
+              : "Слишком много запросов. Попробуйте позже.",
+          );
+        }
+
+        throw new Error("Не удалось открыть контакты. Попробуйте позже.");
+      }
+
+      setRevealedContacts(payload.contacts);
+      trackListingAction({ ...tracking, actionType: "other" });
+    } catch (error) {
+      setRevealError(
+        error instanceof Error ? error.message : "Не удалось открыть контакты. Попробуйте позже.",
+      );
+    } finally {
+      setIsRevealLoading(false);
+    }
+  }
+
+  const preparedPhone = effectivePhone?.trim() ? effectivePhone.trim() : null;
+  const preparedExtraPhones = effectiveExtraPhones
     .map((item) => ({
       phone: item.phone.trim(),
       label: item.label?.trim() || null,
       name: item.name?.trim() || null,
     }))
     .filter((item) => item.phone.length > 0);
-  const preparedWebsiteUrl = websiteUrl?.trim() ? websiteUrl.trim() : null;
-  const preparedEmailHref = normalizeEmailHref(email);
-  const preparedWhatsappUrl = normalizeWhatsappUrl(whatsappUrl);
-  const preparedTelegramUrl = normalizeTelegramProfileUrl(telegramUrl);
-  const preparedVkUrl = normalizeVkProfileUrl(vkUrl);
-  const preparedMaxUrl = normalizeMaxProfileUrl(maxUrl);
-  const preparedOkUrl = normalizeOkProfileUrl(okUrl);
+  const preparedWebsiteUrl = effectiveWebsiteUrl?.trim() ? effectiveWebsiteUrl.trim() : null;
+  const preparedEmailHref = normalizeEmailHref(effectiveEmail);
+  const preparedWhatsappUrl = normalizeWhatsappUrl(effectiveWhatsappUrl);
+  const preparedTelegramUrl = normalizeTelegramProfileUrl(effectiveTelegramUrl);
+  const preparedVkUrl = normalizeVkProfileUrl(effectiveVkUrl);
+  const preparedMaxUrl = normalizeMaxProfileUrl(effectiveMaxUrl);
+  const preparedOkUrl = normalizeOkProfileUrl(effectiveOkUrl);
   const normalizedWebsiteHref = preparedWebsiteUrl ? normalizeWebsiteUrl(preparedWebsiteUrl) : null;
   const [failedWebsiteFaviconUrl, setFailedWebsiteFaviconUrl] = useState<string | null>(null);
   const copy = {
@@ -298,7 +408,7 @@ export function PropertyContactsPanel({
           key: "primary",
           href: normalizePhoneHref(preparedPhone),
           label: phoneLabel?.trim() || preparedPhone,
-          name: phoneName?.trim() || null,
+          name: effectivePhoneName?.trim() || null,
         }
       : null,
     ...preparedExtraPhones.map((item, index) => ({
@@ -369,7 +479,7 @@ export function PropertyContactsPanel({
   const hasSecondaryContacts = Boolean(
     normalizedWebsiteHref || preparedEmailHref || visibleActions.length > 0,
   );
-  const hasAnyContact = Boolean(phoneItems.length > 0 || hasSecondaryContacts);
+  const hasAnyContact = Boolean(phoneItems.length > 0 || hasSecondaryContacts || canRevealContacts);
   const trackAction = (actionType: ListingActionType) => {
     if (tracking) {
       trackListingAction({ ...tracking, actionType });
@@ -380,6 +490,53 @@ export function PropertyContactsPanel({
     <div className={cn("space-y-4", isCompact && "space-y-3")}>
       {!hasAnyContact && !hideEmptyState ? (
         <p className="text-sm text-olive/60">{copy.emptyState}</p>
+      ) : null}
+
+      {canRevealContacts ? (
+        <div
+          className={cn(
+            "rounded-[24px] border border-primary/14 bg-[linear-gradient(160deg,rgba(247,251,250,0.96),rgba(229,245,243,0.98))] shadow-[0_18px_40px_rgba(15,118,110,0.08)]",
+            isCompact ? "p-3" : "p-4",
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-[16px] bg-[linear-gradient(145deg,rgba(15,118,110,0.98),rgba(14,116,144,0.92))] text-white shadow-[0_16px_32px_rgba(15,118,110,0.22)]",
+                isCompact ? "h-9 w-9" : "h-11 w-11",
+              )}
+            >
+              <PhoneIcon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/72">
+                {copy.primaryPhoneEyebrow}
+              </p>
+              <p
+                className={cn(
+                  "mt-2 font-semibold leading-tight text-olive",
+                  isCompact ? "text-base" : "text-lg",
+                )}
+              >
+                {phoneMasked?.trim() || "Контакты скрыты"}
+              </p>
+              <button
+                type="button"
+                onClick={revealContacts}
+                disabled={isRevealLoading}
+                className={cn(
+                  "mt-3 inline-flex items-center justify-center rounded-[16px] bg-primary px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(15,118,110,0.18)] transition hover:bg-primary/92 disabled:cursor-wait disabled:opacity-70",
+                  isCompact && "w-full",
+                )}
+              >
+                {isRevealLoading ? "Открываем..." : "Показать контакты"}
+              </button>
+              {revealError ? (
+                <p className="mt-2 text-xs leading-5 text-red-600">{revealError}</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {primaryPhone ? (

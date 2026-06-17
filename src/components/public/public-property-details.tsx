@@ -2752,16 +2752,20 @@ export function PublicPropertyDetails({
             <div className="mt-4 space-y-3" data-property-contacts-panel>
               <PropertyContactsPanel
                 phone={item.contacts.phone}
+                phoneMasked={item.contacts.phoneMasked}
+                phoneAvailable={item.contacts.phoneAvailable}
                 phoneLabel={mobilePhoneLabel}
                 phoneName={item.contacts.phoneName}
                 extraPhones={extraContactPhones}
                 websiteUrl={item.contacts.websiteUrl}
                 email={item.contacts.email}
+                emailAvailable={item.contacts.emailAvailable}
                 whatsappUrl={item.contacts.whatsappUrl}
                 telegramUrl={item.contacts.telegramUrl}
                 vkUrl={item.contacts.vkUrl}
                 maxUrl={item.contacts.maxUrl}
                 okUrl={item.contacts.okUrl}
+                messengerAvailable={item.contacts.messengerAvailable}
                 secondaryContactsCompact
                 tracking={contactTracking}
               />

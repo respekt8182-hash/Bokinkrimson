@@ -3,7 +3,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   LayoutGrid,
   MessageSquareText,
   MapPin,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AppIcon, type LucideIcon } from "@/components/ui/app-icon";
+import { ActiveItemScroller } from "@/components/ui/active-item-scroller";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/db";
 import { getPropertyProgress } from "@/lib/properties";
@@ -223,7 +223,8 @@ export async function ObjectSectionNav({
     (section) => section.slug === normalizedActiveSection,
   );
   const visibleSections = availableSections.filter(
-    (section) => shouldShowChessboardTab || !section.hiddenInTabs,
+    (section) =>
+      !section.hiddenInTabs || (shouldShowChessboardTab && section.slug === "chessboard"),
   );
   const visibleActiveIndex = visibleSections.findIndex(
     (section) => section.slug === normalizedActiveSection,
@@ -238,13 +239,19 @@ export async function ObjectSectionNav({
     activeIndex > 0
       ? availableSections
           .slice(0, activeIndex)
-          .findLast((section) => shouldShowChessboardTab || !section.hiddenInTabs)
+          .findLast(
+            (section) =>
+              !section.hiddenInTabs || (shouldShowChessboardTab && section.slug === "chessboard"),
+          )
       : null;
   const nextSection =
     activeIndex >= 0 && activeIndex < availableSections.length - 1
       ? availableSections
           .slice(activeIndex + 1)
-          .find((section) => shouldShowChessboardTab || !section.hiddenInTabs)
+          .find(
+            (section) =>
+              !section.hiddenInTabs || (shouldShowChessboardTab && section.slug === "chessboard"),
+          )
       : null;
 
   const steps = visibleSections.map((section) => {
@@ -264,6 +271,7 @@ export async function ObjectSectionNav({
   });
   const completedCount = steps.filter((step) => step.complete).length;
   const progressPercent = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+  const navListId = `object-section-nav-${propertyId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
     <nav aria-label="Разделы объявления" className="min-w-0 lg:sticky lg:top-32 lg:self-start">
@@ -285,7 +293,11 @@ export async function ObjectSectionNav({
           </Link>
         </div>
 
-        <div className="custom-scrollbar -mx-1 mt-5 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-3 lg:overflow-visible lg:px-0 lg:pb-0">
+        <div
+          id={navListId}
+          className="custom-scrollbar -mx-1 mt-5 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-3 lg:overflow-visible lg:px-0 lg:pb-0"
+        >
+          <ActiveItemScroller rootId={navListId} activeKey={normalizedActiveSection} />
           {steps.map((step, index) => {
             const isActive = step.slug === normalizedActiveSection;
             const StepIcon = step.icon;
@@ -295,6 +307,7 @@ export async function ObjectSectionNav({
                 key={step.slug}
                 href={step.href}
                 aria-current={isActive ? "page" : undefined}
+                data-active={isActive ? "true" : undefined}
                 className={cn(
                   "group relative flex min-w-[226px] items-center gap-4 rounded-[8px] border px-4 py-4 transition lg:min-w-0",
                   isActive
@@ -338,24 +351,6 @@ export async function ObjectSectionNav({
               </Link>
             );
           })}
-        </div>
-
-        <div className="mt-7 rounded-[8px] border border-primary/12 bg-foam/70 p-4 text-primary">
-          <div className="flex items-start gap-2.5">
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-primary shadow-sm">
-              <AppIcon icon={CircleHelp} className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Нужна помощь?</p>
-              <Link
-                href="/cooperation"
-                className="mt-1 inline-flex items-center gap-1 text-sm text-primary/85 hover:text-primary"
-              >
-                Посмотрите инструкцию
-                <AppIcon icon={ChevronRight} className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
         </div>
 
         <div className="mt-4 hidden grid-cols-2 gap-2 border-t border-olive/8 pt-4 sm:grid">

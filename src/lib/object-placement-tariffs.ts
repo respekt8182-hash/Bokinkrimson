@@ -1,6 +1,6 @@
 export const OBJECT_SEASON_FULL_PRICE_RUB = 4600;
 export const OBJECT_OFFSEASON_PRICE_RUB = 2800;
-export const OBJECT_YEARLY_PRICE_RUB = 5200;
+export const OBJECT_YEARLY_PRICE_RUB = 5000;
 export const OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB =
   OBJECT_SEASON_FULL_PRICE_RUB + OBJECT_OFFSEASON_PRICE_RUB;
 export const OBJECT_YEARLY_SAVINGS_RUB =
@@ -40,7 +40,7 @@ export const OBJECT_TARIFF_LABELS: Record<ObjectPlacementPaymentTariffType, stri
   season: "Сезон",
   offseason: "Межсезонье",
   yearly: "Годовой",
-  demo: "Ранний доступ до 1 мая 2027",
+  demo: "Бесплатный год размещения",
 };
 
 export const OBJECT_TARIFF_CODES: Record<ObjectPlacementTariffType, string> = {
@@ -276,7 +276,7 @@ function buildYearlyOption(now: Date): ObjectPlacementTariffOption {
     periodLabel: "12 месяцев с даты оплаты",
     paidFrom: period.paidFrom,
     paidUntil: period.paidUntil,
-    monthlyLabel: "около 433 ₽ в месяц",
+    monthlyLabel: "около 417 ₽ в месяц",
     description:
       "Размещение объекта на 12 месяцев с даты оплаты. Подходит для тех, кто хочет быть на сайте круглый год: в сезон, в период раннего бронирования, осенью, зимой и весной.",
     buttonLabel: "Выбрать годовой тариф",

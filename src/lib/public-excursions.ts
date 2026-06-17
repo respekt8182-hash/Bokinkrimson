@@ -39,7 +39,10 @@ import {
 } from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
+import { createSearchPerformanceTimer } from "@/lib/performance-logging";
 import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
+import { buildRedactedPublicContactFields } from "@/lib/public-contact-redaction";
+import { buildPublicSlugCacheKey, resolveCachedPublicSlugLookup } from "@/lib/public-slug-cache";
 import { PUBLIC_REVIEWS_PAGE_SIZE, serializeReview } from "@/lib/reviews";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import {
@@ -57,6 +60,13 @@ import {
   type RankingVertical,
 } from "@/lib/ranking-v2";
 import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
+import {
+  disabledCandidateStage,
+  getNowMs,
+  getSearchDbPrefilterLimit,
+  isSearchDbPrefilterEnabled,
+  type CandidateStageResult,
+} from "@/lib/search/prefilter-controls";
 import type {
   ExcursionExtraOption,
   ExcursionSectionPhotoGroups,
@@ -90,6 +100,11 @@ type DateRangeFilter = {
   dateTo: Date;
 };
 
+const EXCURSION_CANDIDATE_LIMIT = 5000;
+const EXCURSION_DB_PREFILTER_DEFAULT_LIMIT = 3000;
+const EXCURSION_TEXT_PREFILTER_FALLBACK_MIN = 50;
+const EARTH_RADIUS_KM = 6371;
+
 export type PublicExcursionCatalogQuery = {
   offerType?: "excursion" | "tour";
   location?: string;
@@ -102,6 +117,7 @@ export type PublicExcursionCatalogQuery = {
   page?: number;
   pageSize?: number;
   allowLargePageSize?: boolean;
+  candidateLimit?: number;
   dateFrom?: string;
   dateTo?: string;
   people?: number;
@@ -176,6 +192,10 @@ export type PublicExcursionCatalogResult = {
   pageSize: number;
   total: number;
   totalPages: number;
+  priceBounds: {
+    min: number;
+    max: number;
+  };
   filters: {
     locationId: string | null;
     locationName: string | null;
@@ -310,18 +330,22 @@ export type PublicExcursionCard = {
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
+    phoneMasked: string | null;
+    phoneAvailable: boolean;
     phoneName: string | null;
     phone2: string | null;
     phone2Name: string | null;
     phone3: string | null;
     phone3Name: string | null;
     email: string | null;
+    emailAvailable: boolean;
     websiteUrl: string | null;
     whatsappUrl: string | null;
     telegramUrl: string | null;
     vkUrl: string | null;
     maxUrl: string | null;
     okUrl: string | null;
+    messengerAvailable: boolean;
   };
   owner: {
     id: string;
@@ -624,7 +648,7 @@ function getExcursionIdentifierState(excursion: PublicExcursionIdentifierRecord)
   };
 }
 
-async function findExcursionIdByPublicSlug(input: {
+async function findExcursionIdByPublicSlugUncached(input: {
   identifier: string;
   expectedLocationId?: string | null;
   ownerId?: string | null;
@@ -654,6 +678,39 @@ async function findExcursionIdByPublicSlug(input: {
   });
 
   return match?.id ?? null;
+}
+
+export async function findExcursionIdByPublicSlug(input: {
+  identifier: string;
+  expectedLocationId?: string | null;
+  ownerId?: string | null;
+}): Promise<string | null> {
+  const slug = slugify(input.identifier);
+  if (!slug) {
+    return null;
+  }
+
+  if (input.ownerId) {
+    return findExcursionIdByPublicSlugUncached(input);
+  }
+
+  const finishPerf = createSearchPerformanceTimer("excursionSlugLookup", {
+    entityType: "excursion",
+  });
+  const result = await resolveCachedPublicSlugLookup({
+    cacheKey: buildPublicSlugCacheKey(["excursion", slug, input.expectedLocationId ?? ""]),
+    lookup: () => findExcursionIdByPublicSlugUncached(input),
+  });
+
+  finishPerf({
+    slugCacheHit: result.cacheHit,
+    slugCacheMiss: !result.cacheHit,
+    lookupDurationMs: result.lookupDurationMs,
+    ttlMs: result.ttlMs,
+    status: result.value ? 200 : 404,
+  });
+
+  return result.value;
 }
 
 async function resolveDistrict(input: {
@@ -740,23 +797,6 @@ async function resolveCategory(input: {
   return best?.item ?? null;
 }
 
-function getDailyRotationKey(): string {
-  const now = new Date();
-  const dayIso = now.toISOString().slice(0, 10);
-  // 6 rotation windows per day — top results reshuffle every ~4 hours
-  const hourBucket = Math.floor(now.getUTCHours() / 4);
-  return `${dayIso}:${hourBucket}`;
-}
-
-function stableHash(input: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  return hash >>> 0;
-}
-
 function parseDateRange(input: { dateFrom?: string; dateTo?: string }): DateRangeFilter | null {
   // Accept partial input (only from/to) and normalize to inclusive UTC bounds.
   const dateFromRaw = input.dateFrom?.trim();
@@ -787,6 +827,280 @@ function parseDateRange(input: { dateFrom?: string; dateTo?: string }): DateRang
   }
 
   return { dateFrom: from, dateTo: to };
+}
+
+function normalizeLongitude(longitude: number): number {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+function buildExcursionCoordinateRadiusWhere(
+  center: { latitude: number; longitude: number } | null,
+  radiusKm: number,
+): Prisma.ExcursionWhereInput | null {
+  if (!center) {
+    return null;
+  }
+
+  const latitudeDelta = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI);
+  const latitude = Math.max(-90, Math.min(90, center.latitude));
+  const minLat = Math.max(-90, latitude - latitudeDelta);
+  const maxLat = Math.min(90, latitude + latitudeDelta);
+  const cosLatitude = Math.cos((latitude * Math.PI) / 180);
+  const coversAllLongitudes = Math.abs(cosLatitude) < 1e-8 || minLat <= -90 || maxLat >= 90;
+  const baseLatitudeWhere: Prisma.ExcursionWhereInput = {
+    latitude: { gte: minLat, lte: maxLat },
+  };
+
+  if (coversAllLongitudes) {
+    return baseLatitudeWhere;
+  }
+
+  const longitudeDelta = (radiusKm / (EARTH_RADIUS_KM * cosLatitude)) * (180 / Math.PI);
+  if (longitudeDelta >= 180) {
+    return baseLatitudeWhere;
+  }
+
+  const minLng = normalizeLongitude(center.longitude - longitudeDelta);
+  const maxLng = normalizeLongitude(center.longitude + longitudeDelta);
+  const longitudeWhere: Prisma.ExcursionWhereInput =
+    minLng <= maxLng
+      ? { longitude: { gte: minLng, lte: maxLng } }
+      : {
+          OR: [{ longitude: { gte: minLng } }, { longitude: { lte: maxLng } }],
+        };
+
+  return {
+    AND: [baseLatitudeWhere, longitudeWhere],
+  };
+}
+
+function buildExcursionLocationCandidateWhere(input: {
+  resolvedLocation: ExcursionLocationDirectoryItem | null;
+  locationText: string;
+  locationCenter: { latitude: number; longitude: number } | null;
+  radiusKm: number;
+}): Prisma.ExcursionWhereInput | null {
+  const or: Prisma.ExcursionWhereInput[] = [];
+  const locationText = input.locationText.trim();
+
+  if (input.resolvedLocation) {
+    const locationIds = Array.from(
+      new Set([input.resolvedLocation.id, input.resolvedLocation.slug].filter(Boolean)),
+    );
+
+    or.push(
+      { anchorLocationId: { in: locationIds } },
+      { mainLocationId: { in: locationIds } },
+      { meetingLocationId: { in: locationIds } },
+      { locationId: { in: locationIds } },
+      { pickupLocations: { some: { locationId: { in: locationIds } } } },
+      { routeLocations: { some: { locationId: { in: locationIds } } } },
+      { locationName: { contains: input.resolvedLocation.name, mode: "insensitive" } },
+    );
+  }
+
+  if (locationText.length >= 2) {
+    or.push(
+      { locationId: locationText },
+      { locationName: { contains: locationText, mode: "insensitive" } },
+      { startPoint: { contains: locationText, mode: "insensitive" } },
+      { finishPoint: { contains: locationText, mode: "insensitive" } },
+      { mainLocation: { is: { name: { contains: locationText, mode: "insensitive" } } } },
+      { anchorLocation: { is: { name: { contains: locationText, mode: "insensitive" } } } },
+      { district: { is: { name: { contains: locationText, mode: "insensitive" } } } },
+    );
+  }
+
+  const radiusWhere = buildExcursionCoordinateRadiusWhere(input.locationCenter, input.radiusKm);
+  if (radiusWhere) {
+    or.push(radiusWhere);
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildExcursionTextCandidateWhere(searchQuery: string): Prisma.ExcursionWhereInput | null {
+  if (searchQuery.trim().length < 2) {
+    return null;
+  }
+
+  const variants = Array.from(
+    new Set([searchQuery, normalizeExcursionSearchText(searchQuery)].filter(Boolean)),
+  )
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 2)
+    .slice(0, 3);
+  const or: Prisma.ExcursionWhereInput[] = [];
+
+  for (const variant of variants) {
+    or.push(
+      { title: { contains: variant, mode: "insensitive" } },
+      { locationName: { contains: variant, mode: "insensitive" } },
+      { startPoint: { contains: variant, mode: "insensitive" } },
+      { finishPoint: { contains: variant, mode: "insensitive" } },
+      { shortDescription: { contains: variant, mode: "insensitive" } },
+      { description: { contains: variant, mode: "insensitive" } },
+      { fullDescription: { contains: variant, mode: "insensitive" } },
+      { routeDescription: { contains: variant, mode: "insensitive" } },
+      { mainLocation: { is: { name: { contains: variant, mode: "insensitive" } } } },
+      { anchorLocation: { is: { name: { contains: variant, mode: "insensitive" } } } },
+      { district: { is: { name: { contains: variant, mode: "insensitive" } } } },
+      { category: { is: { name: { contains: variant, mode: "insensitive" } } } },
+    );
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildExcursionDbPrefilterWhere(input: {
+  baseWhere: Prisma.ExcursionWhereInput;
+  searchQuery: string;
+  resolvedLocation: ExcursionLocationDirectoryItem | null;
+  locationText: string;
+  locationCenter: { latitude: number; longitude: number } | null;
+  radiusKm: number;
+}): Prisma.ExcursionWhereInput {
+  const and: Prisma.ExcursionWhereInput[] = [input.baseWhere];
+  const locationWhere = buildExcursionLocationCandidateWhere({
+    resolvedLocation: input.resolvedLocation,
+    locationText: input.locationText,
+    locationCenter: input.locationCenter,
+    radiusKm: input.radiusKm,
+  });
+  if (locationWhere) {
+    and.push(locationWhere);
+  }
+
+  const textWhere = buildExcursionTextCandidateWhere(input.searchQuery);
+  if (textWhere) {
+    and.push(textWhere);
+  }
+
+  return { AND: and };
+}
+
+function shouldUseExcursionCandidateStage(input: {
+  searchQuery: string;
+  hasLocationFilter: boolean;
+  hasResolvedDistrict: boolean;
+  hasResolvedCategory: boolean;
+  hasOfferType: boolean;
+  hasFormat: boolean;
+  pickup: boolean;
+  kids: boolean;
+  hasDateRange: boolean;
+  people: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  durationBucket: string | null;
+  language: string | null;
+  difficulty: string | null;
+  bounds: MapBounds | null;
+}): boolean {
+  return (
+    input.searchQuery.trim().length >= 2 ||
+    input.hasLocationFilter ||
+    input.hasResolvedDistrict ||
+    input.hasResolvedCategory ||
+    input.hasOfferType ||
+    input.hasFormat ||
+    input.pickup ||
+    input.kids ||
+    input.hasDateRange ||
+    input.people !== null ||
+    input.minPrice !== null ||
+    input.maxPrice !== null ||
+    input.durationBucket !== null ||
+    input.language !== null ||
+    input.difficulty !== null ||
+    input.bounds !== null
+  );
+}
+
+async function getExcursionCandidateStage(input: {
+  baseWhere: Prisma.ExcursionWhereInput;
+  pageSize: number;
+  candidateLimit: number;
+  searchQuery: string;
+  resolvedLocation: ExcursionLocationDirectoryItem | null;
+  locationText: string;
+  locationCenter: { latitude: number; longitude: number } | null;
+  radiusKm: number;
+  hasLocationFilter: boolean;
+  hasResolvedDistrict: boolean;
+  hasResolvedCategory: boolean;
+  hasOfferType: boolean;
+  hasFormat: boolean;
+  pickup: boolean;
+  kids: boolean;
+  hasDateRange: boolean;
+  people: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  durationBucket: string | null;
+  language: string | null;
+  difficulty: string | null;
+  bounds: MapBounds | null;
+}): Promise<CandidateStageResult> {
+  if (
+    !isSearchDbPrefilterEnabled("SEARCH_EXCURSION_DB_PREFILTER") ||
+    !shouldUseExcursionCandidateStage(input)
+  ) {
+    return disabledCandidateStage();
+  }
+
+  const limit = getSearchDbPrefilterLimit({
+    envName: "SEARCH_EXCURSION_DB_PREFILTER_LIMIT",
+    fallback: EXCURSION_DB_PREFILTER_DEFAULT_LIMIT,
+    min: Math.min(100, input.candidateLimit),
+    max: input.candidateLimit,
+    pageSize: input.pageSize,
+    candidateLimit: input.candidateLimit,
+  });
+  const startedAt = getNowMs();
+
+  try {
+    const rows = await db.excursion.findMany({
+      where: buildExcursionDbPrefilterWhere(input),
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }],
+      take: limit,
+    });
+    const durationMs = Math.round(getNowMs() - startedAt);
+    const ids = rows.map((row) => row.id);
+    const shouldFallbackForSparseText =
+      input.searchQuery.trim().length >= 2 &&
+      ids.length < Math.min(EXCURSION_TEXT_PREFILTER_FALLBACK_MIN, limit);
+
+    return {
+      ids: shouldFallbackForSparseText ? null : ids,
+      enabled: true,
+      usedFallback: shouldFallbackForSparseText,
+      durationMs,
+      idsCount: ids.length,
+    };
+  } catch {
+    return {
+      ids: null,
+      enabled: true,
+      usedFallback: true,
+      durationMs: Math.round(getNowMs() - startedAt),
+      idsCount: null,
+    };
+  }
 }
 
 export function normalizeExcursionSearchText(value: string): string {
@@ -1064,7 +1378,23 @@ export async function getPublicExcursionCatalog(
   const page = Math.max(1, query.page ?? 1);
   const pageSizeCap = query.allowLargePageSize ? 5000 : 30;
   const pageSize = Math.min(pageSizeCap, Math.max(1, query.pageSize ?? 30));
+  const candidateLimit = Math.min(
+    EXCURSION_CANDIDATE_LIMIT,
+    Math.max(pageSize, query.candidateLimit ?? EXCURSION_CANDIDATE_LIMIT),
+  );
   const searchQuery = query.query?.trim() ?? "";
+  const finishPerf = createSearchPerformanceTimer("getPublicExcursionCatalog", {
+    direction: query.offerType === "tour" ? "tours" : "excursions",
+    page,
+    pageSize,
+    queryLength: searchQuery.length,
+    allowLargePageSize: query.allowLargePageSize === true,
+  });
+  let perfCandidateCount: number | null = null;
+  let perfCandidateStageDurationMs: number | null = null;
+  let perfCandidateIdsCount: number | null = null;
+  let perfUsedFallback = false;
+  let perfPrefilterEnabled = false;
   const normalizedSearchQuery = normalizeExcursionSearchText(searchQuery);
   const hasTextSearch = normalizedSearchQuery.length >= 2;
   const sort = parseExcursionSort(query.sort);
@@ -1117,6 +1447,10 @@ export async function getPublicExcursionCatalog(
     pageSize,
     total: 0,
     totalPages: 1,
+    priceBounds: {
+      min: 0,
+      max: 0,
+    },
     filters: {
       locationId: locationFilterId?.trim() || null,
       locationName: rawLocationQuery || locationFilterId?.trim() || null,
@@ -1147,461 +1481,521 @@ export async function getPublicExcursionCatalog(
     },
   });
 
-  return loadDataWithDatabaseFallback(
-    {
-      contextId: "public-excursion-catalog",
-      unavailableMessage:
-        "Public excursion catalog: database is unavailable. Returning empty search results.",
-      fallbackEligibleMessage:
-        "Public excursion catalog: database is unavailable or credentials are invalid. Returning empty search results.",
-    },
-    async () => {
-      const [resolvedLocation, resolvedDistrict, resolvedCategory] = await Promise.all([
-        resolveExcursionLocation({
-          locationId: locationFilterId,
-          location: locationFilter,
-        }),
-        resolveDistrict({
-          districtId: query.districtId,
-          district: query.district,
-        }),
-        resolveCategory({
-          categoryId: query.categoryId,
-          category: query.category,
-        }),
-      ]);
-      const locationCenterQuery =
-        resolvedLocation?.name ?? (rawLocationQuery || locationFilterId?.trim() || "");
-      const resolvedLocationCenter =
-        resolvedLocation?.latitude !== null &&
-        resolvedLocation?.latitude !== undefined &&
-        resolvedLocation?.longitude !== null &&
-        resolvedLocation?.longitude !== undefined
-          ? {
-              name: resolvedLocation.name,
-              latitude: Number(resolvedLocation.latitude),
-              longitude: Number(resolvedLocation.longitude),
-            }
-          : await resolveCrimeaLocationCenter(locationCenterQuery);
-      const locationTextQuery =
-        rawLocationQuery || resolvedLocation?.name || locationFilterId || "";
-
-      const sessionAvailabilityWhere: Prisma.ExcursionWhereInput = dateRange
-        ? {
-            OR: [
-              { sessions: { none: {} } },
-              {
-                sessions: {
-                  some: {
-                    status: ExcursionSessionStatus.AVAILABLE,
-                    startAt: {
-                      gte: dateRange.dateFrom,
-                      lte: dateRange.dateTo,
-                    },
-                    ...(people
-                      ? {
-                          OR: [{ capacity: null }, { capacity: { gte: people } }],
-                        }
-                      : {}),
-                  },
-                },
-              },
-            ],
-          }
-        : {
-            OR: [
-              { sessions: { none: {} } },
-              {
-                sessions: {
-                  some: {
-                    status: ExcursionSessionStatus.AVAILABLE,
-                    startAt: { gte: new Date() },
-                  },
-                },
-              },
-            ],
-          };
-      const priceFromWhere: Prisma.ExcursionWhereInput["priceFrom"] =
-        minPrice !== null || maxPrice !== null
-          ? {
-              ...(minPrice !== null ? { gte: minPrice } : {}),
-              ...(maxPrice !== null ? { lte: maxPrice } : {}),
-            }
-          : undefined;
-      const catalogWhere: Prisma.ExcursionWhereInput = {
-        ...buildPublicCatalogExcursionVisibilityWhere(),
-        ...(offerTypeFilter ? { offerType: offerTypeFilter } : {}),
-        ...(resolvedDistrict ? { districtId: resolvedDistrict.id } : {}),
-        ...(resolvedCategory ? { categoryId: resolvedCategory.id } : {}),
-        ...(formatFilter ? { format: formatFilter } : {}),
-        ...(difficultyFilter ? { difficulty: difficultyFilter } : {}),
-        ...(query.pickup ? { pickupAvailable: true } : {}),
-        ...(query.kids ? { isKidFriendly: true } : {}),
-        ...(priceFromWhere ? { priceFrom: priceFromWhere } : {}),
-        ...(bounds
-          ? {
-              latitude: { gte: bounds.south, lte: bounds.north },
-              longitude: { gte: bounds.west, lte: bounds.east },
-            }
-          : {}),
-        ...sessionAvailabilityWhere,
-      };
-
-      // Fetch a narrowed candidate set first; final relevance still depends on geo/text signals
-      // that are easier to combine in application code than in SQL.
-      const rows = await db.excursion.findMany({
-        where: catalogWhere,
-        include: {
-          mainLocation: {
-            select: { id: true, name: true },
-          },
-          anchorLocation: {
-            select: { id: true, slug: true, name: true },
-          },
-          district: {
-            select: { id: true, slug: true, name: true },
-          },
-          category: {
-            select: { id: true, slug: true, name: true },
-          },
-          routeLocations: {
-            include: {
-              location: {
-                select: { name: true },
-              },
-            },
-            orderBy: [{ sortOrder: "asc" }],
-          },
-          pickupLocations: {
-            select: { locationId: true },
-          },
-          owner: {
-            select: {
-              firstName: true,
-              avatarUrl: true,
-              phoneVerifiedAt: true,
-            },
-          },
-          sessions: dateRange
-            ? {
-                where: {
-                  status: ExcursionSessionStatus.AVAILABLE,
-                  startAt: {
-                    gte: dateRange.dateFrom,
-                    lte: dateRange.dateTo,
-                  },
-                },
-                select: {
-                  startAt: true,
-                  capacity: true,
-                },
-                orderBy: [{ startAt: "asc" }],
-                take: 20,
-              }
-            : {
-                where: {
-                  status: ExcursionSessionStatus.AVAILABLE,
-                  startAt: {
-                    gte: new Date(),
-                  },
-                },
-                select: {
-                  startAt: true,
-                  capacity: true,
-                },
-                orderBy: [{ startAt: "asc" }],
-                take: 1,
-              },
-          _count: {
-            select: {
-              sessions: true,
-            },
-          },
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: 5000,
-      });
-      type CatalogRow = (typeof rows)[number];
-      const rankingStatsById = await getRankingStatsByEntity(
-        "excursion",
-        rows.map((row) => row.id),
-        rankingNow,
-      );
-      const impressionsMedian = Math.max(
-        1,
-        median(rows.map((row) => rankingStatsById.get(row.id)?.last30Days.cardViews ?? 0)),
-      );
-      const searchFingerprint = buildSearchFingerprint({
-        vertical:
-          offerTypeFilter === ExcursionOfferType.TOUR
-            ? "tour"
-            : offerTypeFilter === ExcursionOfferType.EXCURSION
-              ? "excursion"
-              : "all",
-        location: (resolvedLocation?.id ?? rawLocationQuery) || null,
-        district: resolvedDistrict?.id ?? null,
-        category: resolvedCategory?.id ?? null,
-        query: searchQuery,
-        dateFrom: query.dateFrom ?? null,
-        dateTo: query.dateTo ?? null,
-        people,
-        format: formatFilter ?? null,
-        pickup: query.pickup === true,
-        kids: query.kids === true,
-        minPrice,
-        maxPrice,
-        sort,
-        bounds,
-      });
-      type RankedCatalogRow = {
-        id: string;
-        ownerId: string;
-        item: CatalogRow;
-        latitude: number | null;
-        longitude: number | null;
-        distanceKm: number | null;
-        searchMatchKind: CatalogSearchMatchKind;
-        hasAvailableSession: boolean;
-        nextSessionStartAt: Date | null;
-        relevance: number;
-        fromPrice: number | null;
-        ranking: ReturnType<typeof scoreRankingCandidate>;
-        sortValues: {
-          price: number | null;
-          distance: number | null;
-          duration: number | null;
-          createdAt: Date;
-          publishedAt: Date;
-          updatedAt: Date;
-        };
-      };
-
-      // Similar to housing catalog: broad DB fetch + in-memory relevance, because scoring mixes geo/date/text factors.
-      const searchScoreMap = getSearchScoreMap(normalizedSearchQuery, rows, (item) => {
-        const snapshot = getPublicExcursionSnapshot(item);
-        const display = snapshot?.excursion ?? item;
-        const routeLocationNames =
-          snapshot?.routeLocations.map((route) => route.name) ??
-          item.routeLocations.map((route) => route.location.name);
-
-        return [
-          display.title,
-          display.locationName,
-          display.mainLocation?.name,
-          display.anchorLocation?.name,
-          display.district?.name,
-          display.category?.name,
-          display.finishPoint,
-          ...routeLocationNames,
-          display.shortDescription,
-          display.description,
-          display.fullDescription,
-          display.routeDescription,
-          display.startPoint,
-          ...display.tags,
-        ];
-      });
-
-      // Pipeline: hard filters -> relevance scoring payload -> final sort/pagination.
-      const filtered: RankedCatalogRow[] = [];
-
-      for (const item of rows) {
-        const snapshot = getPublicExcursionSnapshot(item);
-        const display = snapshot?.excursion ?? item;
-        const routeLocationNames =
-          snapshot?.routeLocations.map((route) => route.name) ??
-          item.routeLocations.map((route) => route.location.name);
-        const pickupLocationIds =
-          snapshot?.pickupLocations.map((pickup) => pickup.id) ??
-          item.pickupLocations.map((pickup) => pickup.locationId);
-
-        if (offerTypeFilter && display.offerType !== offerTypeFilter) {
-          continue;
-        }
-        if (resolvedDistrict && display.district?.id !== resolvedDistrict.id) {
-          continue;
-        }
-        if (resolvedCategory && display.category?.id !== resolvedCategory.id) {
-          continue;
-        }
-        if (formatFilter && display.format !== formatFilter) {
-          continue;
-        }
-        if (difficultyFilter && display.difficulty !== difficultyFilter) {
-          continue;
-        }
-        if (query.pickup && !display.pickupAvailable) {
-          continue;
-        }
-        if (query.kids && display.isKidFriendly !== true) {
-          continue;
-        }
-
-        const primarySearchScore = getPrimaryExcursionSearchScore(searchQuery, [
-          display.title,
-          display.locationName,
-          display.mainLocation?.name,
-          display.anchorLocation?.name,
-          display.district?.name,
-          display.category?.name,
-          display.startPoint,
-          display.finishPoint,
-          ...routeLocationNames,
+  try {
+    const result = await loadDataWithDatabaseFallback(
+      {
+        contextId: "public-excursion-catalog",
+        unavailableMessage:
+          "Public excursion catalog: database is unavailable. Returning empty search results.",
+        fallbackEligibleMessage:
+          "Public excursion catalog: database is unavailable or credentials are invalid. Returning empty search results.",
+      },
+      async () => {
+        const [resolvedLocation, resolvedDistrict, resolvedCategory] = await Promise.all([
+          resolveExcursionLocation({
+            locationId: locationFilterId,
+            location: locationFilter,
+          }),
+          resolveDistrict({
+            districtId: query.districtId,
+            district: query.district,
+          }),
+          resolveCategory({
+            categoryId: query.categoryId,
+            category: query.category,
+          }),
         ]);
-        if (hasTextSearch && primarySearchScore <= 0 && !searchScoreMap.has(item.id)) {
-          continue;
-        }
+        const locationCenterQuery =
+          resolvedLocation?.name ?? (rawLocationQuery || locationFilterId?.trim() || "");
+        const resolvedLocationCenter =
+          resolvedLocation?.latitude !== null &&
+          resolvedLocation?.latitude !== undefined &&
+          resolvedLocation?.longitude !== null &&
+          resolvedLocation?.longitude !== undefined
+            ? {
+                name: resolvedLocation.name,
+                latitude: Number(resolvedLocation.latitude),
+                longitude: Number(resolvedLocation.longitude),
+              }
+            : await resolveCrimeaLocationCenter(locationCenterQuery);
+        const locationTextQuery =
+          rawLocationQuery || resolvedLocation?.name || locationFilterId || "";
 
-        // Pins and distance are based strictly on the excursion map point, not on location center.
-        const excursionLatitude = toNumberOrNull(display.latitude);
-        const excursionLongitude = toNumberOrNull(display.longitude);
-        if (!isPointInsideBounds(excursionLatitude, excursionLongitude, bounds)) {
-          continue;
-        }
-
-        // Excursions with no sessions at all are treated as "always available"
-        // (they operate on a request basis). Only filter by date/capacity when
-        // the excursion has explicit sessions configured.
-        const hasNoSessionsConfigured = item._count.sessions === 0;
-        const hasAvailableSession = hasNoSessionsConfigured
-          ? true
-          : dateRange
-            ? item.sessions.some(
-                (session) =>
-                  session.capacity === null || people === null || session.capacity >= people,
-              )
-            : item.sessions.length > 0;
-
-        let anchorMatch = false;
-        let pickupMatch = false;
-        let distanceKm: number | null = null;
-        let locationMatched = false;
-        let searchMatchKind: CatalogSearchMatchKind = "primary";
-
-        if (hasLocationFilter) {
-          const locationPoint = resolvedLocationCenter
+        const sessionAvailabilityWhere: Prisma.ExcursionWhereInput = dateRange
+          ? {
+              OR: [
+                { sessions: { none: {} } },
+                {
+                  sessions: {
+                    some: {
+                      status: ExcursionSessionStatus.AVAILABLE,
+                      startAt: {
+                        gte: dateRange.dateFrom,
+                        lte: dateRange.dateTo,
+                      },
+                      ...(people
+                        ? {
+                            OR: [{ capacity: null }, { capacity: { gte: people } }],
+                          }
+                        : {}),
+                    },
+                  },
+                },
+              ],
+            }
+          : {
+              OR: [
+                { sessions: { none: {} } },
+                {
+                  sessions: {
+                    some: {
+                      status: ExcursionSessionStatus.AVAILABLE,
+                      startAt: { gte: new Date() },
+                    },
+                  },
+                },
+              ],
+            };
+        const priceFromWhere: Prisma.ExcursionWhereInput["priceFrom"] =
+          minPrice !== null || maxPrice !== null
+            ? {
+                ...(minPrice !== null ? { gte: minPrice } : {}),
+                ...(maxPrice !== null ? { lte: maxPrice } : {}),
+              }
+            : undefined;
+        const catalogWhere: Prisma.ExcursionWhereInput = {
+          ...buildPublicCatalogExcursionVisibilityWhere(),
+          ...(offerTypeFilter ? { offerType: offerTypeFilter } : {}),
+          ...(resolvedDistrict ? { districtId: resolvedDistrict.id } : {}),
+          ...(resolvedCategory ? { categoryId: resolvedCategory.id } : {}),
+          ...(formatFilter ? { format: formatFilter } : {}),
+          ...(difficultyFilter ? { difficulty: difficultyFilter } : {}),
+          ...(query.pickup ? { pickupAvailable: true } : {}),
+          ...(query.kids ? { isKidFriendly: true } : {}),
+          ...(priceFromWhere ? { priceFrom: priceFromWhere } : {}),
+          ...(bounds
+            ? {
+                latitude: { gte: bounds.south, lte: bounds.north },
+                longitude: { gte: bounds.west, lte: bounds.east },
+              }
+            : {}),
+          ...sessionAvailabilityWhere,
+        };
+        const excursionCandidateStage = await getExcursionCandidateStage({
+          baseWhere: catalogWhere,
+          pageSize,
+          candidateLimit,
+          searchQuery,
+          resolvedLocation,
+          locationText: locationTextQuery,
+          locationCenter: resolvedLocationCenter
             ? {
                 latitude: resolvedLocationCenter.latitude,
                 longitude: resolvedLocationCenter.longitude,
               }
-            : null;
-          anchorMatch = resolvedLocation
-            ? display.anchorLocation?.id === resolvedLocation.id ||
-              display.locationId === resolvedLocation.slug ||
-              display.locationId === resolvedLocation.id ||
-              isSameExcursionLocation(display.anchorLocation?.name, resolvedLocation.name) ||
-              isSameExcursionLocation(display.locationName, resolvedLocation.name)
-            : false;
-          pickupMatch = resolvedLocation
-            ? pickupLocationIds.some((locationId) => locationId === resolvedLocation.id)
-            : false;
+            : null,
+          radiusKm,
+          hasLocationFilter,
+          hasResolvedDistrict: resolvedDistrict !== null,
+          hasResolvedCategory: resolvedCategory !== null,
+          hasOfferType: offerTypeFilter !== undefined,
+          hasFormat: formatFilter !== undefined,
+          pickup: query.pickup === true,
+          kids: query.kids === true,
+          hasDateRange: dateRange !== null,
+          people,
+          minPrice,
+          maxPrice,
+          durationBucket,
+          language,
+          difficulty,
+          bounds,
+        });
+        perfCandidateStageDurationMs = excursionCandidateStage.durationMs;
+        perfCandidateIdsCount = excursionCandidateStage.idsCount;
+        perfUsedFallback = excursionCandidateStage.usedFallback;
+        perfPrefilterEnabled = excursionCandidateStage.enabled;
 
-          if (locationPoint && excursionLatitude !== null && excursionLongitude !== null) {
-            distanceKm = calculateDistanceKm(locationPoint, {
-              latitude: excursionLatitude,
-              longitude: excursionLongitude,
-            });
+        // Fetch a narrowed candidate set first; final relevance still depends on geo/text signals
+        // that are easier to combine in application code than in SQL.
+        const rows =
+          excursionCandidateStage.ids?.length === 0
+            ? []
+            : await db.excursion.findMany({
+                where: excursionCandidateStage.ids
+                  ? {
+                      AND: [
+                        catalogWhere,
+                        {
+                          id: {
+                            in: excursionCandidateStage.ids,
+                          },
+                        },
+                      ],
+                    }
+                  : catalogWhere,
+                include: {
+                  mainLocation: {
+                    select: { id: true, name: true },
+                  },
+                  anchorLocation: {
+                    select: { id: true, slug: true, name: true },
+                  },
+                  district: {
+                    select: { id: true, slug: true, name: true },
+                  },
+                  category: {
+                    select: { id: true, slug: true, name: true },
+                  },
+                  routeLocations: {
+                    include: {
+                      location: {
+                        select: { name: true },
+                      },
+                    },
+                    orderBy: [{ sortOrder: "asc" }],
+                  },
+                  pickupLocations: {
+                    select: { locationId: true },
+                  },
+                  owner: {
+                    select: {
+                      firstName: true,
+                      avatarUrl: true,
+                      phoneVerifiedAt: true,
+                    },
+                  },
+                  sessions: dateRange
+                    ? {
+                        where: {
+                          status: ExcursionSessionStatus.AVAILABLE,
+                          startAt: {
+                            gte: dateRange.dateFrom,
+                            lte: dateRange.dateTo,
+                          },
+                        },
+                        select: {
+                          startAt: true,
+                          capacity: true,
+                        },
+                        orderBy: [{ startAt: "asc" }],
+                        take: 20,
+                      }
+                    : {
+                        where: {
+                          status: ExcursionSessionStatus.AVAILABLE,
+                          startAt: {
+                            gte: new Date(),
+                          },
+                        },
+                        select: {
+                          startAt: true,
+                          capacity: true,
+                        },
+                        orderBy: [{ startAt: "asc" }],
+                        take: 1,
+                      },
+                  _count: {
+                    select: {
+                      sessions: true,
+                    },
+                  },
+                },
+                orderBy: [{ updatedAt: "desc" }],
+                take: excursionCandidateStage.ids
+                  ? excursionCandidateStage.ids.length
+                  : candidateLimit,
+              });
+        perfCandidateCount = rows.length;
+        type CatalogRow = (typeof rows)[number];
+        let catalogMaxPrice = 0;
+        for (const item of rows) {
+          const snapshot = getPublicExcursionSnapshot(item);
+          const display = snapshot?.excursion ?? item;
+          const value = toNumberOrNull(display.priceFrom);
+          if (value !== null && value > catalogMaxPrice) {
+            catalogMaxPrice = value;
           }
+        }
+        const rankingStatsById = await getRankingStatsByEntity(
+          "excursion",
+          rows.map((row) => row.id),
+          rankingNow,
+        );
+        const impressionsMedian = Math.max(
+          1,
+          median(rows.map((row) => rankingStatsById.get(row.id)?.last30Days.cardViews ?? 0)),
+        );
+        const searchFingerprint = buildSearchFingerprint({
+          vertical:
+            offerTypeFilter === ExcursionOfferType.TOUR
+              ? "tour"
+              : offerTypeFilter === ExcursionOfferType.EXCURSION
+                ? "excursion"
+                : "all",
+          location: (resolvedLocation?.id ?? rawLocationQuery) || null,
+          district: resolvedDistrict?.id ?? null,
+          category: resolvedCategory?.id ?? null,
+          query: searchQuery,
+          dateFrom: query.dateFrom ?? null,
+          dateTo: query.dateTo ?? null,
+          people,
+          format: formatFilter ?? null,
+          pickup: query.pickup === true,
+          kids: query.kids === true,
+          minPrice,
+          maxPrice,
+          sort,
+          bounds,
+        });
+        type RankedCatalogRow = {
+          id: string;
+          ownerId: string;
+          item: CatalogRow;
+          latitude: number | null;
+          longitude: number | null;
+          distanceKm: number | null;
+          searchMatchKind: CatalogSearchMatchKind;
+          hasAvailableSession: boolean;
+          nextSessionStartAt: Date | null;
+          relevance: number;
+          fromPrice: number | null;
+          ranking: ReturnType<typeof scoreRankingCandidate>;
+          sortValues: {
+            price: number | null;
+            distance: number | null;
+            duration: number | null;
+            createdAt: Date;
+            publishedAt: Date;
+            updatedAt: Date;
+          };
+        };
 
-          const textLocationMatch = containsExcursionLocationQuery(locationTextQuery, [
+        // Similar to housing catalog: broad DB fetch + in-memory relevance, because scoring mixes geo/date/text factors.
+        const searchScoreMap = getSearchScoreMap(normalizedSearchQuery, rows, (item) => {
+          const snapshot = getPublicExcursionSnapshot(item);
+          const display = snapshot?.excursion ?? item;
+          const routeLocationNames =
+            snapshot?.routeLocations.map((route) => route.name) ??
+            item.routeLocations.map((route) => route.location.name);
+
+          return [
+            display.title,
             display.locationName,
             display.mainLocation?.name,
             display.anchorLocation?.name,
             display.district?.name,
+            display.category?.name,
+            display.finishPoint,
+            ...routeLocationNames,
+            display.shortDescription,
+            display.description,
+            display.fullDescription,
+            display.routeDescription,
+            display.startPoint,
+            ...display.tags,
+          ];
+        });
+
+        // Pipeline: hard filters -> relevance scoring payload -> final sort/pagination.
+        const filtered: RankedCatalogRow[] = [];
+
+        for (const item of rows) {
+          const snapshot = getPublicExcursionSnapshot(item);
+          const display = snapshot?.excursion ?? item;
+          const routeLocationNames =
+            snapshot?.routeLocations.map((route) => route.name) ??
+            item.routeLocations.map((route) => route.location.name);
+          const pickupLocationIds =
+            snapshot?.pickupLocations.map((pickup) => pickup.id) ??
+            item.pickupLocations.map((pickup) => pickup.locationId);
+
+          if (offerTypeFilter && display.offerType !== offerTypeFilter) {
+            continue;
+          }
+          if (resolvedDistrict && display.district?.id !== resolvedDistrict.id) {
+            continue;
+          }
+          if (resolvedCategory && display.category?.id !== resolvedCategory.id) {
+            continue;
+          }
+          if (formatFilter && display.format !== formatFilter) {
+            continue;
+          }
+          if (difficultyFilter && display.difficulty !== difficultyFilter) {
+            continue;
+          }
+          if (query.pickup && !display.pickupAvailable) {
+            continue;
+          }
+          if (query.kids && display.isKidFriendly !== true) {
+            continue;
+          }
+
+          const primarySearchScore = getPrimaryExcursionSearchScore(searchQuery, [
+            display.title,
+            display.locationName,
+            display.mainLocation?.name,
+            display.anchorLocation?.name,
+            display.district?.name,
+            display.category?.name,
             display.startPoint,
             display.finishPoint,
             ...routeLocationNames,
           ]);
-          const primaryLocationMatch =
-            anchorMatch ||
-            pickupMatch ||
-            // Match by slug (legacy string field) or by ID (CUID stored in locationId).
-            Boolean(
-              resolvedLocation &&
-              display.locationId &&
-              (display.locationId === resolvedLocation.slug ||
-                display.locationId === resolvedLocation.id),
-            ) ||
-            textLocationMatch;
-          const nearbyLocationMatch =
-            locationPoint !== null && isWithinRadiusKm(distanceKm, radiusKm);
-
-          locationMatched = primaryLocationMatch || nearbyLocationMatch;
-          searchMatchKind = primaryLocationMatch ? "primary" : "nearby";
-        } else {
-          locationMatched = true;
-        }
-
-        if (!locationMatched) {
-          continue;
-        }
-
-        if (dateRange && !hasAvailableSession) {
-          continue;
-        }
-
-        if (people && display.groupSizeMax !== null && display.groupSizeMax !== undefined) {
-          if (people > display.groupSizeMax) {
+          if (hasTextSearch && primarySearchScore <= 0 && !searchScoreMap.has(item.id)) {
             continue;
           }
-        }
 
-        if (language && !display.languageCodes.some((code) => code.toLowerCase() === language)) {
-          continue;
-        }
-
-        const fromPrice = toNumberOrNull(display.priceFrom);
-        if (minPrice !== null && (fromPrice === null || fromPrice < minPrice)) {
-          continue;
-        }
-        if (maxPrice !== null && (fromPrice === null || fromPrice > maxPrice)) {
-          continue;
-        }
-
-        if (durationBucket) {
-          const duration = display.durationMinutes ?? 0;
-          if (durationBucket === "up_to_3h" && duration > 180) {
+          // Pins and distance are based strictly on the excursion map point, not on location center.
+          const excursionLatitude = toNumberOrNull(display.latitude);
+          const excursionLongitude = toNumberOrNull(display.longitude);
+          if (!isPointInsideBounds(excursionLatitude, excursionLongitude, bounds)) {
             continue;
           }
-          if (durationBucket === "between_3h_6h" && (duration <= 180 || duration > 360)) {
+
+          // Excursions with no sessions at all are treated as "always available"
+          // (they operate on a request basis). Only filter by date/capacity when
+          // the excursion has explicit sessions configured.
+          const hasNoSessionsConfigured = item._count.sessions === 0;
+          const hasAvailableSession = hasNoSessionsConfigured
+            ? true
+            : dateRange
+              ? item.sessions.some(
+                  (session) =>
+                    session.capacity === null || people === null || session.capacity >= people,
+                )
+              : item.sessions.length > 0;
+
+          let anchorMatch = false;
+          let pickupMatch = false;
+          let distanceKm: number | null = null;
+          let locationMatched = false;
+          let searchMatchKind: CatalogSearchMatchKind = "primary";
+
+          if (hasLocationFilter) {
+            const locationPoint = resolvedLocationCenter
+              ? {
+                  latitude: resolvedLocationCenter.latitude,
+                  longitude: resolvedLocationCenter.longitude,
+                }
+              : null;
+            anchorMatch = resolvedLocation
+              ? display.anchorLocation?.id === resolvedLocation.id ||
+                display.locationId === resolvedLocation.slug ||
+                display.locationId === resolvedLocation.id ||
+                isSameExcursionLocation(display.anchorLocation?.name, resolvedLocation.name) ||
+                isSameExcursionLocation(display.locationName, resolvedLocation.name)
+              : false;
+            pickupMatch = resolvedLocation
+              ? pickupLocationIds.some((locationId) => locationId === resolvedLocation.id)
+              : false;
+
+            if (locationPoint && excursionLatitude !== null && excursionLongitude !== null) {
+              distanceKm = calculateDistanceKm(locationPoint, {
+                latitude: excursionLatitude,
+                longitude: excursionLongitude,
+              });
+            }
+
+            const textLocationMatch = containsExcursionLocationQuery(locationTextQuery, [
+              display.locationName,
+              display.mainLocation?.name,
+              display.anchorLocation?.name,
+              display.district?.name,
+              display.startPoint,
+              display.finishPoint,
+              ...routeLocationNames,
+            ]);
+            const primaryLocationMatch =
+              anchorMatch ||
+              pickupMatch ||
+              // Match by slug (legacy string field) or by ID (CUID stored in locationId).
+              Boolean(
+                resolvedLocation &&
+                display.locationId &&
+                (display.locationId === resolvedLocation.slug ||
+                  display.locationId === resolvedLocation.id),
+              ) ||
+              textLocationMatch;
+            const nearbyLocationMatch =
+              locationPoint !== null && isWithinRadiusKm(distanceKm, radiusKm);
+
+            locationMatched = primaryLocationMatch || nearbyLocationMatch;
+            searchMatchKind = primaryLocationMatch ? "primary" : "nearby";
+          } else {
+            locationMatched = true;
+          }
+
+          if (!locationMatched) {
             continue;
           }
-          if (durationBucket === "more_6h" && duration <= 360) {
+
+          if (dateRange && !hasAvailableSession) {
             continue;
           }
-        }
 
-        // ── Bayesian smoothed rating ──────────────────────────────────────────────
-        // Gives new excursions a fair starting point instead of 0.
-        // C = confidence weight (phantom reviews at the prior); PRIOR = assumed global avg.
-        // New (0 reviews) → 4.0; 5★×100 reviews → ~4.95; 3★×50 → ~3.23.
-        // 0–68 pts: quality baseline that is fair to new creators
+          if (people && display.groupSizeMax !== null && display.groupSizeMax !== undefined) {
+            if (people > display.groupSizeMax) {
+              continue;
+            }
+          }
 
-        // ── Distance — soft, not dominant ────────────────────────────────────────
-        // Linear decay over 2× the haversine radius so excursions just outside
-        // the radius aren't penalised too harshly.
+          if (language && !display.languageCodes.some((code) => code.toLowerCase() === language)) {
+            continue;
+          }
 
-        // ── Location affinity ─────────────────────────────────────────────────────
+          const fromPrice = toNumberOrNull(display.priceFrom);
+          if (minPrice !== null && (fromPrice === null || fromPrice < minPrice)) {
+            continue;
+          }
+          if (maxPrice !== null && (fromPrice === null || fromPrice > maxPrice)) {
+            continue;
+          }
 
-        // ── Availability ──────────────────────────────────────────────────────────
+          if (durationBucket) {
+            const duration = display.durationMinutes ?? 0;
+            if (durationBucket === "up_to_3h" && duration > 180) {
+              continue;
+            }
+            if (durationBucket === "between_3h_6h" && (duration <= 180 || duration > 360)) {
+              continue;
+            }
+            if (durationBucket === "more_6h" && duration <= 360) {
+              continue;
+            }
+          }
 
-        // ── Text search relevance ─────────────────────────────────────────────────
+          // ── Bayesian smoothed rating ──────────────────────────────────────────────
+          // Gives new excursions a fair starting point instead of 0.
+          // C = confidence weight (phantom reviews at the prior); PRIOR = assumed global avg.
+          // New (0 reviews) → 4.0; 5★×100 reviews → ~4.95; 3★×50 → ~3.23.
+          // 0–68 pts: quality baseline that is fair to new creators
 
-        // ── Profile completeness — rewards creator effort, accessible to newcomers ─
-        // Having a well-filled profile is achievable from day one, unlike reviews.
-        const photoCount = collectRawPublicExcursionGalleryPhotoUrls(display).length;
-        const hasTimeline =
-          Array.isArray(display.timeline) && (display.timeline as unknown[]).length > 0;
+          // ── Distance — soft, not dominant ────────────────────────────────────────
+          // Linear decay over 2× the haversine radius so excursions just outside
+          // the radius aren't penalised too harshly.
 
-        // ── Freshness — temporary discovery boost for new listings ────────────────
-        // Fades linearly over 30 days → levels the field for new creators.
+          // ── Location affinity ─────────────────────────────────────────────────────
 
-        // ── Daily rotation ────────────────────────────────────────────────────────
-        // Reshuffles similarly-scored excursions every ~4 hours so every listing
-        // gets exposure windows, not just the perpetual top slots.
+          // ── Availability ──────────────────────────────────────────────────────────
 
-        const legacyRelevance = 0;
-        /*
+          // ── Text search relevance ─────────────────────────────────────────────────
+
+          // ── Profile completeness — rewards creator effort, accessible to newcomers ─
+          // Having a well-filled profile is achievable from day one, unlike reviews.
+          const photoCount = collectRawPublicExcursionGalleryPhotoUrls(display).length;
+          const hasTimeline =
+            Array.isArray(display.timeline) && (display.timeline as unknown[]).length > 0;
+
+          // ── Freshness — temporary discovery boost for new listings ────────────────
+          // Fades linearly over 30 days → levels the field for new creators.
+
+          // ── Daily rotation ────────────────────────────────────────────────────────
+          // Reshuffles similarly-scored excursions every ~4 hours so every listing
+          // gets exposure windows, not just the perpetual top slots.
+
+          /*
       ratingScore + // 40–68  quality baseline (Bayesian-fair to newcomers)
       distanceScore + //  0–20  location proximity (soft)
       anchorScore + //  0–50  anchor city / exact location match
@@ -1613,272 +2007,323 @@ export async function getPublicExcursionCatalog(
       rotationScore; //  0–15  daily shuffle for equal-scored listings
 
     */
-        const nextSessionStartAt = item.sessions[0]?.startAt ?? null;
-        const stats = rankingStatsById.get(item.id)?.last30Days;
-        const v2IntentScore = getExcursionIntentScore({
-          hasTextSearch,
-          searchScore: searchScoreMap.get(item.id) ?? 0,
-          primarySearchScore,
-          hasLocationFilter,
-          anchorMatch,
-          pickupMatch,
-          searchMatchKind,
-          distanceKm,
-          radiusKm,
-        });
-        const v2AvailabilityScore = getExcursionAvailabilityScore({
-          now: rankingNow,
-          hasAvailableSession,
-          nextSessionStartAt,
-          hasNoSessionsConfigured,
-          hasDateRange: Boolean(dateRange),
-        });
-        const v2CompletenessScore = getExcursionCompletenessScore({
-          photoCount,
-          description: display.shortDescription ?? display.description,
-          fullDescription: display.fullDescription ?? display.routeDescription,
-          priceFrom: display.priceFrom,
-          locationName: display.locationName ?? display.mainLocation?.name ?? null,
-          startPoint: display.startPoint,
-          durationMinutes: display.durationMinutes,
-          languageCodes: display.languageCodes,
-          difficulty: display.difficulty,
-          hasTimeline,
-          hasIncludedInfo: Boolean(
-            display.includedText ||
-            display.notIncludedText ||
-            (display.includedItems?.length ?? 0) > 0 ||
-            (display.excludedItems?.length ?? 0) > 0,
-          ),
-          hasSessionsOrRules:
-            item._count.sessions > 0 ||
-            display.availabilityMode !== ExcursionAvailabilityMode.DATED,
-        });
-        const v2FreshnessScore = getExcursionFreshnessScore({
-          now: rankingNow,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        });
-        const ranking = scoreRankingCandidate(
-          {
+          const nextSessionStartAt = item.sessions[0]?.startAt ?? null;
+          const stats = rankingStatsById.get(item.id)?.last30Days;
+          const v2IntentScore = getExcursionIntentScore({
+            hasTextSearch,
+            searchScore: searchScoreMap.get(item.id) ?? 0,
+            primarySearchScore,
+            hasLocationFilter,
+            anchorMatch,
+            pickupMatch,
+            searchMatchKind,
+            distanceKm,
+            radiusKm,
+          });
+          const v2AvailabilityScore = getExcursionAvailabilityScore({
+            now: rankingNow,
+            hasAvailableSession,
+            nextSessionStartAt,
+            hasNoSessionsConfigured,
+            hasDateRange: Boolean(dateRange),
+          });
+          const v2CompletenessScore = getExcursionCompletenessScore({
+            photoCount,
+            description: display.shortDescription ?? display.description,
+            fullDescription: display.fullDescription ?? display.routeDescription,
+            priceFrom: display.priceFrom,
+            locationName: display.locationName ?? display.mainLocation?.name ?? null,
+            startPoint: display.startPoint,
+            durationMinutes: display.durationMinutes,
+            languageCodes: display.languageCodes,
+            difficulty: display.difficulty,
+            hasTimeline,
+            hasIncludedInfo: Boolean(
+              display.includedText ||
+              display.notIncludedText ||
+              (display.includedItems?.length ?? 0) > 0 ||
+              (display.excludedItems?.length ?? 0) > 0,
+            ),
+            hasSessionsOrRules:
+              item._count.sessions > 0 ||
+              display.availabilityMode !== ExcursionAvailabilityMode.DATED,
+          });
+          const v2FreshnessScore = getExcursionFreshnessScore({
+            now: rankingNow,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          });
+          const ranking = scoreRankingCandidate(
+            {
+              id: item.id,
+              ownerId: item.ownerId,
+              vertical: getExcursionRankingVertical(display.offerType),
+              avgRating: Number(item.avgRating),
+              reviewsCount: item.reviewsCount,
+              createdAt: item.createdAt,
+              publishedAt: item.moderatedAt ?? item.createdAt,
+              updatedAt: item.updatedAt,
+              exposureCount: stats?.cardViews ?? 0,
+              componentScores: {
+                intentScore: v2IntentScore,
+                availabilityScore: v2AvailabilityScore,
+                completenessScore: v2CompletenessScore,
+                freshnessScore: v2FreshnessScore,
+              },
+              behaviorMetrics: {
+                cardViews: stats?.cardViews ?? 0,
+                favorites: stats?.favorites ?? 0,
+                phoneClicks: stats?.phoneClicks ?? 0,
+                messengerClicks: stats?.messengerClicks ?? 0,
+                emailClicks: stats?.emailClicks ?? 0,
+                createBookingClicks: stats?.createBookingClicks ?? 0,
+              },
+            },
+            {
+              now: rankingNow,
+              searchFingerprint,
+              impressionsMedian,
+              targetTestImpressions: 90,
+            },
+          );
+
+          filtered.push({
             id: item.id,
             ownerId: item.ownerId,
-            vertical: getExcursionRankingVertical(display.offerType),
-            avgRating: Number(item.avgRating),
-            reviewsCount: item.reviewsCount,
-            createdAt: item.createdAt,
-            publishedAt: item.moderatedAt ?? item.createdAt,
-            updatedAt: item.updatedAt,
-            exposureCount: stats?.cardViews ?? 0,
-            componentScores: {
-              intentScore: v2IntentScore,
-              availabilityScore: v2AvailabilityScore,
-              completenessScore: v2CompletenessScore,
-              freshnessScore: v2FreshnessScore,
-            },
-            behaviorMetrics: {
-              cardViews: stats?.cardViews ?? 0,
-              favorites: stats?.favorites ?? 0,
-              phoneClicks: stats?.phoneClicks ?? 0,
-              messengerClicks: stats?.messengerClicks ?? 0,
-              emailClicks: stats?.emailClicks ?? 0,
-              createBookingClicks: stats?.createBookingClicks ?? 0,
-            },
-          },
-          {
-            now: rankingNow,
-            searchFingerprint,
-            impressionsMedian,
-            targetTestImpressions: 90,
-          },
-        );
-
-        filtered.push({
-          id: item.id,
-          ownerId: item.ownerId,
-          item,
-          latitude: excursionLatitude,
-          longitude: excursionLongitude,
-          distanceKm,
-          searchMatchKind,
-          hasAvailableSession,
-          nextSessionStartAt,
-          relevance: ranking.finalScore,
-          fromPrice,
-          ranking,
-          sortValues: {
-            price: fromPrice,
-            distance: distanceKm,
-            duration: display.durationMinutes,
-            createdAt: item.createdAt,
-            publishedAt: item.moderatedAt ?? item.createdAt,
-            updatedAt: item.updatedAt,
-          },
-        });
-      }
-
-      // Selected sort controls the primary order, but we always keep deterministic
-      // fallback ordering via `updatedAt` at the end.
-      filtered.sort((left, right) => {
-        if (hasLocationFilter && left.searchMatchKind !== right.searchMatchKind) {
-          return (
-            getSearchMatchKindRank(left.searchMatchKind) -
-            getSearchMatchKindRank(right.searchMatchKind)
-          );
-        }
-
-        return compareRankedItems(left, right, sort);
-      });
-
-      const rankedRows =
-        sort === "relevance"
-          ? hasLocationFilter
-            ? [
-                ...rankItems(
-                  filtered.filter((entry) => entry.searchMatchKind === "primary"),
-                  sort,
-                  { pageSize },
-                ),
-                ...rankItems(
-                  filtered.filter((entry) => entry.searchMatchKind !== "primary"),
-                  sort,
-                  { pageSize },
-                ),
-              ]
-            : rankItems(filtered, sort, { pageSize })
-          : filtered;
-
-      const total = rankedRows.length;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      const safePage = Math.min(page, totalPages);
-      const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-
-      return {
-        items: pagedRows.map(
-          ({
             item,
-            latitude,
-            longitude,
+            latitude: excursionLatitude,
+            longitude: excursionLongitude,
             distanceKm,
             searchMatchKind,
             hasAvailableSession,
             nextSessionStartAt,
-          }) => {
-            const snapshot = getPublicExcursionSnapshot(item);
-            const display = snapshot?.excursion ?? item;
-            const routeLocationNames =
-              snapshot?.routeLocations.map((route) => route.name) ??
-              item.routeLocations.map((route) => route.location.name);
+            relevance: ranking.finalScore,
+            fromPrice,
+            ranking,
+            sortValues: {
+              price: fromPrice,
+              distance: distanceKm,
+              duration: display.durationMinutes,
+              createdAt: item.createdAt,
+              publishedAt: item.moderatedAt ?? item.createdAt,
+              updatedAt: item.updatedAt,
+            },
+          });
+        }
 
-            return {
-              id: item.id,
-              slug: buildExcursionSlug(display.title, item.id),
-              path: buildPublicExcursionPath({
-                id: item.id,
-                title: display.title,
-                locationId: display.locationId,
-                anchorLocation: display.anchorLocation,
-              }),
-              title: display.title ?? "Экскурсия без названия",
-              offerType: display.offerType,
-              subtypeLabel: display.subtypeLabel,
-              locationId: display.locationId,
-              locationName: display.locationName,
+        // Selected sort controls the primary order, but we always keep deterministic
+        // fallback ordering via `updatedAt` at the end.
+        filtered.sort((left, right) => {
+          if (hasLocationFilter && left.searchMatchKind !== right.searchMatchKind) {
+            return (
+              getSearchMatchKindRank(left.searchMatchKind) -
+              getSearchMatchKindRank(right.searchMatchKind)
+            );
+          }
+
+          return compareRankedItems(left, right, sort);
+        });
+
+        const rankedRows =
+          sort === "relevance"
+            ? hasLocationFilter
+              ? [
+                  ...rankItems(
+                    filtered.filter((entry) => entry.searchMatchKind === "primary"),
+                    sort,
+                    { pageSize },
+                  ),
+                  ...rankItems(
+                    filtered.filter((entry) => entry.searchMatchKind !== "primary"),
+                    sort,
+                    { pageSize },
+                  ),
+                ]
+              : rankItems(filtered, sort, { pageSize })
+            : filtered;
+
+        const total = rankedRows.length;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const safePage = Math.min(page, totalPages);
+        const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+        return {
+          items: pagedRows.map(
+            ({
+              item,
               latitude,
               longitude,
-              mainLocationName: display.mainLocation?.name ?? null,
-              anchorCityName: display.anchorLocation?.name ?? display.locationName,
-              districtName: display.district?.name ?? null,
-              categoryName: display.category?.name ?? null,
-              startPoint: display.startPoint,
-              finishPoint: display.finishPoint,
-              routeSummary: buildProgramRouteSummary({
-                routePoints: routeLocationNames,
-                startPoint: display.startPoint,
-                finishPoint: display.finishPoint,
-                mainLocationName: display.mainLocation?.name ?? null,
-                anchorLocationName: display.anchorLocation?.name ?? display.locationName,
-                locationName: display.locationName,
-              }),
-              durationMinutes: display.durationMinutes,
-              durationDays: display.durationDays,
-              durationNights: display.durationNights,
-              languageCodes: toStringArray(display.languageCodes),
-              difficulty: display.difficulty,
-              priceFrom: toNumberOrNull(display.priceFrom),
-              priceTo: toNumberOrNull(display.priceTo),
-              currency: display.currency,
-              priceUnitLabel: display.priceUnitLabel,
-              coverImageUrl: getPublicExcursionCoverImageUrl(display),
-              avgRating: Number(item.avgRating),
-              reviewsCount: item.reviewsCount,
-              distanceKm: roundDistanceKm(distanceKm),
+              distanceKm,
               searchMatchKind,
               hasAvailableSession,
-              pickupAvailable: display.pickupAvailable,
-              availabilityMode: getResolvedAvailabilityMode(
-                display.availabilityMode,
-                display.scheduleMode,
-              ),
-              availabilitySummary: formatAvailabilitySummary({
-                availabilityMode: display.availabilityMode,
-                scheduleMode: display.scheduleMode,
-                scheduleText: display.scheduleText,
-                availabilityNote: display.availabilityNote,
-                nextSessionStartAt,
-              }),
-              hasAccommodation:
-                display.accommodationProvided === true ||
-                Boolean(display.accommodationNights && display.accommodationNights > 0),
-              owner: {
-                firstName: item.owner.firstName,
-                lastName: "",
-                avatarUrl: item.owner.avatarUrl,
-                phoneVerifiedAt: item.owner.phoneVerifiedAt?.toISOString() ?? null,
-              },
-            };
+              nextSessionStartAt,
+            }) => {
+              const snapshot = getPublicExcursionSnapshot(item);
+              const display = snapshot?.excursion ?? item;
+              const routeLocationNames =
+                snapshot?.routeLocations.map((route) => route.name) ??
+                item.routeLocations.map((route) => route.location.name);
+
+              return {
+                id: item.id,
+                slug: buildExcursionSlug(display.title, item.id),
+                path: buildPublicExcursionPath({
+                  id: item.id,
+                  title: display.title,
+                  locationId: display.locationId,
+                  anchorLocation: display.anchorLocation,
+                }),
+                title: display.title ?? "Экскурсия без названия",
+                offerType: display.offerType,
+                subtypeLabel: display.subtypeLabel,
+                locationId: display.locationId,
+                locationName: display.locationName,
+                latitude,
+                longitude,
+                mainLocationName: display.mainLocation?.name ?? null,
+                anchorCityName: display.anchorLocation?.name ?? display.locationName,
+                districtName: display.district?.name ?? null,
+                categoryName: display.category?.name ?? null,
+                startPoint: display.startPoint,
+                finishPoint: display.finishPoint,
+                routeSummary: buildProgramRouteSummary({
+                  routePoints: routeLocationNames,
+                  startPoint: display.startPoint,
+                  finishPoint: display.finishPoint,
+                  mainLocationName: display.mainLocation?.name ?? null,
+                  anchorLocationName: display.anchorLocation?.name ?? display.locationName,
+                  locationName: display.locationName,
+                }),
+                durationMinutes: display.durationMinutes,
+                durationDays: display.durationDays,
+                durationNights: display.durationNights,
+                languageCodes: toStringArray(display.languageCodes),
+                difficulty: display.difficulty,
+                priceFrom: toNumberOrNull(display.priceFrom),
+                priceTo: toNumberOrNull(display.priceTo),
+                currency: display.currency,
+                priceUnitLabel: display.priceUnitLabel,
+                coverImageUrl: getPublicExcursionCoverImageUrl(display),
+                avgRating: Number(item.avgRating),
+                reviewsCount: item.reviewsCount,
+                distanceKm: roundDistanceKm(distanceKm),
+                searchMatchKind,
+                hasAvailableSession,
+                pickupAvailable: display.pickupAvailable,
+                availabilityMode: getResolvedAvailabilityMode(
+                  display.availabilityMode,
+                  display.scheduleMode,
+                ),
+                availabilitySummary: formatAvailabilitySummary({
+                  availabilityMode: display.availabilityMode,
+                  scheduleMode: display.scheduleMode,
+                  scheduleText: display.scheduleText,
+                  availabilityNote: display.availabilityNote,
+                  nextSessionStartAt,
+                }),
+                hasAccommodation:
+                  display.accommodationProvided === true ||
+                  Boolean(display.accommodationNights && display.accommodationNights > 0),
+                owner: {
+                  firstName: item.owner.firstName,
+                  lastName: "",
+                  avatarUrl: item.owner.avatarUrl,
+                  phoneVerifiedAt: item.owner.phoneVerifiedAt?.toISOString() ?? null,
+                },
+              };
+            },
+          ),
+          page: safePage,
+          pageSize,
+          total,
+          totalPages,
+          priceBounds: {
+            min: 0,
+            max: catalogMaxPrice,
           },
-        ),
-        page: safePage,
-        pageSize,
-        total,
-        totalPages,
-        filters: {
-          // Echo normalized filters back to UI so client state can be restored from server truth.
-          locationId: resolvedLocation?.id ?? null,
-          // Keep user's raw location text in filters when georesolution fails,
-          // so sidebar fields stay in sync with the search form input.
-          locationName:
-            resolvedLocation?.name ?? resolvedLocationCenter?.name ?? (rawLocationQuery || null),
-          centerLat: resolvedLocationCenter?.latitude ?? null,
-          centerLng: resolvedLocationCenter?.longitude ?? null,
-          districtId: resolvedDistrict?.id ?? null,
-          districtSlug: resolvedDistrict?.slug ?? null,
-          districtName: resolvedDistrict?.name ?? null,
-          categoryId: resolvedCategory?.id ?? null,
-          categorySlug: resolvedCategory?.slug ?? null,
-          categoryName: resolvedCategory?.name ?? null,
-          offerType: query.offerType ?? null,
-          query: searchQuery || null,
-          dateFrom: dateRange ? dateRange.dateFrom.toISOString().slice(0, 10) : null,
-          dateTo: dateRange ? dateRange.dateTo.toISOString().slice(0, 10) : null,
-          people,
-          radiusKm,
-          minPrice,
-          maxPrice,
-          durationBucket,
-          language,
-          difficulty,
-          format: formatFilter ?? null,
-          pickup: query.pickup ?? false,
-          kids: query.kids ?? false,
-          sort,
-          nearbyRadiusKm: hasLocationFilter ? radiusKm : null,
-        },
-      };
-    },
-    fallbackResult,
-  );
+          filters: {
+            // Echo normalized filters back to UI so client state can be restored from server truth.
+            locationId: resolvedLocation?.id ?? null,
+            // Keep user's raw location text in filters when georesolution fails,
+            // so sidebar fields stay in sync with the search form input.
+            locationName:
+              resolvedLocation?.name ?? resolvedLocationCenter?.name ?? (rawLocationQuery || null),
+            centerLat: resolvedLocationCenter?.latitude ?? null,
+            centerLng: resolvedLocationCenter?.longitude ?? null,
+            districtId: resolvedDistrict?.id ?? null,
+            districtSlug: resolvedDistrict?.slug ?? null,
+            districtName: resolvedDistrict?.name ?? null,
+            categoryId: resolvedCategory?.id ?? null,
+            categorySlug: resolvedCategory?.slug ?? null,
+            categoryName: resolvedCategory?.name ?? null,
+            offerType: query.offerType ?? null,
+            query: searchQuery || null,
+            dateFrom: dateRange ? dateRange.dateFrom.toISOString().slice(0, 10) : null,
+            dateTo: dateRange ? dateRange.dateTo.toISOString().slice(0, 10) : null,
+            people,
+            radiusKm,
+            minPrice,
+            maxPrice,
+            durationBucket,
+            language,
+            difficulty,
+            format: formatFilter ?? null,
+            pickup: query.pickup ?? false,
+            kids: query.kids ?? false,
+            sort,
+            nearbyRadiusKm: hasLocationFilter ? radiusKm : null,
+          },
+        };
+      },
+      fallbackResult,
+    );
+
+    finishPerf({
+      returned: result.items.length,
+      count: result.total,
+      candidates: perfCandidateCount,
+      candidateStageDurationMs: perfCandidateStageDurationMs,
+      candidateIdsCount: perfCandidateIdsCount,
+      heavyRowsFetched: perfCandidateCount,
+      finalReturned: result.items.length,
+      usedFallback: perfUsedFallback,
+      prefilterEnabled: perfPrefilterEnabled,
+      candidateLimit,
+      hasFilters:
+        searchQuery.length > 0 ||
+        hasLocationFilter ||
+        Boolean(query.districtId || query.district) ||
+        Boolean(query.categoryId || query.category) ||
+        Boolean(query.offerType) ||
+        Boolean(query.format) ||
+        Boolean(query.pickup) ||
+        Boolean(query.kids) ||
+        dateRange !== null ||
+        people !== null ||
+        minPrice !== null ||
+        maxPrice !== null ||
+        durationBucket !== null ||
+        language !== null ||
+        difficulty !== null ||
+        bounds !== null,
+      status: 200,
+    });
+
+    return result;
+  } catch (error) {
+    finishPerf({
+      candidates: perfCandidateCount,
+      candidateStageDurationMs: perfCandidateStageDurationMs,
+      candidateIdsCount: perfCandidateIdsCount,
+      heavyRowsFetched: perfCandidateCount,
+      usedFallback: perfUsedFallback,
+      prefilterEnabled: perfPrefilterEnabled,
+      candidateLimit,
+      status: 500,
+      errorStatus: 500,
+    });
+    throw error;
+  }
 }
 
 async function getExcursionCardByIdentifier(input: {
@@ -1978,6 +2423,7 @@ async function getExcursionCardByIdentifier(input: {
           status: ReviewStatus.ACTIVE,
         },
         orderBy: [{ createdAt: "desc" }],
+        take: PUBLIC_REVIEWS_PAGE_SIZE,
         include: {
           user: {
             select: { firstName: true, avatarUrl: true },
@@ -2020,6 +2466,54 @@ async function getExcursionCardByIdentifier(input: {
   const displaySessions = snapshot?.sessions ?? excursion.sessions;
   const displayScheduleRules = snapshot?.scheduleRules ?? excursion.scheduleRules;
   const displayScheduleExceptions = snapshot?.scheduleExceptions ?? excursion.scheduleExceptions;
+  const redactContacts = !input.ownerId;
+  const contacts = {
+    firstName: display.contactFirstName ?? excursion.owner.firstName,
+    lastName: null,
+    phone: display.contactPhone ?? excursion.owner.phone,
+    phoneName: display.contactPhoneName,
+    phone2: display.contactPhone2,
+    phone2Name: display.contactPhone2Name,
+    phone3: display.contactPhone3,
+    phone3Name: display.contactPhone3Name,
+    email: display.contactEmail ?? excursion.owner.email,
+    websiteUrl: display.websiteUrl,
+    whatsappUrl: display.whatsappUrl,
+    telegramUrl: display.telegramUrl,
+    vkUrl: display.vkUrl,
+    maxUrl: display.maxUrl,
+    okUrl: display.okUrl,
+  };
+  const redactedContactFields = buildRedactedPublicContactFields(contacts);
+  const publicContacts = redactContacts
+    ? {
+        firstName: null,
+        lastName: null,
+        phone: null,
+        phoneMasked: redactedContactFields.phoneMasked,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        phoneName: null,
+        phone2: null,
+        phone2Name: null,
+        phone3: null,
+        phone3Name: null,
+        email: null,
+        emailAvailable: redactedContactFields.emailAvailable,
+        websiteUrl: contacts.websiteUrl,
+        whatsappUrl: null,
+        telegramUrl: null,
+        vkUrl: null,
+        maxUrl: null,
+        okUrl: null,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+      }
+    : {
+        ...contacts,
+        phoneMasked: contacts.phone,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        emailAvailable: redactedContactFields.emailAvailable,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+      };
   const nextAvailableSessionStartAt =
     displaySessions.find((session) => session.status === ExcursionSessionStatus.AVAILABLE)
       ?.startAt ?? null;
@@ -2233,23 +2727,7 @@ async function getExcursionCardByIdentifier(input: {
     }),
     avgRating: Number(excursion.avgRating),
     reviewsCount: excursion.reviewsCount,
-    contacts: {
-      firstName: display.contactFirstName ?? excursion.owner.firstName,
-      lastName: null,
-      phone: display.contactPhone ?? excursion.owner.phone,
-      phoneName: display.contactPhoneName,
-      phone2: display.contactPhone2,
-      phone2Name: display.contactPhone2Name,
-      phone3: display.contactPhone3,
-      phone3Name: display.contactPhone3Name,
-      email: display.contactEmail ?? excursion.owner.email,
-      websiteUrl: display.websiteUrl,
-      whatsappUrl: display.whatsappUrl,
-      telegramUrl: display.telegramUrl,
-      vkUrl: display.vkUrl,
-      maxUrl: display.maxUrl,
-      okUrl: display.okUrl,
-    },
+    contacts: publicContacts,
     owner: {
       id: excursion.owner.id,
       firstName: excursion.owner.firstName,

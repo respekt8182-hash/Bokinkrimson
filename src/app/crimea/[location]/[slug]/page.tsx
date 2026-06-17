@@ -271,8 +271,7 @@ export default async function PublicPropertyPage({
         initialReviews={item.reviews}
         initialHasMore={item.reviewsCount > item.reviews.length}
         isAuthenticated={Boolean(session)}
-        currentUserId={session?.id ?? null}
-        ownerUserId={item.owner.id}
+        isOwnerViewer={Boolean(session?.id && session.id === item.owner.id)}
       />
 
       <PublicPropertyBottomSections item={item} showPublishedWithoutRegistryNotice={!isPreview} />

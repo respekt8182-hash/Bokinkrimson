@@ -1545,12 +1545,15 @@ export function YandexMapMultiViewer({
     boundsReportTimerRef.current = null;
   }, []);
 
-  const reportCurrentBounds = useCallback((map: YandexMapInstance) => {
-    clearBoundsReportTimer();
-    pendingBoundsReportRef.current = null;
-    const bounds = normalizeMapBounds(map.getBounds());
-    boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds));
-  }, [clearBoundsReportTimer]);
+  const reportCurrentBounds = useCallback(
+    (map: YandexMapInstance) => {
+      clearBoundsReportTimer();
+      pendingBoundsReportRef.current = null;
+      const bounds = normalizeMapBounds(map.getBounds());
+      boundsChangeHandlerRef.current?.(bounds, getMapViewport(map, bounds));
+    },
+    [clearBoundsReportTimer],
+  );
 
   const scheduleBoundsReport = useCallback(
     (
@@ -2248,7 +2251,7 @@ export function YandexMapMultiViewer({
       {customZoomControls ? (
         <div
           className={cn(
-            "pointer-events-auto absolute bottom-4 right-4 z-[70] flex w-12 flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] ring-1 ring-black/5",
+            "pointer-events-auto absolute bottom-12 right-4 z-[70] flex w-12 flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] ring-1 ring-black/5",
             customZoomControlsClassName,
           )}
         >

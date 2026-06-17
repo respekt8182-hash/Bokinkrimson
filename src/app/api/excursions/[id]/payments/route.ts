@@ -119,9 +119,10 @@ export async function GET(_request: Request, context: RouteContext) {
   const trialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: excursion.createdAt,
     now,
+    category,
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil(now)
+    ? getPostLaunchTrialValidUntil(excursion.createdAt)
     : null;
   const [baseYearPrice, baseSeasonPrice] = await Promise.all([
     getPlacementPrice({
@@ -239,9 +240,10 @@ export async function POST(request: Request, context: RouteContext) {
   const trialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: excursion.createdAt,
     now,
+    category,
     hasSuccessfulPlacement: payments.some((item) => item.status === PaymentStatus.SUCCEEDED),
   })
-    ? getPostLaunchTrialValidUntil(now)
+    ? getPostLaunchTrialValidUntil(excursion.createdAt)
     : null;
   const basePlacementPricing = await getPlacementPrice({
     userId: session.id,
@@ -293,7 +295,7 @@ export async function POST(request: Request, context: RouteContext) {
         confirmationUrl: null,
         paidFrom: now,
         paidAt: now,
-        placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(),
+        placementValidUntil: trialUntil ?? getPlacementPromoDemoValidUntil(excursion.createdAt),
         providerPayload: trialUntil
           ? buildPostLaunchTrialPaymentPayload({
               originalAmountRub: publicationPrice.originalAmountRub,
@@ -304,6 +306,7 @@ export async function POST(request: Request, context: RouteContext) {
           : buildFreePlacementPaymentPayload({
               originalAmountRub: publicationPrice.originalAmountRub,
               now,
+              validUntil: trialUntil ?? getPlacementPromoDemoValidUntil(excursion.createdAt),
               placementPricing,
             }),
       },

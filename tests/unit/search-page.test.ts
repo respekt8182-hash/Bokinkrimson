@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getPublicCatalogMock,
+  getPublicHousingCatalogOverviewMock,
+  getPublicExcursionCatalogOverviewMock,
   getLocationDirectoryItemsMock,
   getPopularHousingSuggestionsMock,
   getSearchSeoStateMock,
 } = vi.hoisted(() => ({
   getPublicCatalogMock: vi.fn(),
+  getPublicHousingCatalogOverviewMock: vi.fn(),
+  getPublicExcursionCatalogOverviewMock: vi.fn(),
   getLocationDirectoryItemsMock: vi.fn(),
   getPopularHousingSuggestionsMock: vi.fn(),
   getSearchSeoStateMock: vi.fn(),
@@ -14,6 +18,11 @@ const {
 
 vi.mock("@/components/public/housing-catalog-client", () => ({
   HousingCatalogClient: () => null,
+}));
+
+vi.mock("next/cache", () => ({
+  unstable_cache: (callback: unknown) => callback,
+  unstable_noStore: vi.fn(),
 }));
 
 vi.mock("@/components/public/excursion-search-results", () => ({
@@ -39,6 +48,11 @@ vi.mock("@/lib/public-excursions", () => ({
 
 vi.mock("@/lib/public-properties", () => ({
   getPublicCatalog: getPublicCatalogMock,
+}));
+
+vi.mock("@/lib/public-catalog-overview", () => ({
+  getPublicHousingCatalogOverview: getPublicHousingCatalogOverviewMock,
+  getPublicExcursionCatalogOverview: getPublicExcursionCatalogOverviewMock,
 }));
 
 vi.mock("@/lib/search-suggestions", () => ({
@@ -78,69 +92,45 @@ describe("search page housing catalog bootstrap", () => {
     });
     getLocationDirectoryItemsMock.mockResolvedValue([]);
     getPopularHousingSuggestionsMock.mockResolvedValue([]);
-    getPublicCatalogMock
-      .mockResolvedValueOnce({
-        items: [],
-        total: 42,
-        page: 3,
-        pageSize: 30,
-        totalPages: 5,
-        filters: {
-          locationId: "yalta",
-          locationName: "Ялта",
-          type: null,
-          query: null,
-          minPrice: null,
-          maxPrice: null,
-          minRating: null,
-          hasPhotos: false,
-          hasReviews: false,
-          familyFriendly: false,
-          petsAllowed: false,
-          nearSea: false,
-          hasPool: false,
-          hasKitchen: false,
-          hasAirConditioner: false,
-          hasParking: false,
-          smokingForbidden: false,
-          quietHours: false,
-          amenityIds: [],
-          roomFeatureIds: [],
-          sort: "relevance",
-          nearbyRadiusKm: null,
-        },
-      })
-      .mockResolvedValueOnce({
-        items: [],
-        total: 42,
-        page: 1,
-        pageSize: 1,
-        totalPages: 42,
-        filters: {
-          locationId: "yalta",
-          locationName: "Ялта",
-          type: null,
-          query: null,
-          minPrice: null,
-          maxPrice: null,
-          minRating: null,
-          hasPhotos: false,
-          hasReviews: false,
-          familyFriendly: false,
-          petsAllowed: false,
-          nearSea: false,
-          hasPool: false,
-          hasKitchen: false,
-          hasAirConditioner: false,
-          hasParking: false,
-          smokingForbidden: false,
-          quietHours: false,
-          amenityIds: [],
-          roomFeatureIds: [],
-          sort: "relevance",
-          nearbyRadiusKm: null,
-        },
-      });
+    getPublicCatalogMock.mockResolvedValue({
+      items: [],
+      total: 42,
+      page: 3,
+      pageSize: 30,
+      totalPages: 5,
+      filters: {
+        locationId: "yalta",
+        locationName: "Ялта",
+        type: null,
+        query: null,
+        minPrice: null,
+        maxPrice: null,
+        minRating: null,
+        hasPhotos: false,
+        hasReviews: false,
+        familyFriendly: false,
+        petsAllowed: false,
+        nearSea: false,
+        hasPool: false,
+        hasKitchen: false,
+        hasAirConditioner: false,
+        hasParking: false,
+        smokingForbidden: false,
+        quietHours: false,
+        amenityIds: [],
+        roomFeatureIds: [],
+        sort: "relevance",
+        nearbyRadiusKm: null,
+      },
+    });
+    getPublicHousingCatalogOverviewMock.mockResolvedValue({
+      total: 42,
+      priceBounds: { min: 0, max: 12000 },
+    });
+    getPublicExcursionCatalogOverviewMock.mockResolvedValue({
+      total: 0,
+      priceBounds: { min: 0, max: 0 },
+    });
   });
 
   it("passes the requested page to the initial housing catalog query", async () => {
@@ -155,10 +145,13 @@ describe("search page housing catalog bootstrap", () => {
     });
 
     expect(getPublicCatalogMock).toHaveBeenCalled();
+    expect(getPublicCatalogMock).toHaveBeenCalledTimes(1);
     expect(getPublicCatalogMock.mock.calls[0]?.[0]).toMatchObject({
       location: "Ялта",
       page: 3,
       pageSize: 30,
     });
+    expect(getPublicHousingCatalogOverviewMock).toHaveBeenCalledWith({ location: "Ялта" });
+    expect(getPublicHousingCatalogOverviewMock).toHaveBeenCalledWith();
   });
 });

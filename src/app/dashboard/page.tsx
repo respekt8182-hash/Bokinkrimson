@@ -33,6 +33,34 @@ const sectionCards = [
   },
 ];
 
+function SeagullIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 40 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 13.5C9.8 5.8 15.8 5.6 20 14.3C24.2 5.6 30.2 5.8 36 13.5"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.6 12.2C16.5 13.6 18.3 14.3 20 14.3C21.7 14.3 23.5 13.6 25.4 12.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.55"
+      />
+    </svg>
+  );
+}
+
 export default async function DashboardPage() {
   const session = await getSession();
 
@@ -51,8 +79,11 @@ export default async function DashboardPage() {
         image="/dashboard-prof/main.png"
         imagePosition="right center"
       >
-        <p className="font-heading text-xl italic leading-8 text-primary/75 sm:text-2xl">
-          Ваш бизнес - часть путешествия
+        <p className="inline-flex items-center gap-3 font-heading text-xl italic leading-8 text-primary/75 sm:text-2xl">
+          <span>Ваш бизнес - часть путешествия</span>
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary shadow-[0_10px_24px_rgba(15,118,110,0.14)]">
+            <SeagullIcon className="h-5 w-7" />
+          </span>
         </p>
       </DashboardVisualHero>
 

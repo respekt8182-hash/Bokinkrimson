@@ -1557,7 +1557,7 @@ export function RoomFundManager({
           </div>
 
           {/* Main content */}
-          <div className="p-4 pb-28 sm:p-5 sm:pb-5">
+          <div className="p-4 pb-5 sm:p-5">
             <div className="grid min-w-0 gap-5">
               <div className="min-w-0 space-y-4">
                 {/* General settings */}
@@ -2344,7 +2344,7 @@ export function RoomFundManager({
               </div>
             </div>
 
-            <div className="sticky-bottom-enter sticky bottom-0 z-30 -mx-4 mt-5 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:-mx-5 sm:px-5 sm:hidden">
+            <div className="sticky-bottom-enter mobile-editor-bottom-bar -mx-4 mt-5 border-t border-olive/10 glass-mobile-bar px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:-mx-5 sm:px-5 sm:hidden">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-olive/45">
@@ -2489,7 +2489,10 @@ export function RoomFundManager({
               const { room, cardDetails, instanceNumber } = roomCard;
               const globalRoomIndex = rooms.findIndex((item) => item.id === room.id);
               const firstImage = room.media.find((mediaItem) => mediaItem.type === "IMAGE") ?? null;
-              const featureSummary = [...room.features.map((feature) => feature.name), ...room.customFeatures]
+              const featureSummary = [
+                ...room.features.map((feature) => feature.name),
+                ...room.customFeatures,
+              ]
                 .slice(0, 6)
                 .join(", ");
               const roomInstanceLabel = instanceNumber === null ? null : `Номер ${instanceNumber}`;
@@ -2581,10 +2584,7 @@ export function RoomFundManager({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div
-                        className="hidden"
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                      <div className="hidden" onClick={(event) => event.stopPropagation()}>
                         <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
                           Позиция {globalRoomIndex + 1}
                         </span>

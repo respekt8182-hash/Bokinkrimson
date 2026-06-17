@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { PropertyRulesExtraFields } from "@/components/objects/property-rules-extra-fields";
 import { AppIcon } from "@/components/ui/app-icon";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TimePicker } from "@/components/ui/time-picker";
 import { petsPolicyOptions, smokingPolicyOptions } from "@/lib/constants";
@@ -203,6 +204,9 @@ export function ObjectRulesPage({
   const [isSavingRegistry, setIsSavingRegistry] = useState(false);
   const [registryError, setRegistryError] = useState("");
   const [registrySuccess, setRegistrySuccess] = useState("");
+  const [skipKsrConfirmed, setSkipKsrConfirmed] = useState(
+    initialProperty.classificationApplicable === false,
+  );
   const [error, setError] = useState("");
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
@@ -358,6 +362,13 @@ export function ObjectRulesPage({
           return false;
         }
 
+        if (!skipKsrConfirmed) {
+          setRegistryError(
+            "Подтвердите, что объект размещается без КСР и не относится к средствам размещения, подлежащим классификации.",
+          );
+          return false;
+        }
+
         setIsSavingRegistry(true);
         try {
           const response = await fetch(`/api/properties/${initialProperty.id}`, {
@@ -450,6 +461,7 @@ export function ObjectRulesPage({
       registryNumber,
       router,
       savedRegistryNumber,
+      skipKsrConfirmed,
     ],
   );
 
@@ -675,15 +687,6 @@ export function ObjectRulesPage({
           </div>
 
           <div className="divide-y divide-olive/8">
-            {/* Intro hint */}
-            <div className="px-5 py-3">
-              <p className="rounded-xl bg-sky-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-olive/70">
-                Заполните правила проживания — время заезда/выезда и основные политики. Эта
-                информация отображается в карточке объекта и помогает гостям заранее узнать условия.
-                Данные сохраняются автоматически.
-              </p>
-            </div>
-
             {/* Check-in / Check-out */}
             <div className="px-5 py-4">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-olive/40">
@@ -935,12 +938,20 @@ export function ObjectRulesPage({
 
                 <div className="mt-5 space-y-3 text-sm leading-6 text-olive/68">
                   <p>
-                    Номер записи нужен, если объект сдаётся на платной основе и размещается на
-                    площадках онлайн-сервисов, сайтах или в приложениях.
+                    Номер записи в КСР обязателен, если объект является средством размещения:
+                    гостиницей, отелем, хостелом, апарт-отелем, санаторием, базой отдыха,
+                    турбазой, глэмпингом, кемпингом или похожим объектом, который оказывает услуги
+                    временного проживания.
                   </p>
                   <p>
-                    Если вы сдаёте объект не на платной основе, например друзьям или родственникам,
-                    этот шаг можно пропустить.
+                    Обычно классификации не подлежат отдельные квартиры, комнаты, жилые дома или
+                    отдельные апартаменты, которые сдаются как самостоятельное жилое помещение и не
+                    работают как гостиница, гостевой дом, база отдыха или иной объект размещения.
+                  </p>
+                  <p className="text-xs leading-5 text-olive/55">
+                    Основание: Федеральный закон N 132-ФЗ, постановления Правительства РФ N 1951 и
+                    N 1952 от 27.12.2024. За нарушения требований к услугам средств размещения
+                    предусмотрена административная ответственность по ст. 14.39 КоАП РФ.
                   </p>
                 </div>
 
@@ -950,6 +961,9 @@ export function ObjectRulesPage({
                     value={registryNumber}
                     onChange={(event) => {
                       setRegistryNumber(event.target.value);
+                      if (event.target.value.trim()) {
+                        setSkipKsrConfirmed(false);
+                      }
                       setRegistryError("");
                       setRegistrySuccess("");
                     }}
@@ -983,6 +997,26 @@ export function ObjectRulesPage({
                   </p>
                 ) : null}
 
+                <label className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-5 text-amber-900">
+                  <Checkbox
+                    checked={skipKsrConfirmed}
+                    onChange={(event) => {
+                      setSkipKsrConfirmed(event.target.checked);
+                      setRegistryError("");
+                      setRegistrySuccess("");
+                    }}
+                    disabled={normalizedRegistryNumber.length > 0 || isSavingRegistry}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span>
+                    Да, подтверждаю: объект будет размещен без номера КСР, потому что он не
+                    относится к средствам размещения, подлежащим классификации. Я понимаю, что если
+                    объект фактически является средством размещения, ответственность за размещение и
+                    оказание услуг без обязательной классификации несет владелец объекта, в том
+                    числе по ст. 14.39 КоАП РФ.
+                  </span>
+                </label>
+
                 <div className="mt-4 grid gap-2">
                   <a
                     href="https://tourism.fsa.gov.ru/"
@@ -1005,10 +1039,15 @@ export function ObjectRulesPage({
                     <button
                       type="button"
                       onClick={() => void saveRegistry({ allowSkip: true })}
-                      disabled={isSavingRegistry || isRegistryComplete}
+                      disabled={
+                        isSavingRegistry ||
+                        isRegistryComplete ||
+                        normalizedRegistryNumber.length > 0 ||
+                        !skipKsrConfirmed
+                      }
                       className="inline-flex items-center justify-center rounded-xl border border-olive/12 bg-white px-4 py-2.5 text-sm font-semibold text-olive/70 transition hover:border-primary/25 hover:text-primary disabled:cursor-not-allowed disabled:opacity-55"
                     >
-                      Не требуется
+                      Сохранить без КСР
                     </button>
                   </div>
                 </div>

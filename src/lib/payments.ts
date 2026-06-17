@@ -348,6 +348,7 @@ export function buildFreePlacementPaymentPayload(input: {
   originalAmountRub: number;
   discountedAmountRub?: number;
   now?: Date;
+  validUntil?: Date;
   context?: Prisma.InputJsonObject;
   placementPricing?: PlacementPriceResult | null;
 }): Prisma.InputJsonObject {
@@ -362,7 +363,9 @@ export function buildFreePlacementPaymentPayload(input: {
     placementCampaign: PLACEMENT_PROMO_CODE,
     placementCampaignType: PLACEMENT_PROMO_CAMPAIGN_TYPE,
     placementMode: PLACEMENT_PROMO_DEMO_MODE,
-    placementDemoEndsAtIso: PLACEMENT_PROMO_DEMO_ENDS_AT_ISO,
+    placementDemoEndsAtIso: (
+      input.validUntil ?? new Date(PLACEMENT_PROMO_DEMO_ENDS_AT_ISO)
+    ).toISOString(),
     includeInAdminRevenue: false,
     ...(placementPromo ? { placementPromo } : {}),
     ...(input.placementPricing ? buildPlacementPricingPayload(input.placementPricing) : {}),
@@ -550,7 +553,10 @@ export function serializePayment(payment: {
     providerPayload: payment.providerPayload,
   });
   const serializedPlacementValidUntil = isFreePlacementDemoPayload(payment.providerPayload)
-    ? getFreePlacementDemoValidUntil(payment.providerPayload).toISOString()
+    ? (
+        payment.placementValidUntil ??
+        getFreePlacementDemoValidUntil(payment.providerPayload, payment.paidAt ?? payment.createdAt)
+      ).toISOString()
     : payment.placementValidUntil
       ? payment.placementValidUntil.toISOString()
       : null;
@@ -621,11 +627,18 @@ export function resolvePaymentPlacementValidUntil(payment: {
   placementValidUntil?: Date | null;
   providerPayload?: Prisma.JsonValue | null;
 }): Date {
-  if (isFreePlacementDemoPayload(payment.providerPayload)) {
-    return getFreePlacementDemoValidUntil(payment.providerPayload);
+  if (payment.placementValidUntil) {
+    return payment.placementValidUntil;
   }
 
-  return payment.placementValidUntil ?? getPlacementValidUntil(payment.paidAt ?? payment.createdAt);
+  if (isFreePlacementDemoPayload(payment.providerPayload)) {
+    return getFreePlacementDemoValidUntil(
+      payment.providerPayload,
+      payment.paidAt ?? payment.createdAt,
+    );
+  }
+
+  return getPlacementValidUntil(payment.paidAt ?? payment.createdAt);
 }
 
 export function getPlacementCoverageState(input: {

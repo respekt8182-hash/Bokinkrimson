@@ -1,5 +1,6 @@
 // Search contract endpoint for excursions catalog (TZ-compatible alias over public excursions domain service).
 import { NextResponse } from "next/server";
+import { createSearchPerformanceTimer, hasSearchFilters } from "@/lib/performance-logging";
 import { getPublicExcursionCatalog } from "@/lib/public-excursions";
 import {
   isPointInsideBounds,
@@ -8,6 +9,9 @@ import {
   parseOptionalIntParam,
   pickFirstListValue,
 } from "@/lib/search-contracts";
+
+const interactiveBoundsCandidateBase = 240;
+const interactiveBoundsCandidateCap = 600;
 
 function normalizeSort(raw: string | null): string {
   const value = (raw ?? "").trim().toLowerCase();
@@ -20,6 +24,7 @@ function parseDifficulty(raw: string | null): "easy" | "medium" | "hard" | undef
 }
 
 export async function GET(request: Request) {
+  const finishPerf = createSearchPerformanceTimer("/api/search/excursions");
   const { searchParams } = new URL(request.url);
 
   const page = parseIntParam(searchParams.get("page"), 1, { min: 1, max: 500 });
@@ -54,97 +59,127 @@ export async function GET(request: Request) {
 
   const minPriceRaw = Number.parseFloat(searchParams.get("minPrice") ?? "");
   const maxPriceRaw = Number.parseFloat(searchParams.get("maxPrice") ?? "");
+  const query = searchParams.get("query") ?? searchParams.get("q") ?? undefined;
+  const language = pickFirstListValue(
+    searchParams.get("language") ?? searchParams.get("language[]"),
+  );
+  const difficulty = parseDifficulty(
+    searchParams.get("difficulty") ?? searchParams.get("difficulty[]"),
+  );
+  const interactiveCandidateLimit = bounds
+    ? Math.min(
+        interactiveBoundsCandidateCap,
+        Math.max(interactiveBoundsCandidateBase, page * pageSize + pageSize),
+      )
+    : undefined;
 
-  const result = await getPublicExcursionCatalog({
-    page,
-    pageSize,
-    offerType:
-      searchParams.get("offerType") === "tour" || searchParams.get("offerType") === "excursion"
-        ? (searchParams.get("offerType") as "tour" | "excursion")
-        : undefined,
-    locationId:
-      searchParams.get("location_id") ??
-      searchParams.get("locationId") ??
-      undefined,
-    location: searchParams.get("location") ?? undefined,
-    districtId:
-      searchParams.get("district_id") ??
-      searchParams.get("districtId") ??
-      undefined,
-    district: searchParams.get("district") ?? undefined,
-    categoryId:
-      searchParams.get("category_id") ??
-      searchParams.get("categoryId") ??
-      undefined,
-    category: searchParams.get("category") ?? undefined,
-    bounds,
-    query:
-      searchParams.get("query") ??
-      searchParams.get("q") ??
-      undefined,
-    dateFrom:
-      searchParams.get("date_from") ??
-      searchParams.get("dateFrom") ??
-      searchParams.get("date") ??
-      undefined,
-    dateTo:
-      searchParams.get("date_to") ??
-      searchParams.get("dateTo") ??
-      undefined,
-    people: participants,
-    format: searchParams.get("format") ?? undefined,
-    pickup:
-      searchParams.get("pickup") === "1" ||
-      searchParams.get("pickup") === "true",
-    kids:
-      searchParams.get("kids") === "1" ||
-      searchParams.get("kids") === "true",
-    radiusKm: (() => {
-      const value = Number.parseFloat(searchParams.get("radiusKm") ?? "");
-      return Number.isFinite(value) ? value : undefined;
-    })(),
-    sort,
-    durationBucket,
-    language: pickFirstListValue(searchParams.get("language") ?? searchParams.get("language[]")),
-    difficulty: parseDifficulty(searchParams.get("difficulty") ?? searchParams.get("difficulty[]")),
-    minPrice: Number.isFinite(minPriceRaw) && minPriceRaw > 0 ? minPriceRaw : undefined,
-    maxPrice: Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined,
-  });
+  try {
+    const result = await getPublicExcursionCatalog({
+      page,
+      pageSize,
+      candidateLimit: interactiveCandidateLimit,
+      offerType:
+        searchParams.get("offerType") === "tour" || searchParams.get("offerType") === "excursion"
+          ? (searchParams.get("offerType") as "tour" | "excursion")
+          : undefined,
+      locationId: searchParams.get("location_id") ?? searchParams.get("locationId") ?? undefined,
+      location: searchParams.get("location") ?? undefined,
+      districtId: searchParams.get("district_id") ?? searchParams.get("districtId") ?? undefined,
+      district: searchParams.get("district") ?? undefined,
+      categoryId: searchParams.get("category_id") ?? searchParams.get("categoryId") ?? undefined,
+      category: searchParams.get("category") ?? undefined,
+      bounds,
+      query,
+      dateFrom:
+        searchParams.get("date_from") ??
+        searchParams.get("dateFrom") ??
+        searchParams.get("date") ??
+        undefined,
+      dateTo: searchParams.get("date_to") ?? searchParams.get("dateTo") ?? undefined,
+      people: participants,
+      format: searchParams.get("format") ?? undefined,
+      pickup: searchParams.get("pickup") === "1" || searchParams.get("pickup") === "true",
+      kids: searchParams.get("kids") === "1" || searchParams.get("kids") === "true",
+      radiusKm: (() => {
+        const value = Number.parseFloat(searchParams.get("radiusKm") ?? "");
+        return Number.isFinite(value) ? value : undefined;
+      })(),
+      sort,
+      durationBucket,
+      language,
+      difficulty,
+      minPrice: Number.isFinite(minPriceRaw) && minPriceRaw > 0 ? minPriceRaw : undefined,
+      maxPrice: Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined,
+    });
 
-  const mapPoints = result.items
-    .filter((item) => isPointInsideBounds(item.latitude, item.longitude, bounds))
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      path: item.path,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      priceFrom: item.priceFrom,
-      priceTo: item.priceTo,
-      currency: item.currency,
-      avgRating: item.avgRating,
-      reviewsCount: item.reviewsCount,
-      categoryName: item.categoryName,
-    }));
+    const mapPoints = result.items
+      .filter((item) => isPointInsideBounds(item.latitude, item.longitude, bounds))
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        path: item.path,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        priceFrom: item.priceFrom,
+        priceTo: item.priceTo,
+        currency: item.currency,
+        avgRating: item.avgRating,
+        reviewsCount: item.reviewsCount,
+        categoryName: item.categoryName,
+      }));
 
-  return NextResponse.json({
-    items: result.items,
-    total: result.total,
-    page: result.page,
-    page_size: result.pageSize,
-    total_pages: result.totalPages,
-    map_points: mapPoints,
-    meta: {
-      filters: result.filters,
-      requested: {
-        sort,
-        language: pickFirstListValue(
-          searchParams.get("language") ?? searchParams.get("language[]"),
-        ),
-        difficulty: parseDifficulty(
-          searchParams.get("difficulty") ?? searchParams.get("difficulty[]"),
-        ),
+    finishPerf({
+      direction: "excursions",
+      page,
+      pageSize,
+      returned: result.items.length,
+      count: result.total,
+      queryLength: (query ?? "").trim().length,
+      hasFilters: hasSearchFilters({
+        offerType: searchParams.get("offerType"),
+        location: searchParams.get("location"),
+        locationId: searchParams.get("location_id") ?? searchParams.get("locationId"),
+        district: searchParams.get("district"),
+        category: searchParams.get("category"),
+        dateFrom: searchParams.get("date_from") ?? searchParams.get("dateFrom"),
+        dateTo: searchParams.get("date_to") ?? searchParams.get("dateTo"),
+        participants,
+        sort: sort === "relevance" ? undefined : sort,
+        durationBucket,
+        language,
+        difficulty,
+        minPrice: Number.isFinite(minPriceRaw) && minPriceRaw > 0 ? minPriceRaw : undefined,
+        maxPrice: Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined,
+        boundsApplied: bounds !== null,
+      }),
+      status: 200,
+    });
+
+    return NextResponse.json({
+      items: result.items,
+      total: result.total,
+      page: result.page,
+      page_size: result.pageSize,
+      total_pages: result.totalPages,
+      map_points: mapPoints,
+      meta: {
+        filters: result.filters,
+        requested: {
+          sort,
+          language,
+          difficulty,
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    finishPerf({
+      direction: "excursions",
+      page,
+      pageSize,
+      queryLength: (query ?? "").trim().length,
+      status: 500,
+      errorStatus: 500,
+    });
+    throw error;
+  }
 }

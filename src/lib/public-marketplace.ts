@@ -18,13 +18,19 @@ import {
   type CatalogSearchMatchKind,
 } from "@/lib/catalog-radius";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
+import { createSearchPerformanceTimer } from "@/lib/performance-logging";
 import {
   isDatabaseFallbackEligibleError,
   isDatabaseSchemaMissingError,
   logDatabaseFallbackOnce,
 } from "@/lib/prisma-errors";
 import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
+import { buildRedactedPublicContactFields } from "@/lib/public-contact-redaction";
 import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
+import {
+  buildPublicSlugCacheKey,
+  resolveCachedPublicSlugLookup,
+} from "@/lib/public-slug-cache";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import { getRankingStatsByEntity } from "@/lib/ranking-stats";
 import {
@@ -36,6 +42,13 @@ import {
   scoreRankingCandidate,
 } from "@/lib/ranking-v2";
 import { isPointInsideBounds, type MapBounds } from "@/lib/search-contracts";
+import {
+  disabledCandidateStage,
+  getNowMs,
+  getSearchDbPrefilterLimit,
+  isSearchDbPrefilterEnabled,
+  type CandidateStageResult,
+} from "@/lib/search/prefilter-controls";
 import {
   createStaticAttractionDraft,
   getStaticAttractionByIdentifier,
@@ -163,6 +176,8 @@ export type PublicTransferCatalogItem = {
   contacts: {
     contactName: string | null;
     phone: string | null;
+    phoneMasked: string | null;
+    phoneAvailable: boolean;
     phoneName: string | null;
     phone2: string | null;
     phone2Name: string | null;
@@ -170,11 +185,13 @@ export type PublicTransferCatalogItem = {
     phone3Name: string | null;
     websiteUrl: string | null;
     email: string | null;
+    emailAvailable: boolean;
     whatsappUrl: string | null;
     telegramUrl: string | null;
     vkUrl: string | null;
     maxUrl: string | null;
     okUrl: string | null;
+    messengerAvailable: boolean;
   };
   owner: {
     id: string;
@@ -208,6 +225,10 @@ export type PublicTransferCatalogResult = {
   page: number;
   pageSize: number;
   totalPages: number;
+  priceBounds: {
+    min: number;
+    max: number;
+  };
   filters: {
     query: string | null;
     locationName: string | null;
@@ -282,6 +303,11 @@ type Point = {
   longitude: number;
 };
 
+const TRANSFER_CANDIDATE_LIMIT = 5000;
+const TRANSFER_DB_PREFILTER_DEFAULT_LIMIT = 5000;
+const TRANSFER_TEXT_PREFILTER_FALLBACK_MIN = 50;
+const EARTH_RADIUS_KM = 6371;
+
 function isMarketplaceFallbackError(error: unknown): boolean {
   return isDatabaseSchemaMissingError(error) || isDatabaseFallbackEligibleError(error);
 }
@@ -291,7 +317,7 @@ function getTransferIdentifierSlug(row: TransferIdentifierRow): string {
   return buildTransferPublicSlug(publicRow.title);
 }
 
-async function findTransferIdByPublicSlug(input: {
+async function findTransferIdByPublicSlugUncached(input: {
   identifier: string;
   ownerId?: string | null;
 }): Promise<string | null> {
@@ -324,6 +350,38 @@ async function findTransferIdByPublicSlug(input: {
   );
 
   return match?.id ?? null;
+}
+
+export async function findTransferIdByPublicSlug(input: {
+  identifier: string;
+  ownerId?: string | null;
+}): Promise<string | null> {
+  const publicSlug = slugify(input.identifier.trim());
+  if (!publicSlug) {
+    return null;
+  }
+
+  if (input.ownerId) {
+    return findTransferIdByPublicSlugUncached(input);
+  }
+
+  const finishPerf = createSearchPerformanceTimer("transferSlugLookup", {
+    entityType: "transfer",
+  });
+  const result = await resolveCachedPublicSlugLookup({
+    cacheKey: buildPublicSlugCacheKey(["transfer", publicSlug]),
+    lookup: () => findTransferIdByPublicSlugUncached(input),
+  });
+
+  finishPerf({
+    slugCacheHit: result.cacheHit,
+    slugCacheMiss: !result.cacheHit,
+    lookupDurationMs: result.lookupDurationMs,
+    ttlMs: result.ttlMs,
+    status: result.value ? 200 : 404,
+  });
+
+  return result.value;
 }
 
 function logMarketplaceFallback(context: string, entityLabel: string): void {
@@ -361,6 +419,287 @@ function parseRadiusKm(value: number | undefined): number {
 
 function parseMoney(value: number | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function normalizeLongitude(longitude: number): number {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+function buildTransferCoordinateRadiusWhere(
+  center: Point | null,
+  radiusKm: number,
+): Prisma.TransferWhereInput | null {
+  if (!center) {
+    return null;
+  }
+
+  const latitudeDelta = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI);
+  const latitude = Math.max(-90, Math.min(90, center.latitude));
+  const minLat = Math.max(-90, latitude - latitudeDelta);
+  const maxLat = Math.min(90, latitude + latitudeDelta);
+  const cosLatitude = Math.cos((latitude * Math.PI) / 180);
+  const coversAllLongitudes = Math.abs(cosLatitude) < 1e-8 || minLat <= -90 || maxLat >= 90;
+  const baseLatitudeWhere: Prisma.TransferWhereInput = {
+    latitude: { gte: minLat, lte: maxLat },
+  };
+  const baseLocationLatitudeWhere: Prisma.TransferWhereInput = {
+    location: { is: { latitude: { gte: minLat, lte: maxLat } } },
+  };
+
+  if (coversAllLongitudes) {
+    return {
+      OR: [baseLatitudeWhere, baseLocationLatitudeWhere],
+    };
+  }
+
+  const longitudeDelta = (radiusKm / (EARTH_RADIUS_KM * cosLatitude)) * (180 / Math.PI);
+  if (longitudeDelta >= 180) {
+    return {
+      OR: [baseLatitudeWhere, baseLocationLatitudeWhere],
+    };
+  }
+
+  const minLng = normalizeLongitude(center.longitude - longitudeDelta);
+  const maxLng = normalizeLongitude(center.longitude + longitudeDelta);
+  const longitudeWhere: Prisma.TransferWhereInput =
+    minLng <= maxLng
+      ? { longitude: { gte: minLng, lte: maxLng } }
+      : {
+          OR: [{ longitude: { gte: minLng } }, { longitude: { lte: maxLng } }],
+        };
+  const locationLongitudeWhere: Prisma.TransferWhereInput =
+    minLng <= maxLng
+      ? { location: { is: { longitude: { gte: minLng, lte: maxLng } } } }
+      : {
+          OR: [
+            { location: { is: { longitude: { gte: minLng } } } },
+            { location: { is: { longitude: { lte: maxLng } } } },
+          ],
+        };
+
+  return {
+    OR: [
+      {
+        AND: [baseLatitudeWhere, longitudeWhere],
+      },
+      {
+        AND: [baseLocationLatitudeWhere, locationLongitudeWhere],
+      },
+    ],
+  };
+}
+
+function buildTransferLocationCandidateWhere(input: {
+  resolvedLocationId: string | null;
+  resolvedLocationName: string | null;
+  locationQuery: string;
+  center: Point | null;
+  radiusKm: number;
+}): Prisma.TransferWhereInput | null {
+  const or: Prisma.TransferWhereInput[] = [];
+  const locationQuery = input.locationQuery.trim();
+
+  if (input.resolvedLocationId) {
+    or.push({ locationId: input.resolvedLocationId });
+  }
+
+  if (input.resolvedLocationName) {
+    or.push(
+      { locationName: { contains: input.resolvedLocationName, mode: "insensitive" } },
+      { location: { is: { name: { contains: input.resolvedLocationName, mode: "insensitive" } } } },
+    );
+  }
+
+  if (locationQuery.length >= 2) {
+    or.push(
+      { locationId: locationQuery },
+      { locationName: { contains: locationQuery, mode: "insensitive" } },
+      { serviceArea: { contains: locationQuery, mode: "insensitive" } },
+      { routeExamples: { contains: locationQuery, mode: "insensitive" } },
+      { location: { is: { name: { contains: locationQuery, mode: "insensitive" } } } },
+      { district: { is: { name: { contains: locationQuery, mode: "insensitive" } } } },
+    );
+  }
+
+  const radiusWhere = buildTransferCoordinateRadiusWhere(input.center, input.radiusKm);
+  if (radiusWhere) {
+    or.push(radiusWhere);
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildTransferTextCandidateWhere(searchQuery: string): Prisma.TransferWhereInput | null {
+  if (searchQuery.trim().length < 2) {
+    return null;
+  }
+
+  const variants = Array.from(new Set([searchQuery, normalizeText(searchQuery)]))
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 2)
+    .slice(0, 3);
+  const or: Prisma.TransferWhereInput[] = [];
+
+  for (const variant of variants) {
+    or.push(
+      { title: { contains: variant, mode: "insensitive" } },
+      { transferType: { contains: variant, mode: "insensitive" } },
+      { vehicleClass: { contains: variant, mode: "insensitive" } },
+      { vehicleModel: { contains: variant, mode: "insensitive" } },
+      { locationName: { contains: variant, mode: "insensitive" } },
+      { serviceArea: { contains: variant, mode: "insensitive" } },
+      { routeExamples: { contains: variant, mode: "insensitive" } },
+      { shortDescription: { contains: variant, mode: "insensitive" } },
+      { description: { contains: variant, mode: "insensitive" } },
+      { location: { is: { name: { contains: variant, mode: "insensitive" } } } },
+      { district: { is: { name: { contains: variant, mode: "insensitive" } } } },
+    );
+  }
+
+  if (or.length === 0) {
+    return null;
+  }
+
+  or.push({ pendingEditStatus: { not: null } });
+
+  return { OR: or };
+}
+
+function buildTransferDbPrefilterWhere(input: {
+  baseWhere: Prisma.TransferWhereInput;
+  searchQuery: string;
+  locationQuery: string;
+  resolvedLocationId: string | null;
+  resolvedLocationName: string | null;
+  center: Point | null;
+  radiusKm: number;
+  transferType: string;
+  minPrice: number | null;
+  maxPrice: number | null;
+  bounds: MapBounds | null;
+}): Prisma.TransferWhereInput {
+  const and: Prisma.TransferWhereInput[] = [input.baseWhere];
+
+  const textWhere = buildTransferTextCandidateWhere(input.searchQuery);
+  if (textWhere) {
+    and.push(textWhere);
+  }
+
+  const locationWhere = buildTransferLocationCandidateWhere(input);
+  if (locationWhere) {
+    and.push(locationWhere);
+  }
+
+  if (input.transferType) {
+    and.push({
+      OR: [
+        { transferType: { contains: input.transferType, mode: "insensitive" } },
+        { pendingEditStatus: { not: null } },
+      ],
+    });
+  }
+
+  if (input.minPrice !== null || input.maxPrice !== null) {
+    and.push({
+      OR: [
+        {
+          priceFrom: {
+            ...(input.minPrice !== null ? { gte: input.minPrice } : {}),
+            ...(input.maxPrice !== null ? { lte: input.maxPrice } : {}),
+          },
+        },
+        { pendingEditStatus: { not: null } },
+      ],
+    });
+  }
+
+  if (input.bounds) {
+    and.push({
+      OR: [
+        {
+          latitude: { gte: input.bounds.south, lte: input.bounds.north },
+          longitude: { gte: input.bounds.west, lte: input.bounds.east },
+        },
+        {
+          location: {
+            is: {
+              latitude: { gte: input.bounds.south, lte: input.bounds.north },
+              longitude: { gte: input.bounds.west, lte: input.bounds.east },
+            },
+          },
+        },
+        { pendingEditStatus: { not: null } },
+      ],
+    });
+  }
+
+  return { AND: and };
+}
+
+async function getTransferCandidateStage(input: {
+  baseWhere: Prisma.TransferWhereInput;
+  pageSize: number;
+  searchQuery: string;
+  locationQuery: string;
+  resolvedLocationId: string | null;
+  resolvedLocationName: string | null;
+  center: Point | null;
+  radiusKm: number;
+  transferType: string;
+  minPrice: number | null;
+  maxPrice: number | null;
+  bounds: MapBounds | null;
+}): Promise<CandidateStageResult> {
+  if (!isSearchDbPrefilterEnabled("SEARCH_TRANSFER_DB_PREFILTER")) {
+    return disabledCandidateStage();
+  }
+
+  const limit = getSearchDbPrefilterLimit({
+    envName: "SEARCH_TRANSFER_DB_PREFILTER_LIMIT",
+    fallback: TRANSFER_DB_PREFILTER_DEFAULT_LIMIT,
+    min: Math.min(100, TRANSFER_CANDIDATE_LIMIT),
+    max: TRANSFER_CANDIDATE_LIMIT,
+    pageSize: input.pageSize,
+    candidateLimit: TRANSFER_CANDIDATE_LIMIT,
+  });
+  const startedAt = getNowMs();
+
+  try {
+    const rows = await db.transfer.findMany({
+      where: buildTransferDbPrefilterWhere(input),
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }],
+      take: limit,
+    });
+    const durationMs = Math.round(getNowMs() - startedAt);
+    const ids = rows.map((row) => row.id);
+    const shouldFallbackForSparseText =
+      input.searchQuery.trim().length >= 2 &&
+      ids.length < Math.min(TRANSFER_TEXT_PREFILTER_FALLBACK_MIN, limit);
+
+    return {
+      ids: shouldFallbackForSparseText ? null : ids,
+      enabled: true,
+      usedFallback: shouldFallbackForSparseText,
+      durationMs,
+      idsCount: ids.length,
+    };
+  } catch {
+    return {
+      ids: null,
+      enabled: true,
+      usedFallback: true,
+      durationMs: Math.round(getNowMs() - startedAt),
+      idsCount: null,
+    };
+  }
 }
 
 function pluralize(value: number, variants: [string, string, string]): string {
@@ -442,7 +781,11 @@ function getTransferIntentScore(input: {
     : input.primaryLocationMatch
       ? 100
       : input.nearbyLocationMatch
-        ? clamp(82 - ((input.distanceKm ?? input.radiusKm) / Math.max(input.radiusKm, 1)) * 30, 45, 82)
+        ? clamp(
+            82 - ((input.distanceKm ?? input.radiusKm) / Math.max(input.radiusKm, 1)) * 30,
+            45,
+            82,
+          )
         : 25;
   const typeScore = input.transferTypeMatch ? 100 : 72;
 
@@ -603,6 +946,7 @@ function mapTransferCatalogItem(
   row: TransferRow,
   distanceKm: number | null,
   searchMatchKind: CatalogSearchMatchKind = "primary",
+  options?: { redactContacts?: boolean },
 ): PublicTransferCatalogItem {
   const fallbackContactName = formatPublicPersonName(row.owner, "");
   const contactName = formatPublicContactName(row.contactName, fallbackContactName) || null;
@@ -644,6 +988,53 @@ function mapTransferCatalogItem(
         item.photoUrls.length > 0 ||
         item.description,
     );
+
+  const contacts = {
+    contactName,
+    phone: row.phone ?? row.owner.phone,
+    phoneName: row.phoneName,
+    phone2: row.phone2,
+    phone2Name: row.phone2Name,
+    phone3: row.phone3,
+    phone3Name: row.phone3Name,
+    websiteUrl: row.websiteUrl,
+    email: row.contactEmail ?? row.owner.email,
+    whatsappUrl: normalizeWhatsappUrl(row.whatsappUrl),
+    telegramUrl: normalizeTelegramProfileUrl(row.telegramUrl),
+    vkUrl: normalizeVkProfileUrl(row.vkUrl),
+    maxUrl: normalizeMaxProfileUrl(row.maxUrl),
+    okUrl: normalizeOkProfileUrl(row.okUrl),
+  };
+  const redactContacts = options?.redactContacts !== false;
+  const redactedContactFields = buildRedactedPublicContactFields(contacts);
+  const publicContacts = redactContacts
+    ? {
+        contactName: null,
+        phone: null,
+        phoneMasked: redactedContactFields.phoneMasked,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        phoneName: null,
+        phone2: null,
+        phone2Name: null,
+        phone3: null,
+        phone3Name: null,
+        websiteUrl: contacts.websiteUrl,
+        email: null,
+        emailAvailable: redactedContactFields.emailAvailable,
+        whatsappUrl: null,
+        telegramUrl: null,
+        vkUrl: null,
+        maxUrl: null,
+        okUrl: null,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+      }
+    : {
+        ...contacts,
+        phoneMasked: contacts.phone,
+        phoneAvailable: redactedContactFields.phoneAvailable,
+        emailAvailable: redactedContactFields.emailAvailable,
+        messengerAvailable: redactedContactFields.messengerAvailable,
+      };
 
   return {
     id: row.id,
@@ -699,22 +1090,7 @@ function mapTransferCatalogItem(
     ),
     distanceKm: roundDistanceKm(distanceKm),
     searchMatchKind,
-    contacts: {
-      contactName,
-      phone: row.phone ?? row.owner.phone,
-      phoneName: row.phoneName,
-      phone2: row.phone2,
-      phone2Name: row.phone2Name,
-      phone3: row.phone3,
-      phone3Name: row.phone3Name,
-      websiteUrl: row.websiteUrl,
-      email: row.contactEmail ?? row.owner.email,
-      whatsappUrl: normalizeWhatsappUrl(row.whatsappUrl),
-      telegramUrl: normalizeTelegramProfileUrl(row.telegramUrl),
-      vkUrl: normalizeVkProfileUrl(row.vkUrl),
-      maxUrl: normalizeMaxProfileUrl(row.maxUrl),
-      okUrl: normalizeOkProfileUrl(row.okUrl),
-    },
+    contacts: publicContacts,
     owner: {
       id: row.owner.id,
       firstName: row.owner.firstName,
@@ -773,6 +1149,17 @@ export async function getPublicTransferCatalog(
   const page = parsePage(query.page);
   const pageSize = parsePageSize(query.pageSize, query.allowLargePageSize === true);
   const searchQuery = query.query?.trim() ?? "";
+  const finishPerf = createSearchPerformanceTimer("getPublicTransferCatalog", {
+    direction: "transfers",
+    page,
+    pageSize,
+    queryLength: searchQuery.length,
+    allowLargePageSize: query.allowLargePageSize === true,
+  });
+  let perfCandidateStageDurationMs: number | null = null;
+  let perfCandidateIdsCount: number | null = null;
+  let perfUsedFallback = false;
+  let perfPrefilterEnabled = false;
   const bounds = query.bounds ?? null;
   const locationQuery = bounds ? "" : (query.location?.trim() ?? "");
   const transferType = query.transferType?.trim() ?? "";
@@ -801,31 +1188,79 @@ export async function getPublicTransferCatalog(
     : null;
 
   let rows: TransferRow[];
+  const transferBaseWhere: Prisma.TransferWhereInput = {
+    status: TransferStatus.PUBLISHED,
+    isPublishedVisible: true,
+    owner: {
+      deletedAt: null,
+    },
+  };
+
   try {
-    rows = await db.transfer.findMany({
-      where: {
-        status: TransferStatus.PUBLISHED,
-        isPublishedVisible: true,
-        owner: {
-          deletedAt: null,
-        },
-      },
-      include: transferInclude,
-      orderBy: [{ updatedAt: "desc" }],
+    const transferCandidateStage = await getTransferCandidateStage({
+      baseWhere: transferBaseWhere,
+      pageSize,
+      searchQuery,
+      locationQuery,
+      resolvedLocationId: resolvedLocation?.id ?? null,
+      resolvedLocationName: resolvedLocation?.name ?? null,
+      center,
+      radiusKm,
+      transferType,
+      minPrice,
+      maxPrice,
+      bounds,
     });
+    perfCandidateStageDurationMs = transferCandidateStage.durationMs;
+    perfCandidateIdsCount = transferCandidateStage.idsCount;
+    perfUsedFallback = transferCandidateStage.usedFallback;
+    perfPrefilterEnabled = transferCandidateStage.enabled;
+
+    rows =
+      transferCandidateStage.ids?.length === 0
+        ? []
+        : await db.transfer.findMany({
+            where: transferCandidateStage.ids
+              ? {
+                  AND: [
+                    transferBaseWhere,
+                    {
+                      id: {
+                        in: transferCandidateStage.ids,
+                      },
+                    },
+                  ],
+                }
+              : transferBaseWhere,
+            include: transferInclude,
+            orderBy: [{ updatedAt: "desc" }],
+            take: transferCandidateStage.ids ? transferCandidateStage.ids.length : undefined,
+          });
   } catch (error) {
     if (!isMarketplaceFallbackError(error)) {
+      finishPerf({
+        candidateStageDurationMs: perfCandidateStageDurationMs,
+        candidateIdsCount: perfCandidateIdsCount,
+        usedFallback: perfUsedFallback,
+        prefilterEnabled: perfPrefilterEnabled,
+        status: 500,
+        errorStatus: 500,
+      });
       throw error;
     }
 
     logMarketplaceFallback("public-transfers-catalog", "Transfer");
 
-    return {
+    const fallback: PublicTransferCatalogResult = {
       items: [],
       total: 0,
       page,
       pageSize,
       totalPages: 1,
+      priceBounds: {
+        min: 0,
+        max: 0,
+      },
       filters: {
         query: searchQuery || null,
         locationName: resolvedLocation?.name ?? locationCenter?.name ?? (locationQuery || null),
@@ -839,9 +1274,33 @@ export async function getPublicTransferCatalog(
         nearbyRadiusKm: locationQuery ? radiusKm : null,
       },
     };
+
+    finishPerf({
+      returned: 0,
+      count: 0,
+      candidates: 0,
+      candidateStageDurationMs: perfCandidateStageDurationMs,
+      candidateIdsCount: perfCandidateIdsCount,
+      heavyRowsFetched: 0,
+      finalReturned: 0,
+      usedFallback: perfUsedFallback,
+      prefilterEnabled: perfPrefilterEnabled,
+      candidateLimit: TRANSFER_CANDIDATE_LIMIT,
+      status: 200,
+    });
+
+    return fallback;
   }
 
   const effectiveRows = rows.map((row) => applyPublishedTransferSnapshotToRow(row));
+  let catalogMaxPrice = 0;
+  for (const row of effectiveRows) {
+    const fleetSummary = deriveTransferSummaryFromFleet(row);
+    const value = fleetSummary.priceFrom ?? toNumberOrNull(row.priceFrom);
+    if (value !== null && value > catalogMaxPrice) {
+      catalogMaxPrice = value;
+    }
+  }
   const rankingStatsById = await getRankingStatsByEntity(
     "transfer",
     effectiveRows.map((row) => row.id),
@@ -926,13 +1385,7 @@ export async function getPublicTransferCatalog(
         return null;
       }
 
-      if (
-        !isPointInsideBounds(
-          point?.latitude ?? null,
-          point?.longitude ?? null,
-          bounds,
-        )
-      ) {
+      if (!isPointInsideBounds(point?.latitude ?? null, point?.longitude ?? null, bounds)) {
         return null;
       }
 
@@ -972,11 +1425,11 @@ export async function getPublicTransferCatalog(
       const stats = rankingStatsById.get(row.id)?.last30Days;
       const hasContactPath = Boolean(
         row.phone ||
-          row.owner.phone ||
-          row.whatsappUrl ||
-          row.telegramUrl ||
-          row.contactEmail ||
-          row.receiveRequests,
+        row.owner.phone ||
+        row.whatsappUrl ||
+        row.telegramUrl ||
+        row.contactEmail ||
+        row.receiveRequests,
       );
       const photoCount =
         row.photoUrls.length > 0 ? row.photoUrls.length : fleetSummary.photoUrls.length;
@@ -986,7 +1439,8 @@ export async function getPublicTransferCatalog(
         hasLocationQuery: Boolean(locationQuery),
         primaryLocationMatch,
         nearbyLocationMatch,
-        transferTypeMatch: !transferType || normalizeText(row.transferType) === normalizeText(transferType),
+        transferTypeMatch:
+          !transferType || normalizeText(row.transferType) === normalizeText(transferType),
         distanceKm,
         radiusKm,
       });
@@ -1125,7 +1579,7 @@ export async function getPublicTransferCatalog(
   const safePage = Math.min(page, totalPages);
   const paged = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  return {
+  const result: PublicTransferCatalogResult = {
     items: paged.map(({ row, distanceKm, searchMatchKind }) =>
       mapTransferCatalogItem(row, distanceKm, searchMatchKind),
     ),
@@ -1133,6 +1587,10 @@ export async function getPublicTransferCatalog(
     page: safePage,
     pageSize,
     totalPages,
+    priceBounds: {
+      min: 0,
+      max: catalogMaxPrice,
+    },
     filters: {
       query: searchQuery || null,
       locationName: resolvedLocation?.name ?? locationCenter?.name ?? (locationQuery || null),
@@ -1146,6 +1604,30 @@ export async function getPublicTransferCatalog(
       nearbyRadiusKm: locationQuery ? radiusKm : null,
     },
   };
+
+  finishPerf({
+    returned: result.items.length,
+    count: result.total,
+    candidates: effectiveRows.length,
+    candidateStageDurationMs: perfCandidateStageDurationMs,
+    candidateIdsCount: perfCandidateIdsCount,
+    heavyRowsFetched: effectiveRows.length,
+    finalReturned: result.items.length,
+    usedFallback: perfUsedFallback,
+    prefilterEnabled: perfPrefilterEnabled,
+    candidateLimit: TRANSFER_CANDIDATE_LIMIT,
+    hasFilters:
+      searchQuery.length > 0 ||
+      locationQuery.length > 0 ||
+      transferType.length > 0 ||
+      minPrice !== null ||
+      maxPrice !== null ||
+      bounds !== null ||
+      sort !== "relevance",
+    status: 200,
+  });
+
+  return result;
 }
 
 export async function getPublicAttractionByIdentifier(
@@ -1246,7 +1728,7 @@ export async function getOwnerPreviewTransferByIdentifier(
     return null;
   }
 
-  const item = mapTransferCatalogItem(row, null);
+  const item = mapTransferCatalogItem(row, null, "primary", { redactContacts: false });
   const summary = await getExternalReviewSummaryWithFallback({
     entityType: "transfer",
     entityId: row.id,

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { companyConfig } from "@/config/company";
-import { PLACEMENT_PROMO_END_LABEL } from "@/lib/placement-promo";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { defaultSocialImageMetadata } from "@/lib/seo/metadata";
 import { excursionsHubPath, housingHubPath } from "@/lib/seo/routes";
@@ -46,7 +45,7 @@ const partnerBenefits = [
   },
   {
     title: "Бесплатный старт",
-    text: `Сейчас размещение бесплатно до ${PLACEMENT_PROMO_END_LABEL}. После окончания акции новые карточки получают один бесплатный месяц с момента добавления на сайт.`,
+    text: `Сейчас первое размещение бесплатно на 1 год с даты создания объявления. После окончания бесплатного периода карточка остаётся на сайте, а в профиле появится отметка о необходимости оплаты.`,
   },
 ];
 
@@ -335,9 +334,9 @@ export default function AboutPage() {
         </h2>
         <p className="mt-3 max-w-4xl text-sm leading-7 text-olive/65">
           Не у всех есть время разбираться с карточкой. Мы можем взять оформление на себя — от
-          переноса материалов и подготовки текста до полной публикации. Сейчас, до{" "}
-          {PLACEMENT_PROMO_END_LABEL}, размещение бесплатно; после окончания акции новый партнер
-          получает один бесплатный месяц с момента добавления карточки на сайт.
+          переноса материалов и подготовки текста до полной публикации. Сейчас, до 1 год с даты
+          создания объявления размещение бесплатно; после окончания бесплатного периода новый
+          партнер получает один бесплатный месяц с момента добавления карточки на сайт.
         </p>
         <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {placementSupport.map((item) => (

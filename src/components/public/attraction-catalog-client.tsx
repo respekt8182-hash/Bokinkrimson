@@ -50,7 +50,7 @@ type CatalogParams = Record<string, string | null | undefined>;
 
 const PAGE_SIZE = 30;
 const REQUEST_CACHE_TTL_MS = 45_000;
-const MAP_BOUNDS_REFRESH_DELAY_MS = 650;
+const MAP_BOUNDS_REFRESH_DELAY_MS = 320;
 const responseCache = new Map<
   string,
   { expiresAt: number; response: PublicAttractionCatalogResult }
@@ -218,15 +218,6 @@ async function fetchAttractionCatalog(
 function CatalogShell({ children }: { children: ReactNode }) {
   return (
     <main>
-      <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 md:px-6 md:pt-8">
-        <p className="sr-only">Каталог</p>
-        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold leading-tight text-olive">Досуг в Крыму</h1>
-          </div>
-        </div>
-      </div>
-
       <div className="mx-auto w-full max-w-[1680px] px-4 pb-28 md:px-6 md:pb-8 lg:max-w-none lg:px-0">
         {children}
       </div>
@@ -860,11 +851,7 @@ export function AttractionCatalogClient({
           mapTitle="Карта мест"
           onBoundsQueryChange={handleBoundsChange}
         >
-          <section
-            className="min-w-0 lg:w-full"
-            id="catalog-results"
-            aria-busy={isRefreshing}
-          >
+          <section className="min-w-0 lg:w-full" id="catalog-results" aria-busy={isRefreshing}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-olive/70">
                 {isRefreshing ? <CatalogLoadingInlineLabel /> : `Найдено: ${foundLabel}`}
