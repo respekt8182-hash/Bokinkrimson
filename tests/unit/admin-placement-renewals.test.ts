@@ -62,7 +62,7 @@ describe("admin placement renewals", () => {
     expect(latest?.validUntil.toISOString()).toBe("2027-05-01T10:00:00.000Z");
   });
 
-  it("uses the promo end date for free demo placements", () => {
+  it("uses the stored placement end date for free demo placements", () => {
     const latest = getLatestPlacementPayment([
       {
         paidAt: new Date("2026-05-10T09:00:00.000Z"),
@@ -74,6 +74,6 @@ describe("admin placement renewals", () => {
       },
     ]);
 
-    expect(latest?.validUntil.toISOString()).toBe("2027-04-30T21:00:00.000Z");
+    expect(latest?.validUntil.toISOString()).toBe("2027-05-10T09:00:00.000Z");
   });
 });

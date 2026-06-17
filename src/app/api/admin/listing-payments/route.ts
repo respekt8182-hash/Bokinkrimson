@@ -37,7 +37,7 @@ import { autoSubmitTransferAfterSuccessfulPayment, getTransferFleet } from "@/li
 const manualListingPaymentSchema = z.object({
   entityType: z.enum(["property", "excursion", "transfer"]),
   entityId: z.string().trim().min(1),
-  tariff: z.enum(["season", "yearly", "year"]).default("year"),
+  tariff: z.enum(["season", "offseason", "yearly", "year"]).default("year"),
   notes: z.string().trim().max(2000).optional().default(""),
   action: z.enum(["confirm", "request"]).optional().default("confirm"),
 });
@@ -66,7 +66,7 @@ function getProgramPlacementValidUntil(period: "season" | "year", now: Date): Da
 
 async function createPropertyPayment(input: {
   propertyId: string;
-  tariff: "season" | "yearly";
+  tariff: "season" | "offseason" | "yearly";
   notes: string;
   confirmedById: string | null;
   adminId: string;
@@ -100,11 +100,11 @@ async function createPropertyPayment(input: {
     now: input.now,
   });
 
-  if (input.tariff === "season" && quote.tariffType !== "season") {
+  if (quote.tariffType !== input.tariff) {
     return NextResponse.json(
       {
         error:
-          "Сезонное размещение будет доступно с января. Для текущей даты выберите годовое размещение.",
+          "Выбранный тариф сейчас недоступен. Обновите страницу и выберите доступный период размещения.",
       },
       { status: 400 },
     );
@@ -420,7 +420,10 @@ export async function POST(request: Request) {
   const notes = parsed.data.notes;
 
   if (parsed.data.entityType === "property") {
-    const tariff = parsed.data.tariff === "season" ? parsed.data.tariff : "yearly";
+    const tariff =
+      parsed.data.tariff === "season" || parsed.data.tariff === "offseason"
+        ? parsed.data.tariff
+        : "yearly";
 
     return createPropertyPayment({
       propertyId: parsed.data.entityId,

@@ -11,7 +11,7 @@ Stage 13 implementation for the booking service focused on Crimea:
 - Public housing catalog and property cards without authorization
 - Guest applications from property card to owner dashboard (stage 8)
 - Owner request management with statuses (new / in progress / closed)
-- Placement payments with tariff calculation and manager-confirmed flow (stage 9)
+- Placement payments with tariff calculation, manager-confirmed flow, and YooKassa acquiring (stage 9)
 - Admin panel with moderation queue, object review, users/objects lists (stage 10)
 - RBAC for `/admin` routes and admin moderation action log
 - Separate admin workspace: isolated from owner dashboard + unread moderation badges
@@ -50,6 +50,9 @@ ADMIN_LOGIN="admin"
 ADMIN_PASSWORD_HASH="\$2b\$10\$your-bcrypt-hash"
 ADMIN_JWT_SECRET="your-long-random-admin-secret"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
+YOOKASSA_SHOP_ID="1327811"
+YOOKASSA_SECRET_KEY="your-yookassa-secret-key"
+YOOKASSA_CAPTURE="true"
 CSRF_TRUSTED_ORIGINS="http://192.168.1.50:3000 http://boking.local:3000"
 RATE_LIMIT_MODE="auto"
 SECURITY_EMAIL_DELIVERY_MODE="log"
@@ -69,7 +72,7 @@ S3_PUBLIC_BASE_URL="https://cdn.example.com"
 `CSRF_TRUSTED_ORIGINS` is optional and lets you explicitly allow extra origins for mutating `/api/*` requests, for example when testing from a phone over local network or behind a reverse proxy.
 `RATE_LIMIT_MODE="memory"` is a good default for a single VPS node. Use `upstash` when you need a shared external rate-limit backend.
 When you store a bcrypt hash in `.env` / `.env.local`, escape each `$` as `\$`, otherwise Next.js treats parts of the hash as variable expansion and `ADMIN_PASSWORD_HASH` may become empty at runtime.
-Online acquiring is disabled; publication payments are created as manager-confirmed requests.
+YooKassa online acquiring is enabled when both `YOOKASSA_SHOP_ID` and `YOOKASSA_SECRET_KEY` are set. The YooKassa HTTP notification URL is `https://<domain>/api/yookassa/webhook`; if the secret key is empty, the online option is hidden and manager-confirmed payments remain available.
 If you run multiple local projects against one PostgreSQL server, give each project its own database name (and ideally its own DB user) in `.env` to avoid mixing credentials and data.
 
 ## Run locally

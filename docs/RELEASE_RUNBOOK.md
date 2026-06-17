@@ -18,6 +18,11 @@ Use `.env.example` as baseline and set production secrets:
 - `S3_*` variables
 - `NEXT_PUBLIC_YANDEX_MAPS_API_KEY`
 - `YANDEX_GEOCODER_API_KEY`
+- `YOOKASSA_SHOP_ID="1327811"`
+- `YOOKASSA_SECRET_KEY` (YooKassa shop secret key)
+
+For YooKassa production notifications, configure this webhook URL in the YooKassa dashboard:
+`https://krymvokrug.ru/api/yookassa/webhook`
 
 ## 3) Release checklist
 

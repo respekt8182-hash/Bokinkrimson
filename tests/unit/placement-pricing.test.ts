@@ -13,8 +13,36 @@ describe("placement pricing", () => {
     expect(calculateDiscountedPlacementPrice(placementTariffs.excursion.yearPrice, 10)).toBe(1340);
     expect(calculateDiscountedPlacementPrice(placementTariffs.tour.yearPrice, 20)).toBe(1430);
     expect(calculateDiscountedPlacementPrice(placementTariffs.tour.yearPrice, 10)).toBe(1610);
-    expect(calculateDiscountedPlacementPrice(placementTariffs.object.yearPrice, 20)).toBe(4160);
-    expect(calculateDiscountedPlacementPrice(placementTariffs.object.yearPrice, 10)).toBe(4680);
+    expect(calculateDiscountedPlacementPrice(placementTariffs.object.yearPrice, 20)).toBe(4000);
+    expect(calculateDiscountedPlacementPrice(placementTariffs.object.yearPrice, 10)).toBe(4500);
+  });
+
+  it("keeps service season prices fixed to the public tariffs page", async () => {
+    const excursionSeason = await getPlacementPrice({
+      category: "excursion",
+      period: "season",
+      now: new Date("2026-06-10T09:00:00.000Z"),
+    });
+    const tourSeason = await getPlacementPrice({
+      category: "tour",
+      period: "season",
+      now: new Date("2026-06-10T09:00:00.000Z"),
+    });
+    const transferSeason = await getPlacementPrice({
+      category: "transfer",
+      period: "season",
+      now: new Date("2026-06-10T09:00:00.000Z"),
+    });
+    const excursionYear = await getPlacementPrice({
+      category: "excursion",
+      period: "year",
+      now: new Date("2026-06-10T09:00:00.000Z"),
+    });
+
+    expect(excursionSeason.basePrice).toBe(990);
+    expect(tourSeason.basePrice).toBe(1290);
+    expect(transferSeason.basePrice).toBe(990);
+    expect(excursionYear.basePrice).toBe(placementTariffs.excursion.yearPrice);
   });
 
   it("keeps transfer additional cars outside the discountable base price", () => {
@@ -48,7 +76,7 @@ describe("placement pricing", () => {
     expect(newListingAfterLaunch.finalPrice).toBe(placementTariffs.excursion.yearPrice);
   });
 
-  it("grants a one-month post-launch trial only to new listings without successful placement", () => {
+  it("grants a one-year post-launch trial only to listings without successful placement", () => {
     const now = new Date("2027-05-10T09:00:00.000Z");
 
     expect(
@@ -60,7 +88,7 @@ describe("placement pricing", () => {
     ).toBe(true);
     expect(
       isPostLaunchTrialEligible({
-        listingCreatedAt: new Date("2027-04-30T09:00:00.000Z"),
+        listingCreatedAt: new Date("2026-04-30T09:00:00.000Z"),
         now,
         hasSuccessfulPlacement: false,
       }),
@@ -72,6 +100,6 @@ describe("placement pricing", () => {
         hasSuccessfulPlacement: true,
       }),
     ).toBe(false);
-    expect(getPostLaunchTrialValidUntil(now).toISOString()).toBe("2027-06-10T09:00:00.000Z");
+    expect(getPostLaunchTrialValidUntil(now).toISOString()).toBe("2028-05-10T09:00:00.000Z");
   });
 });

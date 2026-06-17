@@ -82,10 +82,22 @@ node scripts/hash-admin-password.mjs "VeryStrongAdminPassword123!"
 - `CRON_SECRET`
 - `ACME_EMAIL`
 
+Для включения онлайн-оплаты через ЮKassa также заполните:
+
+- `YOOKASSA_SHOP_ID="1327811"`
+- `YOOKASSA_SECRET_KEY` — секретный ключ магазина из кабинета ЮKassa
+
+В кабинете ЮKassa укажите URL для HTTP-уведомлений:
+
+- `https://krymvokrug.ru/api/yookassa/webhook`
+
+Подключите события `payment.succeeded`, `payment.waiting_for_capture`, `payment.canceled`, `refund.succeeded`.
+
 Для этого проекта базовые production значения уже заданы:
 
 - `NEXT_PUBLIC_APP_URL="https://krymvokrug.ru"`
 - `CSRF_TRUSTED_ORIGINS="https://krymvokrug.ru https://www.krymvokrug.ru"`
+- `YOOKASSA_SHOP_ID="1327811"`
 - `RATE_LIMIT_MODE="memory"` для одного VPS-инстанса
 - `SECURITY_EMAIL_DELIVERY_MODE="log"` чтобы запуск не зависел от SMTP
 
@@ -123,7 +135,7 @@ bash scripts/deploy/logs.sh
 Ожидаемый ответ healthcheck:
 
 ```json
-{"status":"ok","service":"krymvokrug","timestamp":"..."}
+{ "status": "ok", "service": "krymvokrug", "timestamp": "..." }
 ```
 
 ## 5. Обновление проекта

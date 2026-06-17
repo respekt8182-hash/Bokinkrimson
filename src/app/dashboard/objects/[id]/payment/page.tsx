@@ -5,10 +5,8 @@ import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { PropertyPaymentPanel } from "@/components/payments/property-payment-panel";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  getPlacementCoverageState,
-  serializePayment,
-} from "@/lib/payments";
+import { syncOpenYooKassaPayments } from "@/lib/payment-finalization";
+import { getPlacementCoverageState, serializePayment } from "@/lib/payments";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { getPropertyPaymentReadinessIssues, getPropertyProgress } from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
@@ -78,6 +76,22 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
     notFound();
   }
 
+  let resolvedPayments = payments;
+  if (await syncOpenYooKassaPayments(db, resolvedPayments)) {
+    resolvedPayments = await db.payment.findMany({
+      where: {
+        propertyId: id,
+        ownerId: session.id,
+      },
+      orderBy: [{ createdAt: "desc" }],
+      include: {
+        property: {
+          select: { name: true },
+        },
+      },
+    });
+  }
+
   const progress = getPropertyProgress(property);
   const roomCount = property.rooms.length;
   const readinessIssues = getPropertyPaymentReadinessIssues(property.id, progress).map((issue) =>
@@ -98,7 +112,7 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
         })
       : null;
   const initialPlacement = getPlacementCoverageState({
-    payments,
+    payments: resolvedPayments,
     quote,
   });
   const previewHref = `${buildPublicPropertyPath({
@@ -126,7 +140,7 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
             quote,
           }}
           initialPlacement={initialPlacement}
-          initialPayments={payments.map(serializePayment)}
+          initialPayments={resolvedPayments.map(serializePayment)}
           initialOnlinePaymentAvailable={isYooKassaConfigured()}
           previewHref={previewHref}
         />

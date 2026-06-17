@@ -10,7 +10,11 @@ import {
   getPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
-import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
+import {
+  applyProviderPaymentStatus,
+  getOnlinePaymentProviders,
+  syncOpenYooKassaPayments,
+} from "@/lib/payment-finalization";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
 import { buildPlacementPricingPayload } from "@/lib/placement-pricing";
 import {
@@ -157,7 +161,11 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const payments = await listPropertyPayments(property.id, session.id);
+  let payments = await listPropertyPayments(property.id, session.id);
+  if (await syncOpenYooKassaPayments(db, payments)) {
+    payments = await listPropertyPayments(property.id, session.id);
+  }
+
   const { searchParams } = new URL(request.url);
   const freeTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: property.createdAt,
@@ -190,7 +198,7 @@ export async function GET(request: Request, context: RouteContext) {
 
 const createPaymentSchema = z.object({
   provider: z.enum(["MANAGER", "YOOKASSA"]).optional().default("MANAGER"),
-  tariffType: z.enum(["season", "yearly"]).optional(),
+  tariffType: z.enum(["season", "offseason", "yearly"]).optional(),
 });
 
 export async function POST(request: Request, context: RouteContext) {
@@ -221,7 +229,11 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Объект не найден" }, { status: 404 });
   }
 
-  const payments = await listPropertyPayments(property.id, session.id);
+  let payments = await listPropertyPayments(property.id, session.id);
+  if (await syncOpenYooKassaPayments(db, payments)) {
+    payments = await listPropertyPayments(property.id, session.id);
+  }
+
   const now = new Date();
   const freeTrialUntil = isPostLaunchTrialEligible({
     listingCreatedAt: property.createdAt,
@@ -243,11 +255,11 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  if (body.tariffType === "season" && readiness.quote.tariffType !== "season") {
+  if (body.tariffType && readiness.quote.tariffType !== body.tariffType) {
     return NextResponse.json(
       {
         error:
-          "Сезонное размещение будет доступно с января. Сейчас можно выбрать годовое размещение.",
+          "Выбранный тариф сейчас недоступен. Обновите страницу и выберите доступный период размещения.",
         readiness,
       },
       { status: 400 },

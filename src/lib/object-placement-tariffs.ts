@@ -5,6 +5,7 @@ export const OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB =
   OBJECT_SEASON_FULL_PRICE_RUB + OBJECT_OFFSEASON_PRICE_RUB;
 export const OBJECT_YEARLY_SAVINGS_RUB =
   OBJECT_SEASON_OFFSEASON_SEPARATE_TOTAL_RUB - OBJECT_YEARLY_PRICE_RUB;
+const OBJECT_OFFSEASON_MONTH_COUNT = 6;
 
 export const OBJECT_TARIFF_TYPES = ["season", "offseason", "yearly"] as const;
 export type ObjectPlacementTariffType = (typeof OBJECT_TARIFF_TYPES)[number];
@@ -65,6 +66,14 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function formatMoney(value: number): string {
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value)} ₽`;
+}
+
+function roundDownToTenRub(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.floor(Math.max(0, value) / 10) * 10;
 }
 
 function startOfLocalDay(year: number, monthIndex: number, day: number): Date {
@@ -154,9 +163,30 @@ export function getCurrentSeasonTariffPriceRub(now = new Date()): number | null 
   return getSeasonPriceByMonth(now.getMonth());
 }
 
+export function isOffseasonPlacementAvailable(now = new Date()): boolean {
+  const month = now.getMonth();
+  return month >= 10 || month <= 3;
+}
+
+export function getCurrentOffseasonTariffPriceRub(now = new Date()): number | null {
+  if (!isOffseasonPlacementAvailable(now)) {
+    return null;
+  }
+
+  const period = getOffseasonPlacementPeriod(now);
+  const remainingMonths = Math.min(
+    OBJECT_OFFSEASON_MONTH_COUNT,
+    getInclusiveMonthCount(period.paidFrom, period.paidUntil),
+  );
+
+  return roundDownToTenRub(
+    (OBJECT_OFFSEASON_PRICE_RUB * remainingMonths) / OBJECT_OFFSEASON_MONTH_COUNT,
+  );
+}
+
 export function getDefaultObjectPlacementTariffType(now = new Date()): ObjectPlacementTariffType {
   const month = now.getMonth();
-  return month >= 0 && month <= 9 ? "season" : "yearly";
+  return month >= 0 && month <= 9 ? "season" : "offseason";
 }
 
 export function getSeasonPlacementPeriod(now = new Date()): {
@@ -243,19 +273,26 @@ function buildSeasonOption(now: Date): ObjectPlacementTariffOption | null {
 
 function buildOffseasonOption(now: Date): ObjectPlacementTariffOption {
   const period = getOffseasonPlacementPeriod(now);
+  const amountRub = getCurrentOffseasonTariffPriceRub(now) ?? OBJECT_OFFSEASON_PRICE_RUB;
+  const monthCount = Math.min(
+    OBJECT_OFFSEASON_MONTH_COUNT,
+    getInclusiveMonthCount(period.paidFrom, period.paidUntil),
+  );
+  const monthly = Math.round(amountRub / monthCount);
 
   return {
     type: "offseason",
     code: OBJECT_TARIFF_CODES.offseason,
     title: "Межсезонное размещение",
     shortTitle: "Межсезонье",
-    amountRub: OBJECT_OFFSEASON_PRICE_RUB,
-    priceLabel: formatMoney(OBJECT_OFFSEASON_PRICE_RUB),
-    periodLabel: `С ${formatDate(period.labelFrom)} до ${formatDate(period.paidUntil)}`,
+    amountRub,
+    priceLabel: formatMoney(amountRub),
+    periodLabel: `С даты оплаты до ${formatDate(period.paidUntil)}`,
     paidFrom: period.paidFrom,
     paidUntil: period.paidUntil,
-    monthlyLabel: "около 467 ₽ в месяц",
-    description: "Размещение с ноября по апрель.",
+    monthlyLabel: `примерно ${formatMoney(monthly)} в месяц`,
+    description:
+      "Размещение объекта в межсезонье до 30 апреля. Чем ближе к окончанию межсезонья, тем ниже сумма к оплате.",
     buttonLabel: "Выбрать межсезонье",
     recommended: false,
     savingsRub: null,
@@ -288,7 +325,8 @@ function buildYearlyOption(now: Date): ObjectPlacementTariffOption {
 
 export function getObjectPlacementTariffOptions(now = new Date()): ObjectPlacementTariffOption[] {
   const season = buildSeasonOption(now);
-  return [season, buildYearlyOption(now)].filter(
+  const offseason = isOffseasonPlacementAvailable(now) ? buildOffseasonOption(now) : null;
+  return [season, offseason, buildYearlyOption(now)].filter(
     (item): item is ObjectPlacementTariffOption => item !== null,
   );
 }

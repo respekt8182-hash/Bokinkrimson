@@ -2,6 +2,7 @@
 import { PaymentProvider, PaymentStatus, Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  buildPostLaunchTrialPaymentPayload,
   buildTransferPaymentPayload,
   getPlacementCoverageState,
   getProgramPlacementValidUntil,
@@ -16,7 +17,6 @@ import {
   setPaymentAdminRevenueIncluded,
   shouldCountPaymentInAdminRevenue,
 } from "../../src/lib/payments";
-import { buildPlacementPromoPayload } from "../../src/lib/placement-promo";
 
 describe("payments domain", () => {
   it("keeps terminal success status", () => {
@@ -144,11 +144,11 @@ describe("payments domain", () => {
     expect(seasonQuote.tariff.code).toBe("object_season");
     expect(seasonQuote.originalAmount).toBe(3000);
     expect(yearlyQuote.tariff.code).toBe("object_yearly");
-    expect(yearlyQuote.originalAmount).toBe(5200);
-    expect(yearlyQuote.monthlyLabel).toBe("около 433 ₽ в месяц");
+    expect(yearlyQuote.originalAmount).toBe(5000);
+    expect(yearlyQuote.monthlyLabel).toBe("около 417 ₽ в месяц");
   });
 
-  it("uses yearly object placement as the default after the season ends", () => {
+  it("uses offseason object placement after the season ends and keeps yearly fixed", () => {
     const quote = getTariffQuote({
       roomCount: 1,
       propertyType: "apartment",
@@ -160,10 +160,32 @@ describe("payments domain", () => {
       tariffType: "season",
       now: new Date("2026-12-10T09:00:00.000Z"),
     });
+    const januaryOffseason = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      tariffType: "offseason",
+      now: new Date("2027-01-10T09:00:00.000Z"),
+    });
+    const aprilOffseason = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      tariffType: "offseason",
+      now: new Date("2027-04-10T09:00:00.000Z"),
+    });
+    const yearlyQuote = getTariffQuote({
+      roomCount: 1,
+      propertyType: "apartment",
+      tariffType: "yearly",
+      now: new Date("2027-01-10T09:00:00.000Z"),
+    });
 
-    expect(quote.tariff.code).toBe("object_yearly");
-    expect(quote.originalAmount).toBe(5200);
-    expect(requestedSeasonAfterSeasonEnd.tariff.code).toBe("object_yearly");
+    expect(quote.tariff.code).toBe("object_offseason");
+    expect(quote.originalAmount).toBe(2800);
+    expect(requestedSeasonAfterSeasonEnd.tariff.code).toBe("object_offseason");
+    expect(januaryOffseason.originalAmount).toBe(1860);
+    expect(aprilOffseason.originalAmount).toBe(460);
+    expect(yearlyQuote.tariff.code).toBe("object_yearly");
+    expect(yearlyQuote.originalAmount).toBe(5000);
   });
 
   it("uses October 31 as the paid-until date for season payments", () => {
@@ -183,7 +205,7 @@ describe("payments domain", () => {
     expect(nextSeasonUntil.getDate()).toBe(31);
   });
 
-  it("applies free placement before May 1 2027", () => {
+  it("keeps the selected object tariff price when the launch promo is disabled", () => {
     const quote = getTariffQuote({
       roomCount: 1,
       propertyType: "apartment",
@@ -191,8 +213,8 @@ describe("payments domain", () => {
     });
 
     expect(quote.originalAmount).toBe(3400);
-    expect(quote.amount).toBe(0);
-    expect(quote.promo?.discountPercent).toBe(100);
+    expect(quote.amount).toBe(3400);
+    expect(quote.promo).toBeNull();
   });
 
   it("keeps active object placement covered after room increase", () => {
@@ -257,11 +279,11 @@ describe("payments domain", () => {
     expect(placement.fullyCovered).toBe(true);
   });
 
-  it("treats free launch placement as demo coverage until the campaign end", () => {
-    const promoPayload = buildPlacementPromoPayload({
+  it("treats post-launch trial placement as free coverage until its end date", () => {
+    const trialPayload = buildPostLaunchTrialPaymentPayload({
       originalAmountRub: 3400,
-      discountedAmountRub: 0,
       now: new Date("2026-05-10T09:00:00.000Z"),
+      validUntil: new Date("2027-05-10T09:00:00.000Z"),
     });
 
     const placement = getPlacementCoverageState({
@@ -273,7 +295,7 @@ describe("payments domain", () => {
           paidAt: new Date("2026-05-10T09:00:00.000Z"),
           createdAt: new Date("2026-05-10T09:00:00.000Z"),
           placementValidUntil: new Date("2027-05-10T09:00:00.000Z"),
-          providerPayload: promoPayload ? ({ placementPromo: promoPayload } as never) : null,
+          providerPayload: trialPayload as never,
         },
       ],
       quote: getTariffQuote({
@@ -285,7 +307,7 @@ describe("payments domain", () => {
     });
 
     expect(placement.hasActivePlacement).toBe(true);
-    expect(placement.paidUntil).toBe("2027-04-30T21:00:00.000Z");
+    expect(placement.paidUntil).toBe("2027-05-10T09:00:00.000Z");
     expect(placement.coveredAmount).toBe(0);
     expect(placement.coveredOriginalAmount).toBe(3400);
     expect(placement.requiredPaymentAmount).toBe(0);
@@ -293,10 +315,10 @@ describe("payments domain", () => {
   });
 
   it("requires paid renewal after free demo placement expires", () => {
-    const promoPayload = buildPlacementPromoPayload({
+    const trialPayload = buildPostLaunchTrialPaymentPayload({
       originalAmountRub: 3400,
-      discountedAmountRub: 0,
       now: new Date("2026-05-10T09:00:00.000Z"),
+      validUntil: new Date("2027-05-10T09:00:00.000Z"),
     });
 
     const placement = getPlacementCoverageState({
@@ -308,15 +330,15 @@ describe("payments domain", () => {
           paidAt: new Date("2026-05-10T09:00:00.000Z"),
           createdAt: new Date("2026-05-10T09:00:00.000Z"),
           placementValidUntil: new Date("2027-05-10T09:00:00.000Z"),
-          providerPayload: promoPayload ? ({ placementPromo: promoPayload } as never) : null,
+          providerPayload: trialPayload as never,
         },
       ],
       quote: getTariffQuote({
         roomCount: 1,
         propertyType: "apartment",
-        now: new Date("2027-05-02T09:00:00.000Z"),
+        now: new Date("2027-05-11T09:00:00.000Z"),
       }),
-      now: new Date("2027-05-02T09:00:00.000Z"),
+      now: new Date("2027-05-11T09:00:00.000Z"),
     });
 
     expect(placement.hasActivePlacement).toBe(false);

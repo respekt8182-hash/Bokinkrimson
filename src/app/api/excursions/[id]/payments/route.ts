@@ -11,7 +11,11 @@ import {
   resolvePaymentPlacementValidUntil,
   serializePayment,
 } from "@/lib/payments";
-import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
+import {
+  applyProviderPaymentStatus,
+  getOnlinePaymentProviders,
+  syncOpenYooKassaPayments,
+} from "@/lib/payment-finalization";
 import { buildPlacementPricingPayload, getPlacementPrice } from "@/lib/placement-pricing";
 import {
   applyPlacementFreePeriodToPricing,
@@ -113,7 +117,11 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
 
-  const payments = await listExcursionPayments(excursion.id, session.id);
+  let payments = await listExcursionPayments(excursion.id, session.id);
+  if (await syncOpenYooKassaPayments(db, payments)) {
+    payments = await listExcursionPayments(excursion.id, session.id);
+  }
+
   const now = new Date();
   const category = excursion.offerType === ExcursionOfferType.TOUR ? "tour" : "excursion";
   const trialUntil = isPostLaunchTrialEligible({
@@ -195,7 +203,11 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Экскурсия не найдена" }, { status: 404 });
   }
 
-  const payments = await listExcursionPayments(excursion.id, session.id);
+  let payments = await listExcursionPayments(excursion.id, session.id);
+  if (await syncOpenYooKassaPayments(db, payments)) {
+    payments = await listExcursionPayments(excursion.id, session.id);
+  }
+
   const now = new Date();
   const existingSucceeded =
     payments.find(

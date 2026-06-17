@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type ListingPaymentEntityType = "property" | "excursion" | "transfer";
 
 type TariffOption = {
-  value: "season" | "yearly" | "year";
+  value: "season" | "offseason" | "yearly" | "year";
   label: string;
 };
 

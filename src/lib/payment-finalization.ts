@@ -11,6 +11,7 @@ import { autoSubmitExcursionAfterSuccessfulPayment } from "@/lib/excursions";
 import {
   getPlacementValidUntil,
   getTransferPaymentReference,
+  isPaymentAwaitingCompletion,
   resolvePaymentStatusTransition,
 } from "@/lib/payments";
 import {
@@ -18,6 +19,12 @@ import {
   syncPropertyPlacementFromPayment,
 } from "@/lib/properties";
 import { autoSubmitTransferAfterSuccessfulPayment } from "@/lib/transfers";
+import {
+  getYooKassaPayment,
+  isYooKassaConfigured,
+  mapYooKassaPaymentStatus,
+  mergeYooKassaPaymentPayload,
+} from "@/lib/yookassa";
 
 export async function finalizeSuccessfulPayment(
   client: DbClientLike,
@@ -138,4 +145,105 @@ export async function applyProviderPaymentStatus(
 
 export function getOnlinePaymentProviders(): PaymentProvider[] {
   return [PaymentProvider.MANAGER, PaymentProvider.YOOKASSA];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function getYooKassaPaymentIdFromPayload(providerPayload: Prisma.JsonValue | null): string | null {
+  if (!isRecord(providerPayload) || !isRecord(providerPayload.yookassa)) {
+    return null;
+  }
+
+  const id = providerPayload.yookassa.id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+function shouldSyncYooKassaPayment(payment: {
+  status: PaymentStatus;
+  provider: PaymentProvider;
+  providerPaymentId: string | null;
+  providerPayload?: Prisma.JsonValue | null;
+}): boolean {
+  return (
+    payment.provider === PaymentProvider.YOOKASSA &&
+    isPaymentAwaitingCompletion(payment.status) &&
+    Boolean(
+      payment.providerPaymentId || getYooKassaPaymentIdFromPayload(payment.providerPayload ?? null),
+    )
+  );
+}
+
+export async function syncYooKassaPaymentStatus(
+  client: DbClientLike,
+  paymentId: string,
+  input: {
+    now?: Date;
+  } = {},
+) {
+  const payment = await client.payment.findUnique({
+    where: { id: paymentId },
+  });
+
+  if (!payment || !shouldSyncYooKassaPayment(payment) || !isYooKassaConfigured()) {
+    return payment;
+  }
+
+  const providerPaymentId =
+    payment.providerPaymentId ?? getYooKassaPaymentIdFromPayload(payment.providerPayload);
+
+  if (!providerPaymentId) {
+    return payment;
+  }
+
+  const yooPayment = await getYooKassaPayment(providerPaymentId);
+  const providerPayload = mergeYooKassaPaymentPayload(payment.providerPayload, yooPayment);
+
+  return applyProviderPaymentStatus(
+    client,
+    payment.id,
+    mapYooKassaPaymentStatus(yooPayment.status),
+    {
+      now: input.now,
+      providerPaymentId: yooPayment.id,
+      confirmationUrl: yooPayment.confirmation?.confirmation_url ?? payment.confirmationUrl,
+      providerPayload,
+    },
+  );
+}
+
+export async function syncOpenYooKassaPayments(
+  client: DbClientLike,
+  payments: Array<{
+    id: string;
+    status: PaymentStatus;
+    provider: PaymentProvider;
+    providerPaymentId: string | null;
+    providerPayload?: Prisma.JsonValue | null;
+  }>,
+): Promise<boolean> {
+  if (!isYooKassaConfigured()) {
+    return false;
+  }
+
+  let synced = false;
+
+  for (const payment of payments) {
+    if (!shouldSyncYooKassaPayment(payment)) {
+      continue;
+    }
+
+    try {
+      const updated = await syncYooKassaPaymentStatus(client, payment.id);
+      synced = synced || Boolean(updated);
+    } catch (error) {
+      console.error("Failed to sync YooKassa payment status", {
+        paymentId: payment.id,
+        error,
+      });
+    }
+  }
+
+  return synced;
 }

@@ -74,3 +74,19 @@ describe("admin proxy protection", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 });
+
+describe("webhook proxy protection", () => {
+  it("allows external YooKassa webhook posts through CSRF protection", async () => {
+    const response = await proxy(
+      new NextRequest("http://localhost:3000/api/yookassa/webhook", {
+        method: "POST",
+        headers: {
+          origin: "https://yookassa.ru",
+        },
+      }),
+    );
+
+    expect(response.status).not.toBe(403);
+    expect(response.headers.get("location")).toBeNull();
+  });
+});

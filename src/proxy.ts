@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/admin-session-token";
-import { getAdminApiRequestPermission, getAdminUiPathPermission, hasAdminPermission } from "@/lib/admin-rbac";
+import {
+  getAdminApiRequestPermission,
+  getAdminUiPathPermission,
+  hasAdminPermission,
+} from "@/lib/admin-rbac";
 import { isSameOrigin } from "@/lib/csrf";
 import {
   createRateLimiter,
@@ -109,9 +113,9 @@ function requiresStrictSecurityConfiguration(pathname: string, method: string): 
     return true;
   }
 
-    if (pathname.startsWith("/api/admin/") || pathname.startsWith("/api/auth/")) {
-      return true;
-    }
+  if (pathname.startsWith("/api/admin/") || pathname.startsWith("/api/auth/")) {
+    return true;
+  }
 
   return isOwnerSpaceApiPath(pathname);
 }
@@ -144,6 +148,10 @@ function isOwnerSpaceApiPath(pathname: string): boolean {
 
 function isSensitiveAuthPath(pathname: string): boolean {
   return /^\/api\/auth\/(login|register|forgot-password|reset-password)$/.test(pathname);
+}
+
+function isExternalWebhookPath(pathname: string): boolean {
+  return pathname === "/api/yookassa/webhook";
 }
 
 function isUploadPath(pathname: string): boolean {
@@ -277,7 +285,11 @@ export async function proxy(request: NextRequest) {
       return rateLimitResponse;
     }
 
-    if (mutatingMethods.has(requestMethod) && !isSameOrigin(request)) {
+    if (
+      mutatingMethods.has(requestMethod) &&
+      !isExternalWebhookPath(pathname) &&
+      !isSameOrigin(request)
+    ) {
       return applySecurityHeaders(
         NextResponse.json({ error: "CSRF check failed: invalid origin" }, { status: 403 }),
       );

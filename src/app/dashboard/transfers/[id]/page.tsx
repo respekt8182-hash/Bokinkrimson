@@ -19,7 +19,11 @@ import {
   getTransferPlacementCoverageState,
   serializePayment,
 } from "@/lib/payments";
-import { applyProviderPaymentStatus, getOnlinePaymentProviders } from "@/lib/payment-finalization";
+import {
+  applyProviderPaymentStatus,
+  getOnlinePaymentProviders,
+  syncOpenYooKassaPayments,
+} from "@/lib/payment-finalization";
 import { buildPublicTransferPath, buildTransferSlug } from "@/lib/public-marketplace";
 import { TRANSFER_EXTRA_VEHICLE_FEE_RUB } from "@/lib/site-tariffs";
 import {
@@ -468,12 +472,19 @@ export default async function DashboardTransferEditPage({
             in: getOnlinePaymentProviders(),
           },
         };
-    const payments = shouldPreparePayment
+    let payments = shouldPreparePayment
       ? await db.payment.findMany({
           where: transferPaymentWhere,
           orderBy: [{ createdAt: "desc" }],
         })
       : [];
+    if (shouldPreparePayment && (await syncOpenYooKassaPayments(db, payments))) {
+      payments = await db.payment.findMany({
+        where: transferPaymentWhere,
+        orderBy: [{ createdAt: "desc" }],
+      });
+    }
+
     const trialUntil = isPostLaunchTrialEligible({
       listingCreatedAt: current.createdAt,
       now,
@@ -834,7 +845,7 @@ export default async function DashboardTransferEditPage({
           in: getOnlinePaymentProviders(),
         },
       };
-  const payments = await db.payment.findMany({
+  let payments = await db.payment.findMany({
     where: transferPaymentWhere,
     orderBy: [{ createdAt: "desc" }],
     include: transferPaymentsSupported
@@ -847,6 +858,22 @@ export default async function DashboardTransferEditPage({
         }
       : undefined,
   });
+  if (await syncOpenYooKassaPayments(db, payments)) {
+    payments = await db.payment.findMany({
+      where: transferPaymentWhere,
+      orderBy: [{ createdAt: "desc" }],
+      include: transferPaymentsSupported
+        ? {
+            transfer: {
+              select: {
+                title: true,
+              },
+            },
+          }
+        : undefined,
+    });
+  }
+
   const initialPricingNow = new Date();
   const baseInitialTransferPlacementPricing = await getPlacementPrice({
     userId: session.id,
