@@ -26,7 +26,7 @@ type NavItem = {
 
 const MOBILE_CHROME_TOP_RESET = 72;
 const MOBILE_CHROME_SCROLL_RANGE = 140;
-const MOBILE_CHROME_NAV_TRAVEL = 130;
+const MOBILE_CHROME_NAV_TRAVEL = 88;
 const MOBILE_CHROME_MAP_TRAVEL = 78;
 
 function getPathSegments(pathname: string) {
@@ -210,11 +210,22 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
   }
 
   const navProgress = forceHidden ? 1 : chromeProgress;
+  const navScaleX = 1 - navProgress * 0.68;
+  const navScaleY = 1 - navProgress * 0.5;
+  const navOpacity = forceHidden
+    ? 0
+    : Math.max(0, Math.min(1, (1 - chromeProgress) / 0.24));
+  const itemsProgress = Math.min(1, navProgress / 0.58);
   const navStyle = {
-    transform: `translate3d(0, ${navProgress * MOBILE_CHROME_NAV_TRAVEL}%, 0)`,
-    opacity: forceHidden ? 0 : Math.max(0, 1 - chromeProgress * 1.12),
-    pointerEvents: forceHidden || chromeProgress > 0.92 ? "none" : undefined,
+    transform: `translate3d(0, ${navProgress * MOBILE_CHROME_NAV_TRAVEL}px, 0) scale(${navScaleX}, ${navScaleY})`,
+    opacity: navOpacity,
+    pointerEvents: forceHidden || chromeProgress > 0.58 ? "none" : undefined,
   } satisfies CSSProperties;
+  const itemsStyle = {
+    opacity: 1 - itemsProgress,
+    transform: `scale(${1 - itemsProgress * 0.16})`,
+  } satisfies CSSProperties;
+  const navIsHidden = forceHidden || chromeProgress > 0.98;
 
   const items: NavItem[] = [
     {
@@ -244,11 +255,15 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
     <nav
       aria-label="Быстрая навигация"
       className={cn(
-        "fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-[430px] rounded-[28px] border border-white/80 bg-white/88 px-2 py-2 shadow-[0_18px_46px_rgba(58,43,35,0.18)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out will-change-transform lg:hidden",
+        "fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-[430px] origin-bottom rounded-[28px] border border-white/80 bg-white/88 px-2 py-2 shadow-[0_18px_46px_rgba(58,43,35,0.18)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] motion-reduce:transition-none lg:hidden",
       )}
       style={navStyle}
+      aria-hidden={navIsHidden || undefined}
     >
-      <div className="grid grid-cols-3 gap-1">
+      <div
+        className="grid grid-cols-3 gap-1 transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none"
+        style={itemsStyle}
+      >
         {items.map((item) => {
           const active = item.isActive(pathname);
 
@@ -257,6 +272,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
               key={item.href}
               href={item.href}
               prefetch={false}
+              tabIndex={navIsHidden ? -1 : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[22px] px-2 text-[11px] font-semibold transition active:scale-[0.97]",
