@@ -2498,11 +2498,11 @@ button:focus-visible > .field-adornment-icon {
   bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px));
   z-index: 61;
   display: inline-flex;
-  min-width: 132px;
-  height: 54px;
+  min-width: 108px;
+  height: 46px;
   align-items: center;
   justify-content: center;
-  padding: 0 30px;
+  padding: 0 24px;
   transform: translate3d(-50%, var(--float-map-shift), 0);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 9999px;
@@ -2512,7 +2512,7 @@ button:focus-visible > .field-adornment-icon {
     0 16px 34px rgba(15, 23, 42, 0.24),
     0 6px 14px rgba(58, 43, 35, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;

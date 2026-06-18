@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
+import { PlacementFirstYearPrice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -505,12 +505,22 @@ export function PropertyPaymentPanel({
                 {selectedTariff ? selectedTariff.title : "Не рассчитан"}
               </p>
               {selectedTariff ? (
-                <PlacementPromoPrice
-                  originalAmountRub={originalAmountDue}
-                  finalAmountRub={amountDue}
-                  className="mt-1"
-                  finalClassName="text-lg"
-                />
+                hasSelectedFreePeriod && !hasActivePlacement ? (
+                  <PlacementFirstYearPrice
+                    originalAmountRub={originalAmountDue}
+                    renewalAmountRub={selectedFinalBeforePromo}
+                    freePeriodUntil={selectedPlacementPricing?.freePeriodUntil}
+                    className="mt-2"
+                    compact
+                  />
+                ) : (
+                  <PlacementPromoPrice
+                    originalAmountRub={originalAmountDue}
+                    finalAmountRub={amountDue}
+                    className="mt-1"
+                    finalClassName="text-lg"
+                  />
+                )
               ) : (
                 <p className="mt-1 text-[11px] text-olive/50">Заполните все разделы</p>
               )}
@@ -530,8 +540,6 @@ export function PropertyPaymentPanel({
               </p>
             </div>
           </div>
-          <PlacementPromoNotice compact />
-
           {selectedTariff && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
               <p className="font-semibold">
@@ -540,7 +548,7 @@ export function PropertyPaymentPanel({
                   : "Сейчас размещение бесплатно."}
               </p>
               <p className="mt-1">
-                После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
+                Через год вы сможете продлить размещение по выбранному тарифу:{" "}
                 <strong>{formatMoney(selectedFinalBeforePromo)}</strong>
                 {selectedPlacementPricing?.isDiscountApplied
                   ? ` вместо ${formatMoney(selectedPlacementPricing.basePrice)}.`
@@ -560,6 +568,7 @@ export function PropertyPaymentPanel({
                 const optionBaseAmount = option.baseAmountRub ?? option.amountRub;
                 const optionFinalAmount = option.finalAmountRub ?? option.amountRub;
                 const optionPromoPrice = getPlacementPromoPrice(optionFinalAmount);
+                const optionHasFreeFirstYear = Boolean(option.placementPricing?.freePeriodActive);
                 const optionAmountDue =
                   option.placementPricing?.freePeriodActive || optionPromoPrice.isDiscounted
                     ? 0
@@ -581,12 +590,24 @@ export function PropertyPaymentPanel({
                       </span>
                     ) : null}
                     <p className="pr-20 text-sm font-semibold text-olive">{option.shortTitle}</p>
-                    <PlacementPromoPrice
-                      originalAmountRub={optionBaseAmount}
-                      finalAmountRub={optionAmountDue}
-                      className="mt-2"
-                      finalClassName="text-2xl"
-                    />
+                    {optionHasFreeFirstYear ? (
+                      <PlacementFirstYearPrice
+                        originalAmountRub={optionBaseAmount}
+                        renewalAmountRub={
+                          option.placementPricing?.priceAfterFreePeriod ?? optionFinalAmount
+                        }
+                        freePeriodUntil={option.placementPricing?.freePeriodUntil}
+                        className="mt-3"
+                        compact
+                      />
+                    ) : (
+                      <PlacementPromoPrice
+                        originalAmountRub={optionBaseAmount}
+                        finalAmountRub={optionAmountDue}
+                        className="mt-2"
+                        finalClassName="text-2xl"
+                      />
+                    )}
                     {option.placementPricing?.discountLabel ? (
                       <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
                         {option.placementPricing.discountLabel}

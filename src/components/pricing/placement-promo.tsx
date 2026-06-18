@@ -19,6 +19,15 @@ type PlacementPromoPriceProps = {
   finalClassName?: string;
 };
 
+type PlacementFirstYearPriceProps = {
+  originalAmountRub: number;
+  renewalAmountRub?: number;
+  freePeriodUntil?: string | null;
+  className?: string;
+  finalClassName?: string;
+  compact?: boolean;
+};
+
 function formatRub(value: number): string {
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)} ₽`;
 }
@@ -84,6 +93,47 @@ export function PlacementPromoPrice({
       >
         {formatRub(finalAmount)}
       </span>
+    </div>
+  );
+}
+
+export function PlacementFirstYearPrice({
+  originalAmountRub,
+  renewalAmountRub = originalAmountRub,
+  freePeriodUntil,
+  className,
+  finalClassName,
+  compact = false,
+}: PlacementFirstYearPriceProps) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50/60 p-3",
+        compact ? "p-2.5" : "sm:p-4",
+        className,
+      )}
+    >
+      <span className="inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+        Первый год бесплатно
+      </span>
+      <div className={cn("mt-2 flex items-end justify-between gap-3", compact ? "mt-1.5" : "")}>
+        <div>
+          <p className="text-[11px] font-medium text-olive/55">Сейчас</p>
+          <PlacementPromoPrice
+            originalAmountRub={originalAmountRub}
+            finalAmountRub={0}
+            className="mt-0.5"
+            finalClassName={cn(compact ? "text-xl" : "text-3xl", finalClassName)}
+          />
+        </div>
+        <p className="max-w-[190px] text-right text-[11px] leading-4 text-olive/58">
+          {freePeriodUntil ?? "12 месяцев с даты создания карточки"}
+        </p>
+      </div>
+      <div className="mt-2 border-t border-emerald-900/10 pt-2 text-[11px] leading-4 text-olive/65">
+        Продление через год: <strong className="text-olive">{formatRub(renewalAmountRub)}</strong>.
+        Оплата только при продлении.
+      </div>
     </div>
   );
 }

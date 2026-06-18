@@ -5,10 +5,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { isBuiltInLocationId } from "@/lib/location-directory";
 import { refreshPublishedPropertySnapshot } from "@/lib/property-public-snapshot";
-import {
-  getPropertyWorkflowStatus,
-  getPropertyWorkflowStatusLabel,
-} from "@/lib/properties";
+import { getPropertyWorkflowStatus, getPropertyWorkflowStatusLabel } from "@/lib/properties";
 import { moderatePropertySchema } from "@/lib/schemas";
 
 type RouteContext = {
@@ -120,10 +117,8 @@ export async function PATCH(request: Request, context: RouteContext) {
             }
         : {
             status: targetStatus,
-            moderationNotes:
-              targetStatus === PropertyStatus.PUBLISHED
-                ? comment || null
-                : comment,
+            ...(targetStatus === PropertyStatus.PUBLISHED ? { isPublishedVisible: true } : {}),
+            moderationNotes: targetStatus === PropertyStatus.PUBLISHED ? comment || null : comment,
             moderatedById: admin.id,
             moderatedAt: now,
           },

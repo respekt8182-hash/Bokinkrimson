@@ -286,9 +286,9 @@ export function SiteHeaderMobileDrawer({
         aria-expanded={isOpen}
         aria-controls="site-mobile-drawer"
         onClick={() => setIsOpen(true)}
-        className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px] focus-visible:outline-none"
+        className="icon-button-soft inline-flex h-8 w-8 items-center justify-center rounded-xl focus-visible:outline-none md:h-11 md:w-11 md:rounded-[15px]"
       >
-        <AppIcon icon={Menu} className="h-5 w-5 text-[color:var(--icon-nav)]" />
+        <AppIcon icon={Menu} className="h-4 w-4 text-[color:var(--icon-nav)] md:h-5 md:w-5" />
       </button>
 
       {isOpen && portalHost ? createPortal(drawer, portalHost) : null}

@@ -13,8 +13,7 @@ import { stripSearchParamsFromPath } from "../../src/lib/seo/url-normalize";
 describe("public seo paths", () => {
   it("builds transliterated property slug", () => {
     const slug = buildPropertySlug("Отель Ромашка", "cabc123xyz9");
-    expect(slug).toBe("otel-romashka");
-    expect(slug).not.toContain("cabc123xyz9");
+    expect(slug).toBe("otel-romashka-cabc123xyz9");
   });
 
   it("extracts id from slug and raw id", () => {
@@ -24,9 +23,7 @@ describe("public seo paths", () => {
   });
 
   it("extracts seeded demo ids from slug and raw id", () => {
-    expect(extractPropertyId("sanatoriy-lazurnyy-bereg-demo_property_11")).toBe(
-      "demo_property_11",
-    );
+    expect(extractPropertyId("sanatoriy-lazurnyy-bereg-demo_property_11")).toBe("demo_property_11");
     expect(extractPropertyId("demo_property_11")).toBe("demo_property_11");
     expect(extractPropertyId("vecherniy-tur-demo_excursion_03")).toBe("demo_excursion_03");
     expect(extractPropertyId("azovskiy-semeynyy-otdyh-v-schelkino-demo_tour_11")).toBe(
@@ -60,7 +57,7 @@ describe("public seo paths", () => {
     expect(excursionPath).toMatch(/^\/crimea\/excursions\/sudak\//);
     expect(propertyPath).not.toContain("?");
     expect(excursionPath).not.toContain("?");
-    expect(propertyPath).not.toContain("cabc123xyz9");
+    expect(propertyPath).toContain("cabc123xyz9");
     expect(excursionPath).not.toContain("cabc123xyz8");
   });
 

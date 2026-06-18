@@ -139,10 +139,6 @@ const objectInfoHelpItems = [
     text: "Укажите лаконичное и запоминающееся название вашего объекта.",
   },
   {
-    title: "Кратко и по делу",
-    text: "Короткое описание должно зацепить и вызвать интерес.",
-  },
-  {
     title: "Подробности важны",
     text: "Расскажите о комфорте, особенностях и преимуществах объекта.",
   },
@@ -1632,26 +1628,10 @@ export function ObjectAboutPage({
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-base font-semibold text-olive">3. Краткое описание</span>
-                    <span className="text-xs tabular-nums text-olive/45">
-                      {shortDescription.length}/160
-                    </span>
-                  </div>
-                  <Input
-                    value={shortDescription}
-                    onChange={(event) => setShortDescription(event.target.value)}
-                    maxLength={160}
-                    placeholder="Например: Уютный гостевой дом в 5 минутах от моря. Комфортные номера, бассейн, парковка."
-                    className="h-16 rounded-[8px] border-olive/14 bg-white/95 px-5 text-base"
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <span className="text-base font-semibold text-olive">
-                        4. Подробное описание
+                        3. Подробное описание
                       </span>
                       <p className="mt-1 text-sm leading-6 text-olive/58">
                         Расскажите подробнее о вашем объекте: преимущества, особенности, для кого он
@@ -1713,7 +1693,7 @@ export function ObjectAboutPage({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <p className="truncate text-base font-semibold text-olive">
-                        5. Часто задаваемые вопросы
+                        4. Часто задаваемые вопросы
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/12">

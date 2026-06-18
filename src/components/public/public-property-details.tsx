@@ -2798,8 +2798,25 @@ export function PublicPropertyDetails({
                 ) : null}
               </div>
             </div>
-            {mobileMessengerLinks.length > 0 ? (
+            {mobileCallPhones.length > 0 || mobileMessengerLinks.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {mobileCallPhones.map((phone, index) => (
+                  <a
+                    key={phone.key}
+                    href={phone.href}
+                    title={phone.label}
+                    aria-label={phone.label}
+                    onClick={() =>
+                      trackListingAction({
+                        ...contactTracking,
+                        actionType: getPhoneListingActionType(index),
+                      })
+                    }
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/18 bg-primary/10 text-primary shadow-[0_8px_18px_rgba(15,118,110,0.14)] transition active:scale-[0.96]"
+                  >
+                    <AppIcon icon={Phone} className="h-4 w-4" />
+                  </a>
+                ))}
                 {mobileMessengerLinks.map((channel) => (
                   <a
                     key={channel.key}

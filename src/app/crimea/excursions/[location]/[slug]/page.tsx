@@ -2431,6 +2431,7 @@ export default async function PublicExcursionPage({
           entityPublicId={item.publicId}
           organizerName={organizerName}
           organizerAvatarUrl={item.owner.avatarUrl}
+          organizerVerified={Boolean(item.owner.phoneVerifiedAt)}
           tracking={{ entityType: "excursion", entityId: item.id }}
         />
       </div>
@@ -3675,6 +3676,7 @@ export default async function PublicExcursionPage({
         entityPublicId={item.publicId}
         organizerName={organizerName}
         organizerAvatarUrl={item.owner.avatarUrl}
+        organizerVerified={Boolean(item.owner.phoneVerifiedAt)}
         tracking={{ entityType: "excursion", entityId: item.id }}
       />
     </div>

@@ -1045,6 +1045,7 @@ export function ExcursionSearchResults({
   const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("preview");
   const [mobileSheetTop, setMobileSheetTop] = useState<number | null>(null);
   const [mobileStageHeight, setMobileStageHeight] = useState(0);
+  const [mobileMapButtonVisible, setMobileMapButtonVisible] = useState(false);
   const [isMobileSheetDragging, setIsMobileSheetDragging] = useState(false);
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
@@ -1803,7 +1804,7 @@ export function ExcursionSearchResults({
       0,
       height - MOBILE_SHEET_HANDLE_HEIGHT - MOBILE_SHEET_BOTTOM_CLEARANCE,
     );
-    const preview = clamp(Math.round(height * 0.36), 150, Math.max(150, collapsed - 118));
+    const preview = clamp(Math.round(height * 0.5), 150, Math.max(150, collapsed - 118));
 
     return {
       expanded: 0,
@@ -2168,7 +2169,7 @@ export function ExcursionSearchResults({
     setHoveredPinId(null);
   }
 
-  function handleCatalogMobileSheetPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleCatalogMobileSheetPointerDown(event: ReactPointerEvent<HTMLElement>) {
     mobileSheetTopRef.current = resolvedMobileSheetTop;
     mobileSheetDragRef.current = {
       pointerId: event.pointerId,
@@ -2180,7 +2181,7 @@ export function ExcursionSearchResults({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function handleCatalogMobileSheetPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleCatalogMobileSheetPointerMove(event: ReactPointerEvent<HTMLElement>) {
     const dragState = mobileSheetDragRef.current;
     if (!dragState || dragState.pointerId !== event.pointerId) {
       return;
@@ -2203,7 +2204,7 @@ export function ExcursionSearchResults({
     event.preventDefault();
   }
 
-  function handleCatalogMobileSheetPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleCatalogMobileSheetPointerUp(event: ReactPointerEvent<HTMLElement>) {
     const dragState = mobileSheetDragRef.current;
     if (!dragState || dragState.pointerId !== event.pointerId) {
       return;
@@ -2222,7 +2223,7 @@ export function ExcursionSearchResults({
     snapMobileSheet(nextSnap);
   }
 
-  function handleCatalogMobileSheetPointerCancel(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handleCatalogMobileSheetPointerCancel(event: ReactPointerEvent<HTMLElement>) {
     const dragState = mobileSheetDragRef.current;
     if (!dragState || dragState.pointerId !== event.pointerId) {
       return;
@@ -2256,6 +2257,7 @@ export function ExcursionSearchResults({
     const currentScrollTop = event.currentTarget.scrollTop;
     const previousScrollTop = mobileResultsScrollTopRef.current;
     mobileResultsScrollTopRef.current = currentScrollTop;
+    setMobileMapButtonVisible(currentScrollTop >= 280);
 
     if (mapPlacement !== "mobile" || mobileSheetSnap !== "expanded" || mapExpanded) {
       return;
@@ -2368,7 +2370,8 @@ export function ExcursionSearchResults({
     mapPlacement === "mobile" &&
     !mapExpanded &&
     mobileSheetSnap === "expanded" &&
-    resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1;
+    resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1 &&
+    mobileMapButtonVisible;
   const isCatalogMobileSheetExpanded = mobileSheetSnap === "expanded";
   const catalogMobileSheetHandle = (
     <button
@@ -3529,11 +3532,23 @@ export function ExcursionSearchResults({
               <div
                 ref={mobileResultsScrollRef}
                 onScroll={handleCatalogMobileResultsScroll}
+                onPointerDown={
+                  isCatalogMobileSheetExpanded ? undefined : handleCatalogMobileSheetPointerDown
+                }
+                onPointerMove={
+                  isCatalogMobileSheetExpanded ? undefined : handleCatalogMobileSheetPointerMove
+                }
+                onPointerUp={
+                  isCatalogMobileSheetExpanded ? undefined : handleCatalogMobileSheetPointerUp
+                }
+                onPointerCancel={
+                  isCatalogMobileSheetExpanded ? undefined : handleCatalogMobileSheetPointerCancel
+                }
                 className={cn(
                   "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
                   isCatalogMobileSheetExpanded
                     ? "h-full pt-0"
-                    : "h-[calc(100%-76px)] rounded-t-[28px] pt-4",
+                    : "h-[calc(100%-76px)] touch-none rounded-t-[28px] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >

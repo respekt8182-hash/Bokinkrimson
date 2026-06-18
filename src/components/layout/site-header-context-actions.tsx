@@ -51,7 +51,7 @@ export function SiteHeaderBackButton() {
       onClick={handleBack}
       aria-label="Вернуться назад"
       title="Назад"
-      className="icon-button-soft inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] focus-visible:outline-none lg:hidden"
+      className="icon-button-soft inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl focus-visible:outline-none md:h-11 md:w-11 md:rounded-[15px] lg:hidden"
     >
       <AppIcon icon={ChevronLeft} className="h-5 w-5 text-[color:var(--icon-nav)]" />
     </button>
@@ -90,7 +90,7 @@ export function SiteHeaderShareButton() {
       onClick={() => void handleShare()}
       aria-label={copied ? "Ссылка скопирована" : "Поделиться ссылкой"}
       title={copied ? "Ссылка скопирована" : "Поделиться"}
-      className="icon-button-soft inline-flex h-11 w-11 items-center justify-center rounded-[15px] focus-visible:outline-none lg:hidden"
+      className="icon-button-soft inline-flex h-8 w-8 items-center justify-center rounded-xl focus-visible:outline-none md:h-11 md:w-11 md:rounded-[15px] lg:hidden"
     >
       <AppIcon icon={copied ? Check : Share2} className="h-5 w-5 text-[color:var(--icon-info)]" />
     </button>

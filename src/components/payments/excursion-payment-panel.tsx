@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
-import { PlacementPromoNotice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
+import { PlacementFirstYearPrice, PlacementPromoPrice } from "@/components/pricing/placement-promo";
 import { AppIcon } from "@/components/ui/app-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -446,11 +446,23 @@ export function ExcursionPaymentPanel({
               </>
             ) : (
               <>
-                <PlacementPromoPrice
-                  originalAmountRub={selectedPlacementPrice?.basePrice ?? fallbackYearPrice}
-                  finalAmountRub={publicationFinalAmount}
-                  finalClassName="text-2xl"
-                />
+                {isFreePublication ? (
+                  <PlacementFirstYearPrice
+                    originalAmountRub={selectedPlacementPrice?.basePrice ?? fallbackYearPrice}
+                    renewalAmountRub={
+                      selectedPlacementPrice?.priceAfterFreePeriod ??
+                      selectedPlacementPrice?.totalPrice ??
+                      fallbackYearPrice
+                    }
+                    freePeriodUntil={selectedPlacementPrice?.freePeriodUntil}
+                  />
+                ) : (
+                  <PlacementPromoPrice
+                    originalAmountRub={selectedPlacementPrice?.basePrice ?? fallbackYearPrice}
+                    finalAmountRub={publicationFinalAmount}
+                    finalClassName="text-2xl"
+                  />
+                )}
                 {selectedPlacementPrice?.discountLabel ? (
                   <p className="mt-1 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
                     {selectedPlacementPrice.discountLabel}
@@ -490,12 +502,22 @@ export function ExcursionPaymentPanel({
                   <p className="text-sm font-semibold text-olive">
                     {price.period === "season" ? "Сезон до 31 октября" : "Годовое размещение"}
                   </p>
-                  <PlacementPromoPrice
-                    originalAmountRub={price.basePrice}
-                    finalAmountRub={finalAmountRub}
-                    className="mt-1"
-                    finalClassName="text-xl"
-                  />
+                  {price.freePeriodActive ? (
+                    <PlacementFirstYearPrice
+                      originalAmountRub={price.basePrice}
+                      renewalAmountRub={price.priceAfterFreePeriod ?? price.totalPrice}
+                      freePeriodUntil={price.freePeriodUntil}
+                      className="mt-2"
+                      compact
+                    />
+                  ) : (
+                    <PlacementPromoPrice
+                      originalAmountRub={price.basePrice}
+                      finalAmountRub={finalAmountRub}
+                      className="mt-1"
+                      finalClassName="text-xl"
+                    />
+                  )}
                   {price.discountLabel ? (
                     <p className="mt-1 text-xs font-semibold text-emerald-700">
                       {price.discountLabel}
@@ -527,8 +549,6 @@ export function ExcursionPaymentPanel({
             </>
           )}
         </div>
-        {!adminMode ? <PlacementPromoNotice compact className="mt-3" /> : null}
-
         {!isReady ? (
           <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
             <p className="font-medium">Перед публикацией заполните обязательные поля:</p>
@@ -576,7 +596,7 @@ export function ExcursionPaymentPanel({
                     : "Сейчас размещение бесплатно."}
                 </p>
                 <p className="mt-1">
-                  После окончания бесплатного периода ваша цена на выбранный тариф:{" "}
+                  Через год вы сможете продлить размещение по выбранному тарифу:{" "}
                   <strong>
                     {formatMoney(
                       selectedPlacementPrice?.priceAfterFreePeriod ??

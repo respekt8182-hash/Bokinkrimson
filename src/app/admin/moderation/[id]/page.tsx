@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Prisma } from "@prisma/client";
+import { Prisma, PropertyStatus } from "@prisma/client";
 import { AdminMediaPreview } from "@/components/admin/admin-media-preview";
 import { AdminPropertyModerationPreview } from "@/components/admin/admin-moderation-preview";
 import { RegistryModerationActions } from "@/components/admin/registry-moderation-actions";
@@ -190,6 +190,10 @@ export default async function AdminModerationObjectPage({
     locationId: property.locationId,
     name: property.name,
   });
+  const hasPublicPage =
+    property.status === PropertyStatus.PUBLISHED &&
+    property.isPublishedVisible &&
+    property.ownerDeletedAt === null;
   const ownerEmail = optionalText(property.owner.email);
   const contactPersonName = optionalText(property.contactPersonName);
   const contactPersonRole = optionalText(property.contactPersonRole);
@@ -226,12 +230,23 @@ export default async function AdminModerationObjectPage({
           >
             Полный редактор
           </Link>
-          <Link
-            href={publicPath}
-            className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
-          >
-            Публичная карточка
-          </Link>
+          {hasPublicPage ? (
+            <Link
+              href={publicPath}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-olive/20 px-4 py-2 text-sm font-semibold text-olive hover:bg-cream"
+            >
+              Публичная карточка
+            </Link>
+          ) : (
+            <span
+              title="Ссылка станет доступна после публикации карточки"
+              className="cursor-not-allowed rounded-xl border border-olive/10 bg-cream/50 px-4 py-2 text-sm font-semibold text-olive/40"
+            >
+              Публичная карточка
+            </span>
+          )}
         </div>
       </div>
 

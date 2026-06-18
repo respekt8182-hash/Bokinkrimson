@@ -89,6 +89,8 @@ type RoomCardListItem = {
   instanceNumber: number | null;
 };
 
+type RoomDropPosition = "before" | "after";
+
 type CalendarSyncImportSource = {
   id?: string;
   label: string;
@@ -421,6 +423,13 @@ export function RoomFundManager({
   const [isEditorOpen, setIsEditorOpen] = useState(initialCreateMode);
   const [isCompactRoomList, setIsCompactRoomList] = useState(false);
   const [currentRoomsPage, setCurrentRoomsPage] = useState(1);
+  const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
+  const [dragOverRoom, setDragOverRoom] = useState<{
+    roomId: string;
+    position: RoomDropPosition;
+  } | null>(null);
+  const [pageTransferDirection, setPageTransferDirection] = useState<-1 | 1 | null>(null);
+  const suppressRoomCardClickRef = useRef(false);
   const editorSectionRef = useRef<HTMLElement | null>(null);
   const createRoomRequestIdRef = useRef(0);
   const isCreatingRoomRef = useRef(false);
@@ -1478,13 +1487,14 @@ export function RoomFundManager({
     }
     nextRooms.splice(nextIndex, 0, movedRoom);
     void reorderRooms(nextRooms);
+    setCurrentRoomsPage(Math.floor(nextIndex / roomsPerPage) + 1);
   }
 
-  function moveRoomToPosition(roomId: string, position: number) {
+  function moveRoomToRoom(roomId: string, targetRoomId: string, position: RoomDropPosition) {
     const currentIndex = rooms.findIndex((room) => room.id === roomId);
-    const nextIndex = Math.max(0, Math.min(rooms.length - 1, position - 1));
+    const targetIndex = rooms.findIndex((room) => room.id === targetRoomId);
 
-    if (currentIndex < 0 || currentIndex === nextIndex) {
+    if (currentIndex < 0 || targetIndex < 0 || roomId === targetRoomId) {
       return;
     }
 
@@ -1493,8 +1503,39 @@ export function RoomFundManager({
     if (!movedRoom) {
       return;
     }
+    const adjustedTargetIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const nextIndex = adjustedTargetIndex + (position === "after" ? 1 : 0);
     nextRooms.splice(nextIndex, 0, movedRoom);
     void reorderRooms(nextRooms);
+  }
+
+  function transferRoomToAdjacentPage(roomId: string, direction: -1 | 1) {
+    const currentIndex = rooms.findIndex((room) => room.id === roomId);
+    const adjacentIndex =
+      direction === -1
+        ? (currentRoomsPage - 1) * roomsPerPage - 1
+        : currentRoomsPage * roomsPerPage;
+
+    if (currentIndex < 0 || adjacentIndex < 0 || adjacentIndex >= rooms.length) {
+      return;
+    }
+
+    const nextRooms = [...rooms];
+    [nextRooms[currentIndex], nextRooms[adjacentIndex]] = [
+      nextRooms[adjacentIndex],
+      nextRooms[currentIndex],
+    ];
+    setCurrentRoomsPage(currentRoomsPage + direction);
+    void reorderRooms(nextRooms);
+  }
+
+  function finishRoomDrag() {
+    setDraggedRoomId(null);
+    setDragOverRoom(null);
+    setPageTransferDirection(null);
+    window.setTimeout(() => {
+      suppressRoomCardClickRef.current = false;
+    }, 0);
   }
 
   function getRoomCardDetails(room: SerializedRoom, roomMeta: RoomMeta): RoomCardDetails {
@@ -2484,6 +2525,31 @@ export function RoomFundManager({
             </div>
           </section>
 
+          {draggedRoomId && currentRoomsPage > 1 ? (
+            <div
+              onDragEnter={() => setPageTransferDirection(-1)}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setPageTransferDirection(null);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                transferRoomToAdjacentPage(draggedRoomId, -1);
+                finishRoomDrag();
+              }}
+              className={cn(
+                "hidden min-h-16 items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center text-sm font-semibold transition md:flex",
+                pageTransferDirection === -1
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-olive/20 bg-white/70 text-olive/60",
+              )}
+            >
+              Перенести на предыдущую страницу
+            </div>
+          ) : null}
+
           <div className="grid gap-3">
             {paginatedRoomCards.map((roomCard) => {
               const { room, cardDetails, instanceNumber } = roomCard;
@@ -2509,15 +2575,72 @@ export function RoomFundManager({
                   key={room.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openRoomCard(room)}
+                  draggable={!isCompactRoomList && !isReorderingRooms}
+                  onDragStart={(event) => {
+                    const interactiveElement = (event.target as HTMLElement).closest(
+                      "button, a, input, select, textarea",
+                    );
+                    if (interactiveElement) {
+                      event.preventDefault();
+                      return;
+                    }
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", room.id);
+                    suppressRoomCardClickRef.current = true;
+                    setDraggedRoomId(room.id);
+                    setOpenedRoomMenuId(null);
+                  }}
+                  onDragOver={(event) => {
+                    if (!draggedRoomId || draggedRoomId === room.id) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setDragOverRoom({
+                      roomId: room.id,
+                      position: event.clientY < bounds.top + bounds.height / 2 ? "before" : "after",
+                    });
+                    setPageTransferDirection(null);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggedRoomId && dragOverRoom?.roomId === room.id) {
+                      moveRoomToRoom(draggedRoomId, room.id, dragOverRoom.position);
+                    }
+                    finishRoomDrag();
+                  }}
+                  onDragEnd={finishRoomDrag}
+                  onClick={() => {
+                    if (!suppressRoomCardClickRef.current) {
+                      openRoomCard(room);
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       openRoomCard(room);
                     }
                   }}
-                  className="group relative min-h-[152px] w-full cursor-pointer rounded-2xl border border-olive/10 bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25"
+                  className={cn(
+                    "group relative min-h-[152px] w-full cursor-pointer rounded-2xl border bg-white p-3 transition hover:-translate-y-0.5 hover:border-olive/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive/25 md:cursor-grab md:active:cursor-grabbing",
+                    draggedRoomId === room.id
+                      ? "border-primary/40 opacity-55"
+                      : dragOverRoom?.roomId === room.id
+                        ? dragOverRoom.position === "before"
+                          ? "border-primary shadow-[0_-4px_0_0_var(--color-primary)]"
+                          : "border-primary shadow-[0_4px_0_0_var(--color-primary)]"
+                        : "border-olive/10",
+                  )}
                 >
+                  <div className="pointer-events-none absolute -left-2 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg border border-olive/10 bg-white p-1.5 text-olive/40 shadow-sm transition group-hover:text-primary md:block">
+                    <span
+                      aria-hidden
+                      className="block text-base font-bold leading-5 tracking-[-0.2em]"
+                    >
+                      ⋮⋮
+                    </span>
+                  </div>
                   <div
                     className="hidden"
                     onClick={(event) => {
@@ -2584,23 +2707,21 @@ export function RoomFundManager({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="hidden" onClick={(event) => event.stopPropagation()}>
-                        <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                      <div
+                        className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-olive/10 bg-cream/45 px-2 py-1.5 md:hidden"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <span className="pl-1 text-xs font-semibold text-olive/65">
                           Позиция {globalRoomIndex + 1}
                         </span>
-                        {roomInstanceLabel ? (
-                          <span className="inline-flex rounded-full bg-cream px-2.5 py-1 text-[11px] font-semibold text-olive/65">
-                            {roomInstanceLabel}
-                          </span>
-                        ) : null}
-                        <div className="inline-flex overflow-hidden rounded-lg border border-olive/15 bg-white">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-olive/15 bg-white shadow-sm">
                           <button
                             type="button"
                             onClick={() => moveRoom(room.id, -1)}
                             disabled={isFirstRoom || isReorderingRooms}
                             aria-label="Поднять номер выше"
                             title="Поднять выше"
-                            className="inline-flex h-8 w-8 items-center justify-center text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex h-9 w-10 items-center justify-center text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-35"
                           >
                             <AppIcon icon={ChevronUp} className="h-4 w-4" />
                           </button>
@@ -2610,26 +2731,11 @@ export function RoomFundManager({
                             disabled={isLastRoom || isReorderingRooms}
                             aria-label="Опустить номер ниже"
                             title="Опустить ниже"
-                            className="inline-flex h-8 w-8 items-center justify-center border-l border-olive/10 text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex h-9 w-10 items-center justify-center border-l border-olive/10 text-olive transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-35"
                           >
                             <AppIcon icon={ChevronDown} className="h-4 w-4" />
                           </button>
                         </div>
-                        <select
-                          value={globalRoomIndex + 1}
-                          onChange={(event) =>
-                            moveRoomToPosition(room.id, Number.parseInt(event.target.value, 10))
-                          }
-                          disabled={isReorderingRooms}
-                          aria-label="Позиция номера в карточке объекта"
-                          className="h-8 rounded-lg border border-olive/15 bg-white px-2 text-xs font-semibold text-olive outline-none transition hover:bg-cream focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-55"
-                        >
-                          {rooms.map((item, index) => (
-                            <option key={item.id} value={index + 1}>
-                              {index + 1}
-                            </option>
-                          ))}
-                        </select>
                       </div>
                       <div className="flex flex-wrap items-start gap-2">
                         <h4
@@ -2709,6 +2815,31 @@ export function RoomFundManager({
               );
             })}
           </div>
+
+          {draggedRoomId && currentRoomsPage < totalRoomsPages ? (
+            <div
+              onDragEnter={() => setPageTransferDirection(1)}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setPageTransferDirection(null);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                transferRoomToAdjacentPage(draggedRoomId, 1);
+                finishRoomDrag();
+              }}
+              className={cn(
+                "hidden min-h-16 items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center text-sm font-semibold transition md:flex",
+                pageTransferDirection === 1
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-olive/20 bg-white/70 text-olive/60",
+              )}
+            >
+              Перенести на следующую страницу
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

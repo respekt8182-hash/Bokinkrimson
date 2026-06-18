@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ObjectTariffType, PropertyStatus } from "@prisma/client";
-import { Download, MessageSquareText, Plus } from "lucide-react";
+import { Download, ExternalLink, MessageSquareText, Plus } from "lucide-react";
 import { AdminDeleteDraftButton } from "@/components/admin/admin-delete-draft-button";
 import { AdminChessboardYearTransfer } from "@/components/admin/admin-chessboard-year-transfer";
 import { AdminPagination } from "@/components/admin/admin-pagination";
@@ -29,6 +29,7 @@ import { rankByTrigram } from "@/lib/fuzzy";
 import { getLocationDirectoryItems } from "@/lib/location-directory";
 import { getObjectPaymentDisplay } from "@/lib/object-placement-status";
 import { isPropertyEmptyDraft, isPropertyWorkflowPendingModeration } from "@/lib/properties";
+import { buildPublicPropertyPath } from "@/lib/public-properties";
 
 type Props = {
   searchParams: Promise<{
@@ -474,6 +475,11 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
               item.pendingEditStatus,
             );
             const primaryStatusLabel = getAdminPropertyBaseStatusLabel(item.status);
+            const publicPath = buildPublicPropertyPath({
+              id: item.id,
+              locationId: item.locationId,
+              name: item.name,
+            });
 
             return (
               <article
@@ -617,6 +623,18 @@ export default async function AdminObjectsPage({ searchParams }: Props) {
                   </p>
 
                   <div className="flex flex-wrap gap-2">
+                    {isPublished && item.isPublishedVisible && !isPendingDeletion ? (
+                      <Link
+                        href={publicPath}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Открыть объявление на сайте"
+                        aria-label={`Открыть объявление «${item.name ?? "Объект без названия"}» на сайте`}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/18 bg-primary/8 text-primary transition hover:bg-primary/12"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    ) : null}
                     <ListingStatsButton
                       endpoint={`/api/admin/statistics/listing?entityType=property&id=${item.id}`}
                       entityName={item.name ?? "Объект без названия"}

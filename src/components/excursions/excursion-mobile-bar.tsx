@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MessageSquareText, Phone } from "lucide-react";
+import { BadgeCheck, Mail, MessageSquareText, Phone } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ExcursionLeadModal } from "./excursion-lead-form";
 import { AppIcon } from "@/components/ui/app-icon";
@@ -47,6 +47,7 @@ type ExcursionMobileBarProps = {
   entityPublicId?: number | null;
   organizerName: string;
   organizerAvatarUrl?: string | null;
+  organizerVerified?: boolean;
   tracking?: {
     entityType: ListingEntityType;
     entityId: string;
@@ -212,6 +213,12 @@ export function ExcursionMobileBar({
     });
   }
 
+  const orderedQuickActions = [...quickActions].sort((left, right) => {
+    const leftIsPhone = left.id.startsWith("phone");
+    const rightIsPhone = right.id.startsWith("phone");
+    return Number(rightIsPhone) - Number(leftIsPhone);
+  });
+
   function trackQuickAction(actionId: MobileQuickAction["id"]) {
     const action = quickActions.find((item) => item.id === actionId);
     const actionType = action?.actionType ?? getContactActionTypeFromChannel(actionId);
@@ -236,16 +243,24 @@ export function ExcursionMobileBar({
                 </span>
               </AvatarImage>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-olive">{priceLabel}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-primary/85">
-                  <span className="truncate">{statusLabel}</span>
+                <p className="truncate text-sm font-semibold text-olive">
+                  {formProps.organizerName}
+                </p>
+                {formProps.organizerVerified ? (
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-primary/85">
+                    <AppIcon icon={BadgeCheck} className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Пользователь проверен</span>
+                  </p>
+                ) : null}
+                <p className="mt-0.5 truncate text-[11px] text-olive/58">
+                  {priceLabel} · {statusLabel}
                 </p>
               </div>
             </div>
 
-            {quickActions.length > 0 ? (
+            {orderedQuickActions.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {quickActions.map((action) => (
+                {orderedQuickActions.map((action) => (
                   <a
                     key={action.id}
                     href={action.href}

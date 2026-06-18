@@ -45,10 +45,7 @@ import {
 } from "@/lib/pricing";
 import { cleanFaqItems, cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { buildRedactedPublicContactFields } from "@/lib/public-contact-redaction";
-import {
-  buildPublicSlugCacheKey,
-  resolveCachedPublicSlugLookup,
-} from "@/lib/public-slug-cache";
+import { buildPublicSlugCacheKey, resolveCachedPublicSlugLookup } from "@/lib/public-slug-cache";
 import {
   parsePublishedPropertySnapshot,
   shouldUsePublishedSnapshot,
@@ -952,11 +949,11 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, "-");
 }
 
-// Public slugs are kept human-readable for SEO; legacy id-suffixed URLs are still resolved.
-export function buildPropertySlug(name: string | null, _id?: string): string {
-  void _id;
+// Keep the readable title while including the id so newly published cards do not
+// depend on a cached title lookup and properties with equal names remain distinct.
+export function buildPropertySlug(name: string | null, id?: string): string {
   const base = slugify(name ?? "obekt") || "obekt";
-  return base;
+  return id ? `${base}-${id}` : base;
 }
 
 const publicEntityIdPatterns = [
@@ -2192,797 +2189,177 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           "Public housing catalog: database is unavailable or credentials are invalid. Returning empty search results.",
       },
       async () => {
-      const where: Prisma.PropertyWhereInput = {
-        ...buildPublicCatalogPropertyVisibilityWhere(),
-        ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
-        ...(hasReviews ? { reviewsCount: { gt: 0 } } : {}),
-        ...(bounds
-          ? {
-              latitude: { gte: bounds.south, lte: bounds.north },
-              longitude: { gte: bounds.west, lte: bounds.east },
-            }
-          : {}),
-      };
-      const propertyCandidateStage = await getPropertyCandidateStage({
-        baseWhere: where,
-        pageSize,
-        candidateLimit,
-        type,
-        searchQuery,
-        resolvedLocation,
-        locationText: resolvedLocation?.name ?? locationFilter ?? locationFilterId ?? "",
-        locationCenterPoint,
-        hasLocationSearchScope,
-        minPrice,
-        maxPrice,
-        minRating,
-        hasReviews,
-        hasPhotos,
-        familyFriendly,
-        petsAllowed,
-        smokingForbidden,
-        quietHours,
-        bounds,
-      });
-      perfCandidateStageDurationMs = propertyCandidateStage.durationMs;
-      perfCandidateIdsCount = propertyCandidateStage.idsCount;
-      perfUsedFallback = propertyCandidateStage.usedFallback;
-      perfPrefilterEnabled = propertyCandidateStage.enabled;
-
-      const catalogSelect = Prisma.validator<Prisma.PropertySelect>()({
-        id: true,
-        ownerId: true,
-        status: true,
-        pendingEditStatus: true,
-        publishedSnapshot: true,
-        name: true,
-        type: true,
-        locationId: true,
-        locationName: true,
-        address: true,
-        seaDistance: true,
-        latitude: true,
-        longitude: true,
-        description: true,
-        checkInFrom: true,
-        childrenAllowed: true,
-        petsPolicy: true,
-        smokingPolicy: true,
-        quietHoursEnabled: true,
-        parkingInfo: true,
-        mealOptions: true,
-        starRating: true,
-        phone: true,
-        phone2: true,
-        phone3: true,
-        whatsappUrl: true,
-        telegramUrl: true,
-        contactEmail: true,
-        receiveRequests: true,
-        avgRating: true,
-        reviewsCount: true,
-        searchImpressions: true,
-        createdAt: true,
-        updatedAt: true,
-        moderatedAt: true,
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            avatarUrl: true,
-            phoneVerifiedAt: true,
-          },
-        },
-        media: {
-          where: { roomId: null, type: MediaType.IMAGE },
-          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-          take: CATALOG_CARD_IMAGE_LIMIT,
-          select: {
-            url: true,
-            type: true,
-          },
-        },
-        amenities: {
-          select: {
-            amenityId: true,
-          },
-        },
-        roomAmenitySettings: {
-          where: {
-            enabled: true,
-          },
-          select: {
-            featureId: true,
-            enabled: true,
-          },
-        },
-        rooms: {
-          where: { isActive: true },
-          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-          select: {
-            id: true,
-            title: true,
-            beds: true,
-            extraBeds: true,
-            roomsCount: true,
-            areaSqm: true,
-            features: {
-              select: {
-                featureId: true,
-              },
-            },
-            prices: catalogRoomPriceArgs,
-          },
-        },
-      });
-
-      type CatalogPropertyRow = Prisma.PropertyGetPayload<{
-        select: typeof catalogSelect;
-      }>;
-      // Step 1: fetch broad candidate pool with lightweight joins.
-      // Fine-grained ranking/sorting is applied in memory because it mixes trigram score + dynamic stay pricing.
-      const allProperties: CatalogPropertyRow[] =
-        propertyCandidateStage.ids?.length === 0
-          ? []
-          : await db.property.findMany({
-              where: propertyCandidateStage.ids
-                ? {
-                    AND: [
-                      where,
-                      {
-                        id: {
-                          in: propertyCandidateStage.ids,
-                        },
-                      },
-                    ],
-                  }
-                : where,
-              orderBy: [{ updatedAt: "desc" }],
-              select: catalogSelect,
-              take: propertyCandidateStage.ids ? propertyCandidateStage.ids.length : candidateLimit,
-            });
-      perfCandidateCount = allProperties.length;
-      const rankingStatsById = await getRankingStatsByEntity(
-        "property",
-        allProperties.map((property) => property.id),
-        rankingNow,
-      );
-      const impressionsMedian = Math.max(
-        1,
-        median(allProperties.map((property) => property.searchImpressions)),
-      );
-      const searchFingerprint = buildSearchFingerprint({
-        vertical: "property",
-        location: resolvedLocation?.id ?? locationFilter ?? null,
-        type,
-        query: searchQuery,
-        checkIn: stayRange.checkIn,
-        checkOut: stayRange.checkOut,
-        guests: guestsCount,
-        minPrice,
-        maxPrice,
-        nearSea,
-        hasPool,
-        hasKitchen,
-        hasAirConditioner,
-        hasParking,
-        smokingForbidden,
-        quietHours,
-        amenityIds,
-        roomFeatureIds,
-        sort,
-        bounds,
-      });
-      const catalogDisplayStateById = new Map(
-        allProperties.map((property) => [property.id, resolvePublicCatalogDisplayState(property)]),
-      );
-      let catalogMaxPrice = 0;
-      for (const displayState of catalogDisplayStateById.values()) {
-        for (const room of displayState.rooms) {
-          for (const price of room.prices) {
-            const value = Number(price.price);
-            if (Number.isFinite(value) && value > catalogMaxPrice) {
-              catalogMaxPrice = value;
-            }
-          }
-        }
-      }
-
-      const queryVariants = toSearchVariants(searchQuery);
-      const trigramScoreMap =
-        searchQuery.length >= 2
-          ? new Map(
-              rankByTrigramWithScores(
-                searchQuery,
-                allProperties,
-                (property) => {
-                  const displayState = catalogDisplayStateById.get(property.id);
-                  const typeLabel = displayState?.type
-                    ? (propertyTypeById[displayState.type]?.name ?? displayState.type)
-                    : null;
-                  const normalizedAddress = displayState?.address
-                    ? normalizeAddressSearchText(displayState.address)
-                    : null;
-
-                  return [
-                    displayState?.name ?? property.name,
-                    displayState?.name ? transliterateToLatin(displayState.name) : null,
-                    displayState?.locationName ?? property.locationName,
-                    displayState?.locationName
-                      ? transliterateToLatin(displayState.locationName)
-                      : null,
-                    displayState?.address ?? property.address,
-                    normalizedAddress,
-                    normalizedAddress ? transliterateToLatin(normalizedAddress) : null,
-                    displayState?.description ?? property.description,
-                    typeLabel,
-                    ...(displayState?.rooms ?? []).map((room) => room.title),
-                  ];
-                },
-                { limit: allProperties.length, minScore: 0.05 },
-              ).map((entry) => [entry.item.id, entry.score]),
-            )
-          : new Map<string, number>();
-      const searchScoreEntries: Array<[string, number]> = [];
-
-      if (searchQuery.length >= 2) {
-        // Hybrid ranking: token score catches structured/address terms,
-        // trigram score catches typos and near matches.
-        for (const property of allProperties) {
-          const displayState = catalogDisplayStateById.get(property.id);
-          const typeLabel = displayState?.type
-            ? (propertyTypeById[displayState.type]?.name ?? displayState.type)
-            : null;
-          const tokenScore = getWeightedFieldTokenScore(queryVariants, [
-            { value: displayState?.name ?? property.name, weight: 1.45 },
-            { value: displayState?.address ?? property.address, weight: 1.3, isAddress: true },
-            { value: displayState?.locationName ?? property.locationName, weight: 1.08 },
-            { value: typeLabel, weight: 0.46 },
-            { value: displayState?.description ?? property.description, weight: 0.58 },
-            ...(displayState?.rooms ?? []).map((room) => ({ value: room.title, weight: 0.72 })),
-          ]);
-          const trigramScore = trigramScoreMap.get(property.id) ?? 0;
-          const locationBoost =
-            queryLocationHint && displayState?.locationId === queryLocationHint.id ? 0.22 : 0;
-          const score = Math.max(tokenScore, trigramScore * 1.12) + locationBoost;
-
-          if (score >= 0.34) {
-            searchScoreEntries.push([property.id, score]);
-          }
-        }
-      }
-
-      const searchScoreMap = new Map(searchScoreEntries);
-
-      // Reduce candidate set before expensive per-card enrichment:
-      // text filter -> price constraints -> ranking payload.
-      const filteredRows = allProperties
-        .map((property) => {
-          const displayState = catalogDisplayStateById.get(property.id);
-          if (!displayState) {
-            return null;
-          }
-
-          if (searchQuery.length >= 2 && !searchScoreMap.has(property.id)) {
-            return null;
-          }
-          if (
-            bounds &&
-            (displayState.latitude === null ||
-              displayState.longitude === null ||
-              displayState.latitude < bounds.south ||
-              displayState.latitude > bounds.north ||
-              displayState.longitude < bounds.west ||
-              displayState.longitude > bounds.east)
-          ) {
-            return null;
-          }
-
-          const exactLocationMatch = resolvedLocation
-            ? isSameCatalogLocation(displayState.locationId, resolvedLocation.id) ||
-              isSameCatalogLocation(displayState.locationName, resolvedLocation.name)
-            : false;
-          const distanceKm = calculateDistanceKm(
-            locationCenterPoint,
-            getCatalogLocationPoint({
-              latitude: displayState.latitude,
-              longitude: displayState.longitude,
-              locationId: displayState.locationId,
-              locationName: displayState.locationName,
-            }),
-          );
-          const nearbyLocationMatch =
-            !exactLocationMatch && isWithinRadiusKm(distanceKm, NEARBY_CATALOG_RADIUS_KM);
-          const searchMatchKind: CatalogSearchMatchKind =
-            hasLocationSearchScope && !exactLocationMatch ? "nearby" : "primary";
-
-          if (hasLocationSearchScope && !exactLocationMatch && !nearbyLocationMatch) {
-            return null;
-          }
-          if (type && displayState.type !== type) {
-            return null;
-          }
-          if (hasPhotos && displayState.imageUrls.length === 0) {
-            return null;
-          }
-          if (familyFriendly && displayState.childrenAllowed !== true) {
-            return null;
-          }
-          if (
-            petsAllowed &&
-            !([PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED] as PetsPolicy[]).includes(
-              displayState.petsPolicy ?? PetsPolicy.FORBIDDEN,
-            )
-          ) {
-            return null;
-          }
-          if (
-            !matchesCatalogAmenityFilters(displayState, {
-              nearSea,
-              hasPool,
-              hasKitchen,
-              hasAirConditioner,
-              hasParking,
-              smokingForbidden,
-              quietHours,
-              amenityIds,
-              roomFeatureIds,
-            })
-          ) {
-            return null;
-          }
-
-          const { minNightPrice, minNightPriceType, currency } = getMinPriceByRooms(
-            displayState.rooms.map((room) => ({
-              prices: room.prices,
-            })),
-          );
-          const stayPrice = getBestStayPriceByRooms({
-            rooms: displayState.rooms,
-            checkIn: stayRange.checkIn,
-            checkOut: stayRange.checkOut,
-            guests: guestsCount,
-          });
-          const priceForFilter = stayPrice ? stayPrice.totalNightly : minNightPrice;
-
-          if (minPrice !== null && (priceForFilter === null || priceForFilter < minPrice)) {
-            return null;
-          }
-          if (maxPrice !== null && (priceForFilter === null || priceForFilter > maxPrice)) {
-            return null;
-          }
-
-          const stats = rankingStatsById.get(property.id)?.last30Days;
-          const hasContacts = Boolean(
-            property.phone ||
-            property.phone2 ||
-            property.phone3 ||
-            property.whatsappUrl ||
-            property.telegramUrl ||
-            property.contactEmail ||
-            property.receiveRequests,
-          );
-          const hasRules = Boolean(
-            displayState.checkInFrom ||
-            displayState.childrenAllowed !== null ||
-            displayState.petsPolicy !== null,
-          );
-          const hasCapacity = displayState.rooms.some(
-            (room) => room.beds + room.extraBeds > 0 || room.roomsCount > 0,
-          );
-          const intentScore = getPropertyIntentScore({
-            hasTextSearch: searchQuery.length >= 2,
-            searchScore: searchScoreMap.get(property.id) ?? 0,
-            hasLocationSearchScope,
-            exactLocationMatch,
-            nearbyLocationMatch,
-            distanceKm,
-          });
-          const availabilityScore = getPropertyAvailabilityScore({
-            stayMode: stayRange.mode,
-            stayPrice,
-            minNightPrice,
-            activeRoomsCount: displayState.rooms.length,
-          });
-          const completenessScore = getPropertyCompletenessScore({
-            imageUrls: displayState.imageUrls,
-            description: displayState.description,
-            minNightPrice,
-            latitude: displayState.latitude,
-            longitude: displayState.longitude,
-            activeRoomsCount: displayState.rooms.length,
-            hasContacts,
-            hasRules,
-            hasCapacity,
-          });
-          const freshnessScore = getPropertyFreshnessScore({
-            now: rankingNow,
-            createdAt: property.createdAt,
-            moderatedAt: property.moderatedAt,
-            updatedAt: property.updatedAt,
-          });
-          const ranking = scoreRankingCandidate(
-            {
-              id: property.id,
-              ownerId: property.ownerId,
-              vertical: "property",
-              avgRating: Number(property.avgRating),
-              reviewsCount: property.reviewsCount,
-              createdAt: property.createdAt,
-              publishedAt: property.moderatedAt ?? property.createdAt,
-              updatedAt: property.updatedAt,
-              componentScores: {
-                intentScore,
-                availabilityScore,
-                completenessScore,
-                freshnessScore,
-              },
-              behaviorMetrics: {
-                impressions: property.searchImpressions,
-                cardViews: stats?.cardViews ?? 0,
-                favorites: stats?.favorites ?? 0,
-                phoneClicks: stats?.phoneClicks ?? 0,
-                messengerClicks: stats?.messengerClicks ?? 0,
-                emailClicks: stats?.emailClicks ?? 0,
-                createBookingClicks: stats?.createBookingClicks ?? 0,
-              },
-            },
-            {
-              now: rankingNow,
-              searchFingerprint,
-              impressionsMedian,
-              targetTestImpressions: 120,
-            },
-          );
-
-          return {
-            id: property.id,
-            ownerId: property.ownerId,
-            property,
-            displayState,
-            minNightPrice,
-            minNightPriceType,
-            currency,
-            stayPrice,
-            priceForFilter,
-            distanceKm,
-            searchMatchKind,
-            searchScore: searchScoreMap.get(property.id) ?? 0,
-            ranking,
-            sortValues: {
-              price: priceForFilter,
-              distance: distanceKm,
-              createdAt: property.createdAt,
-              publishedAt: property.moderatedAt ?? property.createdAt,
-              updatedAt: property.updatedAt,
-            },
-          };
-        })
-        .filter(
-          (
-            item,
-          ): item is {
-            id: string;
-            ownerId: string;
-            property: CatalogPropertyRow;
-            displayState: ReturnType<typeof resolvePublicCatalogDisplayState>;
-            minNightPrice: number | null;
-            minNightPriceType: RoomPriceType | null;
-            currency: string | null;
-            stayPrice: ReturnType<typeof getBestStayPriceByRooms>;
-            priceForFilter: number | null;
-            distanceKm: number | null;
-            searchMatchKind: CatalogSearchMatchKind;
-            searchScore: number;
-            ranking: ReturnType<typeof scoreRankingCandidate>;
-            sortValues: {
-              price: number | null;
-              distance: number | null;
-              createdAt: Date;
-              publishedAt: Date;
-              updatedAt: Date;
-            };
-          } => Boolean(item),
-        )
-        .sort((left, right) => {
-          if (hasLocationSearchScope && left.searchMatchKind !== right.searchMatchKind) {
-            return (
-              getSearchMatchKindRank(left.searchMatchKind) -
-              getSearchMatchKindRank(right.searchMatchKind)
-            );
-          }
-
-          return compareRankedItems(left, right, sort);
-        });
-
-      const rankedRows =
-        sort === "relevance"
-          ? hasLocationSearchScope
-            ? [
-                ...rankItems(
-                  filteredRows.filter((entry) => entry.searchMatchKind === "primary"),
-                  sort,
-                  { pageSize },
-                ),
-                ...rankItems(
-                  filteredRows.filter((entry) => entry.searchMatchKind !== "primary"),
-                  sort,
-                  { pageSize },
-                ),
-              ]
-            : rankItems(filteredRows, sort, { pageSize })
-          : filteredRows;
-
-      const total = rankedRows.length;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      const safePage = Math.min(page, totalPages);
-      const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-      const pagedPropertyIds = pagedRows.map((entry) => entry.property.id);
-      const shouldTrackSearchImpressions =
-        query.trackSearchImpressions !== false && areSearchImpressionWritesEnabled();
-
-      // Fire-and-forget writes inside a read path can amplify search traffic into DB writes;
-      // keep them behind SEARCH_IMPRESSION_WRITES=false for staging/load tests and incidents.
-      if (shouldTrackSearchImpressions && pagedPropertyIds.length > 0) {
-        db.property
-          .updateMany({
-            where: { id: { in: pagedPropertyIds } },
-            data: { searchImpressions: { increment: 1 } },
-          })
-          .catch(() => {});
-      }
-
-      // Step 2: load extra card-only metadata only for current page to keep response cost predictable.
-      const cardMetaRows =
-        pagedPropertyIds.length > 0
-          ? await db.property.findMany({
-              where: {
-                id: { in: pagedPropertyIds },
-              },
-              select: {
-                id: true,
-                amenities: {
-                  orderBy: [{ amenityId: "asc" }],
-                  take: 12,
-                  select: {
-                    amenity: {
-                      select: {
-                        name: true,
-                      },
-                    },
-                  },
-                },
-                customAmenities: {
-                  orderBy: [{ createdAt: "asc" }],
-                  take: 12,
-                  select: {
-                    name: true,
-                  },
-                },
-                roomAmenitySettings: {
-                  where: {
-                    enabled: true,
-                    isKeyAmenity: true,
-                  },
-                  orderBy: [{ updatedAt: "asc" }],
-                  select: {
-                    feature: {
-                      select: {
-                        name: true,
-                      },
-                    },
-                  },
-                },
-                rooms: {
-                  where: { isActive: true },
-                  orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-                  select: {
-                    features: {
-                      select: {
-                        feature: {
-                          select: {
-                            name: true,
-                          },
-                        },
-                      },
-                    },
-                    customFeatures: {
-                      select: {
-                        name: true,
-                      },
-                    },
-                  },
-                },
-              },
-            })
-          : [];
-      const cardMetaById = new Map(cardMetaRows.map((entry) => [entry.id, entry]));
-
-      const displayImageUrls = Array.from(
-        new Set(pagedRows.flatMap((entry) => entry.displayState.imageUrls)),
-      );
-      const existingDisplayImageUrls = new Set(
-        await filterExistingLocalPublicUploadUrls(displayImageUrls),
-      );
-
-      const items: PublicCatalogItem[] = pagedRows.map((entry) => {
-        const property = entry.property;
-        const displayState = entry.displayState;
-        const cardMeta = cardMetaById.get(property.id);
-
-        // Use published snapshot for display content when owner edits are under moderation.
-        const catalogSnap = displayState.snapshot;
-        const imageUrls = displayState.imageUrls.filter((url) => existingDisplayImageUrls.has(url));
-        const stayPrice = entry.stayPrice;
-        const roomSnapshot = pickRepresentativeRoom(
-          displayState.rooms,
-          stayPrice?.roomTitle ?? null,
-        );
-        // Manual "key amenity" configuration has priority; auto-highlights are fallback.
-        // When a snapshot is available, prefer its keyRoomAmenityNames for display.
-        const selectedKeyAmenityNames = sortAmenityValuesForCatalog(
-          catalogSnap
-            ? catalogSnap.keyRoomAmenityNames
-            : (cardMeta?.roomAmenitySettings ?? []).map((setting) => setting.feature.name),
-        ).slice(0, MAX_KEY_AMENITIES_PER_PROPERTY);
-        const amenityHighlights =
-          selectedKeyAmenityNames.length > 0
-            ? selectedKeyAmenityNames
-            : collectAmenityHighlights({
-                propertyAmenityNames: catalogSnap
-                  ? catalogSnap.amenities.map((a) => a.name)
-                  : (cardMeta?.amenities ?? []).map((item) => item.amenity.name),
-                propertyCustomAmenityNames: catalogSnap
-                  ? catalogSnap.customAmenities
-                  : (cardMeta?.customAmenities ?? []).map((item) => item.name),
-                roomAmenityNamesByRoom: catalogSnap
-                  ? catalogSnap.rooms.map((room) => [
-                      ...room.features.map((f) => f.name),
-                      ...room.customFeatures.map((f) => stripPaidAmenitySuffix(f)),
-                    ])
-                  : (cardMeta?.rooms ?? []).map((room) => [
-                      ...room.features.map((item) => item.feature.name),
-                      ...room.customFeatures.map((item) => item.name),
-                    ]),
-              });
-        const seaDistanceLabel =
-          displayState.seaDistance?.trim() ||
-          null ||
-          extractSeaDistanceLabel(
-            catalogSnap
-              ? catalogSnap.customAmenities.map((name) => ({ name }))
-              : (cardMeta?.customAmenities ?? []),
-          );
-        const roomPreviews: PublicCatalogRoomPreview[] = displayState.rooms
-          .map((room) => {
-            let priceFrom: number | null = null;
-            let roomPriceType: RoomPriceType | null = null;
-            let roomCurrency: string | null = null;
-
-            for (const price of room.prices) {
-              const value = Number(price.price);
-              if (!Number.isFinite(value)) {
-                continue;
+        const where: Prisma.PropertyWhereInput = {
+          ...buildPublicCatalogPropertyVisibilityWhere(),
+          ...(minRating !== null ? { avgRating: { gte: minRating } } : {}),
+          ...(hasReviews ? { reviewsCount: { gt: 0 } } : {}),
+          ...(bounds
+            ? {
+                latitude: { gte: bounds.south, lte: bounds.north },
+                longitude: { gte: bounds.west, lte: bounds.east },
               }
-              if (priceFrom === null || value < priceFrom) {
-                priceFrom = value;
-                roomPriceType = normalizeRoomPriceType(price.priceType);
-                roomCurrency = price.currency;
-              }
-            }
-
-            return {
-              id: room.id,
-              title: normalizeRoomTitle(room.title) || "Номер",
-              beds: room.beds,
-              extraBeds: room.extraBeds,
-              roomsCount: Math.max(1, room.roomsCount),
-              areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
-              maxGuests: Math.max(1, room.beds + room.extraBeds),
-              priceFrom,
-              priceType: roomPriceType,
-              currency: roomCurrency,
-            };
-          })
-          .sort((left, right) => {
-            if (left.priceFrom === null && right.priceFrom === null) {
-              return left.title.localeCompare(right.title, "ru");
-            }
-            if (left.priceFrom === null) {
-              return 1;
-            }
-            if (right.priceFrom === null) {
-              return -1;
-            }
-            if (left.priceFrom !== right.priceFrom) {
-              return left.priceFrom - right.priceFrom;
-            }
-            return left.title.localeCompare(right.title, "ru");
-          })
-          .slice(0, 3);
-
-        const displayName = displayState.name;
-        const displayType = displayState.type;
-        const displayLocationId = displayState.locationId;
-        const displayLocationName = displayState.locationName;
-        const description = displayState.description?.trim();
-        const starRating = displayState.starRating;
-
-        return {
-          id: property.id,
-          slug: buildPropertySlug(displayName, property.id),
-          path: buildPublicPropertyPath({
-            id: property.id,
-            locationId: displayLocationId,
-            name: displayName,
-          }),
-          createdAt: property.createdAt.toISOString(),
-          name: displayName ?? "Объект без названия",
-          type: displayType,
-          typeLabel: displayType ? (propertyTypeById[displayType]?.name ?? displayType) : null,
-          description: description ? description.slice(0, 150) : null,
-          starRating: Math.max(0, Math.min(5, starRating)),
-          locationId: displayLocationId,
-          locationName: displayLocationId
-            ? (crimeaLocationById[displayLocationId]?.name ?? displayLocationName)
-            : displayLocationName,
-          address: displayState.address ?? null,
-          latitude: displayState.latitude,
-          longitude: displayState.longitude,
-          distanceKm: roundDistanceKm(entry.distanceKm),
-          searchMatchKind: entry.searchMatchKind,
-          checkInFrom: displayState.checkInFrom,
-          childrenAllowed: displayState.childrenAllowed === true,
-          petsPolicy: displayState.petsPolicy as PetsPolicy | null,
-          coverImageUrl: imageUrls[0] ?? null,
-          imageUrls,
-          roomPreviews,
-          activeRoomsCount: displayState.rooms.length,
-          minNightPrice: entry.minNightPrice,
-          minNightPriceType: entry.minNightPriceType,
-          currency: entry.currency,
-          stayContext: {
-            ...stayRange,
-            guests: guestsCount,
-          },
-          stayPrice,
-          roomSnapshot,
-          amenityHighlights,
-          seaDistanceLabel,
-          avgRating: Number(property.avgRating),
-          reviewsCount: property.reviewsCount,
-          owner: {
-            id: property.owner.id,
-            firstName: property.owner.firstName,
-            lastName: "",
-            avatarUrl: property.owner.avatarUrl,
-            phoneVerifiedAt: property.owner.phoneVerifiedAt?.toISOString() ?? null,
-          },
+            : {}),
         };
-      });
-
-      return {
-        items,
-        page: safePage,
-        pageSize,
-        total,
-        totalPages,
-        priceBounds: {
-          min: 0,
-          max: catalogMaxPrice,
-        },
-        filters: {
-          locationId: resolvedLocation?.id ?? null,
-          locationName: resolvedLocation?.name ?? null,
+        const propertyCandidateStage = await getPropertyCandidateStage({
+          baseWhere: where,
+          pageSize,
+          candidateLimit,
           type,
-          query: searchQuery || null,
+          searchQuery,
+          resolvedLocation,
+          locationText: resolvedLocation?.name ?? locationFilter ?? locationFilterId ?? "",
+          locationCenterPoint,
+          hasLocationSearchScope,
           minPrice,
           maxPrice,
           minRating,
-          hasPhotos,
           hasReviews,
+          hasPhotos,
           familyFriendly,
           petsAllowed,
+          smokingForbidden,
+          quietHours,
+          bounds,
+        });
+        perfCandidateStageDurationMs = propertyCandidateStage.durationMs;
+        perfCandidateIdsCount = propertyCandidateStage.idsCount;
+        perfUsedFallback = propertyCandidateStage.usedFallback;
+        perfPrefilterEnabled = propertyCandidateStage.enabled;
+
+        const catalogSelect = Prisma.validator<Prisma.PropertySelect>()({
+          id: true,
+          ownerId: true,
+          status: true,
+          pendingEditStatus: true,
+          publishedSnapshot: true,
+          name: true,
+          type: true,
+          locationId: true,
+          locationName: true,
+          address: true,
+          seaDistance: true,
+          latitude: true,
+          longitude: true,
+          description: true,
+          checkInFrom: true,
+          childrenAllowed: true,
+          petsPolicy: true,
+          smokingPolicy: true,
+          quietHoursEnabled: true,
+          parkingInfo: true,
+          mealOptions: true,
+          starRating: true,
+          phone: true,
+          phone2: true,
+          phone3: true,
+          whatsappUrl: true,
+          telegramUrl: true,
+          contactEmail: true,
+          receiveRequests: true,
+          avgRating: true,
+          reviewsCount: true,
+          searchImpressions: true,
+          createdAt: true,
+          updatedAt: true,
+          moderatedAt: true,
+          owner: {
+            select: {
+              id: true,
+              firstName: true,
+              avatarUrl: true,
+              phoneVerifiedAt: true,
+            },
+          },
+          media: {
+            where: { roomId: null, type: MediaType.IMAGE },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            take: CATALOG_CARD_IMAGE_LIMIT,
+            select: {
+              url: true,
+              type: true,
+            },
+          },
+          amenities: {
+            select: {
+              amenityId: true,
+            },
+          },
+          roomAmenitySettings: {
+            where: {
+              enabled: true,
+            },
+            select: {
+              featureId: true,
+              enabled: true,
+            },
+          },
+          rooms: {
+            where: { isActive: true },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              beds: true,
+              extraBeds: true,
+              roomsCount: true,
+              areaSqm: true,
+              features: {
+                select: {
+                  featureId: true,
+                },
+              },
+              prices: catalogRoomPriceArgs,
+            },
+          },
+        });
+
+        type CatalogPropertyRow = Prisma.PropertyGetPayload<{
+          select: typeof catalogSelect;
+        }>;
+        // Step 1: fetch broad candidate pool with lightweight joins.
+        // Fine-grained ranking/sorting is applied in memory because it mixes trigram score + dynamic stay pricing.
+        const allProperties: CatalogPropertyRow[] =
+          propertyCandidateStage.ids?.length === 0
+            ? []
+            : await db.property.findMany({
+                where: propertyCandidateStage.ids
+                  ? {
+                      AND: [
+                        where,
+                        {
+                          id: {
+                            in: propertyCandidateStage.ids,
+                          },
+                        },
+                      ],
+                    }
+                  : where,
+                orderBy: [{ updatedAt: "desc" }],
+                select: catalogSelect,
+                take: propertyCandidateStage.ids
+                  ? propertyCandidateStage.ids.length
+                  : candidateLimit,
+              });
+        perfCandidateCount = allProperties.length;
+        const rankingStatsById = await getRankingStatsByEntity(
+          "property",
+          allProperties.map((property) => property.id),
+          rankingNow,
+        );
+        const impressionsMedian = Math.max(
+          1,
+          median(allProperties.map((property) => property.searchImpressions)),
+        );
+        const searchFingerprint = buildSearchFingerprint({
+          vertical: "property",
+          location: resolvedLocation?.id ?? locationFilter ?? null,
+          type,
+          query: searchQuery,
+          checkIn: stayRange.checkIn,
+          checkOut: stayRange.checkOut,
+          guests: guestsCount,
+          minPrice,
+          maxPrice,
           nearSea,
           hasPool,
           hasKitchen,
@@ -2993,9 +2370,636 @@ export async function getPublicCatalog(query: PublicCatalogQuery): Promise<Publi
           amenityIds,
           roomFeatureIds,
           sort,
-          nearbyRadiusKm: hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
-        },
-      };
+          bounds,
+        });
+        const catalogDisplayStateById = new Map(
+          allProperties.map((property) => [
+            property.id,
+            resolvePublicCatalogDisplayState(property),
+          ]),
+        );
+        let catalogMaxPrice = 0;
+        for (const displayState of catalogDisplayStateById.values()) {
+          for (const room of displayState.rooms) {
+            for (const price of room.prices) {
+              const value = Number(price.price);
+              if (Number.isFinite(value) && value > catalogMaxPrice) {
+                catalogMaxPrice = value;
+              }
+            }
+          }
+        }
+
+        const queryVariants = toSearchVariants(searchQuery);
+        const trigramScoreMap =
+          searchQuery.length >= 2
+            ? new Map(
+                rankByTrigramWithScores(
+                  searchQuery,
+                  allProperties,
+                  (property) => {
+                    const displayState = catalogDisplayStateById.get(property.id);
+                    const typeLabel = displayState?.type
+                      ? (propertyTypeById[displayState.type]?.name ?? displayState.type)
+                      : null;
+                    const normalizedAddress = displayState?.address
+                      ? normalizeAddressSearchText(displayState.address)
+                      : null;
+
+                    return [
+                      displayState?.name ?? property.name,
+                      displayState?.name ? transliterateToLatin(displayState.name) : null,
+                      displayState?.locationName ?? property.locationName,
+                      displayState?.locationName
+                        ? transliterateToLatin(displayState.locationName)
+                        : null,
+                      displayState?.address ?? property.address,
+                      normalizedAddress,
+                      normalizedAddress ? transliterateToLatin(normalizedAddress) : null,
+                      displayState?.description ?? property.description,
+                      typeLabel,
+                      ...(displayState?.rooms ?? []).map((room) => room.title),
+                    ];
+                  },
+                  { limit: allProperties.length, minScore: 0.05 },
+                ).map((entry) => [entry.item.id, entry.score]),
+              )
+            : new Map<string, number>();
+        const searchScoreEntries: Array<[string, number]> = [];
+
+        if (searchQuery.length >= 2) {
+          // Hybrid ranking: token score catches structured/address terms,
+          // trigram score catches typos and near matches.
+          for (const property of allProperties) {
+            const displayState = catalogDisplayStateById.get(property.id);
+            const typeLabel = displayState?.type
+              ? (propertyTypeById[displayState.type]?.name ?? displayState.type)
+              : null;
+            const tokenScore = getWeightedFieldTokenScore(queryVariants, [
+              { value: displayState?.name ?? property.name, weight: 1.45 },
+              { value: displayState?.address ?? property.address, weight: 1.3, isAddress: true },
+              { value: displayState?.locationName ?? property.locationName, weight: 1.08 },
+              { value: typeLabel, weight: 0.46 },
+              { value: displayState?.description ?? property.description, weight: 0.58 },
+              ...(displayState?.rooms ?? []).map((room) => ({ value: room.title, weight: 0.72 })),
+            ]);
+            const trigramScore = trigramScoreMap.get(property.id) ?? 0;
+            const locationBoost =
+              queryLocationHint && displayState?.locationId === queryLocationHint.id ? 0.22 : 0;
+            const score = Math.max(tokenScore, trigramScore * 1.12) + locationBoost;
+
+            if (score >= 0.34) {
+              searchScoreEntries.push([property.id, score]);
+            }
+          }
+        }
+
+        const searchScoreMap = new Map(searchScoreEntries);
+
+        // Reduce candidate set before expensive per-card enrichment:
+        // text filter -> price constraints -> ranking payload.
+        const filteredRows = allProperties
+          .map((property) => {
+            const displayState = catalogDisplayStateById.get(property.id);
+            if (!displayState) {
+              return null;
+            }
+
+            if (searchQuery.length >= 2 && !searchScoreMap.has(property.id)) {
+              return null;
+            }
+            if (
+              bounds &&
+              (displayState.latitude === null ||
+                displayState.longitude === null ||
+                displayState.latitude < bounds.south ||
+                displayState.latitude > bounds.north ||
+                displayState.longitude < bounds.west ||
+                displayState.longitude > bounds.east)
+            ) {
+              return null;
+            }
+
+            const exactLocationMatch = resolvedLocation
+              ? isSameCatalogLocation(displayState.locationId, resolvedLocation.id) ||
+                isSameCatalogLocation(displayState.locationName, resolvedLocation.name)
+              : false;
+            const distanceKm = calculateDistanceKm(
+              locationCenterPoint,
+              getCatalogLocationPoint({
+                latitude: displayState.latitude,
+                longitude: displayState.longitude,
+                locationId: displayState.locationId,
+                locationName: displayState.locationName,
+              }),
+            );
+            const nearbyLocationMatch =
+              !exactLocationMatch && isWithinRadiusKm(distanceKm, NEARBY_CATALOG_RADIUS_KM);
+            const searchMatchKind: CatalogSearchMatchKind =
+              hasLocationSearchScope && !exactLocationMatch ? "nearby" : "primary";
+
+            if (hasLocationSearchScope && !exactLocationMatch && !nearbyLocationMatch) {
+              return null;
+            }
+            if (type && displayState.type !== type) {
+              return null;
+            }
+            if (hasPhotos && displayState.imageUrls.length === 0) {
+              return null;
+            }
+            if (familyFriendly && displayState.childrenAllowed !== true) {
+              return null;
+            }
+            if (
+              petsAllowed &&
+              !([PetsPolicy.ON_REQUEST, PetsPolicy.ALLOWED] as PetsPolicy[]).includes(
+                displayState.petsPolicy ?? PetsPolicy.FORBIDDEN,
+              )
+            ) {
+              return null;
+            }
+            if (
+              !matchesCatalogAmenityFilters(displayState, {
+                nearSea,
+                hasPool,
+                hasKitchen,
+                hasAirConditioner,
+                hasParking,
+                smokingForbidden,
+                quietHours,
+                amenityIds,
+                roomFeatureIds,
+              })
+            ) {
+              return null;
+            }
+
+            const { minNightPrice, minNightPriceType, currency } = getMinPriceByRooms(
+              displayState.rooms.map((room) => ({
+                prices: room.prices,
+              })),
+            );
+            const stayPrice = getBestStayPriceByRooms({
+              rooms: displayState.rooms,
+              checkIn: stayRange.checkIn,
+              checkOut: stayRange.checkOut,
+              guests: guestsCount,
+            });
+            const priceForFilter = stayPrice ? stayPrice.totalNightly : minNightPrice;
+
+            if (minPrice !== null && (priceForFilter === null || priceForFilter < minPrice)) {
+              return null;
+            }
+            if (maxPrice !== null && (priceForFilter === null || priceForFilter > maxPrice)) {
+              return null;
+            }
+
+            const stats = rankingStatsById.get(property.id)?.last30Days;
+            const hasContacts = Boolean(
+              property.phone ||
+              property.phone2 ||
+              property.phone3 ||
+              property.whatsappUrl ||
+              property.telegramUrl ||
+              property.contactEmail ||
+              property.receiveRequests,
+            );
+            const hasRules = Boolean(
+              displayState.checkInFrom ||
+              displayState.childrenAllowed !== null ||
+              displayState.petsPolicy !== null,
+            );
+            const hasCapacity = displayState.rooms.some(
+              (room) => room.beds + room.extraBeds > 0 || room.roomsCount > 0,
+            );
+            const intentScore = getPropertyIntentScore({
+              hasTextSearch: searchQuery.length >= 2,
+              searchScore: searchScoreMap.get(property.id) ?? 0,
+              hasLocationSearchScope,
+              exactLocationMatch,
+              nearbyLocationMatch,
+              distanceKm,
+            });
+            const availabilityScore = getPropertyAvailabilityScore({
+              stayMode: stayRange.mode,
+              stayPrice,
+              minNightPrice,
+              activeRoomsCount: displayState.rooms.length,
+            });
+            const completenessScore = getPropertyCompletenessScore({
+              imageUrls: displayState.imageUrls,
+              description: displayState.description,
+              minNightPrice,
+              latitude: displayState.latitude,
+              longitude: displayState.longitude,
+              activeRoomsCount: displayState.rooms.length,
+              hasContacts,
+              hasRules,
+              hasCapacity,
+            });
+            const freshnessScore = getPropertyFreshnessScore({
+              now: rankingNow,
+              createdAt: property.createdAt,
+              moderatedAt: property.moderatedAt,
+              updatedAt: property.updatedAt,
+            });
+            const ranking = scoreRankingCandidate(
+              {
+                id: property.id,
+                ownerId: property.ownerId,
+                vertical: "property",
+                avgRating: Number(property.avgRating),
+                reviewsCount: property.reviewsCount,
+                createdAt: property.createdAt,
+                publishedAt: property.moderatedAt ?? property.createdAt,
+                updatedAt: property.updatedAt,
+                componentScores: {
+                  intentScore,
+                  availabilityScore,
+                  completenessScore,
+                  freshnessScore,
+                },
+                behaviorMetrics: {
+                  impressions: property.searchImpressions,
+                  cardViews: stats?.cardViews ?? 0,
+                  favorites: stats?.favorites ?? 0,
+                  phoneClicks: stats?.phoneClicks ?? 0,
+                  messengerClicks: stats?.messengerClicks ?? 0,
+                  emailClicks: stats?.emailClicks ?? 0,
+                  createBookingClicks: stats?.createBookingClicks ?? 0,
+                },
+              },
+              {
+                now: rankingNow,
+                searchFingerprint,
+                impressionsMedian,
+                targetTestImpressions: 120,
+              },
+            );
+
+            return {
+              id: property.id,
+              ownerId: property.ownerId,
+              property,
+              displayState,
+              minNightPrice,
+              minNightPriceType,
+              currency,
+              stayPrice,
+              priceForFilter,
+              distanceKm,
+              searchMatchKind,
+              searchScore: searchScoreMap.get(property.id) ?? 0,
+              ranking,
+              sortValues: {
+                price: priceForFilter,
+                distance: distanceKm,
+                createdAt: property.createdAt,
+                publishedAt: property.moderatedAt ?? property.createdAt,
+                updatedAt: property.updatedAt,
+              },
+            };
+          })
+          .filter(
+            (
+              item,
+            ): item is {
+              id: string;
+              ownerId: string;
+              property: CatalogPropertyRow;
+              displayState: ReturnType<typeof resolvePublicCatalogDisplayState>;
+              minNightPrice: number | null;
+              minNightPriceType: RoomPriceType | null;
+              currency: string | null;
+              stayPrice: ReturnType<typeof getBestStayPriceByRooms>;
+              priceForFilter: number | null;
+              distanceKm: number | null;
+              searchMatchKind: CatalogSearchMatchKind;
+              searchScore: number;
+              ranking: ReturnType<typeof scoreRankingCandidate>;
+              sortValues: {
+                price: number | null;
+                distance: number | null;
+                createdAt: Date;
+                publishedAt: Date;
+                updatedAt: Date;
+              };
+            } => Boolean(item),
+          )
+          .sort((left, right) => {
+            if (hasLocationSearchScope && left.searchMatchKind !== right.searchMatchKind) {
+              return (
+                getSearchMatchKindRank(left.searchMatchKind) -
+                getSearchMatchKindRank(right.searchMatchKind)
+              );
+            }
+
+            return compareRankedItems(left, right, sort);
+          });
+
+        const rankedRows =
+          sort === "relevance"
+            ? hasLocationSearchScope
+              ? [
+                  ...rankItems(
+                    filteredRows.filter((entry) => entry.searchMatchKind === "primary"),
+                    sort,
+                    { pageSize },
+                  ),
+                  ...rankItems(
+                    filteredRows.filter((entry) => entry.searchMatchKind !== "primary"),
+                    sort,
+                    { pageSize },
+                  ),
+                ]
+              : rankItems(filteredRows, sort, { pageSize })
+            : filteredRows;
+
+        const total = rankedRows.length;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const safePage = Math.min(page, totalPages);
+        const pagedRows = rankedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+        const pagedPropertyIds = pagedRows.map((entry) => entry.property.id);
+        const shouldTrackSearchImpressions =
+          query.trackSearchImpressions !== false && areSearchImpressionWritesEnabled();
+
+        // Fire-and-forget writes inside a read path can amplify search traffic into DB writes;
+        // keep them behind SEARCH_IMPRESSION_WRITES=false for staging/load tests and incidents.
+        if (shouldTrackSearchImpressions && pagedPropertyIds.length > 0) {
+          db.property
+            .updateMany({
+              where: { id: { in: pagedPropertyIds } },
+              data: { searchImpressions: { increment: 1 } },
+            })
+            .catch(() => {});
+        }
+
+        // Step 2: load extra card-only metadata only for current page to keep response cost predictable.
+        const cardMetaRows =
+          pagedPropertyIds.length > 0
+            ? await db.property.findMany({
+                where: {
+                  id: { in: pagedPropertyIds },
+                },
+                select: {
+                  id: true,
+                  amenities: {
+                    orderBy: [{ amenityId: "asc" }],
+                    take: 12,
+                    select: {
+                      amenity: {
+                        select: {
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                  customAmenities: {
+                    orderBy: [{ createdAt: "asc" }],
+                    take: 12,
+                    select: {
+                      name: true,
+                    },
+                  },
+                  roomAmenitySettings: {
+                    where: {
+                      enabled: true,
+                      isKeyAmenity: true,
+                    },
+                    orderBy: [{ updatedAt: "asc" }],
+                    select: {
+                      feature: {
+                        select: {
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                  rooms: {
+                    where: { isActive: true },
+                    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+                    select: {
+                      features: {
+                        select: {
+                          feature: {
+                            select: {
+                              name: true,
+                            },
+                          },
+                        },
+                      },
+                      customFeatures: {
+                        select: {
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              })
+            : [];
+        const cardMetaById = new Map(cardMetaRows.map((entry) => [entry.id, entry]));
+
+        const displayImageUrls = Array.from(
+          new Set(pagedRows.flatMap((entry) => entry.displayState.imageUrls)),
+        );
+        const existingDisplayImageUrls = new Set(
+          await filterExistingLocalPublicUploadUrls(displayImageUrls),
+        );
+
+        const items: PublicCatalogItem[] = pagedRows.map((entry) => {
+          const property = entry.property;
+          const displayState = entry.displayState;
+          const cardMeta = cardMetaById.get(property.id);
+
+          // Use published snapshot for display content when owner edits are under moderation.
+          const catalogSnap = displayState.snapshot;
+          const imageUrls = displayState.imageUrls.filter((url) =>
+            existingDisplayImageUrls.has(url),
+          );
+          const stayPrice = entry.stayPrice;
+          const roomSnapshot = pickRepresentativeRoom(
+            displayState.rooms,
+            stayPrice?.roomTitle ?? null,
+          );
+          // Manual "key amenity" configuration has priority; auto-highlights are fallback.
+          // When a snapshot is available, prefer its keyRoomAmenityNames for display.
+          const selectedKeyAmenityNames = sortAmenityValuesForCatalog(
+            catalogSnap
+              ? catalogSnap.keyRoomAmenityNames
+              : (cardMeta?.roomAmenitySettings ?? []).map((setting) => setting.feature.name),
+          ).slice(0, MAX_KEY_AMENITIES_PER_PROPERTY);
+          const amenityHighlights =
+            selectedKeyAmenityNames.length > 0
+              ? selectedKeyAmenityNames
+              : collectAmenityHighlights({
+                  propertyAmenityNames: catalogSnap
+                    ? catalogSnap.amenities.map((a) => a.name)
+                    : (cardMeta?.amenities ?? []).map((item) => item.amenity.name),
+                  propertyCustomAmenityNames: catalogSnap
+                    ? catalogSnap.customAmenities
+                    : (cardMeta?.customAmenities ?? []).map((item) => item.name),
+                  roomAmenityNamesByRoom: catalogSnap
+                    ? catalogSnap.rooms.map((room) => [
+                        ...room.features.map((f) => f.name),
+                        ...room.customFeatures.map((f) => stripPaidAmenitySuffix(f)),
+                      ])
+                    : (cardMeta?.rooms ?? []).map((room) => [
+                        ...room.features.map((item) => item.feature.name),
+                        ...room.customFeatures.map((item) => item.name),
+                      ]),
+                });
+          const seaDistanceLabel =
+            displayState.seaDistance?.trim() ||
+            null ||
+            extractSeaDistanceLabel(
+              catalogSnap
+                ? catalogSnap.customAmenities.map((name) => ({ name }))
+                : (cardMeta?.customAmenities ?? []),
+            );
+          const roomPreviews: PublicCatalogRoomPreview[] = displayState.rooms
+            .map((room) => {
+              let priceFrom: number | null = null;
+              let roomPriceType: RoomPriceType | null = null;
+              let roomCurrency: string | null = null;
+
+              for (const price of room.prices) {
+                const value = Number(price.price);
+                if (!Number.isFinite(value)) {
+                  continue;
+                }
+                if (priceFrom === null || value < priceFrom) {
+                  priceFrom = value;
+                  roomPriceType = normalizeRoomPriceType(price.priceType);
+                  roomCurrency = price.currency;
+                }
+              }
+
+              return {
+                id: room.id,
+                title: normalizeRoomTitle(room.title) || "Номер",
+                beds: room.beds,
+                extraBeds: room.extraBeds,
+                roomsCount: Math.max(1, room.roomsCount),
+                areaSqm: room.areaSqm === null ? null : Number(room.areaSqm),
+                maxGuests: Math.max(1, room.beds + room.extraBeds),
+                priceFrom,
+                priceType: roomPriceType,
+                currency: roomCurrency,
+              };
+            })
+            .sort((left, right) => {
+              if (left.priceFrom === null && right.priceFrom === null) {
+                return left.title.localeCompare(right.title, "ru");
+              }
+              if (left.priceFrom === null) {
+                return 1;
+              }
+              if (right.priceFrom === null) {
+                return -1;
+              }
+              if (left.priceFrom !== right.priceFrom) {
+                return left.priceFrom - right.priceFrom;
+              }
+              return left.title.localeCompare(right.title, "ru");
+            })
+            .slice(0, 3);
+
+          const displayName = displayState.name;
+          const displayType = displayState.type;
+          const displayLocationId = displayState.locationId;
+          const displayLocationName = displayState.locationName;
+          const description = displayState.description?.trim();
+          const starRating = displayState.starRating;
+
+          return {
+            id: property.id,
+            slug: buildPropertySlug(displayName, property.id),
+            path: buildPublicPropertyPath({
+              id: property.id,
+              locationId: displayLocationId,
+              name: displayName,
+            }),
+            createdAt: property.createdAt.toISOString(),
+            name: displayName ?? "Объект без названия",
+            type: displayType,
+            typeLabel: displayType ? (propertyTypeById[displayType]?.name ?? displayType) : null,
+            description: description ? description.slice(0, 150) : null,
+            starRating: Math.max(0, Math.min(5, starRating)),
+            locationId: displayLocationId,
+            locationName: displayLocationId
+              ? (crimeaLocationById[displayLocationId]?.name ?? displayLocationName)
+              : displayLocationName,
+            address: displayState.address ?? null,
+            latitude: displayState.latitude,
+            longitude: displayState.longitude,
+            distanceKm: roundDistanceKm(entry.distanceKm),
+            searchMatchKind: entry.searchMatchKind,
+            checkInFrom: displayState.checkInFrom,
+            childrenAllowed: displayState.childrenAllowed === true,
+            petsPolicy: displayState.petsPolicy as PetsPolicy | null,
+            coverImageUrl: imageUrls[0] ?? null,
+            imageUrls,
+            roomPreviews,
+            activeRoomsCount: displayState.rooms.length,
+            minNightPrice: entry.minNightPrice,
+            minNightPriceType: entry.minNightPriceType,
+            currency: entry.currency,
+            stayContext: {
+              ...stayRange,
+              guests: guestsCount,
+            },
+            stayPrice,
+            roomSnapshot,
+            amenityHighlights,
+            seaDistanceLabel,
+            avgRating: Number(property.avgRating),
+            reviewsCount: property.reviewsCount,
+            owner: {
+              id: property.owner.id,
+              firstName: property.owner.firstName,
+              lastName: "",
+              avatarUrl: property.owner.avatarUrl,
+              phoneVerifiedAt: property.owner.phoneVerifiedAt?.toISOString() ?? null,
+            },
+          };
+        });
+
+        return {
+          items,
+          page: safePage,
+          pageSize,
+          total,
+          totalPages,
+          priceBounds: {
+            min: 0,
+            max: catalogMaxPrice,
+          },
+          filters: {
+            locationId: resolvedLocation?.id ?? null,
+            locationName: resolvedLocation?.name ?? null,
+            type,
+            query: searchQuery || null,
+            minPrice,
+            maxPrice,
+            minRating,
+            hasPhotos,
+            hasReviews,
+            familyFriendly,
+            petsAllowed,
+            nearSea,
+            hasPool,
+            hasKitchen,
+            hasAirConditioner,
+            hasParking,
+            smokingForbidden,
+            quietHours,
+            amenityIds,
+            roomFeatureIds,
+            sort,
+            nearbyRadiusKm: hasLocationSearchScope ? NEARBY_CATALOG_RADIUS_KM : null,
+          },
+        };
       },
       () =>
         buildEmptyPublicCatalogResult({
@@ -3163,7 +3167,7 @@ const getCachedPublicPropertyRecord = cache(
 function getPropertyIdentifierState(
   property: PublicPropertyIdentifierRecord,
   options?: { usePublishedSnapshot?: boolean },
-): { slug: string; locationId: string | null } {
+): { slug: string; legacySlug: string; locationId: string | null } {
   const snapshot =
     options?.usePublishedSnapshot !== false &&
     shouldUsePublishedSnapshot({
@@ -3178,6 +3182,7 @@ function getPropertyIdentifierState(
 
   return {
     slug: buildPropertySlug(displayName, property.id),
+    legacySlug: buildPropertySlug(displayName),
     locationId: displayLocationId,
   };
 }
@@ -3209,7 +3214,7 @@ async function findPropertyIdByPublicSlugUncached(input: {
       usePublishedSnapshot: input.usePublishedSnapshot,
     });
     return (
-      state.slug === slug &&
+      (state.slug === slug || state.legacySlug === slug) &&
       (!input.expectedLocationId || state.locationId === input.expectedLocationId)
     );
   });
