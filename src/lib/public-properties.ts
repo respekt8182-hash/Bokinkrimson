@@ -3392,7 +3392,7 @@ function buildPublicPropertyCardFromRecord(
     okUrl: sp?.okUrl ?? property.okUrl,
     receiveRequests: sp?.receiveRequests ?? property.receiveRequests,
   };
-  const redactContacts = options?.redactContacts !== false;
+  const redactContacts = options?.redactContacts === true;
   const redactedContactFields = buildRedactedPublicContactFields(contacts);
   const publicContacts = redactContacts
     ? {
@@ -3556,7 +3556,7 @@ export async function getPublicPropertyByIdentifier(
   const item = await applyExternalImportedReviewsToPropertyCard(
     buildPublicPropertyCardFromRecord(property, reviewReactionById, {
       usePublishedSnapshot: true,
-      redactContacts: true,
+      redactContacts: false,
     }),
     property.id,
     viewerUserId,

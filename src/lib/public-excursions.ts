@@ -2466,7 +2466,7 @@ async function getExcursionCardByIdentifier(input: {
   const displaySessions = snapshot?.sessions ?? excursion.sessions;
   const displayScheduleRules = snapshot?.scheduleRules ?? excursion.scheduleRules;
   const displayScheduleExceptions = snapshot?.scheduleExceptions ?? excursion.scheduleExceptions;
-  const redactContacts = !input.ownerId;
+  const redactContacts = false;
   const contacts = {
     firstName: display.contactFirstName ?? excursion.owner.firstName,
     lastName: null,

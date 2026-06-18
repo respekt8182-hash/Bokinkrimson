@@ -1005,7 +1005,7 @@ function mapTransferCatalogItem(
     maxUrl: normalizeMaxProfileUrl(row.maxUrl),
     okUrl: normalizeOkProfileUrl(row.okUrl),
   };
-  const redactContacts = options?.redactContacts !== false;
+  const redactContacts = options?.redactContacts === true;
   const redactedContactFields = buildRedactedPublicContactFields(contacts);
   const publicContacts = redactContacts
     ? {

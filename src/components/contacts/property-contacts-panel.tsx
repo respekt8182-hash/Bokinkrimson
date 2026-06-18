@@ -302,9 +302,20 @@ export function PropertyContactsPanel({
   const effectiveVkUrl = revealedContacts?.vkUrl ?? vkUrl;
   const effectiveMaxUrl = revealedContacts?.maxUrl ?? maxUrl;
   const effectiveOkUrl = revealedContacts?.okUrl ?? okUrl;
+  const hasInlineDirectContacts = Boolean(
+    effectivePhone?.trim() ||
+      effectiveExtraPhones.some((item) => item.phone.trim().length > 0) ||
+      effectiveEmail?.trim() ||
+      effectiveWhatsappUrl?.trim() ||
+      effectiveTelegramUrl?.trim() ||
+      effectiveVkUrl?.trim() ||
+      effectiveMaxUrl?.trim() ||
+      effectiveOkUrl?.trim(),
+  );
   const canRevealContacts = Boolean(
     tracking &&
       !revealedContacts &&
+      !hasInlineDirectContacts &&
       (phoneAvailable || emailAvailable || messengerAvailable || phoneMasked),
   );
   const isCompact = variant === "compact";
