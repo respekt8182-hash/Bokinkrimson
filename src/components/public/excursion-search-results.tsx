@@ -3471,15 +3471,25 @@ export function ExcursionSearchResults({
       {mapPlacement === "mobile" ? (
         <section ref={mobileStageRef} className="-mx-4 -mt-2 md:hidden">
           <div
-            className="relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
+            className={cn(
+              "catalog-map-mobile-stage relative min-h-[360px] overflow-hidden bg-[#e7eef3]",
+              isCatalogMobileSheetExpanded && "catalog-map-mobile-stage-document-scroll",
+            )}
             style={{
-              height: mobileStageHeight
-                ? `${mobileStageHeight}px`
-                : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
+              height: isCatalogMobileSheetExpanded
+                ? "auto"
+                : mobileStageHeight
+                  ? `${mobileStageHeight}px`
+                  : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
             }}
           >
             <div
-              className="absolute inset-0"
+              className={cn(
+                "absolute",
+                isCatalogMobileSheetExpanded
+                  ? "inset-x-0 top-0 h-[100dvh]"
+                  : "inset-0",
+              )}
               onPointerDownCapture={handleCatalogMobileMapPointerDown}
               onWheelCapture={handleMapWheelCapture}
             >
@@ -3519,12 +3529,17 @@ export function ExcursionSearchResults({
 
             <div
               className={cn(
-                "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
+                "z-40 bg-transparent will-change-transform",
+                isCatalogMobileSheetExpanded
+                  ? "relative h-auto"
+                  : "absolute inset-x-0 top-0 h-full",
                 isMobileSheetDragging
                   ? "transition-none"
                   : "transition-transform duration-300 ease-out",
               )}
-              style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
+              style={{
+                transform: `translate3d(0, ${isCatalogMobileSheetExpanded ? 0 : resolvedMobileSheetTop}px, 0)`,
+              }}
             >
               <div className={cn("md:hidden", isCatalogMobileSheetExpanded && "hidden")}>
                 {catalogMobileSheetHandle}
@@ -3545,10 +3560,10 @@ export function ExcursionSearchResults({
                   isCatalogMobileSheetExpanded ? undefined : handleCatalogMobileSheetPointerCancel
                 }
                 className={cn(
-                  "overflow-y-auto overscroll-y-auto bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
+                  "bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
                   isCatalogMobileSheetExpanded
-                    ? "h-full pt-0"
-                    : "h-[calc(100%-76px)] touch-none rounded-t-[28px] pt-4",
+                    ? "h-auto overflow-visible pt-0"
+                    : "h-[calc(100%-76px)] touch-none overflow-y-auto overscroll-y-auto rounded-t-[28px] pt-4",
                   mobileSheetSnap === "collapsed" ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
               >

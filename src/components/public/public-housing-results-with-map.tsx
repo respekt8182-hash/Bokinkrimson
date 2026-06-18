@@ -1338,15 +1338,25 @@ export function PublicHousingResultsWithMap({
           isMapActivated ? (
             <section ref={mobileStageRef} className="-mx-4 -mt-6 md:hidden">
               <div
-                className="catalog-map-mobile-stage relative min-h-[360px] overflow-hidden bg-[#e7eef3]"
+                className={cn(
+                  "catalog-map-mobile-stage relative min-h-[360px] overflow-hidden bg-[#e7eef3]",
+                  isMobileSheetExpanded && "catalog-map-mobile-stage-document-scroll",
+                )}
                 style={{
-                  height: mobileStageHeight
-                    ? `${mobileStageHeight}px`
-                    : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
+                  height: isMobileSheetExpanded
+                    ? "auto"
+                    : mobileStageHeight
+                      ? `${mobileStageHeight}px`
+                      : `min(${MOBILE_STAGE_MAX_HEIGHT}px, 100dvh)`,
                 }}
               >
                 <div
-                  className="catalog-map-touch-layer absolute inset-0"
+                  className={cn(
+                    "catalog-map-touch-layer absolute",
+                    isMobileSheetExpanded
+                      ? "inset-x-0 top-0 h-[100dvh]"
+                      : "inset-0",
+                  )}
                   onPointerDownCapture={handleMobileMapPointerDown}
                   onWheelCapture={handleMapWheelCapture}
                 >
@@ -1386,12 +1396,17 @@ export function PublicHousingResultsWithMap({
 
                 <div
                   className={cn(
-                    "absolute inset-x-0 top-0 z-40 h-full bg-transparent will-change-transform",
+                    "z-40 bg-transparent will-change-transform",
+                    isMobileSheetExpanded
+                      ? "relative h-auto"
+                      : "absolute inset-x-0 top-0 h-full",
                     mobileSheetDragRef.current
                       ? "transition-none"
                       : "transition-transform duration-300 ease-out",
                   )}
-                  style={{ transform: `translate3d(0, ${resolvedMobileSheetTop}px, 0)` }}
+                  style={{
+                    transform: `translate3d(0, ${isMobileSheetExpanded ? 0 : resolvedMobileSheetTop}px, 0)`,
+                  }}
                 >
                   <div className={cn("md:hidden", isMobileSheetExpanded && "hidden")}>
                     <button
@@ -1428,10 +1443,10 @@ export function PublicHousingResultsWithMap({
                       isMobileSheetExpanded ? undefined : handleMobileSheetPointerCancel
                     }
                     className={cn(
-                      "overflow-y-auto overscroll-y-contain bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
+                      "bg-[#f4f6fb] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+7rem)] shadow-[0_-18px_38px_rgba(15,23,42,0.15)] transition-opacity duration-150",
                       isMobileSheetExpanded
-                        ? "h-full pt-0"
-                        : "h-[calc(100%-76px)] touch-none rounded-t-[28px] pt-4",
+                        ? "h-auto overflow-visible pt-0"
+                        : "h-[calc(100%-76px)] touch-none overflow-y-auto overscroll-y-contain rounded-t-[28px] pt-4",
                       mobileSheetSnap === "collapsed"
                         ? "pointer-events-none opacity-0"
                         : "opacity-100",

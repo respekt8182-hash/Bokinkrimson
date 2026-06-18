@@ -2570,6 +2570,11 @@ button:focus-visible > .field-adornment-icon {
   touch-action: none;
 }
 
+.catalog-map-mobile-stage.catalog-map-mobile-stage-document-scroll {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 .map-column {
   border-radius: 20px;
   overflow: hidden;
