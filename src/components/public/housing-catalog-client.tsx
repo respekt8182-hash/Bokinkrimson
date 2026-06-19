@@ -571,6 +571,10 @@ export function HousingCatalogClient({
       const controller = new AbortController();
       filterAbortControllerRef.current = controller;
 
+      document.getElementById("catalog-results")?.scrollIntoView({
+        block: "start",
+        behavior: "instant" as ScrollBehavior,
+      });
       setIsRefreshing(true);
       setIsMapBoundsRefreshing(false);
 
@@ -589,12 +593,6 @@ export function HousingCatalogClient({
         replaceAll(nextResponse);
         setNewItemIds(nextResponse.items.map((item) => item.id));
         window.history.pushState({}, "", buildHousingCatalogUrl(filters, nextResponse.page, true));
-        window.requestAnimationFrame(() => {
-          document.getElementById("catalog-results")?.scrollIntoView({
-            block: "start",
-            behavior: "smooth",
-          });
-        });
       } catch {
         if (!controller.signal.aborted && requestId === requestSeqRef.current) {
           pushToast("error", "Не удалось открыть страницу каталога");

@@ -567,7 +567,7 @@ export function AttractionCatalogClient({
     });
   }, [currentParams, effectiveBounds]);
   const initialMapItems = mapItems ?? result.items.map(toAttractionMapItem);
-  const shouldShowRefreshSkeleton = isRefreshing;
+  const shouldShowRefreshSkeleton = isRefreshing && result.items.length === 0;
   const foundLabel = formatRuCount(result.total, "место", "места", "мест");
 
   useEffect(() => {
@@ -758,6 +758,10 @@ export function AttractionCatalogClient({
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
+      document.getElementById("catalog-results")?.scrollIntoView({
+        block: "start",
+        behavior: "instant" as ScrollBehavior,
+      });
       setIsRefreshing(true);
       setError("");
 
@@ -783,12 +787,6 @@ export function AttractionCatalogClient({
         setResult(merged);
         setNewItemIds(merged.items.map((item) => item.id));
         window.history.pushState({}, "", nextHref);
-        window.requestAnimationFrame(() => {
-          document.getElementById("catalog-results")?.scrollIntoView({
-            block: "start",
-            behavior: "smooth",
-          });
-        });
       } catch {
         if (!controller.signal.aborted && requestId === requestSeqRef.current) {
           setError("Не удалось открыть страницу каталога досуга");

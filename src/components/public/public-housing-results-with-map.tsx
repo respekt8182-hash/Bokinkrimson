@@ -592,7 +592,7 @@ export function PublicHousingResultsWithMap({
     ? `housing-memory:${mapViewportStorageScope}`
     : initialViewportKey;
   const isResultsRefreshing = loadingInitial || mapBoundsRefreshing;
-  const isCatalogLoading = isResultsRefreshing;
+  const isCatalogLoading = isResultsRefreshing && items.length === 0;
   const catalogSkeletonCount = mapBoundsRefreshing ? (view === "grid" ? 8 : 6) : 4;
   const hasCatalogPagination = totalPages > 1 && Boolean(onPageChange);
   const mapLoadingPillVisible =
