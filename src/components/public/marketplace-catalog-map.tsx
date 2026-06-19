@@ -2006,11 +2006,17 @@ export function MarketplaceCatalogMap({
   );
 
   const openMobileMapInSearch = useCallback(() => {
+    setMobileMapButtonVisible(false);
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPointId(null);
     setMobileChromeProgress(0, true);
     snapMobileSheet("collapsed");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        mobileStageRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      });
+    });
   }, [setMobileChromeProgress, snapMobileSheet]);
 
   const handleMobileMapPointerDown = useCallback(() => {

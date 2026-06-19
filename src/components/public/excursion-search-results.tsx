@@ -2144,11 +2144,17 @@ export function ExcursionSearchResults({
   }
 
   function openCatalogMobileMapInSearch() {
+    setMobileMapButtonVisible(false);
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPinId(null);
     setMobileChromeProgress(0, true);
     snapMobileSheet("collapsed");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        mobileStageRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      });
+    });
   }
 
   function handleCatalogMobileMapPointerDown() {

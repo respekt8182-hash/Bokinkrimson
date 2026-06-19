@@ -1079,12 +1079,18 @@ export function PublicHousingResultsWithMap({
   }
 
   function openMobileMapInSearch() {
+    setMobileMapButtonVisible(false);
     setIsMapActivated(true);
     setActivePointId(null);
     setHoveredCardId(null);
     setHoveredPointId(null);
     setMobileChromeProgress(0, true);
     snapMobileSheet("collapsed");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        mobileStageRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      });
+    });
   }
 
   function handleMobileMapPointerDown() {

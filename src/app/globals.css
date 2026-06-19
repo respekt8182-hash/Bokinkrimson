@@ -1673,7 +1673,7 @@ button:focus-visible > .field-adornment-icon {
   width: min(760px, calc(100vw - 48px));
   margin: 0 auto;
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 0;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.12);
   box-shadow:
@@ -2509,13 +2509,14 @@ button:focus-visible > .field-adornment-icon {
   background: rgba(63, 63, 63, 0.96);
   color: #ffffff;
   box-shadow:
-    0 16px 34px rgba(15, 23, 42, 0.24),
-    0 6px 14px rgba(58, 43, 35, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 8px 18px rgba(15, 23, 42, 0.16),
+    0 2px 6px rgba(58, 43, 35, 0.1);
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   will-change: transform;
   transition:
     transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
