@@ -102,4 +102,15 @@ describe("placement pricing", () => {
     ).toBe(false);
     expect(getPostLaunchTrialValidUntil(now).toISOString()).toBe("2028-05-10T09:00:00.000Z");
   });
+
+  it("temporarily requires payment for transfer placement", () => {
+    expect(
+      isPostLaunchTrialEligible({
+        listingCreatedAt: new Date("2026-06-19T09:00:00.000Z"),
+        now: new Date("2026-06-20T09:00:00.000Z"),
+        category: "transfer",
+        hasSuccessfulPlacement: false,
+      }),
+    ).toBe(false);
+  });
 });

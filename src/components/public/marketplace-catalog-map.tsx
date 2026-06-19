@@ -101,6 +101,7 @@ const MOBILE_SHEET_BOTTOM_CLEARANCE = -12;
 const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
+const MOBILE_MAP_BUTTON_SCROLL_THRESHOLD = 180;
 const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
 const MAP_BOUNDS_UPDATE_DELAY_MS = 350;
 const MAP_BOUNDS_PRECISION = 4;
@@ -2095,6 +2096,47 @@ export function MarketplaceCatalogMap({
   }, []);
 
   useEffect(() => {
+    if (mapPlacement !== "mobile" || mapExpanded) {
+      setMobileMapButtonVisible(false);
+      return;
+    }
+
+    let frame = 0;
+    const updateVisibility = () => {
+      frame = 0;
+      const results =
+        mobileResultsScrollRef.current ?? document.getElementById("catalog-results");
+
+      if (!results) {
+        setMobileMapButtonVisible(false);
+        return;
+      }
+
+      const resultsTop = results.getBoundingClientRect().top + window.scrollY;
+      setMobileMapButtonVisible(
+        window.scrollY - resultsTop >= MOBILE_MAP_BUTTON_SCROLL_THRESHOLD,
+      );
+    };
+    const scheduleVisibilityUpdate = () => {
+      if (frame === 0) {
+        frame = window.requestAnimationFrame(updateVisibility);
+      }
+    };
+
+    updateVisibility();
+    window.addEventListener("scroll", scheduleVisibilityUpdate, { passive: true });
+    window.addEventListener("resize", scheduleVisibilityUpdate);
+
+    return () => {
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.removeEventListener("scroll", scheduleVisibilityUpdate);
+      window.removeEventListener("resize", scheduleVisibilityUpdate);
+    };
+  }, [mapExpanded, mapPlacement, mobileSheetSnap]);
+
+  useEffect(() => {
     return () => {
       if (boundsUpdateTimerRef.current !== null) {
         window.clearTimeout(boundsUpdateTimerRef.current);
@@ -2224,7 +2266,7 @@ export function MarketplaceCatalogMap({
     const currentScrollTop = event.currentTarget.scrollTop;
     const previousScrollTop = mobileResultsScrollTopRef.current;
     mobileResultsScrollTopRef.current = currentScrollTop;
-    setMobileMapButtonVisible(currentScrollTop >= 280);
+    setMobileMapButtonVisible(currentScrollTop >= MOBILE_MAP_BUTTON_SCROLL_THRESHOLD);
 
     if (mapPlacement !== "mobile" || mobileSheetSnap !== "expanded" || mapExpanded) {
       return;
@@ -2248,8 +2290,6 @@ export function MarketplaceCatalogMap({
   const shouldShowMobileMapButton =
     mapPlacement === "mobile" &&
     !mapExpanded &&
-    mobileSheetSnap === "expanded" &&
-    resolvedMobileSheetTop <= mobileSheetSnaps.expanded + 1 &&
     mobileMapButtonVisible;
   const isMobileMapCollapsed = mobileSheetSnap === "collapsed";
   const isMobileSheetExpanded = mobileSheetSnap === "expanded";

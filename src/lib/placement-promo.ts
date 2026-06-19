@@ -19,11 +19,14 @@ export const PLACEMENT_POST_LAUNCH_TRIAL_CODE = "post-launch-new-listing-trial-2
 export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE = "post_launch_new_listing_trial_1_year";
 export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 год";
 
+// Temporary switch: keep the free-placement flow available, but require payment for transfers.
+export const TRANSFER_FREE_PLACEMENT_ENABLED = false;
+
 const FREE_PLACEMENT_TRIAL_ENABLED_BY_CATEGORY: Record<PlacementCategory, boolean> = {
   object: true,
   excursion: true,
   tour: true,
-  transfer: false,
+  transfer: TRANSFER_FREE_PLACEMENT_ENABLED,
 };
 
 const LEGACY_PLACEMENT_PROMO_CODES = new Map<string, number>([["season-start-2026-20", 20]]);

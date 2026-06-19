@@ -184,14 +184,14 @@ export function buildYooKassaReceiptItemDescription(input: {
 }): string {
   const periodLabel =
     input.paidFrom && input.paidUntil
-      ? `${formatYooKassaReceiptDate(input.paidFrom)}-${formatYooKassaReceiptDate(input.paidUntil)}`
+      ? `период: ${formatYooKassaReceiptDate(input.paidFrom)}-${formatYooKassaReceiptDate(input.paidUntil)}`
       : null;
   const listingName = input.listingName?.trim();
   const parts = [
     input.serviceLabel,
     input.tariffLabel?.trim() || null,
     periodLabel,
-    listingName ? `карточка: ${listingName}` : null,
+    listingName ? `объявление: ${listingName}` : null,
   ].filter((part): part is string => Boolean(part));
 
   return compactDescription(parts.join("; "), YOOKASSA_RECEIPT_ITEM_DESCRIPTION_MAX_LENGTH);

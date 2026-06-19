@@ -45,7 +45,39 @@ describe("YooKassa receipts", () => {
     });
     expect(itemDescription).toContain("Размещение объекта");
     expect(itemDescription).toContain("Сезон");
-    expect(itemDescription).toContain("31.10.2026");
+    expect(itemDescription).toContain("период: 23.05.2026-31.10.2026");
+    expect(itemDescription).toContain("объявление: Гостевой дом у моря");
+    expect(receipt?.items[0]?.amount.value).toBe("3400.00");
+  });
+
+  it.each([
+    ["Размещение объекта на сайте Крым Вокруг", "Гостевой дом", 5000],
+    ["Размещение экскурсии на сайте Крым Вокруг", "Ай-Петри", 1490],
+    ["Размещение трансфера на сайте Крым Вокруг", "Аэропорт - Ялта", 990],
+  ])("describes the paid service and period for %s", (serviceLabel, listingName, amountRub) => {
+    const itemDescription = buildYooKassaReceiptItemDescription({
+      serviceLabel,
+      listingName,
+      tariffLabel: "Годовое размещение",
+      paidFrom: new Date("2026-06-19T09:00:00.000Z"),
+      paidUntil: new Date("2027-06-19T09:00:00.000Z"),
+    });
+    const receipt = buildYooKassaPaymentReceipt({
+      amountRub,
+      itemDescription,
+      customer: { phone: "+7 999 111-22-33" },
+    });
+
+    expect(itemDescription).toContain(serviceLabel);
+    expect(itemDescription).toContain("Годовое размещение");
+    expect(itemDescription).toContain("период: 19.06.2026-19.06.2027");
+    expect(receipt?.items[0]).toMatchObject({
+      description: itemDescription,
+      quantity: 1,
+      amount: { value: `${amountRub.toFixed(2)}`, currency: "RUB" },
+      payment_mode: "full_payment",
+      payment_subject: "service",
+    });
   });
 
   it("does not build a receipt without customer email or phone", () => {
