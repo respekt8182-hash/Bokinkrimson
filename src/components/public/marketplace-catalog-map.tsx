@@ -102,6 +102,7 @@ const MOBILE_STAGE_MIN_HEIGHT = 360;
 const MOBILE_STAGE_MAX_HEIGHT = 820;
 const MOBILE_SHEET_CHROME_SCROLL_RANGE = 140;
 const MOBILE_MAP_BUTTON_SCROLL_THRESHOLD = 180;
+const MOBILE_SHEET_SWIPE_THRESHOLD = 28;
 const CATALOG_MAP_ITEM_SELECTOR = "[data-catalog-map-item-id]";
 const MAP_BOUNDS_UPDATE_DELAY_MS = 350;
 const MAP_BOUNDS_PRECISION = 4;
@@ -257,6 +258,21 @@ function getNearestMobileSheetSnap(top: number, snaps: MobileSheetSnaps): Mobile
     (nearest, entry) => (Math.abs(entry[1] - top) < Math.abs(nearest[1] - top) ? entry : nearest),
     ["preview", snaps.preview],
   )[0];
+}
+
+function getDirectionalMobileSheetSnap(
+  current: MobileSheetSnap,
+  deltaY: number,
+): MobileSheetSnap | null {
+  if (deltaY <= -MOBILE_SHEET_SWIPE_THRESHOLD) {
+    return current === "collapsed" ? "preview" : "expanded";
+  }
+
+  if (deltaY >= MOBILE_SHEET_SWIPE_THRESHOLD) {
+    return current === "expanded" ? "preview" : "collapsed";
+  }
+
+  return null;
 }
 
 function MapLoadingDotsPill({ className }: { className?: string }) {
@@ -1717,7 +1733,7 @@ export function MarketplaceCatalogMap({
       0,
       height - MOBILE_SHEET_HANDLE_HEIGHT - MOBILE_SHEET_BOTTOM_CLEARANCE,
     );
-    const preview = clamp(Math.round(height * 0.5), 150, Math.max(150, collapsed - 118));
+    const preview = clamp(Math.round(height * 0.46), 150, Math.max(150, collapsed - 118));
 
     return {
       expanded: 0,
@@ -1943,7 +1959,9 @@ export function MarketplaceCatalogMap({
 
       const currentTop =
         mobileSheetTopRef.current ?? mobileSheetTop ?? mobileSheetSnaps[mobileSheetSnap];
-      const nextSnap = getNearestMobileSheetSnap(currentTop, mobileSheetSnaps);
+      const nextSnap =
+        getDirectionalMobileSheetSnap(mobileSheetSnap, event.clientY - dragState.startY) ??
+        getNearestMobileSheetSnap(currentTop, mobileSheetSnaps);
       snapMobileSheet(nextSnap);
     },
     [mobileSheetSnap, mobileSheetSnaps, mobileSheetTop, snapMobileSheet],
