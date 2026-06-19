@@ -1,7 +1,12 @@
 // Integration tests for public catalog APIs and route accessibility.
 import { describe, expect, it } from "vitest";
 import { buildPublicExcursionPath, buildExcursionSlug } from "../../src/lib/public-excursions";
-import { buildPublicTransferPath, buildTransferPublicSlug } from "../../src/lib/public-marketplace";
+import {
+  buildAttractionSlug,
+  buildPublicAttractionPath,
+  buildPublicTransferPath,
+  buildTransferPublicSlug,
+} from "../../src/lib/public-marketplace";
 import {
   buildPropertySlug,
   buildPublicPropertyPath,
@@ -13,7 +18,8 @@ import { stripSearchParamsFromPath } from "../../src/lib/seo/url-normalize";
 describe("public seo paths", () => {
   it("builds transliterated property slug", () => {
     const slug = buildPropertySlug("Отель Ромашка", "cabc123xyz9");
-    expect(slug).toBe("otel-romashka-cabc123xyz9");
+    expect(slug).toBe("otel-romashka");
+    expect(slug).not.toContain("cabc123xyz9");
   });
 
   it("extracts id from slug and raw id", () => {
@@ -57,7 +63,7 @@ describe("public seo paths", () => {
     expect(excursionPath).toMatch(/^\/crimea\/excursions\/sudak\//);
     expect(propertyPath).not.toContain("?");
     expect(excursionPath).not.toContain("?");
-    expect(propertyPath).toContain("cabc123xyz9");
+    expect(propertyPath).not.toContain("cabc123xyz9");
     expect(excursionPath).not.toContain("cabc123xyz8");
   });
 
@@ -72,6 +78,22 @@ describe("public seo paths", () => {
     );
     expect(transferPath).toBe("/transfers/taksi-po-gorodu-yalta-sedan");
     expect(transferPath).not.toContain("cmohb63e50001exmkyx1lx59l");
+  });
+
+  it("builds public attraction path without technical id", () => {
+    const id = "attraction_c9b47c9f85ae456f911e58d371048c1c";
+
+    expect(buildAttractionSlug("Ласточкино гнездо", id)).toBe("lastochkino-gnezdo");
+    expect(buildPublicAttractionPath({ id, title: "Ласточкино гнездо" })).toBe(
+      "/attractions/lastochkino-gnezdo",
+    );
+    expect(
+      buildPublicAttractionPath({
+        id,
+        title: "Ласточкино гнездо",
+        slug: `lastochkino-gnezdo-${id}`,
+      }),
+    ).toBe("/attractions/lastochkino-gnezdo");
   });
 
   it("strips volatile search params from public detail links", () => {

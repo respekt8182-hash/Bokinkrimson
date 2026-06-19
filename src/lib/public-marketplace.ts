@@ -860,8 +860,8 @@ function getTransferFreshnessScore(input: {
 }
 
 export function buildAttractionSlug(title: string | null, id: string): string {
-  const base = slugify(title ?? "dostoprimechatelnost") || "dostoprimechatelnost";
-  return `${base}-${id}`;
+  void id;
+  return slugify(title ?? "dostoprimechatelnost") || "dostoprimechatelnost";
 }
 
 export function buildTransferSlug(title: string | null, id: string): string {
@@ -878,7 +878,11 @@ export function buildPublicAttractionPath(item: {
   title: string | null;
   slug?: string | null;
 }): string {
-  const slug = item.slug?.trim() || buildAttractionSlug(item.title, item.id);
+  const cleanTitleSlug = buildAttractionSlug(item.title, item.id);
+  const storedSlug = item.slug?.trim();
+  const hasTechnicalSuffix =
+    storedSlug === item.id || Boolean(storedSlug?.endsWith(`-${item.id}`));
+  const slug = !storedSlug || hasTechnicalSuffix ? cleanTitleSlug : storedSlug;
   return `/attractions/${slug}`;
 }
 

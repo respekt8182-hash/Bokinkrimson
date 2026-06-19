@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { CatalogMapViewMarker } from "@/components/public/catalog-map-view-marker";
 import { AttractionDetails } from "@/components/public/marketplace-catalogs";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
@@ -41,6 +41,12 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
 
   if (!item) {
     notFound();
+  }
+
+  const canonicalPath = item.path;
+  const currentPath = `/attractions/${slug}`;
+  if (canonicalPath !== currentPath) {
+    permanentRedirect(canonicalPath);
   }
 
   const nearbySearchParams = {

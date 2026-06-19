@@ -949,11 +949,11 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, "-");
 }
 
-// Keep the readable title while including the id so newly published cards do not
-// depend on a cached title lookup and properties with equal names remain distinct.
+// Public URLs must stay readable. The technical id is still accepted by the
+// resolver below so existing links can be redirected to this clean slug.
 export function buildPropertySlug(name: string | null, id?: string): string {
-  const base = slugify(name ?? "obekt") || "obekt";
-  return id ? `${base}-${id}` : base;
+  void id;
+  return slugify(name ?? "obekt") || "obekt";
 }
 
 const publicEntityIdPatterns = [

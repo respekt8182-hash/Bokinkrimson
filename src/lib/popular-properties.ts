@@ -121,15 +121,17 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
     // Determine if price is "per room" or "per night" based on room count
     const priceType: "per_room" | "per_night" = p.rooms.length <= 1 ? "per_room" : "per_night";
 
+    const path = buildPublicPropertyPath({
+      id: p.id,
+      locationId: p.locationId,
+      name: p.name,
+    });
+
     return {
       id: p.id,
       name: p.name ?? "Объект размещения",
-      slug: p.id,
-      path: buildPublicPropertyPath({
-        id: p.id,
-        locationId: p.locationId,
-        name: p.name,
-      }),
+      slug: path.split("/").pop() ?? "obekt",
+      path,
       locationName: buildLocationLine(p.locationName, p.address),
       address: p.address,
       imageUrls,

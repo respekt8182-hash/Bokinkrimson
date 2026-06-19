@@ -6,6 +6,7 @@ import { crimeaLocationById } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { getFavoritePropertyIds } from "@/lib/favorites";
 import { normalizeLegacyFotoImageUrl } from "@/lib/media";
+import { buildPublicPropertyPath } from "@/lib/public-properties";
 import {
   parsePublishedPropertySnapshot,
   shouldUsePublishedSnapshot,
@@ -57,10 +58,6 @@ function getSnapshot(row: {
   return shouldUsePublishedSnapshot(row)
     ? parsePublishedPropertySnapshot(row.publishedSnapshot)
     : null;
-}
-
-function buildPropertyMapPath(input: { id: string; locationId: string | null }): string {
-  return `/crimea/${input.locationId ?? "crimea"}/${input.id}`;
 }
 
 function buildBoundsWhere(bounds: MapBounds | null): Prisma.PropertyWhereInput {
@@ -383,9 +380,10 @@ export async function GET(request: Request) {
       ? (crimeaLocationById[locationId]?.name ?? display.locationName)
       : display.locationName;
 
-    const path = buildPropertyMapPath({
+    const path = buildPublicPropertyPath({
       id: row.id,
       locationId,
+      name: display.name,
     });
 
     return [

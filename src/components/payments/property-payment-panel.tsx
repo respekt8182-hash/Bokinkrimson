@@ -206,8 +206,8 @@ export function PropertyPaymentPanel({
       }
       if (hasFreePlacementCoverage) {
         return selectedPlacementPricing?.freePeriodUntil
-          ? `Размещение бесплатно: ${selectedPlacementPricing.freePeriodUntil}. Карточку можно отправить на модерацию без оплаты.`
-          : "Размещение бесплатно. Карточку можно отправить на модерацию без оплаты.";
+          ? `Первое размещение этого объекта бесплатно. Срок: ${selectedPlacementPricing.freePeriodUntil}. Карточку можно отправить на модерацию без оплаты.`
+          : "Первое размещение этого объекта бесплатно на 1 год. Карточку можно отправить на модерацию без оплаты.";
       }
       return "Карточка готова к оплате и последующей отправке на модерацию.";
     }
@@ -542,11 +542,10 @@ export function PropertyPaymentPanel({
           </div>
           {selectedTariff && readiness.ready && amountDue <= 0 && !hasActivePlacement ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              <p className="font-semibold">
-                {selectedPlacementPricing?.freePeriodUntil
-                  ? `Сейчас размещение бесплатно: ${selectedPlacementPricing.freePeriodUntil}.`
-                  : "Сейчас размещение бесплатно."}
-              </p>
+              <p className="font-semibold">Первое размещение этого объекта бесплатно на 1 год</p>
+              {selectedPlacementPricing?.freePeriodUntil ? (
+                <p className="mt-1">Срок: {selectedPlacementPricing.freePeriodUntil}.</p>
+              ) : null}
               <p className="mt-1">
                 Через год вы сможете продлить размещение по выбранному тарифу:{" "}
                 <strong>{formatMoney(selectedFinalBeforePromo)}</strong>
@@ -637,9 +636,22 @@ export function PropertyPaymentPanel({
           ) : null}
 
           {/* Payment summary */}
-          {selectedTariff && readiness.ready && amountDue > 0 && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="mb-3 text-sm font-semibold text-olive">Счёт к оплате</p>
+          {selectedTariff && readiness.ready && (
+            <div
+              className={`rounded-xl border p-4 ${
+                hasFreePlacementCoverage
+                  ? "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50/50"
+                  : "border-primary/20 bg-primary/5"
+              }`}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-olive">Счёт к оплате</p>
+                {hasFreePlacementCoverage ? (
+                  <span className="inline-flex rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+                    Первое размещение
+                  </span>
+                ) : null}
+              </div>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-olive/65">Тариф</span>
@@ -651,19 +663,29 @@ export function PropertyPaymentPanel({
                     {selectedTariff.periodLabel}
                   </span>
                 </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-olive/65">В месяц</span>
-                  <span className="text-right font-medium text-olive">
-                    {selectedTariff.monthlyLabel}
-                  </span>
-                </div>
-                {selectedTariff.savingsRub ? (
+                {hasFreePlacementCoverage ? (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-olive/65">Срок</span>
+                    <span className="text-right font-semibold text-emerald-700">
+                      {selectedPlacementPricing?.freePeriodUntil ??
+                        "1 год с даты создания объявления"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-olive/65">В месяц</span>
+                    <span className="text-right font-medium text-olive">
+                      {selectedTariff.monthlyLabel}
+                    </span>
+                  </div>
+                )}
+                {selectedTariff.savingsRub && !hasFreePlacementCoverage ? (
                   <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                     Экономия {formatMoney(selectedTariff.savingsRub)} по сравнению с оплатой сезона
                     и межсезонья отдельно.
                   </div>
                 ) : null}
-                {selectedPlacementPricing ? (
+                {selectedPlacementPricing && !hasFreePlacementCoverage ? (
                   <div className="rounded-xl bg-white/70 px-3 py-2 text-xs leading-5 text-olive/70">
                     {selectedPlacementPricing.discountLabel ? (
                       <p className="font-semibold text-emerald-700">
@@ -673,15 +695,36 @@ export function PropertyPaymentPanel({
                     <p>{selectedPlacementPricing.discountText}</p>
                   </div>
                 ) : null}
-                <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
+                <div
+                  className={`mt-1 flex items-end justify-between gap-4 border-t pt-3 ${
+                    hasFreePlacementCoverage ? "border-emerald-900/10" : "border-primary/15"
+                  }`}
+                >
                   <span className="font-semibold text-olive">Итого</span>
-                  <PlacementPromoPrice
-                    originalAmountRub={originalAmountDue}
-                    finalAmountRub={amountDue}
-                    align="right"
-                    finalClassName="text-2xl"
-                  />
+                  {hasFreePlacementCoverage ? (
+                    <div className="text-right">
+                      <span className="block text-sm font-semibold tabular-nums text-olive/40 line-through decoration-olive/40 decoration-2">
+                        {formatMoney(selectedFinalBeforePromo)}
+                      </span>
+                      <strong className="block text-2xl font-bold text-emerald-700">
+                        Бесплатно
+                      </strong>
+                    </div>
+                  ) : (
+                    <PlacementPromoPrice
+                      originalAmountRub={originalAmountDue}
+                      finalAmountRub={amountDue}
+                      align="right"
+                      finalClassName="text-2xl"
+                    />
+                  )}
                 </div>
+                {hasFreePlacementCoverage ? (
+                  <div className="rounded-xl bg-white/75 px-3 py-2.5 text-xs leading-5 text-olive/65 ring-1 ring-emerald-900/5">
+                    Сейчас платить ничего не нужно. Через год вы сможете продлить размещение за{" "}
+                    <strong className="text-olive">{formatMoney(selectedFinalBeforePromo)}</strong>.
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

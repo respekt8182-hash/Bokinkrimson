@@ -11,6 +11,7 @@ import {
   parsePublishedExcursionSnapshot,
   shouldUsePublishedExcursionSnapshot,
 } from "@/lib/excursion-public-snapshot";
+import { buildPublicExcursionPath } from "@/lib/public-excursions";
 import { buildPublicCatalogExcursionVisibilityWhere } from "@/lib/public-visibility";
 import { db } from "@/lib/db";
 import {
@@ -270,14 +271,6 @@ function getSnapshot(row: {
     : null;
 }
 
-function buildExcursionMapPath(input: {
-  id: string;
-  locationId: string | null;
-  anchorLocationSlug: string | null;
-}): string {
-  return `/crimea/excursions/${input.anchorLocationSlug ?? input.locationId ?? "crimea"}/${input.id}`;
-}
-
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const { searchParams } = new URL(request.url);
@@ -379,16 +372,18 @@ export async function GET(request: Request) {
     const title = display.title ?? "Экскурсия";
     const locationId = display.locationId ?? null;
     const anchorLocationSlug = anchorLocation?.slug ?? null;
+    const path = buildPublicExcursionPath({
+      id: row.id,
+      locationId,
+      title,
+      anchorLocationSlug,
+    });
 
     return [
       {
         id: row.id,
-        slug: row.id,
-        path: buildExcursionMapPath({
-          id: row.id,
-          locationId,
-          anchorLocationSlug,
-        }),
+        slug: path.split("/").pop() ?? row.id,
+        path,
         title,
         offerType: display.offerType,
         subtypeLabel: display.subtypeLabel ?? null,
