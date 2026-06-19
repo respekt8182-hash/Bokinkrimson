@@ -103,7 +103,7 @@ describe("placement pricing", () => {
     expect(getPostLaunchTrialValidUntil(now).toISOString()).toBe("2028-05-10T09:00:00.000Z");
   });
 
-  it("temporarily requires payment for transfer placement", () => {
+  it("grants the first free placement year to transfers", () => {
     expect(
       isPostLaunchTrialEligible({
         listingCreatedAt: new Date("2026-06-19T09:00:00.000Z"),
@@ -111,6 +111,6 @@ describe("placement pricing", () => {
         category: "transfer",
         hasSuccessfulPlacement: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

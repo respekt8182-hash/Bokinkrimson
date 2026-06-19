@@ -10,7 +10,7 @@ export const PLACEMENT_PROMO_END_LABEL = "1 год с даты создания 
 export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 год бесплатно";
 export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ на 1 год";
 export const PLACEMENT_PROMO_NOTICE =
-  "Идёт набор в программу раннего доступа: первое размещение объектов, экскурсий и туров бесплатно на 1 год с даты создания объявления.";
+  "Идёт набор в программу раннего доступа: первое размещение объектов, экскурсий, туров и трансферов бесплатно на 1 год с даты создания объявления.";
 export const PLACEMENT_PROMO_DEMO_MODE = "demo";
 export const PLACEMENT_PROMO_DEMO_LABEL = "Бесплатный год";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
@@ -19,8 +19,7 @@ export const PLACEMENT_POST_LAUNCH_TRIAL_CODE = "post-launch-new-listing-trial-2
 export const PLACEMENT_POST_LAUNCH_TRIAL_CAMPAIGN_TYPE = "post_launch_new_listing_trial_1_year";
 export const PLACEMENT_POST_LAUNCH_TRIAL_LABEL = "Пробный период 1 год";
 
-// Temporary switch: keep the free-placement flow available, but require payment for transfers.
-export const TRANSFER_FREE_PLACEMENT_ENABLED = false;
+export const TRANSFER_FREE_PLACEMENT_ENABLED = true;
 
 const FREE_PLACEMENT_TRIAL_ENABLED_BY_CATEGORY: Record<PlacementCategory, boolean> = {
   object: true,
