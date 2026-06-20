@@ -84,7 +84,7 @@ export default async function HomePage() {
 
   return (
     <div className="home-page-bg">
-      <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-0 md:px-6 md:pb-10 md:pt-0">
+      <div className="mx-auto w-full max-w-6xl px-3 pb-7 pt-0 min-[390px]:px-4 md:px-6 md:pb-10 md:pt-0">
         <HomeSearchShowcase
           cities={cities}
           locationSuggestions={locationDirectory.map((item) => item.name)}

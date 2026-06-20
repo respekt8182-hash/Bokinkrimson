@@ -113,8 +113,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
     const root = document.documentElement;
 
     function handleExternalProgress(event: Event) {
-      const progress = (event as CustomEvent<PublicMobileBottomNavProgressDetail>).detail
-        ?.progress;
+      const progress = (event as CustomEvent<PublicMobileBottomNavProgressDetail>).detail?.progress;
 
       if (typeof progress !== "number" || !Number.isFinite(progress)) {
         return;
@@ -129,10 +128,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
       );
 
       setChromeState((previous) => {
-        if (
-          previous.key === visibilityKey &&
-          Math.abs(previous.progress - nextProgress) < 0.004
-        ) {
+        if (previous.key === visibilityKey && Math.abs(previous.progress - nextProgress) < 0.004) {
           return previous;
         }
 
@@ -212,9 +208,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
   const navProgress = forceHidden ? 1 : chromeProgress;
   const navScaleX = 1 - navProgress * 0.68;
   const navScaleY = 1 - navProgress * 0.5;
-  const navOpacity = forceHidden
-    ? 0
-    : Math.max(0, Math.min(1, (1 - chromeProgress) / 0.24));
+  const navOpacity = forceHidden ? 0 : Math.max(0, Math.min(1, (1 - chromeProgress) / 0.24));
   const itemsProgress = Math.min(1, navProgress / 0.58);
   const navStyle = {
     transform: `translate3d(0, ${navProgress * MOBILE_CHROME_NAV_TRAVEL}px, 0) scale(${navScaleX}, ${navScaleY})`,
@@ -255,7 +249,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
     <nav
       aria-label="Быстрая навигация"
       className={cn(
-        "fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-[430px] origin-bottom rounded-[28px] border border-white/80 bg-white/88 px-2 py-2 shadow-[0_18px_46px_rgba(58,43,35,0.18)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] motion-reduce:transition-none lg:hidden",
+        "fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] z-[60] mx-auto max-w-[430px] origin-bottom rounded-[24px] border border-white/80 bg-white/88 px-1.5 py-1.5 shadow-[0_18px_46px_rgba(58,43,35,0.18)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] motion-reduce:transition-none min-[390px]:inset-x-3 min-[390px]:rounded-[28px] min-[390px]:px-2 min-[390px]:py-2 lg:hidden",
       )}
       style={navStyle}
       aria-hidden={navIsHidden || undefined}
@@ -275,7 +269,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
               tabIndex={navIsHidden ? -1 : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[22px] px-2 text-[11px] font-semibold transition active:scale-[0.97]",
+                "flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[19px] px-1 text-[10px] font-semibold transition active:scale-[0.97] min-[390px]:min-h-[54px] min-[390px]:gap-1 min-[390px]:rounded-[22px] min-[390px]:px-2 min-[390px]:text-[11px]",
                 active
                   ? "bg-[linear-gradient(135deg,rgba(15,118,110,0.14),rgba(242,196,77,0.18))] text-olive shadow-[inset_0_1px_0_rgba(255,255,255,0.86)]"
                   : "text-olive/62 hover:bg-cream/70 hover:text-olive",
@@ -283,7 +277,7 @@ export function PublicMobileBottomNav({ accountHref }: PublicMobileBottomNavProp
             >
               <span
                 className={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-2xl",
+                  "inline-flex h-7 w-7 items-center justify-center rounded-xl min-[390px]:h-8 min-[390px]:w-8 min-[390px]:rounded-2xl",
                   active ? "icon-surface" : "icon-surface-muted",
                 )}
               >

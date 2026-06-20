@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { ArrowRight, Sparkles } from "lucide-react";
 
-import { PlacementPromoNotice } from "@/components/pricing/placement-promo";
+import { AppIcon } from "@/components/ui/app-icon";
 import { cn } from "@/lib/cn";
 import {
   additionalServiceRows,
@@ -12,7 +13,21 @@ type ServicesAndTariffsSectionProps = {
   variant?: "page" | "footer";
   className?: string;
   id?: string;
+  publishedPropertiesCount?: number | null;
 };
+
+const STARTER_PROGRAM_LIMIT = 1000;
+const countFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+
+function pluralizeObjects(count: number): string {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+
+  if (mod100 >= 11 && mod100 <= 14) return "объектов";
+  if (mod10 === 1) return "объект";
+  if (mod10 >= 2 && mod10 <= 4) return "объекта";
+  return "объектов";
+}
 
 function formatRub(value: number): string {
   return `${value.toLocaleString("ru-RU")} ₽`;
@@ -22,8 +37,12 @@ export function ServicesAndTariffsSection({
   variant = "page",
   className,
   id = "services-and-tariffs",
+  publishedPropertiesCount,
 }: ServicesAndTariffsSectionProps) {
   const isPage = variant === "page";
+  const used = Math.max(0, publishedPropertiesCount ?? 0);
+  const placesLeft = Math.max(STARTER_PROGRAM_LIMIT - used, 0);
+  const progressPercent = Math.min(100, (used / STARTER_PROGRAM_LIMIT) * 100);
 
   return (
     <section
@@ -48,14 +67,72 @@ export function ServicesAndTariffsSection({
           Услуги и тарифы
         </h2>
       )}
-      <p className="mt-4 max-w-4xl text-sm leading-7 text-olive/75 md:text-base">
-        Для владельцев жилья доступны два основных варианта: сезонное размещение до 31 октября и
-        годовое размещение на 12 месяцев с даты оплаты. Сезон можно подключить заранее, чтобы
-        карточка участвовала в раннем бронировании на лето.
-      </p>
-      <PlacementPromoNotice className="mt-5" />
+      <div className="relative mt-6 overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50/70 p-5 shadow-[0_24px_55px_-38px_rgba(5,150,105,0.65)] sm:p-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_280px] lg:items-center">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm">
+              <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />
+              0 ₽ на 1 год
+            </span>
+            <h2 className="mt-4 font-heading text-2xl leading-tight text-olive sm:text-3xl">
+              Сейчас размещение бесплатно
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-olive/75 md:text-base md:leading-7">
+              Добавляйте жильё, экскурсии, туры и трансферы без оплаты. Каждое новое объявление
+              получает 12 месяцев бесплатного размещения с даты создания, количество объявлений
+              не ограничено.
+            </p>
+            <Link
+              href="/dashboard/objects"
+              className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
+            >
+              Добавить объявление бесплатно
+              <AppIcon icon={ArrowRight} className="h-4 w-4 text-[color:var(--icon-stay)]" />
+            </Link>
+          </div>
 
-      <div className="mt-6 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl border border-emerald-900/10 bg-white/85 p-4 shadow-[0_16px_34px_-30px_rgba(15,74,64,0.55)] backdrop-blur-sm">
+            <p className="text-sm font-semibold text-olive">Программа первых партнёров</p>
+            <div className="mt-4 flex items-center justify-between gap-3 text-xs text-olive/60">
+              <span>В каталоге:</span>
+              <span className="font-semibold text-olive">
+                {publishedPropertiesCount === null || publishedPropertiesCount === undefined
+                  ? "обновляется"
+                  : `${countFormatter.format(used)} ${pluralizeObjects(used)}`}
+              </span>
+            </div>
+            <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-cream ring-1 ring-olive/10">
+              <div
+                className="h-full rounded-full bg-emerald-600 transition-[width] duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <p className="mt-3 text-xs font-semibold leading-5 text-olive/65">
+              {publishedPropertiesCount === null || publishedPropertiesCount === undefined
+                ? "Счётчик обновится после подключения базы"
+                : placesLeft > 0
+                  ? `Осталось мест в программе: ${countFormatter.format(placesLeft)}`
+                  : "Места в программе заполнены"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-olive/45">
+          Тарифы после бесплатного года
+        </p>
+        <h2 className="mt-2 font-heading text-2xl leading-tight text-olive md:text-3xl">
+          Продление размещения жилья
+        </h2>
+        <p className="mt-3 max-w-4xl text-sm leading-6 text-olive/68">
+          Указанные ниже тарифы понадобятся только через год, если вы решите продлить публикацию
+          объявления. Первый год размещения оплачивать не нужно.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
         {publicObjectTariffCards.map((card) => (
           <article
             key={card.id}
@@ -119,10 +196,12 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-8 overflow-hidden rounded-3xl border border-olive/10 bg-cream/72">
         <div className="border-b border-olive/10 bg-white/85 px-4 py-3">
-          <p className="text-sm font-semibold text-olive">Экскурсии, туры и трансферы</p>
+          <p className="text-sm font-semibold text-olive">
+            Продление экскурсий, туров и трансферов после бесплатного года
+          </p>
           <p className="mt-1 text-xs leading-5 text-olive/60">
-            Размещайте свои услуги на сайте и получайте обращения от туристов напрямую. Комиссию с
-            заказов мы не берём.
+            Первый год каждого объявления стоит 0 ₽. Цены ниже применяются только при последующем
+            продлении; комиссию с заказов мы не берём.
           </p>
         </div>
         <div className="hidden overflow-x-auto md:block">
@@ -192,8 +271,9 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-4 rounded-2xl border border-olive/10 bg-white/80 px-4 py-3 text-sm leading-6 text-olive/70">
         <p>
-          Персональная стоимость выбранного периода отображается в личном кабинете после входа или
-          регистрации.
+          Бесплатный год начинается отдельно для каждого нового объявления в день его создания.
+          Можно добавлять новые объявления позже — каждое из них также получит свои 12 бесплатных
+          месяцев.
         </p>
         <p className="mt-1">
           После бесплатного периода действует базовая стоимость выбранного тарифа без комиссии с

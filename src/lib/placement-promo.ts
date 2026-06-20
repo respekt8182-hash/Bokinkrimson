@@ -10,7 +10,7 @@ export const PLACEMENT_PROMO_END_LABEL = "1 год с даты создания 
 export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 год бесплатно";
 export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ на 1 год";
 export const PLACEMENT_PROMO_NOTICE =
-  "Идёт набор в программу раннего доступа: первое размещение объектов, экскурсий, туров и трансферов бесплатно на 1 год с даты создания объявления.";
+  "Каждое новое объявление — объект размещения, экскурсия, тур или трансфер — публикуется бесплатно на 1 год с даты его создания. Количество бесплатных объявлений не ограничено.";
 export const PLACEMENT_PROMO_DEMO_MODE = "demo";
 export const PLACEMENT_PROMO_DEMO_LABEL = "Бесплатный год";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;

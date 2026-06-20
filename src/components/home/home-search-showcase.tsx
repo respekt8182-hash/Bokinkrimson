@@ -20,7 +20,6 @@ import {
   Phone,
   Search,
   ShieldCheck,
-  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -55,7 +54,7 @@ import { setPublicMobileBottomNavForceHidden } from "@/lib/public-mobile-nav-vis
 const directionLabels = {
   housing: "Жильё",
   excursions: "Экскурсии",
-  attractions: "Досуг",
+  attractions: "Открывай Крым",
   transfers: "Трансферы",
 } as const;
 
@@ -207,8 +206,6 @@ const yearFormatter = new Intl.NumberFormat("ru-RU", {
 const countFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 });
-
-const STARTER_PROGRAM_LIMIT = 1000;
 
 function normalizeLocation(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase().replace(/ё/g, "е");
@@ -1197,28 +1194,13 @@ export function HomeSearchShowcase({
       ]),
     };
   }, [publishedAttractionsCount]);
+  const siteStats = [
+    { icon: House, value: housingStat.value, label: housingStat.label },
+    { icon: Landmark, value: leisureStat.value, label: leisureStat.label },
+    { icon: Compass, value: excursionStat.value, label: excursionStat.label },
+    { icon: Car, value: transferStat.value, label: transferStat.label },
+  ];
   const dailyHeroCards = useMemo(() => heroAttractionCards.slice(0, 4), [heroAttractionCards]);
-  const starterProgram = useMemo(() => {
-    if (publishedPropertiesCount === null) {
-      return {
-        usedLabel: "обновляется",
-        leftLabel: "Счётчик обновится после подключения базы",
-        progressPercent: 0,
-      };
-    }
-
-    const used = Math.max(0, publishedPropertiesCount);
-    const left = Math.max(STARTER_PROGRAM_LIMIT - used, 0);
-
-    return {
-      usedLabel: `${countFormatter.format(used)} ${pluralize(used, ["объект", "объекта", "объектов"])}`,
-      leftLabel:
-        left > 0
-          ? `Осталось мест в программе: ${countFormatter.format(left)}`
-          : "Места в программе заполнены",
-      progressPercent: Math.min(100, (used / STARTER_PROGRAM_LIMIT) * 100),
-    };
-  }, [publishedPropertiesCount]);
   const locationByNormalizedName = useMemo(() => {
     const map = new Map<string, string>();
 
@@ -3165,18 +3147,18 @@ export function HomeSearchShowcase({
           </div>
         ) : null}
 
-        <section className="relative z-30 mx-auto max-w-5xl px-0 pt-4 md:pt-8 lg:pt-10">
-          <div className="mb-7 text-center">
-            <h1 className="mt-3 text-3xl text-midnight sm:text-4xl md:text-5xl md:leading-tight">
+        <section className="relative z-30 mx-auto max-w-5xl px-0 pt-5 md:pt-8 lg:pt-10">
+          <div className="mb-5 px-2 text-center md:mb-7 md:px-0">
+            <h1 className="text-[2rem] leading-[1.08] text-midnight sm:text-4xl md:mt-3 md:text-5xl md:leading-tight">
               Поиск по Крыму
             </h1>
-            <p className="mt-2 text-base text-olive/60 md:text-lg">
-              Жильё, экскурсии, досуг и трансферы по всему полуострову
+            <p className="mx-auto mt-2 max-w-[320px] text-sm leading-5 text-olive/60 sm:max-w-none sm:text-base md:text-lg">
+              Бесплатный туристический навигатор по Крыму
             </p>
           </div>
 
-          <div className="mt-5 md:hidden">
-            <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-foam p-1 ring-1 ring-olive/12">
+          <div className="md:hidden">
+            <div className="mb-3 grid grid-cols-2 gap-1 rounded-[20px] bg-foam p-1 ring-1 ring-olive/12">
               {(Object.keys(directionLabels) as Direction[]).map((item) => (
                 <button
                   key={`mobile-compact-${item}`}
@@ -3189,7 +3171,7 @@ export function HomeSearchShowcase({
                     closeSearchDropdown();
                   }}
                   className={cn(
-                    "flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold transition active:scale-[0.98]",
+                    "flex min-h-10 items-center justify-center gap-1.5 rounded-2xl px-2 text-[13px] font-semibold transition active:scale-[0.98] min-[390px]:min-h-11 min-[390px]:text-sm",
                     direction === item
                       ? "bg-primary text-white shadow-md shadow-primary/25"
                       : "text-olive/72 hover:bg-white/60",
@@ -3204,14 +3186,14 @@ export function HomeSearchShowcase({
             <button
               type="button"
               onClick={() => openMobileSearch("location")}
-              className="flex w-full items-center gap-3 rounded-[28px] bg-white p-2 text-left shadow-[0_16px_34px_-24px_rgba(58,43,35,0.55)] ring-1 ring-sand transition active:scale-[0.99]"
+              className="flex w-full items-center gap-3 rounded-[24px] bg-white p-1.5 text-left shadow-[0_16px_34px_-24px_rgba(58,43,35,0.55)] ring-1 ring-sand transition active:scale-[0.99] min-[390px]:rounded-[28px] min-[390px]:p-2"
             >
               <span className="min-w-0 flex-1 px-3 py-2">
                 <span className="block truncate text-base font-semibold text-midnight">
                   {searchValue.trim() || renderSearchDemoLabel()}
                 </span>
               </span>
-              <span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.9)]">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.9)] min-[390px]:h-13 min-[390px]:w-13">
                 <AppIcon icon={Search} className="h-6 w-6 text-white" />
               </span>
             </button>
@@ -4065,15 +4047,48 @@ export function HomeSearchShowcase({
 
         {renderMobileSearchModal()}
 
+        <section className="relative z-10 mx-auto mt-5 overflow-hidden rounded-[24px] border border-white/80 bg-white/86 py-4 shadow-[0_20px_46px_-32px_rgba(58,43,35,0.58)] ring-1 ring-olive/10 backdrop-blur-xl md:hidden">
+          <div className="mb-3 px-4">
+            <h2 className="text-sm font-semibold text-midnight">Сейчас на сайте</h2>
+          </div>
+          <div className="snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-1 [scroll-padding-inline:1rem] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex w-max gap-2.5">
+              {siteStats.map((item, index) => (
+                <div
+                  key={`mobile-${item.label}-${index}`}
+                  className="flex w-[172px] shrink-0 snap-start items-center gap-3 rounded-[18px] bg-foam/75 px-3.5 py-3 ring-1 ring-olive/8 transition active:scale-[0.98] min-[390px]:w-[184px]"
+                >
+                  <span className="icon-surface-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] shadow-sm ring-1 ring-white/80">
+                    <AppIcon
+                      icon={item.icon}
+                      className="h-5 w-5 text-[color:var(--icon-default)]"
+                    />
+                  </span>
+                  <span className="min-w-0">
+                    <span
+                      className={cn(
+                        "block whitespace-nowrap font-heading text-xl leading-none text-midnight",
+                        item.value === "подключение" || item.value === "подключаются"
+                          ? "font-sans text-[12px] font-bold leading-5"
+                          : "",
+                      )}
+                    >
+                      {item.value}
+                    </span>
+                    <span className="mt-1 block max-w-[104px] truncate text-[11px] leading-4 text-olive/60 min-[390px]:max-w-[116px]">
+                      {item.label}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="relative z-10 mx-auto mt-6 hidden max-w-5xl overflow-hidden rounded-[24px] border border-white/70 bg-white/82 shadow-[0_20px_52px_-36px_rgba(58,43,35,0.55)] ring-1 ring-olive/10 backdrop-blur-xl md:block">
           <div className="flex w-full items-center gap-5 px-6 py-5">
             <span className="shrink-0 text-sm font-semibold text-olive/72">Сейчас на сайте:</span>
-            {[
-              { icon: House, value: housingStat.value, label: housingStat.label },
-              { icon: Compass, value: excursionStat.value, label: excursionStat.label },
-              { icon: Car, value: transferStat.value, label: transferStat.label },
-              { icon: Landmark, value: leisureStat.value, label: leisureStat.label },
-            ].map((item, index) => (
+            {siteStats.map((item, index) => (
               <div
                 key={`${item.label}-${index}`}
                 className="flex min-w-0 flex-1 items-center gap-3 border-l border-olive/10 pl-5 first:border-l-0 first:pl-0"
@@ -4103,48 +4118,19 @@ export function HomeSearchShowcase({
       </div>
 
       {/* ── Why choose us ── */}
-      <div className="mx-auto mt-8 max-w-5xl">
-        <div className="mx-auto mb-5 max-w-3xl rounded-2xl border border-white/70 bg-white/82 p-4 shadow-[0_18px_38px_-34px_rgba(15,74,64,0.45)] ring-1 ring-olive/8 backdrop-blur-xl">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-                <AppIcon icon={Sparkles} className="h-4 w-4 text-[color:var(--icon-stay)]" />0 ₽ на
-                1 год
-              </span>
-              <p className="mt-2 text-sm font-semibold leading-6 text-olive">
-                Программа первых партнёров
-              </p>
-            </div>
-
-            <div className="w-full shrink-0 rounded-xl border border-olive/10 bg-cream/45 p-3 sm:w-[220px]">
-              <div className="flex items-center justify-between gap-3 text-xs text-olive/60">
-                <span>В каталоге:</span>
-                <span className="font-semibold text-olive">{starterProgram.usedLabel}</span>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white ring-1 ring-olive/10">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
-                  style={{ width: `${starterProgram.progressPercent}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs font-semibold leading-5 text-olive/65">
-                {starterProgram.leftLabel}
-              </p>
-            </div>
-          </div>
-        </div>
-        <h2 className="mb-4 text-center font-heading text-xl text-midnight sm:text-2xl md:text-3xl">
+      <div className="mx-auto mt-7 max-w-5xl md:mt-8">
+        <h2 className="mb-3 px-2 text-center font-heading text-[1.35rem] leading-tight text-midnight sm:mb-4 sm:text-2xl md:text-3xl">
           Почему выбирают «Крым Вокруг»?
         </h2>
         <div
-          className="-mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
+          className="-mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
           aria-label="Преимущества"
         >
           <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
             {/* Card 1 */}
             <div
               data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto"
+              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
             >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
                 <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
@@ -4159,7 +4145,7 @@ export function HomeSearchShowcase({
             {/* Card 2 */}
             <div
               data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:w-auto"
+              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
               style={{ animationDelay: "80ms" }}
             >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
@@ -4175,7 +4161,7 @@ export function HomeSearchShowcase({
             {/* Card 3 */}
             <div
               data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[min(82vw,320px)] shrink-0 snap-start overflow-hidden rounded-2xl bg-white/80 p-5 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 sm:col-span-2 sm:w-auto lg:col-span-1"
+              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:col-span-2 sm:w-auto lg:col-span-1"
               style={{ animationDelay: "160ms" }}
             >
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
@@ -4191,17 +4177,19 @@ export function HomeSearchShowcase({
         </div>
       </div>
 
-      <section className="mt-5 rounded-[2rem] bg-sand/90 px-4 py-8 ring-1 ring-olive/12 md:px-8 md:py-10 lg:px-14">
+      <section className="mt-4 rounded-[24px] bg-sand/90 px-3 py-6 ring-1 ring-olive/12 min-[390px]:px-4 md:mt-5 md:rounded-[2rem] md:px-8 md:py-10 lg:px-14">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-2xl text-midnight md:text-3xl">Популярные города</h2>
+            <h2 className="text-[1.35rem] leading-tight text-midnight sm:text-2xl md:text-3xl">
+              Популярные города
+            </h2>
             <p className="mt-1 text-sm text-olive/60 md:text-base">
               Выберите направление для путешествия
             </p>
           </div>
         </div>
 
-        <div className="mt-6 -mx-4 snap-x snap-mandatory overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:snap-none md:overflow-visible md:px-0 md:pb-0">
+        <div className="mt-5 -mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] md:mx-0 md:mt-6 md:snap-none md:overflow-visible md:px-0 md:pb-0">
           <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
             {cities.map((city, index) => {
               const price =
@@ -4218,10 +4206,10 @@ export function HomeSearchShowcase({
                   href={href}
                   prefetch={false}
                   data-home-scroll-reveal
-                  className="home-scroll-reveal group relative block w-[240px] shrink-0 snap-start overflow-hidden rounded-[36px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
+                  className="home-scroll-reveal group relative block w-[70vw] max-w-[260px] shrink-0 snap-start overflow-hidden rounded-[26px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
                   style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}
                 >
-                  <div className="relative aspect-[3/4] w-full bg-cream">
+                  <div className="relative aspect-[4/5] w-full bg-cream md:aspect-[3/4]">
                     <Image
                       src={city.imageSrc}
                       alt={city.title}

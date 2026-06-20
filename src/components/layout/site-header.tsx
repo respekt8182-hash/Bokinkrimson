@@ -37,8 +37,8 @@ export async function SiteHeader() {
   return (
     <>
       {session?.role === "USER" ? <UserActivityTracker /> : null}
-      <header className="site-header sticky top-0 z-50 border-b border-olive/10 bg-cream/92 backdrop-blur lg:border-b-0 lg:bg-transparent lg:px-4 lg:pt-4">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-1.5 md:gap-3 md:px-6 md:py-4 lg:rounded-2xl lg:border lg:border-white/70 lg:bg-white/82 lg:shadow-[0_20px_52px_-34px_rgba(58,43,35,0.5)] lg:ring-1 lg:ring-olive/8 lg:backdrop-blur-xl">
+      <header className="site-header sticky top-0 z-50 border-b border-olive/10 bg-cream/92 pt-[env(safe-area-inset-top,0px)] backdrop-blur lg:border-b-0 lg:bg-transparent lg:px-4 lg:pt-4">
+        <div className="mx-auto flex min-h-14 w-full max-w-6xl items-center gap-2 px-3 py-1.5 min-[390px]:px-4 md:gap-3 md:px-6 md:py-4 lg:rounded-2xl lg:border lg:border-white/70 lg:bg-white/82 lg:shadow-[0_20px_52px_-34px_rgba(58,43,35,0.5)] lg:ring-1 lg:ring-olive/8 lg:backdrop-blur-xl">
           <SiteHeaderBackButton />
           <Link
             href="/"
@@ -51,14 +51,14 @@ export async function SiteHeader() {
               width={56}
               height={56}
               priority
-              className="h-6 w-6 md:h-14 md:w-14"
+              className="h-7 w-7 md:h-14 md:w-14"
             />
             <div className="min-w-0 leading-tight">
-              <p className="truncate font-heading text-sm tracking-wide text-olive md:text-3xl">
+              <p className="truncate font-heading text-[15px] tracking-wide text-olive min-[390px]:text-base md:text-3xl">
                 Крым Вокруг
               </p>
               <p className="hidden text-xs font-semibold uppercase tracking-[0.22em] text-olive/65 md:block">
-                Жильё у моря и экскурсии
+                Туристический навигатор
               </p>
             </div>
           </Link>
@@ -83,7 +83,7 @@ export async function SiteHeader() {
               prefetch={false}
               className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
             >
-              Досуг
+              Открывай Крым
             </Link>
             <Link
               href={transfersHubPath}
@@ -100,11 +100,11 @@ export async function SiteHeader() {
               Туры
             </Link>
             <Link
-              href="/about"
+              href="/uslugi-i-tarify"
               prefetch={false}
               className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
             >
-              О сервисе
+              Партнёрам
             </Link>
           </nav>
 

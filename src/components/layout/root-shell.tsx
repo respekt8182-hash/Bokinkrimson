@@ -68,7 +68,7 @@ export function RootShell({ children, header, footer, supportChatEnabled }: Root
         className={cn(
           "flex-1",
           showPublicMobileBottomNav
-            ? "pb-[calc(env(safe-area-inset-bottom,0px)+5.75rem)] lg:pb-3"
+            ? "pb-[calc(env(safe-area-inset-bottom,0px)+5rem)] min-[390px]:pb-[calc(env(safe-area-inset-bottom,0px)+5.75rem)] lg:pb-3"
             : showSiteChrome
               ? "pb-3"
               : "pb-0",

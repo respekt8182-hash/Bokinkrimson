@@ -51,9 +51,9 @@ export function SiteFooter() {
       <div className="pointer-events-none absolute -left-32 -top-32 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-terra/[0.04] blur-3xl" />
 
-      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3 lg:gap-8">
-          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-5 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-primary/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(15,118,110,0.08)]">
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-3 py-8 min-[390px]:px-4 md:px-6 md:py-16">
+        <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2 md:gap-6 xl:grid-cols-3 lg:gap-8">
+          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-3 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-primary/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(15,118,110,0.08)] min-[390px]:px-4 md:px-5">
             <div className="mb-3 flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/[0.07]">
                 <Compass className="h-3.5 w-3.5 text-primary" />
@@ -77,7 +77,7 @@ export function SiteFooter() {
             </div>
           </div>
 
-          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-5 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-terra/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(167,101,73,0.08)]">
+          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-3 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-terra/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(167,101,73,0.08)] min-[390px]:px-4 md:px-5">
             <div className="mb-3 flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-terra/[0.07]">
                 <FileText className="h-3.5 w-3.5 text-terra" />
@@ -101,7 +101,7 @@ export function SiteFooter() {
             </div>
           </div>
 
-          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-5 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-primary/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(15,118,110,0.08)]">
+          <div className="group rounded-2xl border border-olive/[0.06] bg-white/60 px-4 py-3.5 backdrop-blur-sm transition-all duration-300 hover:border-primary/10 hover:bg-white/80 hover:shadow-[0_8px_30px_-12px_rgba(15,118,110,0.08)] min-[390px]:col-span-2 md:px-5 xl:col-span-1">
             <div className="mb-3 flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/[0.07]">
                 <Phone className="h-3.5 w-3.5 text-primary" />
@@ -177,7 +177,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center gap-3 border-t border-olive/[0.06] pt-8 text-center">
+        <div className="mt-7 flex flex-col items-center gap-2 border-t border-olive/[0.06] pt-6 text-center md:mt-10 md:gap-3 md:pt-8">
           <p className="flex items-center gap-1.5 text-xs text-olive/35">
             Сделано с <Heart className="inline h-3 w-3 fill-terra/40 text-terra/50" /> в Крыму
           </p>
