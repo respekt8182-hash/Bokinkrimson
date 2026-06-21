@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { AttractionListCardBadges } from "@/components/attractions/attraction-list-card-badges";
 import {
   Fragment,
   type CSSProperties,
@@ -28,6 +29,7 @@ import { MarketplaceFilterBar } from "@/components/public/marketplace-filter-bar
 import { CatalogScrollRestorer } from "@/components/public/catalog-scroll-memory";
 import { FirstListingPromo } from "@/components/public/first-listing-promo";
 import { cn } from "@/lib/cn";
+import { getCatalogPageFromSearch } from "@/lib/catalog-pagination";
 import type { FavoriteEntityType } from "@/lib/favorite-entities";
 import {
   type PublicAttractionCatalogItem,
@@ -287,7 +289,6 @@ function AttractionCard({
 }) {
   const description = compactText(item.shortDescription ?? item.description, 180);
   const distance = formatDistance(item.distanceKm);
-  const tags = item.tags.slice(0, 3);
   const locationLine = [item.locationName, item.address].filter(Boolean).join(", ") || "Крым";
 
   return (
@@ -347,25 +348,13 @@ function AttractionCard({
               <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p>
             ) : null}
 
-            {tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 md:hidden">
-                {tags.map((tag) => (
-                  <span
-                    key={`${item.id}-tag-${tag}`}
-                    className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <div className="md:hidden">
+              <AttractionListCardBadges place={item} />
+            </div>
 
             <div className="mt-auto flex items-end justify-between gap-3 border-t border-olive/[0.06] pt-3 md:hidden">
               <div className="min-w-0">
-                <p className="text-[17px] font-extrabold leading-tight tracking-tight text-olive">
-                  Карточка места
-                </p>
-                <p className="mt-0.5 text-[11px] text-olive/40">Маршрут, фото и карта</p>
+                <AttractionListCardBadges place={item} limit={2} />
               </div>
               <Link
                 href={item.path}
@@ -381,7 +370,7 @@ function AttractionCard({
 
           <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[190px] lg:w-[210px]">
             <div className="text-right">
-              <p className="text-[12px] font-semibold text-olive">Самостоятельно</p>
+              <AttractionListCardBadges place={item} />
             </div>
 
             <div className="mt-auto text-right">
@@ -597,6 +586,7 @@ export function AttractionCatalogClient({
         bounds?: string | null;
         preserveFiltersForBounds?: boolean;
         preserveCurrentResults?: boolean;
+        page?: number;
       },
     ) => {
       const nextBounds = options?.bounds ?? null;
@@ -621,7 +611,12 @@ export function AttractionCatalogClient({
       setError("");
 
       try {
-        const response = await fetchAttractionCatalog(href, 1, controller.signal, nextBounds);
+        const response = await fetchAttractionCatalog(
+          href,
+          options?.page ?? 1,
+          controller.signal,
+          nextBounds,
+        );
         if (requestId !== requestSeqRef.current || controller.signal.aborted) {
           return;
         }
@@ -809,6 +804,7 @@ export function AttractionCatalogClient({
       void runRequest(getPageHrefFromWindow(), {
         historyMode: "none",
         bounds: new URLSearchParams(window.location.search).get("bounds")?.trim() || null,
+        page: getCatalogPageFromSearch(window.location.search),
       });
     };
 

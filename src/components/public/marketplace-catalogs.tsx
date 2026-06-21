@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Fragment } from "react";
+import { AttractionPage } from "@/components/attractions/attraction-page";
+import { AttractionListCardBadges } from "@/components/attractions/attraction-list-card-badges";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
 import { ExcursionPhotoGallery } from "@/components/excursions/excursion-photo-gallery";
 import type { SeoBreadcrumbItem } from "@/components/seo/seo-breadcrumbs";
@@ -39,6 +41,8 @@ import { AvatarImage } from "@/components/ui/avatar-image";
 import { ContactBrandMark, type ContactBrand } from "@/components/ui/contact-brand-mark";
 import { ContactWebsiteMark } from "@/components/ui/contact-website-mark";
 import { cn } from "@/lib/cn";
+import { getAttractionTemplate } from "@/lib/attraction-templates";
+import { getSmartAttractionFaq } from "@/lib/normalize-attraction-text";
 import {
   formatPublicContactName,
   formatPublicPersonName,
@@ -805,7 +809,6 @@ function AttractionCard({
 }) {
   const description = compactText(item.shortDescription ?? item.description, 180);
   const distance = formatDistance(item.distanceKm);
-  const tags = item.tags.slice(0, 3);
   const locationLine = [item.locationName, item.address].filter(Boolean).join(", ") || "Крым";
 
   return (
@@ -865,26 +868,12 @@ function AttractionCard({
               <p className="text-sm leading-6 text-olive/62 md:hidden">{description}</p>
             ) : null}
 
-            {tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 md:hidden">
-                {tags.map((tag) => (
-                  <span
-                    key={`${item.id}-tag-${tag}`}
-                    className="inline-flex items-center gap-1 rounded-md bg-sand/50 px-2 py-0.5 text-[11px] font-medium text-olive/60"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <div className="md:hidden">
+              <AttractionListCardBadges place={item} />
+            </div>
 
             <div className="mt-auto flex items-end justify-between gap-3 border-t border-olive/[0.06] pt-3 md:hidden">
-              <div className="min-w-0">
-                <p className="text-[17px] font-extrabold leading-tight tracking-tight text-olive">
-                  Карточка места
-                </p>
-                <p className="mt-0.5 text-[11px] text-olive/40">Маршрут, фото и карта</p>
-              </div>
+              <div className="min-w-0"><AttractionListCardBadges place={item} limit={2} /></div>
               <Link
                 href={item.path}
                 data-catalog-detail-link="attractions"
@@ -899,7 +888,7 @@ function AttractionCard({
 
           <div className="hidden shrink-0 flex-col items-end justify-between border-l border-olive/[0.06] pl-4 md:flex md:w-[190px] lg:w-[210px]">
             <div className="text-right">
-              <p className="text-[12px] font-semibold text-olive">Самостоятельно</p>
+              <AttractionListCardBadges place={item} />
             </div>
 
             <div className="mt-auto text-right">
@@ -1334,6 +1323,11 @@ export function TransferCatalog({
 
 export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem }) {
   const distance = formatDistance(item.distanceKm);
+  const template = getAttractionTemplate(item);
+  const smartFaq = getSmartAttractionFaq(
+    item.faq,
+    [item.description, ...item.sections.flatMap((section) => section.body)].filter(Boolean).join(" "),
+  );
   const attractionLocationPath = item.locationName
     ? buildCatalogPath("/attractions", { location: item.locationName })
     : "/attractions";
@@ -1345,19 +1339,20 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
   ];
   const sectionLinks = [
     { href: "#overview", label: "Обзор" },
-    ...(item.sections.length > 0 ? [{ href: "#details", label: "Подробно" }] : []),
+    { href: "#details", label: "О месте" },
+    { href: "#visit-planner", label: "План визита" },
     ...(item.latitude !== null && item.longitude !== null
       ? [{ href: "#map-panel", label: "Карта" }]
       : []),
     ...(item.nearby.length > 0 ? [{ href: "#nearby-places", label: "Рядом" }] : []),
-    ...(item.faq.length > 0 ? [{ href: "#faq", label: "FAQ" }] : []),
+    ...(smartFaq.length > 0 ? [{ href: "#faq", label: "FAQ" }] : []),
     { href: "#nearby-housing", label: "Жильё рядом" },
     { href: "#nearby-excursions", label: "Экскурсии рядом" },
   ];
   const heroBadges = [
     item.category ?? "Досуг",
     item.locationName,
-    item.districtName,
+    ...template.catalogBadges,
     distance,
   ].filter((value): value is string => Boolean(value));
 
@@ -1456,7 +1451,32 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
 
         <AttractionJumpNav items={sectionLinks} />
 
-        <section
+        <AttractionPage
+          place={item}
+          mobileHeader={(
+            <section className="rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_18px_55px_rgba(58,43,35,0.08)] md:hidden">
+              <div className="flex flex-wrap gap-2">
+                <SummaryPill>{item.category ?? "Досуг"}</SummaryPill>
+                {item.locationName ? <SummaryPill icon={MapPin}>{item.locationName}</SummaryPill> : null}
+              </div>
+              <h1 className="mt-4 text-3xl font-semibold leading-tight text-olive">{item.h1}</h1>
+              {item.shortDescription ? <p className="mt-3 text-lg leading-7 text-olive/68">{item.shortDescription}</p> : null}
+              <div className="mt-4"><FavoriteToggleButton itemId={item.id} entityType="attraction" initialIsFavorite={false} /></div>
+            </section>
+          )}
+          reportAction={<AttractionReportButton attractionId={item.id} attractionTitle={item.title} />}
+          mapSection={
+            item.latitude !== null && item.longitude !== null ? (
+              <section id="map-panel" className="scroll-mt-[132px] md:scroll-mt-[152px]">
+                <DetailSection title="Ориентир на карте">
+                  <StaticMapPreview latitude={item.latitude} longitude={item.longitude} label={item.address ?? item.locationName ?? item.title} />
+                </DetailSection>
+              </section>
+            ) : null
+          }
+        />
+
+        {false ? <><section
           id="overview"
           className="scroll-mt-[132px] rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_18px_55px_rgba(58,43,35,0.08)] sm:p-6 md:scroll-mt-[152px]"
         >
@@ -1489,14 +1509,14 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {item.locationName ? (
-              <InfoTile icon={MapPin} label="Город" value={item.locationName} />
+              <InfoTile icon={MapPin} label="Город" value={item.locationName!} />
             ) : null}
             {item.districtName ? (
-              <InfoTile icon={Route} label="Район" value={item.districtName} />
+              <InfoTile icon={Route} label="Район" value={item.districtName!} />
             ) : null}
-            {item.address ? <InfoTile icon={MapPin} label="Ориентир" value={item.address} /> : null}
+            {item.address ? <InfoTile icon={MapPin} label="Ориентир" value={item.address!} /> : null}
             {item.category ? (
-              <InfoTile icon={Route} label="Категория" value={item.category} />
+              <InfoTile icon={Route} label="Категория" value={item.category!} />
             ) : null}
           </div>
 
@@ -1569,8 +1589,8 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
           <section id="map-panel" className="scroll-mt-[132px] md:scroll-mt-[152px]">
             <DetailSection title="Ориентир на карте">
               <StaticMapPreview
-                latitude={item.latitude}
-                longitude={item.longitude}
+                latitude={item.latitude!}
+                longitude={item.longitude!}
                 label={item.address ?? item.locationName ?? item.title}
               />
             </DetailSection>
@@ -1615,7 +1635,7 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
               </div>
             </DetailSection>
           </section>
-        ) : null}
+        ) : null}</> : null}
       </div>
     </main>
   );

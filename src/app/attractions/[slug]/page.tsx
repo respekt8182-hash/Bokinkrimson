@@ -10,6 +10,8 @@ import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { buildWebPageMetadata } from "@/lib/seo/metadata";
 import { absoluteUrl } from "@/lib/seo/site";
 import { buildBreadcrumbListStructuredData } from "@/lib/seo/structured-data";
+import { getAttractionTemplate } from "@/lib/attraction-templates";
+import { getSmartAttractionFaq } from "@/lib/normalize-attraction-text";
 
 type AttractionDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -72,6 +74,12 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
     ...(item.locationName ? [{ name: item.locationName, path: attractionLocationHref }] : []),
     { name: item.title, path: item.path },
   ];
+  const template = getAttractionTemplate(item);
+  const faqComparedText = [
+    item.description,
+    ...item.sections.flatMap((section) => section.body),
+  ].filter(Boolean).join(" ");
+  const smartFaq = getSmartAttractionFaq(item.faq, faqComparedText);
   const jsonLdItems: Array<Record<string, unknown>> = [
     buildBreadcrumbListStructuredData(breadcrumbItems),
     {
@@ -98,14 +106,16 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
               longitude: item.longitude,
             }
           : undefined,
+      touristType: template.label,
+      keywords: item.tags.length > 0 ? item.tags.join(", ") : undefined,
     },
   ];
 
-  if (item.faq.length > 0) {
+  if (smartFaq.length > 0) {
     jsonLdItems.push({
       "@context": "https://schema.org",
       "@type": "FAQPage",
-      mainEntity: item.faq.map((faqItem) => ({
+      mainEntity: smartFaq.map((faqItem) => ({
         "@type": "Question",
         name: faqItem.question,
         acceptedAnswer: {

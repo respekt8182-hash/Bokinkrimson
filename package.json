@@ -8,6 +8,8 @@
     "check:mojibake": "node scripts/check-mojibake.mjs",
     "photos:export:properties": "node scripts/export-property-photos.mjs",
     "photos:import:properties": "node scripts/import-processed-property-photos.mjs",
+    "photos:export:attractions": "node scripts/export-attractions-photos.mjs",
+    "photos:import:attractions": "node scripts/import-processed-attraction-photos.mjs",
     "predev": "node scripts/ensure-local-postgres.js && npm run clean:cache && npm run db:generate:ensure",
     "dev": "next dev --webpack",
     "predev:turbo": "node scripts/ensure-local-postgres.js && npm run clean:cache && npm run db:generate:ensure",

@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getAttractionCategoryLabel, isAttractionInCategory } from "@/lib/attraction-categories";
 import { calculateDistanceKm, isWithinRadiusKm, roundDistanceKm } from "@/lib/catalog-radius";
 import { resolveCrimeaLocationCenter } from "@/lib/crimea-location-centers";
 import { rankByTrigramWithScores } from "@/lib/fuzzy";
@@ -828,8 +829,9 @@ export async function getStaticAttractionCategories(): Promise<string[]> {
   const items = await getStaticAttractions();
   const categories = new Set<string>();
   for (const item of items) {
-    if (item.category) {
-      categories.add(item.category);
+    const category = getAttractionCategoryLabel(item.category);
+    if (category) {
+      categories.add(category);
     }
   }
 
@@ -992,7 +994,8 @@ export async function getStaticAttractionCatalog(
   const searchQuery = query.query?.trim() ?? "";
   const bounds = query.bounds ?? null;
   const locationQuery = query.location?.trim() ?? "";
-  const category = query.category?.trim() ?? "";
+  const rawCategory = query.category?.trim() ?? "";
+  const category = getAttractionCategoryLabel(rawCategory) ?? rawCategory;
   const radiusKm = parseRadiusKm(query.radiusKm);
   const sort = parseSort(query.sort);
   const rows = await getStaticAttractions();
@@ -1052,7 +1055,7 @@ export async function getStaticAttractionCatalog(
         return null;
       }
 
-      if (category && normalizeText(item.category) !== normalizeText(category)) {
+      if (category && !isAttractionInCategory(item.category, category)) {
         return null;
       }
 

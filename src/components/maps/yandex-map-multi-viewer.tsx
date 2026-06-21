@@ -7,19 +7,18 @@ import { cn } from "@/lib/cn";
 
 export type YandexMapMarkerCategory =
   | "beach"
-  | "sea"
-  | "mountain"
-  | "water"
-  | "reserve"
+  | "nature"
   | "history"
   | "religion"
   | "palace"
   | "culture"
   | "city"
   | "entertainment"
-  | "winery"
-  | "route"
-  | "landmark";
+  | "bay"
+  | "strait"
+  | "gulf"
+  | "crimean_bridge"
+  | "dolphinarium";
 
 export type YandexMapPoint = {
   id: string;
@@ -34,7 +33,6 @@ export type YandexMapPoint = {
   isViewed?: boolean;
   showPriceAtLowZoom?: boolean;
   markerCategory?: YandexMapMarkerCategory | null;
-  markerCategoryLabel?: string | null;
 };
 
 export type YandexMapViewport = {
@@ -151,6 +149,7 @@ type CategoryLayouts = Record<
 
 type CategoryMarkerDefinition = {
   color: string;
+  background: string;
   icon: string;
   label: string;
 };
@@ -177,9 +176,9 @@ const PRICE_MARKER_TAIL_HEIGHT = 7;
 const PRICE_MARKER_HORIZONTAL_PADDING = 22;
 const DOT_MARKER_SIZE = 14;
 const CATEGORY_MARKER_MIN_ZOOM = 12;
-const CATEGORY_MARKER_SIZE = 34;
-const CATEGORY_MARKER_TAIL_SIZE = 10;
-const CATEGORY_MARKER_TOTAL_HEIGHT = CATEGORY_MARKER_SIZE + 7;
+const CATEGORY_MARKER_SIZE = 44;
+const CATEGORY_MARKER_TAIL_SIZE = 11;
+const CATEGORY_MARKER_TOTAL_HEIGHT = CATEGORY_MARKER_SIZE + 8;
 const BALLOON_CLOSE_DELAY_MS = 180;
 const PRICE_BALLOON_GAP_PX = 6;
 const DOT_BALLOON_OFFSET: [number, number] = [0, -12];
@@ -276,81 +275,82 @@ function createDotLayout(ymaps: YandexApi, outerStyle: string, innerStyle: strin
 
 const categoryMarkerDefinitions: Record<YandexMapMarkerCategory, CategoryMarkerDefinition> = {
   beach: {
-    color: "#38bdf8",
-    icon: '<path d="M17.553 16.75a7.5 7.5 0 0 0 -10.606 0"/><path d="M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196"/><path d="M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196"/><path d="M15 9l-3 5.196"/><path d="M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25"/>',
-    label: "\u041f\u043b\u044f\u0436\u0438 \u0438 \u043a\u0443\u043f\u0430\u043d\u0438\u0435",
+    color: "#087ea4",
+    background: "#e5f7ff",
+    icon: '<path d="M4 11a8 8 0 0 1 16 0c-2.4-1.8-4.2-1.8-6 0-1.3-1.8-2.7-1.8-4 0-1.8-1.8-3.6-1.8-6 0Z"/><path d="M12 4v13"/><path d="M8 20c1.2-1.7 2.5-2.5 4-2.5s2.8.8 4 2.5"/><path d="M5 21h14"/>',
+    label: "Море и пляжи",
   },
-  sea: {
-    color: "#2563eb",
-    icon: '<path d="M3 7c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 17c3 -2 6 -2 9 0s6 2 9 0"/><path d="M3 12c3 -2 6 -2 9 0s6 2 9 0"/>',
-    label:
-      "\u041c\u043e\u0440\u0435, \u0431\u0443\u0445\u0442\u044b \u0438 \u043c\u044b\u0441\u044b",
-  },
-  mountain: {
-    color: "#92400e",
-    icon: '<path d="M3 20h18l-6.921 -14.612a2.3 2.3 0 0 0 -4.158 0l-6.921 14.612"/><path d="M7.5 11l2 2.5l2.5 -2.5l2 3l2.5 -2"/>',
-    label:
-      "\u0413\u043e\u0440\u044b, \u0441\u043a\u0430\u043b\u044b \u0438 \u043f\u0435\u0449\u0435\u0440\u044b",
-  },
-  water: {
-    color: "#0891b2",
-    icon: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1 -11.31 0z"/><path d="M8.5 14a3.5 3.5 0 0 0 7 0"/>',
-    label:
-      "\u0412\u043e\u0434\u043e\u043f\u0430\u0434\u044b, \u043e\u0437\u0435\u0440\u0430 \u0438 \u0432\u043e\u0434\u043e\u0435\u043c\u044b",
-  },
-  reserve: {
-    color: "#16a34a",
-    icon: '<path d="M16 5l3 3l-2 1l4 4l-3 1l4 4h-9"/><path d="M15 21l0 -3"/><path d="M8 13l-2 -2"/><path d="M8 12l2 -2"/><path d="M8 21v-13"/><path d="M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005"/>',
-    label:
-      "\u0417\u0430\u043f\u043e\u0432\u0435\u0434\u043d\u0438\u043a\u0438 \u0438 \u0443\u0440\u043e\u0447\u0438\u0449\u0430",
+  nature: {
+    color: "#387a4a",
+    background: "#eaf6e8",
+    icon: '<path d="m3 17 5.2-7 3 3.7L15 8l6 9"/><path d="m6.5 12 1.8 1 1.5-1.1"/><path d="M5 21c2.5-3 5-3.5 7.5-1.5S17 21.5 19 19"/>',
+    label: "Природа и маршруты",
   },
   history: {
-    color: "#475569",
-    icon: '<path d="M7 21h1a1 1 0 0 0 1 -1v-1a3 3 0 0 1 6 0m3 2h1a1 1 0 0 0 1 -1v-15l-3 -2l-3 2v6h-4v-6l-3 -2l-3 2v15a1 1 0 0 0 1 1h2m8 -2v1a1 1 0 0 0 1 1h2"/><path d="M7 7v.01"/><path d="M7 10v.01"/><path d="M7 13v.01"/><path d="M17 7v.01"/><path d="M17 10v.01"/><path d="M17 13v.01"/>',
-    label:
-      "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0438 \u0430\u0440\u0445\u0435\u043e\u043b\u043e\u0433\u0438\u044f",
-  },
-  religion: {
-    color: "#7c3aed",
-    icon: '<path d="M3 21l18 0"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/><path d="M10 5l4 0"/><path d="M12 3l0 5"/><path d="M6 21v-7m-2 2l8 -8l8 8m-2 -2v7"/>',
-    label: "\u0425\u0440\u0430\u043c\u044b \u0438 \u0440\u0435\u043b\u0438\u0433\u0438\u044f",
+    color: "#9a5b24",
+    background: "#fff2df",
+    icon: '<path d="M4 20h16"/><path d="M6 20V9l3-2v4h3V6l3-2 3 2v14"/><path d="M8.5 15h1M14.5 10h1M14.5 14h1"/>',
+    label: "История и археология",
   },
   palace: {
-    color: "#d97706",
-    icon: '<path d="M15 19v-2a3 3 0 0 0 -6 0v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-14h4v3h3v-3h4v3h3v-3h4v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1"/><path d="M3 11l18 0"/>',
-    label: "\u0414\u0432\u043e\u0440\u0446\u044b \u0438 \u0434\u0430\u0447\u0438",
+    color: "#a94463",
+    background: "#fff0f4",
+    icon: '<path d="M3 20h18"/><path d="M5 20v-9h14v9"/><path d="M4 11h16L12 4 4 11Z"/><path d="M8 14v6M12 14v6M16 14v6"/>',
+    label: "Дворцы и архитектура",
   },
   culture: {
-    color: "#dc2626",
-    icon: '<path d="M3 21l18 0"/><path d="M3 10l18 0"/><path d="M5 6l7 -3l7 3"/><path d="M4 10l0 11"/><path d="M20 10l0 11"/><path d="M8 14l0 3"/><path d="M12 14l0 3"/><path d="M16 14l0 3"/>',
-    label: "\u041c\u0443\u0437\u0435\u0438 \u0438 \u043a\u0443\u043b\u044c\u0442\u0443\u0440\u0430",
+    color: "#5d56a8",
+    background: "#f0efff",
+    icon: '<path d="M3 20h18M4 9h16M5 6l7-3 7 3v3M6 9v11M18 9v11"/><path d="M9 13h6v4H9z"/>',
+    label: "Музеи и культура",
+  },
+  religion: {
+    color: "#7b4aa1",
+    background: "#f6edff",
+    icon: '<path d="M4 21h16M6 21v-8l6-4 6 4v8M9 21v-4a3 3 0 0 1 6 0v4"/><path d="M9 10V7a3 3 0 0 1 6 0v3M12 1v3M10.5 2.5h3"/>',
+    label: "Храмы и религия",
   },
   city: {
-    color: "#65a30d",
-    icon: '<path d="M13 4a2 2 0 1 0 -4 0a2 2 0 0 0 4 0"/><path d="M10 7l-1 5l-3 3"/><path d="M11 12l4 2l1 5"/><path d="M9 12h4"/><path d="M3 21h18"/>',
-    label: "\u041f\u0440\u043e\u0433\u0443\u043b\u043a\u0438 \u0438 \u043f\u0430\u0440\u043a\u0438",
+    color: "#477238",
+    background: "#eef7e9",
+    icon: '<path d="M7 16V8M4 11c0-3 1.3-5 3-5s3 2 3 5c0 2-1 3-3 3s-3-1-3-3Z"/><path d="M12 13h8v3h-8zM13 16v4M19 16v4M11 20h10M3 20h5"/>',
+    label: "Парки и городские прогулки",
   },
   entertainment: {
-    color: "#ec4899",
-    icon: '<path d="M15 5l0 2"/><path d="M15 11l0 2"/><path d="M15 17l0 2"/><path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2"/>',
-    label: "\u0421\u0435\u043c\u0435\u0439\u043d\u044b\u0439 \u043e\u0442\u0434\u044b\u0445",
+    color: "#d24b35",
+    background: "#fff0e9",
+    icon: '<circle cx="12" cy="11" r="7"/><circle cx="12" cy="11" r="2"/><path d="M12 4v14M5 11h14M7 6l10 10M17 6 7 16M9 18l-2 3M15 18l2 3M6 21h12"/>',
+    label: "Развлечения и семья",
   },
-  winery: {
-    color: "#991b1b",
-    icon: '<path d="M8 21h8"/><path d="M12 16v5"/><path d="M17 5l1 6c0 3.012 -2.686 5 -6 5s-6 -1.988 -6 -5l1 -6"/><path d="M7 5a5 2 0 1 0 10 0a5 2 0 1 0 -10 0"/>',
-    label: "\u0412\u0438\u043d\u043e\u0434\u0435\u043b\u044c\u043d\u0438",
+  bay: {
+    color: "#167c9c",
+    background: "#e7f8fb",
+    icon: '<path d="M3 7c2.5 0 3.5 2 6 2s3.5-2 6-2 3.5 2 6 2"/><path d="M4 13c2 0 3 1.5 5 1.5s3-1.5 5-1.5 3 1.5 5 1.5"/><path d="M5 4c-1.5 3-1.5 6 0 9M19 4c1.5 3 1.5 6 0 9"/><path d="M7 20c1.6-1.5 3.3-2.2 5-2.2s3.4.7 5 2.2"/>',
+    label: "Бухты",
   },
-  route: {
-    color: "#111827",
-    icon: '<path d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4"/><path d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/>',
-    label:
-      "\u0421\u043c\u043e\u0442\u0440\u043e\u0432\u044b\u0435 \u0438 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u044b",
+  strait: {
+    color: "#1769aa",
+    background: "#eaf4ff",
+    icon: '<path d="M4 3c3 2.5 3 5.5 0 8s-3 5.5 0 10M20 3c-3 2.5-3 5.5 0 8s3 5.5 0 10"/><path d="M8 7h8M8 12h8M8 17h8"/><path d="m14 5 2 2-2 2M10 10l-2 2 2 2M14 15l2 2-2 2"/>',
+    label: "Проливы",
   },
-  landmark: {
-    color: "#0f766e",
-    icon: '<path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0"/>',
-    label:
-      "\u0414\u043e\u0441\u0442\u043e\u043f\u0440\u0438\u043c\u0435\u0447\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
+  gulf: {
+    color: "#2767b1",
+    background: "#edf3ff",
+    icon: '<path d="M4 4v5c0 6 3.2 10 8 10s8-4 8-10V4"/><path d="M4 8c2.2 0 3.2 1.5 5.4 1.5S12.6 8 14.8 8 18 9.5 20 9.5"/><path d="M8 14c1.2.8 2.5 1.2 4 1.2s2.8-.4 4-1.2"/>',
+    label: "Заливы",
+  },
+  crimean_bridge: {
+    color: "#4b6475",
+    background: "#edf3f5",
+    icon: '<path d="M2 19h20M4 19v-7M20 19v-7M7 19v-5M17 19v-5"/><path d="M4 12c2 0 2.5-6 5-6s2.5 6 5 6 3-4 6-4"/><path d="M2 12h20M9 6V3M14 12V8"/>',
+    label: "Крымский мост",
+  },
+  dolphinarium: {
+    color: "#0b8b82",
+    background: "#e6f8f5",
+    icon: '<path d="M4 14c3-5 7-7 12-5l3-2-1 4c1.5 1.2 2 2.5 2 4-2-1-3.5-1.2-5-.5-2.8 1.4-5.5 1.2-8-.5"/><path d="M10 9 8 5c2 0 4 .8 5 2.5M7 14c-1 2-2.5 3-4.5 3"/><circle cx="16" cy="10" r=".6" fill="currentColor" stroke="none"/><path d="M4 20c2-1.3 4-1.3 6 0s4 1.3 6 0 4-1.3 6 0"/>',
+    label: "Дельфинарии",
   },
 };
 
@@ -362,8 +362,12 @@ function createCategoryMarkerLayout(
   const safeLabel = escapeHtml(definition.label);
   const isStrong = state === "hover" || state === "active";
   const isViewed = state === "viewed";
-  const background = isStrong ? "#202124" : isViewed ? "#e1e4ea" : "#ffffff";
-  const borderColor = isStrong ? "#202124" : isViewed ? "#cfd6dc" : definition.color;
+  const background = isStrong
+    ? definition.color
+    : isViewed
+      ? "#eef0f2"
+      : definition.background;
+  const borderColor = isStrong ? definition.color : isViewed ? "#cfd6dc" : definition.color;
   const iconColor = isStrong ? "#ffffff" : isViewed ? "#64707d" : definition.color;
   const shadow = isStrong
     ? "0 2px 5px rgba(0,0,0,0.28),0 9px 22px rgba(0,0,0,0.22)"
@@ -372,7 +376,7 @@ function createCategoryMarkerLayout(
       : "0 2px 4px rgba(0,0,0,0.18),0 8px 20px rgba(0,0,0,0.14)";
   const markerStyle =
     `position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;` +
-    `width:${CATEGORY_MARKER_SIZE}px;height:${CATEGORY_MARKER_SIZE}px;border-radius:50%;` +
+    `width:${CATEGORY_MARKER_SIZE}px;height:${CATEGORY_MARKER_SIZE}px;border-radius:13px;` +
     `background:${background};border:2px solid ${borderColor};color:${iconColor};box-sizing:border-box;` +
     `box-shadow:${shadow};transition:background .12s ease,color .12s ease,border-color .12s ease,box-shadow .12s ease;`;
   const tailStyle =
@@ -385,7 +389,7 @@ function createCategoryMarkerLayout(
   return ymaps.templateLayoutFactory.createClass(
     `<span style="${markerStyle}" role="img" aria-label="${safeLabel}" title="${safeLabel}">
       <span style="${tailStyle}"></span>
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="position:relative;z-index:1;display:block;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${definition.icon}</svg>
+      <svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" style="position:relative;z-index:1;display:block;" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${definition.icon}</svg>
     </span>`,
   );
 }
@@ -438,7 +442,6 @@ function createTitleOnlyBalloonContentLayout(ymaps: YandexApi): unknown {
   return ymaps.templateLayoutFactory.createClass(`<div style="pointer-events:none;">
     <div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
       <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">$[properties.balloonTitle]</div>
-      <div style="${fontFamily}display:$[properties.balloonCategoryDisplay];margin-top:4px;font-size:12px;line-height:1.2;font-weight:600;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">$[properties.balloonCategoryLabel]</div>
     </div>
   </div>`);
 }
@@ -470,18 +473,11 @@ function buildBalloonContentFallbackHtml(input: {
   </div>`;
 }
 
-function buildTitleOnlyBalloonContentFallbackHtml(input: {
-  title: string;
-  categoryLabel: string;
-}): string {
+function buildTitleOnlyBalloonContentFallbackHtml(input: { title: string }): string {
   const fontFamily = "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;";
-  const categoryHtml = input.categoryLabel
-    ? `<div style="${fontFamily}margin-top:4px;font-size:12px;line-height:1.2;font-weight:600;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.categoryLabel}</div>`
-    : "";
 
   return `<div style="max-width:240px;padding:9px 12px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:12px;box-shadow:0 12px 24px rgba(15,23,42,0.18);">
     <div style="${fontFamily}font-size:14px;line-height:1.25;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${input.title}</div>
-    ${categoryHtml}
   </div>`;
 }
 
@@ -497,20 +493,6 @@ function escapeHtml(value: string): string {
 function resolvePreviewImageUrl(value: string | null | undefined): string {
   const trimmed = typeof value === "string" ? value.trim() : "";
   return trimmed.length > 0 ? trimmed : FALLBACK_PREVIEW_IMAGE_URL;
-}
-
-function resolveMarkerCategoryLabel(point: YandexMapPoint): string {
-  const explicitLabel =
-    typeof point.markerCategoryLabel === "string" ? point.markerCategoryLabel.trim() : "";
-  if (explicitLabel.length > 0) {
-    return explicitLabel;
-  }
-
-  if (!hasPointMarkerCategory(point)) {
-    return "";
-  }
-
-  return categoryMarkerDefinitions[point.markerCategory]?.label ?? "";
 }
 
 function formatReviewsCount(value: number): string {
@@ -1232,8 +1214,8 @@ function buildCategoryPlacemarkOptions(input: {
   const isHovered = input.point.id === input.hoveredPointId && !isActive;
   const isViewed = input.point.isViewed === true && !isActive && !isHovered;
   const halfWidth = CATEGORY_MARKER_SIZE / 2;
-  const category = hasPointMarkerCategory(input.point) ? input.point.markerCategory : "landmark";
-  const layouts = input.layouts[category] ?? input.layouts.landmark;
+  const category = hasPointMarkerCategory(input.point) ? input.point.markerCategory : "culture";
+  const layouts = input.layouts[category] ?? input.layouts.culture;
   const zIndex = getMarkerZIndex({ isActive, isHovered, baseZIndex: input.baseZIndex });
 
   return {
@@ -1488,7 +1470,6 @@ export function YandexMapMultiViewer({
             point.reviewsCount ?? "",
             point.balloonVariant ?? "",
             point.markerCategory ?? "",
-            point.markerCategoryLabel ?? "",
           ].join("\u001f"),
         )
         .join("\u001e"),
@@ -1988,7 +1969,6 @@ export function YandexMapMultiViewer({
       const safeImageUrl = escapeHtml(resolvePreviewImageUrl(point.previewImageUrl));
       const safeRatingLabel = escapeHtml(rating !== null ? rating.toFixed(1) : "—");
       const safeReviewsLabel = escapeHtml(formatReviewsCount(reviewsCount));
-      const safeCategoryLabel = escapeHtml(resolveMarkerCategoryLabel(point));
       const isTitleOnlyBalloon = point.balloonVariant === "title-only";
       const balloonContentLayout = isTitleOnlyBalloon
         ? balloonContentLayouts.titleOnly
@@ -2005,7 +1985,6 @@ export function YandexMapMultiViewer({
       const balloonFallbackHtml = isTitleOnlyBalloon
         ? buildTitleOnlyBalloonContentFallbackHtml({
             title: safeTitle,
-            categoryLabel: safeCategoryLabel,
           })
         : buildBalloonContentFallbackHtml({
             title: safeTitle,
@@ -2022,13 +2001,11 @@ export function YandexMapMultiViewer({
           balloonContentBody: balloonFallbackHtml,
           iconContent: hasPriceLabel ? point.priceLabel : "",
           balloonTitle: safeTitle,
-          balloonCategoryLabel: safeCategoryLabel,
-          balloonCategoryDisplay: safeCategoryLabel ? "block" : "none",
           balloonPriceLabel: safePriceLabel,
           balloonImageUrl: safeImageUrl,
           balloonRatingLabel: safeRatingLabel,
           balloonReviewsLabel: safeReviewsLabel,
-          hintContent: safeCategoryLabel ? `${safeTitle} - ${safeCategoryLabel}` : safeTitle,
+          hintContent: safeTitle,
         },
         {
           ...buildMarkerVisualOptions({

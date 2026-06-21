@@ -100,7 +100,7 @@ export async function SiteHeader() {
               Туры
             </Link>
             <Link
-              href="/uslugi-i-tarify"
+              href="/about"
               prefetch={false}
               className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
             >

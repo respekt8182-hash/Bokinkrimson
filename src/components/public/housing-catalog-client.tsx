@@ -12,6 +12,7 @@ import {
   fetchAccommodationSearch,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
+import { getCatalogPageFromSearch } from "@/lib/catalog-pagination";
 import { propertyTypes } from "@/lib/constants";
 import { resolveKnownCrimeaLocationName } from "@/lib/seo/routes";
 import { formatLocationInPrepositional } from "@/lib/seo/site";
@@ -459,7 +460,11 @@ export function HousingCatalogClient({
   const runFilterRequest = useCallback(
     async (
       nextFilters: SearchFilters,
-      options?: { historyMode?: "push" | "replace" | "none"; announceMessage?: string },
+      options?: {
+        historyMode?: "push" | "replace" | "none";
+        announceMessage?: string;
+        page?: number;
+      },
     ) => {
       const normalizedFilters: SearchFilters = {
         ...nextFilters,
@@ -487,7 +492,7 @@ export function HousingCatalogClient({
       try {
         const nextResponse = await fetchAccommodationSearch(
           normalizedFilters,
-          1,
+          options?.page ?? 1,
           PAGE_SIZE,
           controller.signal,
           null,
@@ -649,6 +654,7 @@ export function HousingCatalogClient({
     const handlePopState = () => {
       void runFilterRequest(parseUrlFilters(window.location.search, window.location.pathname), {
         historyMode: "none",
+        page: getCatalogPageFromSearch(window.location.search),
       });
     };
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, TransferStatus } from "@prisma/client";
+import { getAttractionCategoryLabel } from "@/lib/attraction-categories";
 import {
   normalizeMaxProfileUrl,
   normalizeOkProfileUrl,
@@ -27,10 +28,7 @@ import {
 import { cleanPublicText, cleanPublicTextList } from "@/lib/public-content-quality";
 import { buildRedactedPublicContactFields } from "@/lib/public-contact-redaction";
 import { formatPublicContactName, formatPublicPersonName } from "@/lib/public-display-name";
-import {
-  buildPublicSlugCacheKey,
-  resolveCachedPublicSlugLookup,
-} from "@/lib/public-slug-cache";
+import { buildPublicSlugCacheKey, resolveCachedPublicSlugLookup } from "@/lib/public-slug-cache";
 import { extractPropertyId, isPublicEntityId, slugify } from "@/lib/public-properties";
 import { getRankingStatsByEntity } from "@/lib/ranking-stats";
 import {
@@ -880,8 +878,7 @@ export function buildPublicAttractionPath(item: {
 }): string {
   const cleanTitleSlug = buildAttractionSlug(item.title, item.id);
   const storedSlug = item.slug?.trim();
-  const hasTechnicalSuffix =
-    storedSlug === item.id || Boolean(storedSlug?.endsWith(`-${item.id}`));
+  const hasTechnicalSuffix = storedSlug === item.id || Boolean(storedSlug?.endsWith(`-${item.id}`));
   const slug = !storedSlug || hasTechnicalSuffix ? cleanTitleSlug : storedSlug;
   return `/attractions/${slug}`;
 }
@@ -904,7 +901,7 @@ function mapAttractionCatalogItem(
     h1: row.h1,
     seoTitle: row.seoTitle,
     metaDescription: row.metaDescription,
-    category: row.category,
+    category: getAttractionCategoryLabel(row.category),
     tags: row.tags,
     locationName: row.locationName,
     districtName: row.districtName,
@@ -934,7 +931,7 @@ function mapAttractionMapItem(row: StaticAttraction): PublicAttractionMapItem {
     id: row.id,
     path: buildPublicAttractionPath({ id: row.id, title: row.title, slug: row.slug }),
     title: row.title,
-    category: row.category,
+    category: getAttractionCategoryLabel(row.category),
     tags: row.tags.slice(0, 1),
     locationName: row.locationName,
     districtName: row.districtName,
@@ -1756,7 +1753,7 @@ export async function getAttractionMarketplaceDirectoryData(): Promise<{
   const attractionCategories = Array.from(
     new Set(
       staticAttractions
-        .map((item) => item.category)
+        .map((item) => getAttractionCategoryLabel(item.category))
         .filter((value): value is string => Boolean(value)),
     ),
   ).sort((a, b) => a.localeCompare(b, "ru"));
@@ -1818,7 +1815,7 @@ export async function getMarketplaceDirectoryData(): Promise<{
   const staticAttractionCategories = Array.from(
     new Set(
       staticAttractions
-        .map((item) => item.category)
+        .map((item) => getAttractionCategoryLabel(item.category))
         .filter((value): value is string => Boolean(value)),
     ),
   ).sort((a, b) => a.localeCompare(b, "ru"));

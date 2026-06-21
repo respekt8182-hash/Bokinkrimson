@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { DEFAULT_NEARBY_RADIUS_KM, getNearbyProperties } from "@/lib/nearby-public";
 import { NearbyPropertiesSection } from "@/components/public/nearby-properties-section";
 
@@ -16,6 +17,27 @@ type NearbyPropertiesSectionServerProps = {
   titleClassName?: string;
 };
 
+const getDailyNearbyProperties = unstable_cache(
+  async (input: {
+    latitude: number;
+    longitude: number;
+    propertyId?: string;
+    radiusKm: number;
+    pricingDate: string;
+  }) =>
+    getNearbyProperties({
+      latitude: input.latitude,
+      longitude: input.longitude,
+      excludeId: input.propertyId,
+      radiusKm: input.radiusKm,
+      limit: 4,
+      randomize: true,
+      pricingDate: input.pricingDate,
+    }),
+  ["daily-nearby-properties"],
+  { revalidate: 86_400 },
+);
+
 export async function NearbyPropertiesSectionServer({
   propertyId,
   latitude,
@@ -30,14 +52,19 @@ export async function NearbyPropertiesSectionServer({
   className,
   titleClassName,
 }: NearbyPropertiesSectionServerProps) {
-  const items = await getNearbyProperties({
-    latitude,
-    longitude,
-    excludeId: propertyId ?? undefined,
-    radiusKm,
-    limit: 4,
-    randomize: true,
+  const pricingDate = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Europe/Moscow",
   });
+  const items =
+    latitude === null || longitude === null
+      ? []
+      : await getDailyNearbyProperties({
+          latitude,
+          longitude,
+          propertyId: propertyId ?? undefined,
+          radiusKm,
+          pricingDate,
+        });
 
   return (
     <NearbyPropertiesSection

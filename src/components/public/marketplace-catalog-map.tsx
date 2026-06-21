@@ -17,6 +17,8 @@ import {
   type UIEvent as ReactUIEvent,
 } from "react";
 import { FavoriteToggleButton } from "@/components/favorites/favorite-toggle-button";
+import { getAttractionCategory } from "@/lib/attraction-categories";
+import { getSpecialAttractionMarkerCategory } from "@/lib/attraction-marker-categories";
 import type {
   YandexMapMarkerCategory,
   YandexMapPoint,
@@ -420,8 +422,18 @@ const cp1252ByteByChar: Record<string, number> = {
 const utf8TextDecoder =
   typeof TextDecoder === "undefined" ? null : new TextDecoder("utf-8", { fatal: false });
 
+type LegacyAttractionMarkerCategory =
+  | YandexMapMarkerCategory
+  | "sea"
+  | "mountain"
+  | "water"
+  | "reserve"
+  | "winery"
+  | "route"
+  | "landmark";
+
 type AttractionMarkerCategoryRule = {
-  category: YandexMapMarkerCategory;
+  category: LegacyAttractionMarkerCategory;
   keywords: string[];
 };
 
@@ -962,20 +974,48 @@ function getAttractionMarkerCategorySearchText(
 function findAttractionMarkerCategory(
   text: string,
   rules: AttractionMarkerCategoryRule[],
-): YandexMapMarkerCategory | null {
+): LegacyAttractionMarkerCategory | null {
   const match = rules.find((rule) => rule.keywords.some((keyword) => text.includes(keyword)));
   return match?.category ?? null;
+}
+
+function toUnifiedMarkerCategory(
+  category: LegacyAttractionMarkerCategory,
+): YandexMapMarkerCategory {
+  if (category === "beach" || category === "sea") return "beach";
+  if (
+    category === "nature" ||
+    category === "mountain" ||
+    category === "water" ||
+    category === "reserve" ||
+    category === "route"
+  ) {
+    return "nature";
+  }
+  if (category === "winery" || category === "landmark") return "culture";
+
+  return category;
 }
 
 function resolveAttractionMarkerCategory(
   item: PublicAttractionCatalogItem | PublicAttractionMapItem,
 ): YandexMapMarkerCategory {
+  const specialCategory = getSpecialAttractionMarkerCategory(item);
+  if (specialCategory) {
+    return specialCategory;
+  }
+
+  const unifiedCategory = getAttractionCategory(item.category);
+  if (unifiedCategory) {
+    return unifiedCategory.id;
+  }
+
   const primaryCategory = findAttractionMarkerCategory(
     getAttractionMarkerCategorySearchText(item),
     attractionMarkerPrimaryCategoryRules,
   );
   if (primaryCategory) {
-    return primaryCategory;
+    return toUnifiedMarkerCategory(primaryCategory);
   }
 
   const identityCategory = findAttractionMarkerCategory(
@@ -983,7 +1023,7 @@ function resolveAttractionMarkerCategory(
     attractionMarkerIdentityCategoryRules,
   );
   if (identityCategory) {
-    return identityCategory;
+    return toUnifiedMarkerCategory(identityCategory);
   }
 
   const fallbackCategory = findAttractionMarkerCategory(
@@ -991,7 +1031,7 @@ function resolveAttractionMarkerCategory(
     attractionMarkerCategoryFallbackRules,
   );
 
-  return fallbackCategory ?? "landmark";
+  return fallbackCategory ? toUnifiedMarkerCategory(fallbackCategory) : "culture";
 }
 
 function buildMapPoint(
@@ -1026,7 +1066,6 @@ function buildMapPoint(
     reviewsCount: 0,
     balloonVariant: "title-only",
     markerCategory: resolveAttractionMarkerCategory(attraction),
-    markerCategoryLabel: attraction.category ?? attraction.tags[0] ?? null,
   };
 }
 
@@ -1091,7 +1130,6 @@ function AttractionMapPopupCard({
   const locationLabel =
     [item.locationName, item.address].filter(Boolean).join(", ") || item.districtName || "Крым";
 
-  const categoryLabel = item.category || item.tags[0] || null;
   const description = "description" in item ? item.description : null;
   const summaryLabel = compactText(item.shortDescription ?? description, 78);
 
@@ -1131,13 +1169,7 @@ function AttractionMapPopupCard({
           </div>
 
           <div className="min-w-0 flex-1 py-0.5 pr-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-xs font-medium text-olive/58">
-                {categoryLabel || locationLabel}
-              </span>
-            </div>
-
-            <h3 className="mt-2 line-clamp-2 text-[15px] font-bold leading-snug text-olive">
+            <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-olive">
               {item.title}
             </h3>
             <p className="mt-0.5 line-clamp-1 text-xs text-olive/55">{locationLabel}</p>

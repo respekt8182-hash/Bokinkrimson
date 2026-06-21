@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getBoundingBoxForRadiusKm } from "../../src/lib/nearby-public";
+import { getBoundingBoxForRadiusKm, getMinNightPriceForDate } from "@/lib/nearby-public";
 
 describe("nearby public bounding boxes", () => {
   it("builds a tight box around a normal point", () => {
@@ -52,5 +52,44 @@ describe("nearby public bounding boxes", () => {
     expect(box!.coversAllLongitudes).toBe(true);
     expect(box!.minLng).toBe(-180);
     expect(box!.maxLng).toBe(180);
+  });
+});
+
+describe("getMinNightPriceForDate", () => {
+  it("returns the lowest price among all rooms for the requested day", () => {
+    const result = getMinNightPriceForDate(
+      [
+        {
+          prices: [
+            { dateFrom: "2026-06-01", dateTo: "2026-06-30", price: 4200, currency: "RUB" },
+          ],
+        },
+        {
+          prices: [
+            { dateFrom: "2026-06-20", dateTo: "2026-06-20", price: 3100, currency: "RUB" },
+            { dateFrom: "2026-07-01", dateTo: "2026-07-31", price: 1800, currency: "RUB" },
+          ],
+        },
+      ],
+      "2026-06-20",
+    );
+
+    expect(result).toEqual({ minNightPrice: 3100, currency: "RUB" });
+  });
+
+  it("does not show expired or future prices as current", () => {
+    const result = getMinNightPriceForDate(
+      [
+        {
+          prices: [
+            { dateFrom: "2026-05-01", dateTo: "2026-05-31", price: 1000, currency: "RUB" },
+            { dateFrom: "2026-07-01", dateTo: "2026-07-31", price: 1500, currency: "RUB" },
+          ],
+        },
+      ],
+      "2026-06-20",
+    );
+
+    expect(result).toEqual({ minNightPrice: null, currency: null });
   });
 });

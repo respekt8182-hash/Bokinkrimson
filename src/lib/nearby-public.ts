@@ -321,19 +321,26 @@ type NearbyPropertyRecord = Prisma.PropertyGetPayload<{
   select: typeof nearbyPropertySelect;
 }>;
 
-function getMinNightPrice(
+export function getMinNightPriceForDate(
   rooms: Array<{
     prices: Array<{
       price: number;
       currency: string;
+      dateFrom: string;
+      dateTo: string;
     }>;
   }>,
+  date: string,
 ): { minNightPrice: number | null; currency: string | null } {
   let minNightPrice: number | null = null;
   let currency: string | null = null;
 
   for (const room of rooms) {
     for (const price of room.prices) {
+      if (price.dateFrom > date || price.dateTo < date) {
+        continue;
+      }
+
       if (minNightPrice === null || price.price < minNightPrice) {
         minNightPrice = price.price;
         currency = price.currency;
@@ -393,15 +400,19 @@ function buildNearbyExcursionItem(
 function buildNearbyPropertyItem(
   row: NearbyPropertyRecord,
   distanceKm: number,
+  pricingDate: string,
 ): NearbyPropertyItem {
   const displayState = resolvePublicCatalogDisplayState(row);
-  const pricing = getMinNightPrice(
+  const pricing = getMinNightPriceForDate(
     displayState.rooms.map((room) => ({
       prices: room.prices.map((price) => ({
         price: Number(price.price),
         currency: price.currency,
+        dateFrom: price.dateFrom,
+        dateTo: price.dateTo,
       })),
     })),
+    pricingDate,
   );
 
   return {
@@ -516,6 +527,7 @@ export async function getNearbyProperties(input: {
   radiusKm?: number;
   limit?: number;
   randomize?: boolean;
+  pricingDate?: string;
 }): Promise<NearbyPropertyItem[]> {
   if (input.latitude === null || input.longitude === null) {
     return [];
@@ -526,6 +538,9 @@ export async function getNearbyProperties(input: {
     longitude: input.longitude,
   };
   const radiusKm = input.radiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
+  const pricingDate = input.pricingDate ?? new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Europe/Moscow",
+  });
   const boundingBox = getBoundingBoxForRadiusKm({
     latitude: input.latitude,
     longitude: input.longitude,
@@ -571,7 +586,7 @@ export async function getNearbyProperties(input: {
         return null;
       }
 
-      return buildNearbyPropertyItem(row, roadDistanceKm);
+      return buildNearbyPropertyItem(row, roadDistanceKm, pricingDate);
     })
     .filter((item): item is NearbyPropertyItem => Boolean(item));
 

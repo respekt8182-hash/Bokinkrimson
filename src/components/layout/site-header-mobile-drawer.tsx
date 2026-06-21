@@ -56,7 +56,7 @@ const primaryLinks: DrawerLink[] = [
   { href: attractionsHubPath, label: "Открывай Крым", icon: Landmark },
   { href: transfersHubPath, label: "Трансферы", icon: Car },
   { href: toursHubPath, label: "Туры", icon: Compass },
-  { href: "/uslugi-i-tarify", label: "Партнёрам", icon: Info, exact: true },
+  { href: "/about", label: "Партнёрам", icon: Info, exact: true },
   { href: "/cooperation", label: "Сотрудничество", icon: MessageCircleMore, exact: true },
 ];
 

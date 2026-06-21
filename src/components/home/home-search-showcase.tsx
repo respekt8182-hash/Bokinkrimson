@@ -3153,7 +3153,7 @@ export function HomeSearchShowcase({
               Поиск по Крыму
             </h1>
             <p className="mx-auto mt-2 max-w-[320px] text-sm leading-5 text-olive/60 sm:max-w-none sm:text-base md:text-lg">
-              Бесплатный туристический навигатор по Крыму
+              Молодёжный туристический навигатор для самостоятельных путешествий по Крыму
             </p>
           </div>
 
