@@ -51,9 +51,9 @@ type DrawerLink = {
 };
 
 const primaryLinks: DrawerLink[] = [
+  { href: attractionsHubPath, label: "Открывай Крым", icon: Landmark },
   { href: housingHubPath, label: "Жильё", icon: House },
   { href: excursionsHubPath, label: "Экскурсии", icon: Compass },
-  { href: attractionsHubPath, label: "Открывай Крым", icon: Landmark },
   { href: transfersHubPath, label: "Трансферы", icon: Car },
   { href: toursHubPath, label: "Туры", icon: Compass },
   { href: "/about", label: "Партнёрам", icon: Info, exact: true },

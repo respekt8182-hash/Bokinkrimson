@@ -1,6 +1,5 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, Camera, CircleAlert, Clock3, Compass, MapPin, Route, Sparkles } from "lucide-react";
+import { Camera, CircleAlert, Clock3, Compass, MapPin, Sparkles } from "lucide-react";
 import { AppIcon } from "@/components/ui/app-icon";
 import {
   attractionTemplateRegistry,
@@ -162,39 +161,6 @@ export function ImportantToKnow({ place }: { place: AttractionPagePlace }) {
   );
 }
 
-export function NearbyRoutes({ place }: { place: AttractionPagePlace }) {
-  if (place.nearby.length === 0) return null;
-  const groups = [
-    { title: "Короткая прогулка", items: place.nearby.slice(0, 2) },
-    { title: "Продолжить маршрут", items: place.nearby.slice(2, 5) },
-    { title: "Ещё рядом", items: place.nearby.slice(5) },
-  ].filter((group) => group.items.length > 0);
-
-  return (
-    <GuideSection id="nearby-places" title="Что рядом" icon={Route}>
-      <div className="grid gap-3 md:grid-cols-3">
-        {groups.map((group) => (
-          <div key={group.title} className="min-w-0 rounded-2xl bg-cream/62 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-olive/45">{group.title}</p>
-            <div className="mt-3 grid gap-2">
-              {group.items.map((name) => (
-                <Link
-                  key={name}
-                  href={`/attractions?q=${encodeURIComponent(name)}`}
-                  className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2.5 text-sm font-semibold text-olive transition hover:text-primary"
-                >
-                  <span className="min-w-0 break-words">{name}</span>
-                  <AppIcon icon={ArrowRight} className="h-4 w-4 shrink-0" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </GuideSection>
-  );
-}
-
 export function SmartFAQ({ place, comparedText = "" }: { place: AttractionPagePlace; comparedText?: string }) {
   const items = getSmartAttractionFaq(place.faq, comparedText);
   if (items.length === 0) return null;
@@ -280,7 +246,6 @@ export function AttractionPage({
       <ImportantToKnow place={place} />
       <ExistingDetails place={place} />
       {mapSection}
-      <NearbyRoutes place={place} />
       <SmartFAQ place={place} comparedText={comparedText} />
     </div>
   );

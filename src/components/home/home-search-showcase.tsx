@@ -52,11 +52,23 @@ import { buildDateRangeParam } from "@/lib/seo/url-normalize";
 import { setPublicMobileBottomNavForceHidden } from "@/lib/public-mobile-nav-visibility";
 
 const directionLabels = {
+  attractions: "Открывай Крым",
   housing: "Жильё",
   excursions: "Экскурсии",
-  attractions: "Открывай Крым",
   transfers: "Трансферы",
 } as const;
+
+const attractionQuickCategories = [
+  "История",
+  "Архитектура",
+  "Музеи",
+  "Природа",
+  "Парки",
+  "Пещеры",
+  "Смотровые",
+  "Пляжи",
+  "Необычные места",
+] as const;
 
 type Direction = keyof typeof directionLabels;
 
@@ -91,6 +103,7 @@ type HomeSearchShowcaseProps = {
   locationSuggestions: string[];
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
+  publishedToursCount: number | null;
   publishedTransfersCount: number | null;
   publishedAttractionsCount: number;
   heroAttractionCards?: HomeHeroAttractionCard[];
@@ -982,6 +995,7 @@ export function HomeSearchShowcase({
   locationSuggestions,
   publishedPropertiesCount,
   publishedExcursionsCount,
+  publishedToursCount,
   publishedTransfersCount,
   publishedAttractionsCount,
   heroAttractionCards = [],
@@ -999,7 +1013,7 @@ export function HomeSearchShowcase({
     [initialPopularSuggestionsByDirection],
   );
 
-  const [direction, setDirection] = useState<Direction>("housing");
+  const [direction, setDirection] = useState<Direction>("attractions");
   const [searchValue, setSearchValue] = useState("");
   const [selectedSuggestion, setSelectedSuggestion] = useState<HomeSearchSuggestionItem | null>(
     null,
@@ -1128,7 +1142,10 @@ export function HomeSearchShowcase({
   const typedDestination = useTypewriterText(typewriterDestinations);
   const searchDemoDestination =
     typedDestination || (typewriterDestinations.length === 0 ? "Ялта" : "");
-  const searchDemoLabel = `Куда едем - ${searchDemoDestination}`;
+  const searchDemoLabel =
+    direction === "attractions"
+      ? "Найдите достопримечательность, город, музей, крепость или маршрут"
+      : `Куда едем - ${searchDemoDestination}`;
   const renderSearchDemoLabel = () => (
     <span className="inline-flex min-w-0 items-center">
       <span className="truncate">{searchDemoLabel}</span>
@@ -1148,42 +1165,41 @@ export function HomeSearchShowcase({
     }
 
     return {
-      value: "подключаются",
-      label: "объекты",
+      value: "идёт подключение",
+      label: "жильё",
     };
   }, [publishedPropertiesCount]);
-  const excursionStat = useMemo(() => {
-    if (publishedExcursionsCount !== null && publishedExcursionsCount > 0) {
+  const excursionsAndToursStat = useMemo(() => {
+    const count =
+      publishedExcursionsCount !== null && publishedToursCount !== null
+        ? publishedExcursionsCount + publishedToursCount
+        : null;
+
+    if (count !== null && count > 0) {
       return {
-        value: countFormatter.format(publishedExcursionsCount),
-        label: pluralize(publishedExcursionsCount, ["экскурсия", "экскурсии", "экскурсий"]),
+        value: countFormatter.format(count),
+        label: "экскурсий и туров",
       };
     }
 
-    return {
-      value: "подключение",
-      label: "экскурсии",
-    };
-  }, [publishedExcursionsCount]);
+    return { value: "идёт подключение", label: "экскурсии и туры" };
+  }, [publishedExcursionsCount, publishedToursCount]);
   const transferStat = useMemo(() => {
     if (publishedTransfersCount !== null && publishedTransfersCount > 0) {
       return {
         value: countFormatter.format(publishedTransfersCount),
-        label: pluralize(publishedTransfersCount, [
-          "направление трансфера",
-          "направления трансфера",
-          "направлений трансфера",
-        ]),
+        label: pluralize(publishedTransfersCount, ["трансфер", "трансфера", "трансферов"]),
       };
     }
 
-    return {
-      value: "подключение",
-      label: "трансферы",
-    };
+    return { value: "идёт подключение", label: "трансферы" };
   }, [publishedTransfersCount]);
   const leisureStat = useMemo(() => {
     const attractionsCount = Math.max(0, publishedAttractionsCount);
+
+    if (attractionsCount === 0) {
+      return { value: "идёт подключение", label: "достопримечательности" };
+    }
 
     return {
       value: countFormatter.format(attractionsCount),
@@ -1195,9 +1211,13 @@ export function HomeSearchShowcase({
     };
   }, [publishedAttractionsCount]);
   const siteStats = [
-    { icon: House, value: housingStat.value, label: housingStat.label },
     { icon: Landmark, value: leisureStat.value, label: leisureStat.label },
-    { icon: Compass, value: excursionStat.value, label: excursionStat.label },
+    { icon: House, value: housingStat.value, label: housingStat.label },
+    {
+      icon: Compass,
+      value: excursionsAndToursStat.value,
+      label: excursionsAndToursStat.label,
+    },
     { icon: Car, value: transferStat.value, label: transferStat.label },
   ];
   const dailyHeroCards = useMemo(() => heroAttractionCards.slice(0, 4), [heroAttractionCards]);
@@ -3150,10 +3170,11 @@ export function HomeSearchShowcase({
         <section className="relative z-30 mx-auto max-w-5xl px-0 pt-5 md:pt-8 lg:pt-10">
           <div className="mb-5 px-2 text-center md:mb-7 md:px-0">
             <h1 className="text-[2rem] leading-[1.08] text-midnight sm:text-4xl md:mt-3 md:text-5xl md:leading-tight">
-              Поиск по Крыму
+              Открывай Крым
             </h1>
-            <p className="mx-auto mt-2 max-w-[320px] text-sm leading-5 text-olive/60 sm:max-w-none sm:text-base md:text-lg">
-              Молодёжный туристический навигатор для самостоятельных путешествий по Крыму
+            <p className="mx-auto mt-3 max-w-3xl text-base font-medium leading-6 text-olive/78 sm:text-lg md:text-xl">
+              Бесплатный путеводитель по достопримечательностям, истории, маршрутам и необычным
+              местам полуострова.
             </p>
           </div>
 
@@ -4043,6 +4064,21 @@ export function HomeSearchShowcase({
               </div>
             </div>
           </form>
+
+          <nav aria-label="Категории достопримечательностей" className="mt-4">
+            <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:justify-center md:overflow-visible">
+              {attractionQuickCategories.map((category) => (
+                <Link
+                  key={category}
+                  href={`${attractionsHubPath}?q=${encodeURIComponent(category)}`}
+                  prefetch={false}
+                  className="shrink-0 rounded-full border border-olive/10 bg-white/85 px-3.5 py-2 text-xs font-semibold text-olive/75 shadow-sm transition hover:border-primary/30 hover:text-primary sm:text-sm"
+                >
+                  {category}
+                </Link>
+              ))}
+            </div>
+          </nav>
         </section>
 
         {renderMobileSearchModal()}
@@ -4068,7 +4104,7 @@ export function HomeSearchShowcase({
                     <span
                       className={cn(
                         "block whitespace-nowrap font-heading text-xl leading-none text-midnight",
-                        item.value === "подключение" || item.value === "подключаются"
+                        item.value === "идёт подключение"
                           ? "font-sans text-[12px] font-bold leading-5"
                           : "",
                       )}
@@ -4100,9 +4136,7 @@ export function HomeSearchShowcase({
                   <span
                     className={cn(
                       "block whitespace-nowrap font-heading text-2xl leading-none text-midnight",
-                      item.value === "подключение" || item.value === "подключаются"
-                        ? "font-sans text-sm font-bold"
-                        : "",
+                      item.value === "идёт подключение" ? "font-sans text-sm font-bold" : "",
                     )}
                   >
                     {item.value}
@@ -4117,130 +4151,138 @@ export function HomeSearchShowcase({
         </section>
       </div>
 
-      {/* ── Why choose us ── */}
-      <div className="mx-auto mt-7 max-w-5xl md:mt-8">
-        <h2 className="mb-3 px-2 text-center font-heading text-[1.35rem] leading-tight text-midnight sm:mb-4 sm:text-2xl md:text-3xl">
-          Почему выбирают «Крым Вокруг»?
-        </h2>
-        <div
-          className="-mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
-          aria-label="Преимущества"
-        >
-          <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
-            {/* Card 1 */}
-            <div
-              data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
-            >
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
-                <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
-              </div>
-              <h3 className="text-base font-bold text-midnight">Только проверенные объявления</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем многих
-                владельцев жилья в Крыму.
-              </p>
-            </div>
-
-            {/* Card 2 */}
-            <div
-              data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
-              style={{ animationDelay: "80ms" }}
-            >
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
-                <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
-              </div>
-              <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём комиссию —
-                вы экономите!
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div
-              data-home-scroll-reveal
-              className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:col-span-2 sm:w-auto lg:col-span-1"
-              style={{ animationDelay: "160ms" }}
-            >
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
-                <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
-              </div>
-              <h3 className="text-base font-bold text-midnight">Большой выбор по всему Крыму</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
-                {housingStat.value} {housingStat.label} и {leisureStat.value} {leisureStat.label} —
-                всё на одном сайте.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <section className="mt-4 rounded-[24px] bg-sand/90 px-3 py-6 ring-1 ring-olive/12 min-[390px]:px-4 md:mt-5 md:rounded-[2rem] md:px-8 md:py-10 lg:px-14">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-[1.35rem] leading-tight text-midnight sm:text-2xl md:text-3xl">
-              Популярные города
+      {false ? (
+        <>
+          {/* ── Legacy home sections kept out of the new guide-first composition ── */}
+          <div className="mx-auto mt-7 max-w-5xl md:mt-8">
+            <h2 className="mb-3 px-2 text-center font-heading text-[1.35rem] leading-tight text-midnight sm:mb-4 sm:text-2xl md:text-3xl">
+              Почему выбирают «Крым Вокруг»?
             </h2>
-            <p className="mt-1 text-sm text-olive/60 md:text-base">
-              Выберите направление для путешествия
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 -mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] md:mx-0 md:mt-6 md:snap-none md:overflow-visible md:px-0 md:pb-0">
-          <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {cities.map((city, index) => {
-              const price =
-                direction === "housing" ? city.housingPriceFrom : city.excursionPriceFrom;
-              const href = buildCityHref({
-                direction,
-                locationId: city.locationId,
-                locationName: city.locationName,
-              });
-
-              return (
-                <Link
-                  key={city.key}
-                  href={href}
-                  prefetch={false}
+            <div
+              className="-mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
+              aria-label="Преимущества"
+            >
+              <div className="flex w-max gap-3 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3">
+                {/* Card 1 */}
+                <div
                   data-home-scroll-reveal
-                  className="home-scroll-reveal group relative block w-[70vw] max-w-[260px] shrink-0 snap-start overflow-hidden rounded-[26px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
-                  style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}
+                  className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
                 >
-                  <div className="relative aspect-[4/5] w-full bg-cream md:aspect-[3/4]">
-                    <Image
-                      src={city.imageSrc}
-                      alt={city.title}
-                      fill
-                      sizes="(max-width: 767px) 220px, (max-width: 1023px) 48vw, (max-width: 1279px) 32vw, 25vw"
-                      loading="lazy"
-                      fetchPriority="low"
-                      className="object-cover object-center transition duration-500 group-hover:scale-[1.06]"
-                    />
-                    {/* gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-midnight/75 via-midnight/15 to-transparent" />
-                    {/* arrow badge */}
-                    <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition duration-300 group-hover:opacity-100">
-                      <AppIcon icon={ArrowUpRight} className="h-4 w-4 text-white" />
-                    </div>
-                    {/* city info on image */}
-                    <div className="absolute inset-x-0 bottom-0 p-5 md:p-6">
-                      <p className="text-xl font-semibold leading-tight text-white md:text-2xl">
-                        {city.title}
-                      </p>
-                      <p className="mt-1 text-sm text-white/70">
-                        {formatCardPrice(price, direction)}
-                      </p>
-                    </div>
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
+                    <AppIcon icon={ShieldCheck} className="h-6 w-6 text-[color:var(--icon-stay)]" />
                   </div>
-                </Link>
-              );
-            })}
+                  <h3 className="text-base font-bold text-midnight">
+                    Только проверенные объявления
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                    Каждый объект проходит ручную модерацию с видео-верификацией. Мы лично знаем
+                    многих владельцев жилья в Крыму.
+                  </p>
+                </div>
+
+                {/* Card 2 */}
+                <div
+                  data-home-scroll-reveal
+                  className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:w-auto"
+                  style={{ animationDelay: "80ms" }}
+                >
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-terra/10 text-terra transition-transform group-hover:scale-110">
+                    <AppIcon icon={Phone} className="h-6 w-6 text-[color:var(--icon-location)]" />
+                  </div>
+                  <h3 className="text-base font-bold text-midnight">Без посредников и комиссий</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                    Общайтесь с владельцем напрямую по телефону или мессенджеру. Мы не берём
+                    комиссию — вы экономите!
+                  </p>
+                </div>
+
+                {/* Card 3 */}
+                <div
+                  data-home-scroll-reveal
+                  className="home-scroll-reveal group relative w-[calc(100vw-3.25rem)] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-[20px] bg-white/84 p-4 ring-1 ring-olive/10 transition-shadow hover:shadow-lg hover:ring-olive/20 min-[390px]:w-[min(82vw,320px)] min-[390px]:p-5 sm:col-span-2 sm:w-auto lg:col-span-1"
+                  style={{ animationDelay: "160ms" }}
+                >
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-success/10 text-success transition-transform group-hover:scale-110">
+                    <AppIcon icon={Globe2} className="h-6 w-6 text-[color:var(--icon-site)]" />
+                  </div>
+                  <h3 className="text-base font-bold text-midnight">
+                    Большой выбор по всему Крыму
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-olive/70">
+                    {housingStat.value} {housingStat.label} и {leisureStat.value}{" "}
+                    {leisureStat.label} — всё на одном сайте.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+
+          <section className="mt-4 rounded-[24px] bg-sand/90 px-3 py-6 ring-1 ring-olive/12 min-[390px]:px-4 md:mt-5 md:rounded-[2rem] md:px-8 md:py-10 lg:px-14">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-[1.35rem] leading-tight text-midnight sm:text-2xl md:text-3xl">
+                  Популярные города
+                </h2>
+                <p className="mt-1 text-sm text-olive/60 md:text-base">
+                  Выберите направление для путешествия
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 -mx-3 snap-x snap-mandatory overflow-x-auto scroll-smooth px-3 pb-2 [scroll-padding-inline:0.75rem] [scrollbar-width:none] [-ms-overflow-style:none] min-[390px]:-mx-4 min-[390px]:px-4 min-[390px]:[scroll-padding-inline:1rem] md:mx-0 md:mt-6 md:snap-none md:overflow-visible md:px-0 md:pb-0">
+              <div className="flex w-max gap-3 xs:gap-4 md:grid md:w-full md:grid-cols-2 md:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+                {cities.map((city, index) => {
+                  const price =
+                    direction === "housing" ? city.housingPriceFrom : city.excursionPriceFrom;
+                  const href = buildCityHref({
+                    direction,
+                    locationId: city.locationId,
+                    locationName: city.locationName,
+                  });
+
+                  return (
+                    <Link
+                      key={city.key}
+                      href={href}
+                      prefetch={false}
+                      data-home-scroll-reveal
+                      className="home-scroll-reveal group relative block w-[70vw] max-w-[260px] shrink-0 snap-start overflow-hidden rounded-[26px] transition duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20 xs:w-[260px] md:w-full md:snap-align-none md:rounded-[44px]"
+                      style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}
+                    >
+                      <div className="relative aspect-[4/5] w-full bg-cream md:aspect-[3/4]">
+                        <Image
+                          src={city.imageSrc}
+                          alt={city.title}
+                          fill
+                          sizes="(max-width: 767px) 220px, (max-width: 1023px) 48vw, (max-width: 1279px) 32vw, 25vw"
+                          loading="lazy"
+                          fetchPriority="low"
+                          className="object-cover object-center transition duration-500 group-hover:scale-[1.06]"
+                        />
+                        {/* gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-midnight/75 via-midnight/15 to-transparent" />
+                        {/* arrow badge */}
+                        <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition duration-300 group-hover:opacity-100">
+                          <AppIcon icon={ArrowUpRight} className="h-4 w-4 text-white" />
+                        </div>
+                        {/* city info on image */}
+                        <div className="absolute inset-x-0 bottom-0 p-5 md:p-6">
+                          <p className="text-xl font-semibold leading-tight text-white md:text-2xl">
+                            {city.title}
+                          </p>
+                          <p className="mt-1 text-sm text-white/70">
+                            {formatCardPrice(price, direction)}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
     </>
   );
 }

@@ -7,6 +7,7 @@ type NearbyAttractionsSectionServerProps = {
   longitude: number | null;
   searchHref: string;
   radiusKm?: number;
+  limit?: number;
   title?: string;
   description?: string;
   emptyDescription?: string;
@@ -22,6 +23,7 @@ export async function NearbyAttractionsSectionServer({
   longitude,
   searchHref,
   radiusKm = DEFAULT_NEARBY_RADIUS_KM,
+  limit = 4,
   title,
   description,
   emptyDescription,
@@ -35,7 +37,7 @@ export async function NearbyAttractionsSectionServer({
     longitude,
     excludeId: attractionId ?? undefined,
     radiusKm,
-    limit: 4,
+    limit,
   });
 
   return (

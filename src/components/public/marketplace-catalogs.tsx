@@ -1344,8 +1344,10 @@ export function AttractionDetails({ item }: { item: PublicAttractionCatalogItem 
     ...(item.latitude !== null && item.longitude !== null
       ? [{ href: "#map-panel", label: "Карта" }]
       : []),
-    ...(item.nearby.length > 0 ? [{ href: "#nearby-places", label: "Рядом" }] : []),
     ...(smartFaq.length > 0 ? [{ href: "#faq", label: "FAQ" }] : []),
+    ...(item.latitude !== null && item.longitude !== null
+      ? [{ href: "#nearby-places", label: "Что рядом" }]
+      : []),
     { href: "#nearby-housing", label: "Жильё рядом" },
     { href: "#nearby-excursions", label: "Экскурсии рядом" },
   ];

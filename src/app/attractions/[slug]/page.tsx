@@ -4,6 +4,7 @@ import { CatalogMapViewMarker } from "@/components/public/catalog-map-view-marke
 import { AttractionDetails } from "@/components/public/marketplace-catalogs";
 import { NearbyExcursionsSectionServer } from "@/components/public/nearby-excursions-section-server";
 import { NearbyPropertiesSectionServer } from "@/components/public/nearby-properties-section-server";
+import { NearbyAttractionsSectionServer } from "@/components/public/nearby-attractions-section-server";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getPublicAttractionByIdentifier } from "@/lib/public-marketplace";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
@@ -132,6 +133,22 @@ export default async function AttractionDetailPage({ params }: AttractionDetailP
       <CatalogMapViewMarker catalogKey="attractions" itemId={item.id} />
       <AttractionDetails item={item} />
       <section className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 md:px-6">
+        <div id="nearby-places" className="scroll-mt-[132px] md:scroll-mt-[152px]">
+          <NearbyAttractionsSectionServer
+            attractionId={item.id}
+            latitude={item.latitude}
+            longitude={item.longitude}
+            searchHref={attractionLocationHref}
+            radiusKm={15}
+            limit={5}
+            title="Что рядом"
+            description="Другие интересные достопримечательности поблизости."
+            actionLabel="Смотреть все достопримечательности"
+            layout="carousel"
+            className="excursion-card p-6 md:p-7"
+            titleClassName="font-heading text-2xl"
+          />
+        </div>
         <div id="nearby-housing">
           <NearbyPropertiesSectionServer
             latitude={item.latitude}

@@ -246,9 +246,17 @@ export function PopularPropertiesSection({ items }: PopularPropertiesSectionProp
   return (
     <section className="mt-10 sm:mt-14">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-heading text-2xl font-bold text-olive sm:text-3xl md:text-4xl">
-          Последние добавленные объекты
-        </h2>
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
+            Популярные варианты
+          </p>
+          <h2 className="mt-1 font-heading text-2xl font-bold text-olive sm:text-3xl md:text-4xl">
+            Где остановиться в Крыму
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-olive/68 sm:text-base">
+            Небольшая подборка жилья для поездки. Новые варианты появляются каждый день.
+          </p>
+        </div>
         <Link
           href={housingHubPath}
           prefetch={false}

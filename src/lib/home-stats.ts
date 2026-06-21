@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { ExcursionOfferType } from "@prisma/client";
 import { canUseDatabaseFallback } from "@/lib/database-fallback";
 import { db } from "@/lib/db";
 import {
@@ -16,6 +17,7 @@ import { getStaticAttractions } from "@/lib/static-attractions";
 export type HomeStats = {
   publishedPropertiesCount: number | null;
   publishedExcursionsCount: number | null;
+  publishedToursCount: number | null;
   publishedTransfersCount: number | null;
   publishedAttractionsCount: number;
 };
@@ -25,6 +27,7 @@ const getCachedHomeStats = unstable_cache(
     const [
       publishedPropertiesCount,
       publishedExcursionsCount,
+      publishedToursCount,
       publishedTransfersCount,
       publishedAttractions,
     ] = await Promise.all([
@@ -32,7 +35,20 @@ const getCachedHomeStats = unstable_cache(
         where: buildPublicCatalogPropertyVisibilityWhere(),
       }),
       db.excursion.count({
-        where: buildPublicCatalogExcursionVisibilityWhere(),
+        where: {
+          AND: [
+            buildPublicCatalogExcursionVisibilityWhere(),
+            { offerType: ExcursionOfferType.EXCURSION },
+          ],
+        },
+      }),
+      db.excursion.count({
+        where: {
+          AND: [
+            buildPublicCatalogExcursionVisibilityWhere(),
+            { offerType: ExcursionOfferType.TOUR },
+          ],
+        },
       }),
       db.transfer.count({
         where: buildPublishedTransferVisibilityWhere(),
@@ -43,11 +59,12 @@ const getCachedHomeStats = unstable_cache(
     return {
       publishedPropertiesCount,
       publishedExcursionsCount,
+      publishedToursCount,
       publishedTransfersCount,
       publishedAttractionsCount: publishedAttractions.length,
     };
   },
-  ["home-stats-v3"],
+  ["home-stats-v4"],
   { revalidate: 600 },
 );
 
@@ -63,6 +80,7 @@ export async function getHomeStats(): Promise<HomeStats> {
     return {
       publishedPropertiesCount: null,
       publishedExcursionsCount: null,
+      publishedToursCount: null,
       publishedTransfersCount: null,
       publishedAttractionsCount: (await getStaticAttractions()).length,
     };
@@ -83,6 +101,7 @@ export async function getHomeStats(): Promise<HomeStats> {
     return {
       publishedPropertiesCount: null,
       publishedExcursionsCount: null,
+      publishedToursCount: null,
       publishedTransfersCount: null,
       publishedAttractionsCount: (await getStaticAttractions()).length,
     };

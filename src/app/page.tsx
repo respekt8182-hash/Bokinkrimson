@@ -4,6 +4,7 @@ import {
   HomeSearchShowcase,
   type HomeHeroAttractionCard,
 } from "@/components/home/home-search-showcase";
+import { HomeGuideSections } from "@/components/home/home-guide-sections";
 import { PopularPropertiesSectionServer } from "@/components/home/popular-properties-section.server";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 import { getHomeCityShowcaseItems } from "@/lib/home-cities";
@@ -16,27 +17,27 @@ export const revalidate = 600;
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Жильё, экскурсии, досуг и трансферы по Крыму — Крым Вокруг",
+    absolute: "Крым Вокруг — достопримечательности, маршруты и жильё в Крыму",
   },
   description:
-    "Крым Вокруг — маркетплейс жилья у моря, экскурсий, досуга и трансферов по Крыму. Идёт набор в ранний доступ: первое размещение бесплатно на 1 год с даты создания объявления, без комиссии с каждого клиента или бронирования.",
+    "Бесплатный путеводитель по достопримечательностям Крыма: города, история, маршруты, необычные места, музеи, природа, а также жильё, экскурсии, туры и трансферы для планирования поездки.",
   alternates: {
     canonical: buildCanonicalPath("/"),
   },
   openGraph: {
     type: "website",
-    title: "Жильё, экскурсии, досуг и трансферы по Крыму — Крым Вокруг",
+    title: "Крым Вокруг — достопримечательности, маршруты и жильё в Крыму",
     description:
-      "Маркетплейс жилья, экскурсий, досуга и трансферов по Крыму без комиссии с каждого клиента или бронирования.",
+      "Бесплатный путеводитель по достопримечательностям, городам, истории, маршрутам и необычным местам Крыма.",
     url: "/",
     locale: "ru_RU",
     images: [defaultSocialImageMetadata],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Жильё, экскурсии, досуг и трансферы по Крыму — Крым Вокруг",
+    title: "Крым Вокруг — достопримечательности, маршруты и жильё в Крыму",
     description:
-      "Маркетплейс жилья, экскурсий, досуга и трансферов по Крыму без комиссии с каждого клиента или бронирования.",
+      "Бесплатный путеводитель по достопримечательностям, городам, истории, маршрутам и необычным местам Крыма.",
     images: [defaultSocialImageMetadata.url],
   },
 };
@@ -75,12 +76,14 @@ async function getDailyHeroAttractionCards(): Promise<HomeHeroAttractionCard[]> 
 }
 
 export default async function HomePage() {
-  const [cities, locationDirectory, homeStats, heroAttractionCards] = await Promise.all([
-    getHomeCityShowcaseItems(),
-    getLocationDirectoryItems(),
-    getHomeStats(),
-    getDailyHeroAttractionCards(),
-  ]);
+  const [cities, locationDirectory, homeStats, heroAttractionCards, attractions] =
+    await Promise.all([
+      getHomeCityShowcaseItems(),
+      getLocationDirectoryItems(),
+      getHomeStats(),
+      getDailyHeroAttractionCards(),
+      getStaticAttractions(),
+    ]);
 
   return (
     <div className="home-page-bg">
@@ -90,10 +93,15 @@ export default async function HomePage() {
           locationSuggestions={locationDirectory.map((item) => item.name)}
           publishedPropertiesCount={homeStats.publishedPropertiesCount}
           publishedExcursionsCount={homeStats.publishedExcursionsCount}
+          publishedToursCount={homeStats.publishedToursCount}
           publishedTransfersCount={homeStats.publishedTransfersCount}
           publishedAttractionsCount={homeStats.publishedAttractionsCount}
           heroAttractionCards={heroAttractionCards}
         />
+
+        <Suspense fallback={null}>
+          <HomeGuideSections cities={cities} attractions={attractions} />
+        </Suspense>
 
         <Suspense fallback={null}>
           <PopularPropertiesSectionServer />

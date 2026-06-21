@@ -65,6 +65,13 @@ export async function SiteHeader() {
 
           <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
             <Link
+              href={attractionsHubPath}
+              prefetch={false}
+              className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
+            >
+              Открывай Крым
+            </Link>
+            <Link
               href={housingHubPath}
               prefetch={false}
               className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
@@ -77,13 +84,6 @@ export async function SiteHeader() {
               className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
             >
               Экскурсии
-            </Link>
-            <Link
-              href={attractionsHubPath}
-              prefetch={false}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-olive/80 transition hover:bg-white hover:text-olive"
-            >
-              Открывай Крым
             </Link>
             <Link
               href={transfersHubPath}

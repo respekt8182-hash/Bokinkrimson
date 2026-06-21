@@ -9,6 +9,7 @@ import {
 } from "@/lib/prisma-errors";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
 import { buildPublicCatalogPropertyVisibilityWhere } from "@/lib/public-visibility";
+import { getDailyDateKey, selectDailyItems } from "@/lib/daily-selection";
 
 export type PopularPropertyItem = {
   id: string;
@@ -54,7 +55,7 @@ function buildLocationLine(locationName: string | null, address: string | null):
   return loc || addr || "";
 }
 
-async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
+async function fetchPopularProperties(dailyDateKey: string): Promise<PopularPropertyItem[]> {
   const properties = await db.property.findMany({
     where: {
       ...buildPublicCatalogPropertyVisibilityWhere(),
@@ -94,10 +95,10 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
       { createdAt: "desc" },
       { updatedAt: "desc" },
     ],
-    take: 12,
+    take: 80,
   });
 
-  return properties.map((p) => {
+  const items = properties.map((p) => {
     const imageUrls = p.media.map((m) => normalizeLegacyFotoImageUrl(m.url));
 
     // Find the minimum price and determine which month it applies to
@@ -141,12 +142,19 @@ async function fetchPopularProperties(): Promise<PopularPropertyItem[]> {
       priceMonth,
     };
   });
+
+  return selectDailyItems(items, {
+    dateKey: dailyDateKey,
+    selectionKey: "home-properties",
+    limit: 4,
+    getId: (item) => item.id,
+  });
 }
 
 const getCachedPopularProperties = unstable_cache(
   fetchPopularProperties,
-  ["popular-properties-v2"],
-  { revalidate: 600 },
+  ["daily-home-properties-v3"],
+  { revalidate: 86_400 },
 );
 
 export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
@@ -161,7 +169,7 @@ export async function getPopularProperties(): Promise<PopularPropertyItem[]> {
   }
 
   try {
-    return await getCachedPopularProperties();
+    return await getCachedPopularProperties(getDailyDateKey());
   } catch (error) {
     if (!canUseFallback || !isDatabaseFallbackEligibleError(error)) {
       throw error;
