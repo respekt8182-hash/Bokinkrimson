@@ -114,11 +114,11 @@ export function PlacementFirstYearPrice({
       )}
     >
       <span className="inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
-        Первый год бесплатно
+        Первый год размещения бесплатно
       </span>
       <div className={cn("mt-2 flex items-end justify-between gap-3", compact ? "mt-1.5" : "")}>
         <div>
-          <p className="text-[11px] font-medium text-olive/55">Сейчас</p>
+          <p className="text-[11px] font-medium text-olive/55">Итого к оплате сейчас</p>
           <PlacementPromoPrice
             originalAmountRub={originalAmountRub}
             finalAmountRub={0}

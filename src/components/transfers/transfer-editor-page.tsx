@@ -1738,12 +1738,19 @@ export function TransferEditorPage({
                     </div>
                     <div className="mt-1 flex items-center justify-between border-t border-primary/15 pt-3">
                       <span className="font-semibold text-olive">Итого</span>
-                      <PlacementPromoPrice
-                        originalAmountRub={originalLivePublicationFeeRub}
-                        finalAmountRub={livePublicationFeeRub}
-                        align="right"
-                        finalClassName="text-2xl"
-                      />
+                      <div className="text-right">
+                        <PlacementPromoPrice
+                          originalAmountRub={originalLivePublicationFeeRub}
+                          finalAmountRub={livePublicationFeeRub}
+                          align="right"
+                          finalClassName="text-2xl"
+                        />
+                        {isLaunchFreePlacement ? (
+                          <span className="mt-0.5 block text-[11px] font-semibold text-emerald-700">
+                            Первый год размещения бесплатно
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     {paymentCoverage.hasActivePlacement ? (
                       <>

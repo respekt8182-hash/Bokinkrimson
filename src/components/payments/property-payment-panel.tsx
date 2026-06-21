@@ -706,9 +706,12 @@ export function PropertyPaymentPanel({
                       <span className="block text-sm font-semibold tabular-nums text-olive/40 line-through decoration-olive/40 decoration-2">
                         {formatMoney(selectedFinalBeforePromo)}
                       </span>
-                      <strong className="block text-2xl font-bold text-emerald-700">
-                        Бесплатно
+                      <strong className="block text-2xl font-bold tabular-nums text-emerald-700">
+                        0 ₽
                       </strong>
+                      <span className="mt-0.5 block text-[11px] font-semibold text-emerald-700">
+                        Первый год размещения бесплатно
+                      </span>
                     </div>
                   ) : (
                     <PlacementPromoPrice
