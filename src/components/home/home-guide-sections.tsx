@@ -90,7 +90,7 @@ export function HomeGuideSections({ cities, attractions }: HomeGuideSectionsProp
           </div>
           <Link
             href={attractionsHubPath}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-white/70 bg-white/82 px-4 text-sm font-semibold text-olive shadow-[0_12px_28px_-22px_rgba(58,43,35,0.45)] ring-1 ring-olive/10 backdrop-blur transition hover:bg-primary hover:text-white"
           >
             Все достопримечательности <AppIcon icon={ArrowUpRight} className="h-4 w-4" />
           </Link>
@@ -119,8 +119,10 @@ export function HomeGuideSections({ cities, attractions }: HomeGuideSectionsProp
               );
               if (!image) return null;
               return (
-                <article
+                <Link
                   key={attraction.id}
+                  href={`/attractions/${attraction.slug}`}
+                  prefetch={false}
                   className="group flex overflow-hidden rounded-[24px] bg-white shadow-[0_16px_40px_-30px_rgba(58,43,35,0.7)] ring-1 ring-olive/10 sm:flex-col"
                 >
                   <div className="relative min-h-40 w-[42%] shrink-0 bg-sand sm:aspect-[4/3] sm:w-full">
@@ -147,14 +149,8 @@ export function HomeGuideSections({ cities, attractions }: HomeGuideSectionsProp
                     <p className="mt-2 line-clamp-2 text-sm leading-5 text-olive/70">
                       {attraction.shortDescription || attraction.metaDescription}
                     </p>
-                    <Link
-                      href={`/attractions/${attraction.slug}`}
-                      className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary"
-                    >
-                      Подробнее <AppIcon icon={ArrowUpRight} className="h-4 w-4" />
-                    </Link>
                   </div>
-                </article>
+                </Link>
               );
             })}
           </div>

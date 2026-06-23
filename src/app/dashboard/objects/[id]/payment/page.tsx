@@ -1,5 +1,5 @@
 // Next.js page for route /dashboard/objects/[id]/payment.
-import { Prisma } from "@prisma/client";
+import { PaymentStatus, Prisma } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { ObjectSectionNav } from "@/components/objects/object-section-nav";
 import { PropertyPaymentPanel } from "@/components/payments/property-payment-panel";
@@ -8,6 +8,10 @@ import { db } from "@/lib/db";
 import { syncOpenYooKassaPayments } from "@/lib/payment-finalization";
 import { getPlacementCoverageState, serializePayment } from "@/lib/payments";
 import { getPersonalTariffQuote } from "@/lib/personal-tariff-quote";
+import {
+  getPostLaunchTrialValidUntil,
+  isPostLaunchTrialEligible,
+} from "@/lib/placement-promo";
 import { getPropertyPaymentReadinessIssues, getPropertyProgress } from "@/lib/properties";
 import { buildPublicPropertyPath } from "@/lib/public-properties";
 import { isYooKassaConfigured } from "@/lib/yookassa";
@@ -103,12 +107,25 @@ export default async function DashboardObjectPaymentPage({ params }: PaymentPage
       : issue,
   );
   const readinessReasons = readinessIssues.map((issue) => issue.reason);
+  const now = new Date();
+  const freeTrialUntil = isPostLaunchTrialEligible({
+    listingCreatedAt: property.createdAt,
+    now,
+    category: "object",
+    hasSuccessfulPlacement: resolvedPayments.some(
+      (payment) => payment.status === PaymentStatus.SUCCEEDED,
+    ),
+  })
+    ? getPostLaunchTrialValidUntil(property.createdAt)
+    : null;
   const quote =
     roomCount > 0
       ? await getPersonalTariffQuote({
           userId: session.id,
           roomCount,
           propertyType: property.type,
+          now,
+          freeTrialUntil,
         })
       : null;
   const initialPlacement = getPlacementCoverageState({

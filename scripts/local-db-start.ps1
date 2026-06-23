@@ -20,6 +20,14 @@ if (-not (Test-Path $initdb)) {
   throw "PostgreSQL binaries not found at $pgBin"
 }
 
+$dataDrive = (Split-Path -Qualifier $dataDir).TrimEnd("\")
+$freeBytes = (Get-PSDrive -Name $dataDrive.TrimEnd(":")).Free
+$minimumFreeBytes = 128MB
+if ($freeBytes -lt $minimumFreeBytes) {
+  $freeMb = [math]::Round($freeBytes / 1MB, 1)
+  throw "Not enough free space to start local PostgreSQL on $dataDrive ($freeMb MB free; at least 128 MB required). Free disk space and try again."
+}
+
 if (-not (Test-Path (Join-Path $dataDir "PG_VERSION"))) {
   & $initdb -D $dataDir -U $dbUser -A trust --encoding=UTF8 --locale=C
 }
