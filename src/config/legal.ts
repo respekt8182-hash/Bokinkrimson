@@ -1,11 +1,19 @@
 export const LEGAL_DOCUMENT_EFFECTIVE_DATE = "2026-06-24";
 
+function envOrFallback(name: string, fallback: string): string {
+  const value = process.env[name]?.trim();
+  return value || fallback;
+}
+
 export const legalConfig = {
   owner: {
     fullName: "Гаврисюк Александр Дмитриевич",
     inn: "910524018609",
     taxStatus: "SELF_EMPLOYED_NPD",
-    claimsPostalAddress: "[ПОЧТОВЫЙ АДРЕС ДЛЯ ПРЕТЕНЗИЙ]",
+    claimsPostalAddress: envOrFallback(
+      "LEGAL_CLAIMS_POSTAL_ADDRESS",
+      "[ПОЧТОВЫЙ АДРЕС ДЛЯ ПРЕТЕНЗИЙ]",
+    ),
     contactEmail: "krymvokrug@mail.ru",
     contactPhone: "+7 (979) 047-53-36",
     supportContact: "krymvokrug@mail.ru",
@@ -28,9 +36,12 @@ export const legalConfig = {
     ],
   },
   personalData: {
-    rknNotificationNumber: "[НОМЕР ЗАПИСИ ИЛИ TODO]",
-    primaryDatabaseCountry: "[СТРАНА]",
-    primaryDatabaseRegion: "[РЕГИОН ИЛИ ЦОД]",
+    rknNotificationNumber: envOrFallback(
+      "LEGAL_RKN_NOTIFICATION_NUMBER",
+      "[НОМЕР ЗАПИСИ ИЛИ TODO]",
+    ),
+    primaryDatabaseCountry: envOrFallback("LEGAL_PRIMARY_DATABASE_COUNTRY", "[СТРАНА]"),
+    primaryDatabaseRegion: envOrFallback("LEGAL_PRIMARY_DATABASE_REGION", "[РЕГИОН ИЛИ ЦОД]"),
   },
   documents: {
     offerVersion: "2026-06-24",
