@@ -1,0 +1,24 @@
+{
+  "id": "3277280",
+  "name": "Пляж «Солнечный-3» (ЯЛ-65)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "г. Ялта, Приморский парк",
+  "latitude": 44.48396201669322,
+  "longitude": 34.15952420924181,
+  "description": "Пляж расположен в Приморском парке. Доступ свободный.\n\nБерег галечный и широкий. Вход в море пологий. В аренду здесь можно взять шезлонги и зонты.\n\nК пляжу примыкает набережная, на которой работают кафе.",
+  "description_html": "<p>Пляж расположен в&nbsp;Приморском парке. Доступ свободный.</p><p>Берег галечный и&nbsp;широкий. Вход в&nbsp;море пологий. В аренду здесь можно взять шезлонги и&nbsp;зонты.</p><p>К пляжу примыкает набережная, на&nbsp;которой работают кафе.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090604/3277280.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.159524%2C44.483962&mode=routes&rtext=~44.483992%2C34.159518&rtt=mt&ruri=~&utm_source=api-maps&z=17",
+  "image_url": "https://travelcrimea.com/images/329/21/3292113.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пользователем пляжа",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.582600+00:00"
+}

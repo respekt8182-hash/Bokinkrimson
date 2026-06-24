@@ -1,0 +1,24 @@
+{
+  "id": "3658276",
+  "name": "Пляж санатория «Крым» (АЛ-01)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, пгт Партенит",
+  "latitude": 44.571445842841584,
+  "longitude": 34.346188440505976,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3658276.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.346188%2C44.571446&mode=routes&rtext=~44.571473%2C34.346174&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.755808+00:00"
+}

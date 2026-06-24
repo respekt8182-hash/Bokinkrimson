@@ -1,0 +1,24 @@
+{
+  "id": "3280326",
+  "name": "Пляж туристического центра «Аян-Дере» (АЛ-66)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, пос. Семидворье",
+  "latitude": 44.69655829686129,
+  "longitude": 34.442581215353904,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090605/3280326.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.442581%2C44.696558&mode=routes&rtext=~44.696541%2C34.442573&rtt=mt&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.782190+00:00"
+}

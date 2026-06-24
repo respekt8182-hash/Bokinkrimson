@@ -1,0 +1,24 @@
+{
+  "id": "37088",
+  "name": "Ландшафтно-рекреационный парк «Атлеш»",
+  "category": "Природа",
+  "region": "Черноморский район",
+  "address": "Черноморский р-н, с. Оленевка",
+  "latitude": 45.332109,
+  "longitude": 32.573837,
+  "description": "Ландшафтно-рекреационный парк расположен на Тарханкутском полуострове. Создан в границах парка «Тархунский», включает мыс Атлеш, бухту с подводным туннелем и Чашу любви — небольшой закрытый бассейн, соединённый с морем. Площадь парка составляет 260 га.",
+  "description_html": "<p>Ландшафтно-рекреационный парк расположен на&nbsp;Тарханкутском полуострове. Создан в&nbsp;границах парка &laquo;Тархунский&raquo;, включает мыс Атлеш, бухту с&nbsp;подводным туннелем и&nbsp;Чашу любви&nbsp;&mdash; небольшой закрытый бассейн, соединённый с&nbsp;морем. Площадь парка составляет 260 га.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/-/CCfmyL4a",
+  "image_url": "https://travelcrimea.com/images/10/88/108834.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Сергей Мальгавко",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/chernomorskiy-rayon/get.json",
+    "services/places/priroda/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.859551+00:00"
+}

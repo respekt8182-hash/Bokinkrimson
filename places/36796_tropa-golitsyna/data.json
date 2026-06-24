@@ -1,0 +1,25 @@
+{
+  "id": "36796",
+  "name": "Тропа Голицына",
+  "category": "Природа",
+  "region": "Новый Свет",
+  "address": "г. Судак, пгт. Новый Свет",
+  "latitude": 44.821705,
+  "longitude": 34.913437,
+  "description": "Экологическая горная тропа, расположена вдоль береговой линии к юго-западу от поселка Новый Свет. Вырублена на склоне горы Коба-Кая в 1912 году по приказу князя Льва Голицына к приезду императора Николая II. Начинается на юго-западном берегу Зелёной бухты, проходит вдоль береговой линии.",
+  "description_html": "<p>Экологическая горная тропа, расположена вдоль береговой линии к&nbsp;юго-западу от&nbsp;поселка Новый Свет. Вырублена на&nbsp;склоне горы Коба-Кая в&nbsp;1912 году по&nbsp;приказу князя Льва Голицына к&nbsp;приезду императора Николая II. Начинается на&nbsp;юго-западном берегу Зелёной бухты, проходит вдоль береговой линии.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbHi0zv",
+  "image_url": "https://travelcrimea.com/images/254/10/2541056.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Артем Креминский",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/marshrut/get.json",
+    "services/places/novyjsvet/get.json",
+    "services/places/priroda/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.918247+00:00"
+}

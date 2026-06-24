@@ -1,0 +1,24 @@
+{
+  "id": "3277567",
+  "name": "Пляж ООО «Дельфин-2001» (ЯЛ-79)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "г. Ялта, пгт Отрадное, ул. Днепровская, 5",
+  "latitude": 44.50423905028078,
+  "longitude": 34.22932262003717,
+  "description": "Пляж находится в пгт Отрадное в Большой Ялте. На территории пляжа и примыкающей к ней набережной есть теневые навесы. Также установлены душевые, кабинки для переодевания, шезлонги. Работает спасательный пункт.",
+  "description_html": "<p>Пляж находится в&nbsp;пгт Отрадное в&nbsp;Большой Ялте. На территории пляжа и&nbsp;примыкающей к&nbsp;ней набережной есть теневые навесы. Также установлены душевые, кабинки для&nbsp;переодевания, шезлонги. Работает спасательный пункт.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090604/3277567.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.229323%2C44.504239&mode=routes&rtext=~44.504229%2C34.229316&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 888 73 03",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.648573+00:00"
+}

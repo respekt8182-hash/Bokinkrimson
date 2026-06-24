@@ -1,0 +1,24 @@
+{
+  "id": "3285739",
+  "name": "Пляж «Сёрф приют» (СУ-22)",
+  "category": "Пляжи",
+  "region": "Судак",
+  "address": "г. Судак, бухта Капсель",
+  "latitude": 44.833394393751846,
+  "longitude": 35.01716228812254,
+  "description": "Пляж с функциональной и комфортной инфраструктурой. На территории есть душевые, кабины для переодевания. Для гостей доступны шезлонги, зонты, уютные бунгало с навесами.\n\nНа пляже установлена сцена для мероприятий и работает кафе быстрого питания.",
+  "description_html": "<p>Пляж с&nbsp;функциональной и&nbsp;комфортной инфраструктурой. На территории есть душевые, кабины для&nbsp;переодевания. Для гостей доступны шезлонги, зонты, уютные бунгало с&nbsp;навесами.</p><p>На пляже установлена сцена для&nbsp;мероприятий и&nbsp;работает кафе быстрого питания.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285739.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.017162%2C44.833394&mode=routes&rtext=~44.833287%2C35.017632&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/324/38/3243871.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пляжем",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.587775+00:00"
+}

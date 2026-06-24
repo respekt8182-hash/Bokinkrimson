@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PrintButton } from "@/components/legal/print-button";
 import { cn } from "@/lib/cn";
 
 type TocItem = {
@@ -41,9 +42,12 @@ export function LegalDocumentLayout({
         )}
       >
         <header>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-olive/45">
-            {eyebrow}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-olive/45">
+              {eyebrow}
+            </p>
+            <PrintButton />
+          </div>
           <h1 className="mt-3 font-heading text-3xl leading-tight text-olive md:text-5xl md:leading-[1.08]">
             {title}
           </h1>

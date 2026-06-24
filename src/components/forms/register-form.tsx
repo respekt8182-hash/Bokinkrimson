@@ -3,6 +3,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -19,6 +20,10 @@ const formFieldsSchema = z.object({
   lastName: z.string().trim().min(2, "Фамилия должна содержать минимум 2 символа"),
   password: z.string().min(8, "Пароль должен содержать минимум 8 символов"),
   confirmPassword: z.string().min(8, "Подтвердите пароль"),
+  personalDataConsent: z
+    .boolean()
+    .refine((value) => value === true, "Дайте согласие на обработку персональных данных"),
+  marketingConsent: z.boolean().optional(),
 });
 
 type FormFieldsValues = z.infer<typeof formFieldsSchema>;
@@ -45,6 +50,8 @@ export function RegisterForm() {
       lastName: "",
       password: "",
       confirmPassword: "",
+      personalDataConsent: false,
+      marketingConsent: false,
     },
   });
 
@@ -56,6 +63,8 @@ export function RegisterForm() {
     const fullParsed = registerSchema.safeParse({
       ...values,
       phone: fullPhone,
+      personalDataConsent: values.personalDataConsent,
+      marketingConsent: Boolean(values.marketingConsent),
     });
 
     if (!fullParsed.success) {
@@ -79,6 +88,8 @@ export function RegisterForm() {
         phone: fullPhone,
         password: values.password,
         confirmPassword: values.confirmPassword,
+        personalDataConsent: values.personalDataConsent,
+        marketingConsent: Boolean(values.marketingConsent),
       }),
     });
 
@@ -199,6 +210,38 @@ export function RegisterForm() {
         {errors.confirmPassword ? (
           <p className="mt-1 text-xs text-red-600">{errors.confirmPassword.message}</p>
         ) : null}
+      </div>
+
+      <div className="space-y-2 rounded-2xl border border-olive/10 bg-cream/55 p-3 text-sm leading-5 text-olive/72">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            {...register("personalDataConsent")}
+          />
+          <span>
+            Даю согласие на обработку персональных данных на условиях{" "}
+            <Link
+              href="/legal/personal-data-consent"
+              target="_blank"
+              className="font-semibold text-terra hover:underline"
+            >
+              Согласия на обработку персональных данных
+            </Link>
+            .
+          </span>
+        </label>
+        {errors.personalDataConsent ? (
+          <p className="text-xs text-red-600">{errors.personalDataConsent.message}</p>
+        ) : null}
+
+        <label className="flex items-start gap-3">
+          <input type="checkbox" className="mt-1" {...register("marketingConsent")} />
+          <span>
+            Согласен получать информационные и рекламные сообщения по указанным контактным данным.
+            Это необязательно и не влияет на регистрацию.
+          </span>
+        </label>
       </div>
 
       {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}

@@ -9,7 +9,14 @@ import type { SerializedApplication } from "@/lib/applications";
 // - filtering by entity/status
 // - status updates
 // - lightweight stats widgets
-type ApplicationStatusValue = "NEW" | "IN_PROGRESS" | "CLOSED";
+type ApplicationStatusValue =
+  | "NEW"
+  | "SENT_TO_OWNER"
+  | "VIEWED_BY_OWNER"
+  | "OWNER_RESPONDED"
+  | "CLOSED"
+  | "CANCELLED_BY_USER"
+  | "IN_PROGRESS";
 type ApplicationEntityTypeValue = "PROPERTY" | "EXCURSION";
 
 type OwnerApplicationStats = {
@@ -31,8 +38,12 @@ function statusBadgeClass(status: ApplicationStatusValue): string {
     return "bg-terra/15 text-terra";
   }
 
-  if (status === "IN_PROGRESS") {
+  if (status === "IN_PROGRESS" || status === "SENT_TO_OWNER" || status === "VIEWED_BY_OWNER") {
     return "bg-sage/30 text-olive";
+  }
+
+  if (status === "CANCELLED_BY_USER") {
+    return "bg-gray-100 text-gray-700";
   }
 
   return "bg-primary/15 text-olive";

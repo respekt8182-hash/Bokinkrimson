@@ -1,0 +1,24 @@
+{
+  "id": "3285646",
+  "name": "Пляж ТОК «Судак» (СУ-12)",
+  "category": "Пляжи",
+  "region": "Судак",
+  "address": "г. Судак",
+  "latitude": 44.84038878079769,
+  "longitude": 34.97153181314973,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285646.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.971406%2C44.840416&mode=routes&rtext=~44.840414%2C34.971524&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.676460+00:00"
+}

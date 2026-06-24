@@ -1,0 +1,24 @@
+{
+  "id": "2863529",
+  "name": "Пляж отеля Riga Village Resort (ЛЕ-7)",
+  "category": "Пляжи",
+  "region": "Ленинский район",
+  "address": "Ленинский район, г. Щелкино",
+  "latitude": 45.424289,
+  "longitude": 35.80817,
+  "description": "Пляж расположен в городе Щёлкино на берегу Азовского моря.\n\nНаходится в 20 метрах от отеля. Берег с мягкой ракушкой и чистым песком, вход в море пологий. Площадь составляет 15 тыс. кв метров.\n\nПляж оборудован бунгало, лежаками, трехметровыми вигвамами, спортивной и детской площадкой, а также современной подсветкой. Но самое яркое пространство здесь – это два оазиса с настоящими пальмами.",
+  "description_html": "<p>Пляж расположен в&nbsp;городе Щёлкино на&nbsp;берегу Азовского моря.</p><p>Находится в&nbsp;20 метрах от&nbsp;отеля. Берег с&nbsp;мягкой ракушкой и&nbsp;чистым песком, вход в&nbsp;море пологий. Площадь составляет 15 тыс. кв метров.</p><p>Пляж оборудован бунгало, лежаками, трехметровыми вигвамами, спортивной и&nbsp;детской площадкой, а&nbsp;также современной подсветкой. Но самое яркое пространство здесь &ndash; это два оазиса с&nbsp;настоящими пальмами.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090921/2863529.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.808171%2C45.424290&mode=routes&rtext=~45.424319%2C35.808141&rtt=mt&ruri=~ymapsbm1%3A%2F%2Fgeo%3Fdata%3DCgozNzUxNjgwNTUwEogB0KDQvtGB0YHQuNGPLCDQoNC10YHQv9GD0LHQu9C40LrQsCDQmtGA0YvQvCwg0JvQtdC90LjQvdGB0LrQuNC5INGA0LDQudC-0L0sINGB0LXQu9C-INCc0YvRgdC-0LLQvtC1LCDQn9GA0LjQvNC-0YDRgdC60LDRjyDRg9C70LjRhtCwLCAyMCIKDYk7D0IVgbI1Qg%2C%2C&utm_source=api-maps&z=17",
+  "image_url": "https://travelcrimea.com/images/286/35/2863500.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено отелем Riga Village Resort",
+  "phone": "8(800)7773883",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/leninskiy-rayon/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.715312+00:00"
+}

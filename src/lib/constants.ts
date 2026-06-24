@@ -98,8 +98,12 @@ export const smokingPolicyOptions = [
 
 export const applicationStatusOptions = [
   { id: "NEW", label: "Новая" },
+  { id: "SENT_TO_OWNER", label: "Передана владельцу" },
+  { id: "VIEWED_BY_OWNER", label: "Просмотрена владельцем" },
+  { id: "OWNER_RESPONDED", label: "Владелец ответил" },
   { id: "IN_PROGRESS", label: "В работе" },
   { id: "CLOSED", label: "Закрыта" },
+  { id: "CANCELLED_BY_USER", label: "Отменена пользователем" },
 ] as const;
 
 export const paymentStatusOptions = [

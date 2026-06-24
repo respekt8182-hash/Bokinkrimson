@@ -1,0 +1,24 @@
+{
+  "id": "3286621",
+  "name": "Пляж «Риол» (КО-19)",
+  "category": "Пляжи",
+  "region": "Коктебель",
+  "address": "пгт Коктебель",
+  "latitude": 44.96867455189553,
+  "longitude": 35.27048841086272,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286621.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.270488%2C44.968675&mode=routes&rtext=~44.968731%2C35.270609&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.572888+00:00"
+}

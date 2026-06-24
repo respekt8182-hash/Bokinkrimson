@@ -1,0 +1,24 @@
+{
+  "id": "1498867",
+  "name": "Пляж санатория «Голубая волна» (СА 10)",
+  "category": "Пляжи",
+  "region": "Саки",
+  "address": "г. Саки, ул. Морская, 2",
+  "latitude": 45.131961,
+  "longitude": 33.515834,
+  "description": "Пляж песчано-галечный, протяжённостью 320 м, простирается вдоль всей территории санатория. Берег ровный. Вход в море пологий. Прибрежная полоса мелководная, дно мелкое, песчаное.",
+  "description_html": "<p>Пляж песчано-галечный, протяжённостью 320 м, простирается вдоль всей территории санатория. Берег ровный. Вход в&nbsp;море пологий. Прибрежная полоса мелководная, дно мелкое, песчаное.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090101/1498867.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCQ3FFB3dC",
+  "image_url": "https://travelcrimea.com/images/149/88/1498858.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото: Pixabay / Vadim_2969",
+  "phone": "+79787662441, +79787736316",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.745164+00:00"
+}

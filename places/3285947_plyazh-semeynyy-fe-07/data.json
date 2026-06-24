@@ -1,0 +1,24 @@
+{
+  "id": "3285947",
+  "name": "Пляж «Семейный» (ФЕ-07)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, ул. Курортная",
+  "latitude": 45.04735020181822,
+  "longitude": 35.385398727659016,
+  "description": "Пляж находится напротив спорт-комплекса «Динамо», рядом с Комсомольским парком. Уютный пляж для посещения всей семьёй.",
+  "description_html": "<p>Пляж находится напротив спорт-комплекса &laquo;Динамо&raquo;, рядом с&nbsp;Комсомольским парком. Уютный пляж для&nbsp;посещения всей семьёй.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.385399%2C45.047350&mode=routes&rtext=~45.047332%2C35.385369&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 033 60 30",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.577185+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "3281170",
+  "name": "Пляж ИП Герман (АЛ-12)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, п. Утес",
+  "latitude": 44.59707837000693,
+  "longitude": 34.37175711904905,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090606/3281170.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.371757%2C44.597078&mode=routes&rtext=~44.597061%2C34.371762&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.617853+00:00"
+}

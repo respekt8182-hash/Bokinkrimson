@@ -2346,7 +2346,7 @@ export function PublicPropertyDetails({
                                   }}
                                   className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-xl bg-[#e8621a] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#d45615] active:scale-[0.97]"
                                 >
-                                  Забронировать
+                                  Отправить запрос владельцу
                                 </button>
                               </>
                             )}
@@ -2552,7 +2552,7 @@ export function PublicPropertyDetails({
                                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#e8621a] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(232,98,26,0.24)] transition hover:bg-[#d45615] active:scale-[0.98] sm:w-auto"
                                   >
                                     <AppIcon icon={Check} className="h-4 w-4" />
-                                    Забронировать
+                                    Отправить запрос владельцу
                                   </button>
                                 </div>
                               ) : (
@@ -3049,6 +3049,12 @@ export function PublicPropertyDetails({
                       Скопируйте готовое сообщение нажатием кнопки ниже и отправьте его владельцу
                       объекта в любой удобный мессенджер.
                     </p>
+                    <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900">
+                      Отправка запроса не подтверждает бронирование. Сайт передает запрос
+                      владельцу объекта. Стоимость, даты, доступность и условия проживания
+                      подтверждаются владельцем отдельно. Договор проживания заключается
+                      непосредственно между гостем и владельцем объекта.
+                    </p>
 
                     <LeadMessageAuthorToggle
                       value={authorGender}
@@ -3131,7 +3137,7 @@ export function PublicPropertyDetails({
         <div className="fixed inset-0 z-50 bg-midnight/55 p-4 lg:hidden">
           <div className="absolute inset-x-4 bottom-4 rounded-2xl bg-white p-4 shadow-2xl">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-lg text-olive">Параметры бронирования</h3>
+              <h3 className="text-lg text-olive">Параметры запроса</h3>
               <button
                 type="button"
                 onClick={() => setIsMobileBookingOpen(false)}

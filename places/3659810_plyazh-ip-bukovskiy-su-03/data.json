@@ -1,0 +1,24 @@
+{
+  "id": "3659810",
+  "name": "Пляж ИП Буковский (СУ-03)",
+  "category": "Пляжи",
+  "region": "Судак",
+  "address": "г. Судак, с. Веселое",
+  "latitude": 44.82238676787156,
+  "longitude": 34.87183805240713,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3659810.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.871838%2C44.822387&mode=routes&rtext=~44.822374%2C34.871819&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.616846+00:00"
+}

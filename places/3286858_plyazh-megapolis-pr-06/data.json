@@ -1,0 +1,24 @@
+{
+  "id": "3286858",
+  "name": "Пляж «Мегаполис» (ПР-06)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, пгт Приморский, набережная",
+  "latitude": 45.11361556846935,
+  "longitude": 35.485971440683535,
+  "description": "Находится в посёлке городского типа Приморский, которое входит в Феодосийский городской округ. Берег покрыт галькой, а вход в море плавный.\n\nПляж благоустроен, рассчитан на 200 человек.",
+  "description_html": "<p>Находится в&nbsp;посёлке городского типа Приморский, которое входит в&nbsp;Феодосийский городской округ. Берег покрыт галькой, а&nbsp;вход в&nbsp;море плавный.</p><p>Пляж благоустроен, рассчитан на&nbsp;200 человек.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286858.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.485971%2C45.113616&mode=routes&rtext=~45.113600%2C35.486032&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 970 04 83",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.555561+00:00"
+}

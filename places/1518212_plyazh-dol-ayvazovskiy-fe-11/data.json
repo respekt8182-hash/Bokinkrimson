@@ -1,0 +1,24 @@
+{
+  "id": "1518212",
+  "name": "Пляж ДОЛ «Айвазовский» (ФЕ-11)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Черноморская набережная, 12",
+  "latitude": 45.056594,
+  "longitude": 35.39175,
+  "description": "Пляж общего пользования, принадлежит детскому оздоровительному лагерю «Айвазовский». Благоустроенный пляж расположен у Черноморской набережной Феодосии. Берег песчаный и чистый, глубина моря небольшая, увеличивается постепенно.",
+  "description_html": "<p>Пляж общего пользования, принадлежит детскому оздоровительному лагерю &laquo;Айвазовский&raquo;. Благоустроенный пляж расположен у&nbsp;Черноморской набережной Феодосии. Берег песчаный и&nbsp;чистый, глубина моря небольшая, увеличивается постепенно.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090208/1518212.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCQ3vIuF0C",
+  "image_url": "https://travelcrimea.com/images/151/82/1518278.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": " Фото: Pixabay / shantanukashyap",
+  "phone": "+7 978 577 18 32",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.606187+00:00"
+}

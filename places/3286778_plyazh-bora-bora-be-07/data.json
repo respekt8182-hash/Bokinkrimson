@@ -1,0 +1,24 @@
+{
+  "id": "3286778",
+  "name": "Пляж «Бора-Бора» (БЕ-07)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, с. Береговое",
+  "latitude": 45.09587890119641,
+  "longitude": 35.443001015733714,
+  "description": "Пляж общего пользования.\n\nНаходится в селе Береговое (Феодосийский городской округ). Берег песчаный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для переодевания, детская площадка. Здесь работают спасательный пост и медпункт.",
+  "description_html": "<p>Пляж общего пользования.</p><p>Находится в&nbsp;селе Береговое (Феодосийский городской округ). Берег песчаный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для&nbsp;переодевания, детская площадка. Здесь работают спасательный пост и&nbsp;медпункт.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286778.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.443001%2C45.095957&mode=routes&rtext=~45.095884%2C35.443002&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/328/77/3287770.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 888 21 71",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.522968+00:00"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "3660391",
+  "name": "Пляж «Сокол» (Бах. 16)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.84646611299834,
+  "longitude": 33.59491672786739,
+  "description": "",
+  "description_html": "",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.594917%2C44.846466&mode=routes&rtext=~44.846440%2C33.594923&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.581386+00:00"
+}

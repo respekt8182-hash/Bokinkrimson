@@ -1,0 +1,23 @@
+{
+  "id": "2159",
+  "name": "Автовокзал Саки",
+  "category": "Транспорт",
+  "region": "Саки",
+  "address": "г. Саки, ул. Симферопольская, д.17",
+  "latitude": 45.134615,
+  "longitude": 33.600016,
+  "description": "На автостанции есть зал ожидания на 25 посадочных мест, банкоматы, на территории работают кафе и магазины.",
+  "description_html": "<p>На автостанции есть зал ожидания на&nbsp;25 посадочных мест, банкоматы, на&nbsp;территории работают кафе и&nbsp;магазины.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CGDy4JOH",
+  "image_url": "https://travelcrimea.com/images/00/30/003013.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Пресс-служба ГУП РК «Крымавтотранс»",
+  "phone": "+7(3656)326380",
+  "site": "http://krimavtotrans.info/avtostanciya-saki.html",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.938071+00:00"
+}

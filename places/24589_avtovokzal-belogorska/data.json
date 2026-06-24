@@ -1,0 +1,23 @@
+{
+  "id": "24589",
+  "name": "Автовокзал Белогорска",
+  "category": "Транспорт",
+  "region": "Белогорск",
+  "address": "г. Белогорск, ул. Нижнегорская, д.13",
+  "latitude": 45.060569,
+  "longitude": 34.599856,
+  "description": "В здании автостанции действует зал ожидания на 50 мест, комната отдыха водителей, торговые точки. Камера хранения работает по графику автостанции.\n\n05.30-20.00 (зимний период)\n\n05.30-20.30(летний период)\n\n+7(36559)92373 (справочная)\n\n+7(3652)545676 (бронирование билетов)",
+  "description_html": "<p>В здании автостанции действует зал ожидания на&nbsp;50 мест, комната отдыха водителей, торговые точки. Камера хранения работает по&nbsp;графику автостанции.</p><table class='schedule' border='0'><tbody><tr><td>05.30-20.00 (зимний период)</td></tr><tr><td>&nbsp;05.30-20.30(летний период)</td></tr></tbody></table><table class='phones' border='0'><tbody><tr><td>+7(36559)92373 (справочная)</td></tr><tr><td>&nbsp;+7(3652)545676 (бронирование билетов)</td></tr></tbody></table>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCb-jJ-C",
+  "image_url": "https://travelcrimea.com/images/01/40/014023.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Пресс-служба ГУП РК «Крымавтотранс»",
+  "phone": null,
+  "site": "http://krimavtotrans.info/avtostanciya-belogorsk.html",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/belogorsk/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.935617+00:00"
+}

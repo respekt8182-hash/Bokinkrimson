@@ -92,6 +92,12 @@ const staticRouteFiles: RouteFileEntry[] = [
     priority: 0.3,
   },
   {
+    path: "/documents",
+    file: "src/app/documents/page.tsx",
+    changeFrequency: "yearly",
+    priority: 0.36,
+  },
+  {
     path: "/oferta",
     file: "src/app/oferta/page.tsx",
     changeFrequency: "yearly",

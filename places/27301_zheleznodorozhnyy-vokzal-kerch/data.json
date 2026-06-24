@@ -1,0 +1,23 @@
+{
+  "id": "27301",
+  "name": "Железнодорожный вокзал Керчь",
+  "category": "Транспорт",
+  "region": "Керчь",
+  "address": "г. Керчь, Привокзальная пл., д.3",
+  "latitude": 45.361601,
+  "longitude": 36.432601,
+  "description": "В настоящее время обслуживает только пригородные поезда. В здании вокзала есть зал ожидания, кассы, справочная, пункт общественного питания, камеры хранения (платные).",
+  "description_html": "<p>В настоящее время обслуживает только пригородные поезда. В здании вокзала есть зал ожидания, кассы, справочная, пункт общественного питания, камеры хранения (платные).</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCb-bO6b",
+  "image_url": "https://travelcrimea.com/images/01/33/013349.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-SA 4.0, Neu-Zwei ",
+  "phone": "+7(36561)20029",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/kerch/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.944726+00:00"
+}

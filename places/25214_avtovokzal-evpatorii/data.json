@@ -1,0 +1,23 @@
+{
+  "id": "25214",
+  "name": "Автовокзал Евпатории",
+  "category": "Транспорт",
+  "region": "Евпатория",
+  "address": "г. Евпатория, ул. Интернациональная, д.124",
+  "latitude": 45.200106,
+  "longitude": 33.358543,
+  "description": "В здании автовокзала есть зал ожидания на 80 мест, гостиничные номера, комната отдыха водителей, комната матери и ребёнка, платёжные терминалы, кафе, павильоны с продуктами и магазины. Камера хранения работает с 07.00 до 19.00.\n\n+7(36569)61690 (справочная)\n\n+7(3652)545676 (бронирование билетов)",
+  "description_html": "<p>В здании автовокзала есть зал ожидания на&nbsp;80 мест, гостиничные номера, комната отдыха водителей, комната матери и&nbsp;ребёнка, платёжные терминалы, кафе, павильоны с&nbsp;продуктами и&nbsp;магазины. Камера хранения работает с&nbsp;07.00 до&nbsp;19.00.</p><table class='phones' border='0'><tbody><tr><td>+7(36569)61690 (справочная)</td></tr><tr><td>&nbsp;+7(3652)545676 (бронирование билетов)</td></tr></tbody></table>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbLyC1r",
+  "image_url": "https://travelcrimea.com/images/01/54/015481.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Пресс-служба ГУП РК «Крымавтотранс»",
+  "phone": null,
+  "site": "http://krimavtotrans.info/avtovokzal-evpatoriya.html",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.936017+00:00"
+}

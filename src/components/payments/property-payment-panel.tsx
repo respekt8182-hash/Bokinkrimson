@@ -25,7 +25,12 @@ import { getPlacementPromoPrice } from "@/lib/placement-promo";
 import { getSafeHttpsUrl } from "@/lib/safe-urls";
 
 type PaymentStatusValue = "CREATED" | "PENDING" | "SUCCEEDED" | "CANCELED";
-type PropertyStatusValue = "DRAFT" | "PENDING_MODERATION" | "PUBLISHED" | "REJECTED";
+type PropertyStatusValue =
+  | "DRAFT"
+  | "PENDING_MODERATION"
+  | "PUBLISHED"
+  | "REQUIRES_REGISTRY_REVIEW"
+  | "REJECTED";
 type PaymentProviderValue = "MANAGER" | "YOOKASSA";
 
 type PaymentReadinessIssue = {
@@ -387,6 +392,12 @@ export function PropertyPaymentPanel({
       dot: "bg-emerald-500",
       bg: "bg-emerald-50",
       text: "text-emerald-700",
+    },
+    REQUIRES_REGISTRY_REVIEW: {
+      label: "Проверка реестра",
+      dot: "bg-blue-400",
+      bg: "bg-blue-50",
+      text: "text-blue-700",
     },
     REJECTED: {
       label: "Отклонена",

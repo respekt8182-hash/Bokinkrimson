@@ -1,0 +1,24 @@
+{
+  "id": "3280852",
+  "name": "Пляж ИП Малышев (АЛ-83)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, с. Рыбачье",
+  "latitude": 44.76752006170787,
+  "longitude": 34.59558213169738,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090606/3280852.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.595582%2C44.767520&mode=routes&rtext=~44.767436%2C34.595452&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.626745+00:00"
+}

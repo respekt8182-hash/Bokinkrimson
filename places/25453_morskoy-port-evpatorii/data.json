@@ -1,0 +1,23 @@
+{
+  "id": "25453",
+  "name": "Морской порт Евпатории",
+  "category": "Транспорт",
+  "region": "Евпатория",
+  "address": "г. Евпатория, пл. Моряков, д.1",
+  "latitude": 45.190321,
+  "longitude": 33.373439,
+  "description": "Крупный черноморский порт. Функционирует паромный терминал, осуществляющий перевозки грузов и пассажиров.",
+  "description_html": "<p>Крупный черноморский порт. Функционирует паромный терминал, осуществляющий перевозки грузов и&nbsp;пассажиров.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbL46LI",
+  "image_url": "https://travelcrimea.com/images/01/69/016993.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-SA 4.0, Aleksander Kaasik",
+  "phone": "+7(36569)31036, +7(36569)32106",
+  "site": "evtp.ru",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.950745+00:00"
+}

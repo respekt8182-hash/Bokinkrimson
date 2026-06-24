@@ -1,0 +1,23 @@
+{
+  "id": "3666",
+  "name": "Автостанция «Курортная»",
+  "category": "Транспорт",
+  "region": "Симферополь",
+  "address": "г. Симферополь, ул. Гагарина, д.8",
+  "latitude": 44.963027,
+  "longitude": 34.084599,
+  "description": "На автостанции имеются зал ожидания на 20 мест, платёжные терминалы, банкоматы, киоски с продуктами питания и кафе.\n\nкруглосуточно (летний период)\n\n05.00–22.00 (зимний период)",
+  "description_html": "<p>На автостанции имеются зал ожидания на&nbsp;20 мест, платёжные терминалы, банкоматы, киоски с&nbsp;продуктами питания и&nbsp;кафе.</p><table class='schedule' border='0'><tbody><tr><td>круглосуточно (летний период)</td></tr><tr><td>05.00&ndash;22.00 (зимний период)</td></tr></tbody></table><p>&nbsp;</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/maps/-/CBR45NaEhB",
+  "image_url": "https://travelcrimea.com/images/01/34/013401.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Пресс-служба ГУП РК «Крымавтотранс»",
+  "phone": "+7(3652)277421",
+  "site": "http://krimavtotrans.info/avtostanciya-kurortnaya.html",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/simferopol/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.941184+00:00"
+}

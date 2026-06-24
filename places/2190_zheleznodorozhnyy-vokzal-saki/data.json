@@ -1,0 +1,23 @@
+{
+  "id": "2190",
+  "name": "Железнодорожный вокзал Саки",
+  "category": "Транспорт",
+  "region": "Саки",
+  "address": "г. Саки, ул. Вокзальная, д.1",
+  "latitude": 45.144777,
+  "longitude": 33.598236,
+  "description": "В здании вокзала оборудованы зал ожидания, билетные кассы и камера хранения. Через станцию проходят три пары пригородных электричек в направлении Симферополь — Евпатория.",
+  "description_html": "<p>В здании вокзала оборудованы зал ожидания, билетные кассы и&nbsp;камера хранения. Через станцию проходят три пары пригородных электричек в&nbsp;направлении Симферополь&nbsp;&mdash; Евпатория.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CGDy4V7m",
+  "image_url": "https://travelcrimea.com/images/08/12/081214.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Илья Питалев",
+  "phone": "+7(3656)324497, +7(3656)326345",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.944892+00:00"
+}

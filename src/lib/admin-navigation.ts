@@ -69,6 +69,13 @@ export const adminNavigationGroups: AdminNavigationGroup[] = [
         keywords: ["objects", "properties", "housing", "отели", "гостевые дома"],
       },
       {
+        href: "/admin/registry-review",
+        label: "Проверка реестра",
+        icon: "objects",
+        permission: "content:manage",
+        keywords: ["registry", "реестр", "КСР", "классификация"],
+      },
+      {
         href: "/admin/excursions",
         label: "Экскурсии",
         icon: "excursions",

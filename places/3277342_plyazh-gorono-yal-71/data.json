@@ -1,0 +1,24 @@
+{
+  "id": "3277342",
+  "name": "Пляж «Гороно» (ЯЛ-71)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "г. Ялта",
+  "latitude": 44.496666914875654,
+  "longitude": 34.17501624434062,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090604/3277342.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.175016%2C44.496667&mode=routes&rtext=~44.496674%2C34.175025&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.532526+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "849789",
+  "name": "Пляж санатория «Солнечный берег» (СА 05)",
+  "category": "Пляжи",
+  "region": "Саки",
+  "address": "г. Саки, ул. Морская, 12а",
+  "latitude": 45.114988,
+  "longitude": 33.533065,
+  "description": "Пляж песчано-галечный, расположен в 30 метрах от пансионата.\n\nОн оснащён шезлонгами и кабинками для переодевания. Пляжный инвентарь можно взять напрокат.\n\nРядом с пляжем находится Сакское озеро, известное своими лечебными грязями.",
+  "description_html": "<p>Пляж&nbsp; песчано-галечный, расположен в&nbsp;30 метрах от&nbsp;пансионата.</p><p>Он оснащён шезлонгами и&nbsp;кабинками для&nbsp;переодевания. Пляжный инвентарь можно взять напрокат.</p><p>Рядом с&nbsp;пляжем находится Сакское озеро, известное своими лечебными грязями.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200204/849789.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKQ5r2yb",
+  "image_url": "https://travelcrimea.com/images/84/97/849770.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото санатория",
+  "phone": "+7 978 079 36 76",
+  "site": "https://solbereg-krim.ru/",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.772565+00:00"
+}

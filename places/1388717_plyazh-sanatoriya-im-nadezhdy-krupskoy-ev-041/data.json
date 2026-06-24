@@ -1,0 +1,24 @@
+{
+  "id": "1388717",
+  "name": "Пляж санатория им. Надежды Крупской (ЕВ-041)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория, ул. Маяковского, 11/2",
+  "latitude": 45.17454,
+  "longitude": 33.347496,
+  "description": "Пляж находится в центральной части Евпатории, на самом берегу мелководного Каламитского залива. Предусмотрен для отдыха детей и детей с родителями.\n\nПляж оборудован теневыми навесами, раздевалками и спасательным постом.",
+  "description_html": "<p>Пляж находится в&nbsp;центральной части Евпатории, на&nbsp;самом берегу мелководного Каламитского залива. Предусмотрен для&nbsp;отдыха детей и&nbsp;детей с&nbsp;родителями.</p><p>Пляж оборудован теневыми навесами, раздевалками и&nbsp;спасательным постом. <br /></p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200824/1388717.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCQtNXF7lB",
+  "image_url": "https://travelcrimea.com/images/138/87/1388704.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото с сайта санатория",
+  "phone": "+7 978 84 67 052",
+  "site": "http://krupskoy.ru/",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.779396+00:00"
+}

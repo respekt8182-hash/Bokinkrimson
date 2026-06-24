@@ -1,0 +1,24 @@
+{
+  "id": "3286608",
+  "name": "Пляж «Бора-Бора» (КО-16)",
+  "category": "Пляжи",
+  "region": "Коктебель",
+  "address": "пгт Коктебель, за холмом Юнге",
+  "latitude": 44.96799670733996,
+  "longitude": 35.267537980946344,
+  "description": "Пляж общего пользования.\n\nНаходится в пгт Коктебель (Феодосийский городской округ). Берег галечный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для переодевания, детская площадка. Здесь работают спасательный пост и медпункт.",
+  "description_html": "<p>Пляж общего пользования.<br />Находится в&nbsp;пгт Коктебель (Феодосийский городской округ). Берег галечный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для&nbsp;переодевания, детская площадка. Здесь работают спасательный пост и&nbsp;медпункт.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286608.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.267538%2C44.967997&mode=routes&rtext=~44.967974%2C35.267555&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 888 21 71",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.524151+00:00"
+}

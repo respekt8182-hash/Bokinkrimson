@@ -1,0 +1,24 @@
+{
+  "id": "3280171",
+  "name": "Пляж «Нева-Каскад 2009» (АЛ-48)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта",
+  "latitude": 44.6705800128793,
+  "longitude": 34.41472391973402,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090605/3280171.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.414747%2C44.670538&mode=routes&rtext=~44.670490%2C34.414688&rtt=mt&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.562382+00:00"
+}

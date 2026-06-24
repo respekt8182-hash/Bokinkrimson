@@ -1,0 +1,24 @@
+{
+  "id": "3659431",
+  "name": "Пляж ООО «Прометей Плюс ВВ» (ЕВ-078А)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория, пгт Заозерное",
+  "latitude": 45.171035578711546,
+  "longitude": 33.30042427929075,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3659431.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.300424%2C45.171036&mode=routes&rtext=~45.171012%2C33.300387&rtt=auto&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.658718+00:00"
+}

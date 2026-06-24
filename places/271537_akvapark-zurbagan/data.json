@@ -1,0 +1,26 @@
+{
+  "id": "271537",
+  "name": "Аквапарк «Зурбаган»",
+  "category": "История и культура",
+  "region": "Севастополь",
+  "address": "г. Севастополь, ул. Парковая, 9",
+  "latitude": 44.6075,
+  "longitude": 33.4587,
+  "description": "Расположен в Севастополе возле парка Победы. Аквапарк занимает площадь в более чем 2 гектара. На его территории находятся около 20 разнообразных аттракционов для взрослых и детей. Также здесь есть волновой бассейн, фонтаны и другие развлечения.\n\nВ аквапарке работают кафе и ресторан быстрого питания.",
+  "description_html": "<p>Расположен в&nbsp;Севастополе возле парка Победы. Аквапарк занимает площадь в&nbsp;более чем 2 гектара. На его территории находятся около&nbsp;20 разнообразных аттракционов для&nbsp;взрослых и&nbsp;детей. Также здесь есть волновой бассейн, фонтаны и&nbsp;другие развлечения.</p><p>В аквапарке работают кафе и&nbsp;ресторан быстрого питания.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CGa6nGMO",
+  "image_url": "https://travelcrimea.com/images/35/56/355699.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото аквапарка",
+  "phone": "+7(978)9008080",
+  "site": "http://zurbagan.su/",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/deti/get.json",
+    "services/places/kultura/get.json",
+    "services/places/sevastopol/get.json",
+    "services/places/sport/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.212201+00:00"
+}

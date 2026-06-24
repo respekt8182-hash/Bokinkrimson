@@ -1,0 +1,24 @@
+{
+  "id": "3295319",
+  "name": "Пляж Центра профессиональной реабилитации инвалидов (ЕВ-064)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.17490114683602,
+  "longitude": 33.32561323424108,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3295319.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.325613%2C45.174929&mode=routes&rtext=~45.174920%2C33.325595&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.681968+00:00"
+}

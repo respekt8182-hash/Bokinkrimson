@@ -1,0 +1,24 @@
+{
+  "id": "3660548",
+  "name": "Пляж ИП Полезнюк (ЧЕ-7)",
+  "category": "Пляжи",
+  "region": "Черноморский район",
+  "address": "Черноморский р-н, коса Беляус",
+  "latitude": 45.35831865986103,
+  "longitude": 32.917255289054836,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3660548.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=32.917255%2C45.358918&mode=routes&rtext=~45.358746%2C32.916326&rtt=auto&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/chernomorskiy-rayon/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.629438+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "1023447",
+  "name": "Пляж «Барабулька» (ФЕ-18)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Керченское шоссе",
+  "latitude": 45.08209,
+  "longitude": 35.420684,
+  "description": "Пляж находится в Феодосии и является началом уникальных золотых песков, которыми известен этот город. Благодаря мягкому песку и пологому входу в море «Барабулька» идеально подходит для семей с детьми.\n\nПляж благоустроен и рассчитан на более чем 1000 человек.",
+  "description_html": "<p>Пляж находится в&nbsp;Феодосии и&nbsp;является началом уникальных золотых песков, которыми известен этот город. Благодаря мягкому песку и&nbsp;пологому входу в&nbsp;море &laquo;Барабулька&raquo; идеально подходит для&nbsp;семей с&nbsp;детьми.</p><p>Пляж благоустроен и&nbsp;рассчитан на&nbsp;более чем 1000 человек. <br /></p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200409/1023447.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKWFbPLI",
+  "image_url": "https://travelcrimea.com/images/328/99/3289976.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 059 48 00",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.519434+00:00"
+}

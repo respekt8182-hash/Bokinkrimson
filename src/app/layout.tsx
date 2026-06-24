@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, Yeseva_One } from "next/font/google";
-import Script from "next/script";
 import { Suspense } from "react";
+import { CookieConsentBanner } from "@/components/legal/cookie-consent-banner";
 import { RootShell } from "@/components/layout/root-shell";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { assertLegalConfigForProduction } from "@/config/legal";
 import { defaultSocialImage } from "@/lib/seo/metadata";
 import { absoluteUrl, resolveMetadataBase, siteConfig } from "@/lib/seo/site";
 import {
@@ -15,26 +16,7 @@ import {
 import { getSupportChatSettings } from "@/lib/support-chat";
 import "./globals.css";
 
-const YANDEX_METRIKA_ID = 108582509;
-const yandexMetrikaScript = `
-  (function(m,e,t,r,i,k,a){
-      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-      m[i].l=1*new Date();
-      for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a);
-  })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=${YANDEX_METRIKA_ID}', 'ym');
-
-  ym(${YANDEX_METRIKA_ID}, 'init', {
-    ssr: true,
-    webvisor: true,
-    clickmap: true,
-    ecommerce: "dataLayer",
-    referrer: document.referrer,
-    url: location.href,
-    accurateTrackBounce: true,
-    trackLinks: true
-  });
-`;
+assertLegalConfigForProduction();
 
 const bodyFont = Manrope({
   subsets: ["latin", "cyrillic"],
@@ -132,24 +114,10 @@ export default async function RootLayout({
       <head>
         <link rel="dns-prefetch" href="https://mc.yandex.ru" />
         <link rel="dns-prefetch" href="https://api-maps.yandex.ru" />
-        <link rel="preconnect" href="https://mc.yandex.ru" crossOrigin="" />
-        <Script id="yandex-metrika" strategy="lazyOnload">
-          {yandexMetrikaScript}
-        </Script>
       </head>
       <body
         className={`${bodyFont.variable} ${headingFont.variable} min-h-screen overflow-x-clip bg-cream text-olive antialiased`}
       >
-        <noscript>
-          <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`https://mc.yandex.ru/watch/${YANDEX_METRIKA_ID}`}
-              style={{ position: "absolute", left: "-9999px" }}
-              alt=""
-            />
-          </div>
-        </noscript>
         <JsonLd data={[buildOrganizationStructuredData(), buildWebsiteStructuredData()]} />
         {/* Global SVG defs for clip-paths */}
         <svg width="0" height="0" className="absolute" aria-hidden="true">
@@ -168,6 +136,7 @@ export default async function RootLayout({
             {children}
           </RootShell>
         </Suspense>
+        <CookieConsentBanner />
       </body>
     </html>
   );

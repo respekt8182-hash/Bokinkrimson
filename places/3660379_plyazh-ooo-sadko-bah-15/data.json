@@ -1,0 +1,23 @@
+{
+  "id": "3660379",
+  "name": "Пляж ООО «Садко» (Бах. 15)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.847485043313156,
+  "longitude": 33.59625515016582,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3660379.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.596255%2C44.847485&mode=routes&rtext=~44.847479%2C33.596194&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.664889+00:00"
+}

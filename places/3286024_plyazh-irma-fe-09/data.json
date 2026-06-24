@@ -1,0 +1,24 @@
+{
+  "id": "3286024",
+  "name": "Пляж «Ирма» (ФЕ-09)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Черноморская набережная (бывшая спортплощадка)",
+  "latitude": 45.055789705524006,
+  "longitude": 35.39104599621471,
+  "description": "Уютный песчаный пляж идеально подойдёт для посещения всей семьёй. Расположен на Черноморской набережной.",
+  "description_html": "<p>Уютный песчаный пляж идеально подойдёт для&nbsp;посещения всей семьёй. Расположен на&nbsp;Черноморской набережной.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3286024.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.391046%2C45.055790&mode=routes&rtext=~45.055827%2C35.391046&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 807 68 66",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.545264+00:00"
+}

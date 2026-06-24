@@ -1,0 +1,24 @@
+{
+  "id": "3286233",
+  "name": "Пляж «ТЭС» (ФЕ-26)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Керченское шоссе, район земельного участка ООО «ТЭС»",
+  "latitude": 45.072910149359465,
+  "longitude": 35.4082087369537,
+  "description": "Пляж общего пользования.\n\nШирокий и уютный пляж находится в Феодосии. Берег песчаный, вход в море пологий.\n\nНа пляже есть шезлонги, зонты, кабины для переодевания, душ. Для любителей активного досуга предусмотрены многочисленные развлечения.",
+  "description_html": "<p>Пляж общего пользования.</p><p>Широкий и&nbsp;уютный пляж находится в&nbsp;Феодосии. Берег песчаный, вход в&nbsp;море пологий.</p><p>На пляже есть шезлонги, зонты, кабины для&nbsp;переодевания, душ. Для любителей активного досуга предусмотрены многочисленные развлечения.</p>",
+  "source_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.408273%2C45.072839&mode=routes&rtext=~45.072948%2C35.408276&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.408273%2C45.072839&mode=routes&rtext=~45.072948%2C35.408276&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 820 66 00",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.588013+00:00"
+}

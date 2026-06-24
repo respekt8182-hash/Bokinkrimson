@@ -1,0 +1,24 @@
+{
+  "id": "3286569",
+  "name": "Пляж «Малибу» (КО-17)",
+  "category": "Пляжи",
+  "region": "Коктебель",
+  "address": "пгт Коктебель, ул. Юнге (бывший пляж «Риол»)",
+  "latitude": 44.96856098037175,
+  "longitude": 35.26980134273865,
+  "description": "Пляж благоустроен, на территории есть теневые зонты, шезлонги, работает коктейль-бар.\n\nК пляжу примыкает набережная, на которой работают кафе, столовые и бары, где можно подкрепиться и выпить прохладительный напиток.",
+  "description_html": "<p>Пляж благоустроен, на&nbsp;территории есть теневые зонты, шезлонги, работает коктейль-бар.</p><p>К пляжу примыкает набережная, на&nbsp;которой работают кафе, столовые и&nbsp;бары, где можно подкрепиться и&nbsp;выпить прохладительный напиток.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286569.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.269801%2C44.968561&mode=routes&rtext=~44.968522%2C35.269772&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 112 81 03",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.555351+00:00"
+}

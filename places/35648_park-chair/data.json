@@ -1,0 +1,24 @@
+{
+  "id": "35648",
+  "name": "Парк Чаир",
+  "category": "Природа",
+  "region": "Ялта",
+  "address": "г.Ялта, пгт. Гаспра",
+  "latitude": 44.428385,
+  "longitude": 34.100264,
+  "description": "Площадь парка составляет 23 га. Возраст старейших деревьев в нем — 300-500 лет. Сегодня здесь произрастает около 300 видов хвойных и вечнозелёных видов растений: магнолии, кипарисы, олеандры, гортензии. В парке находятся санаторий «Сосновая роща» и дача «Чаир», которая до 1917 года принадлежала династии Романовых.",
+  "description_html": "<p>Площадь парка составляет 23 га. Возраст старейших деревьев в&nbsp;нем&nbsp;&mdash; 300-500 лет. Сегодня здесь произрастает около&nbsp;300 видов хвойных и&nbsp;вечнозелёных видов растений: магнолии, кипарисы, олеандры, гортензии. В парке находятся санаторий &laquo;Сосновая роща&raquo; и&nbsp;дача &laquo;Чаир&raquo;, которая до&nbsp;1917 года принадлежала династии Романовых.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbHBP09",
+  "image_url": "https://travelcrimea.com/images/01/74/017497.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-SA 4.0, DjordjeMarkovic",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/priroda/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.883390+00:00"
+}

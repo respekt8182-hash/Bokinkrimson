@@ -1,0 +1,23 @@
+{
+  "id": "2439",
+  "name": "Автовокзал Севастополя",
+  "category": "Транспорт",
+  "region": "Севастополь",
+  "address": "г. Севастополь, ул. Вокзальная, д.11",
+  "latitude": 44.594612,
+  "longitude": 33.531557,
+  "description": "Имеются билетные кассы, зал ожидания, комната матери и ребёнка, несколько кафе, пункт охраны.\n\nпн-вс, 05.00–23.15 (летний период)\n\nпн-вс, 05.30–22.30 (зимний период)",
+  "description_html": "<p>Имеются билетные кассы, зал ожидания, комната матери и&nbsp;ребёнка, несколько кафе, пункт охраны.</p><table class='schedule' border='0'><tbody><tr><td>пн-вс, 05.00&ndash;23.15 (летний период)</td></tr><tr><td>пн-вс, 05.30&ndash;22.30 (зимний период)</td></tr></tbody></table><div><br /></div>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/maps/-/CCbLzG3w",
+  "image_url": "https://travelcrimea.com/images/00/65/006508.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Михаил Мокрушин",
+  "phone": "+7(8692)488199",
+  "site": "http://sevavtotrans.com/?page_id=142",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/sevastopol/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.938729+00:00"
+}

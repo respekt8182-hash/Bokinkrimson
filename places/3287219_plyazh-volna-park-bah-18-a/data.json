@@ -1,0 +1,23 @@
+{
+  "id": "3287219",
+  "name": "Пляж «Волна Парк» (Бах. 18-А)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.87009432369756,
+  "longitude": 33.60758835379615,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3287219.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.607588%2C44.870094&mode=routes&rtext=~44.870289%2C33.607588&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.527590+00:00"
+}

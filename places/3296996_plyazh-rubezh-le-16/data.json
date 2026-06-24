@@ -1,0 +1,24 @@
+{
+  "id": "3296996",
+  "name": "Пляж «Рубеж» (ЛЕ-16)",
+  "category": "Пляжи",
+  "region": "Ленинский район",
+  "address": "Ленинский р-н, г. Щелкино",
+  "latitude": 45.43382154969163,
+  "longitude": 35.82183599606252,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3296996.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.821836%2C45.433822&mode=routes&rtext=~45.433937%2C35.821962&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/leninskiy-rayon/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.574647+00:00"
+}

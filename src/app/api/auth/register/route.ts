@@ -14,6 +14,7 @@ import {
   isAuthDatabaseUnavailable,
 } from "@/lib/auth-route-db";
 import { authRateLimit } from "@/lib/constants";
+import { legalConfig } from "@/config/legal";
 import { logger } from "@/lib/logger";
 import {
   createRateLimiter,
@@ -120,6 +121,30 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ ok: true, user: sessionUser }, { status: 201 });
     response.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+    await db.consentEvent
+      .create({
+        data: {
+          userId: sessionUser.id,
+          subjectType: "USER",
+          subjectId: sessionUser.id,
+          consentType: "PERSONAL_DATA",
+          action: "GRANTED",
+          documentVersion: legalConfig.documents.personalDataConsentVersion,
+          url: "/auth/register",
+          ipAddress: ip,
+          userAgent: request.headers.get("user-agent"),
+          categories: ["registration", "account"],
+          metadata: {
+            marketingConsent: Boolean(parsed.data.marketingConsent),
+          },
+        },
+      })
+      .catch((error: unknown) => {
+        logger.warn("Failed to persist registration consent event", {
+          userId: sessionUser.id,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      });
     await markUserLogin(sessionUser.id);
 
     return response;

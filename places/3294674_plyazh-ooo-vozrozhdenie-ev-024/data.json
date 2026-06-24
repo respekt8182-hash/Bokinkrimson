@@ -1,0 +1,24 @@
+{
+  "id": "3294674",
+  "name": "Пляж ООО «Возрождение» (ЕВ-024)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.18365694447919,
+  "longitude": 33.36452866479234,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3294674.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.364529%2C45.183657&mode=routes&rtext=~45.183660%2C33.364515&rtt=mt&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.644579+00:00"
+}

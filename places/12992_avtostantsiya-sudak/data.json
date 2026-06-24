@@ -1,0 +1,23 @@
+{
+  "id": "12992",
+  "name": "Автостанция «Судак»",
+  "category": "Транспорт",
+  "region": "Судак",
+  "address": "г. Судак, ул. Гвардейская, д.32",
+  "latitude": 44.858787,
+  "longitude": 34.9704011,
+  "description": "В здании автостанции есть зал ожидания, камера хранения, банкоматы, закусочная с бесплатным Wi-Fi, касса. Также билеты можно приобрести по адресу: пл. Молодёжная, д.8 (с 08.00 до 18.00).",
+  "description_html": "<p>В здании автостанции есть зал ожидания, камера хранения, банкоматы, закусочная с&nbsp;бесплатным Wi-Fi, касса. Также билеты можно приобрести по&nbsp;адресу: пл. Молодёжная, д.8 (с 08.00 до&nbsp;18.00).</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbL66IG",
+  "image_url": "https://travelcrimea.com/images/06/05/060579.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Пресс-служба ГУП РК «Крымавтотранс»",
+  "phone": "+7(3656)634615, +7(3652)545676",
+  "site": "http://krimavtotrans.info/avtostanciya-sudak.html",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.941934+00:00"
+}

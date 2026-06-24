@@ -1,0 +1,24 @@
+{
+  "id": "3286635",
+  "name": "Пляж «Ли-Эль» (КО-20)",
+  "category": "Пляжи",
+  "region": "Коктебель",
+  "address": "пгт Коктебель",
+  "latitude": 44.94951366725457,
+  "longitude": 35.24671767095276,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286635.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.246718%2C44.949518&mode=routes&rtext=~44.949512%2C35.246716&rtt=mt&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.553626+00:00"
+}

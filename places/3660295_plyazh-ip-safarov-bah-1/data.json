@@ -1,0 +1,23 @@
+{
+  "id": "3660295",
+  "name": "Пляж ИП Сафаров (Бах. 1)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Береговое",
+  "latitude": 44.903414917690355,
+  "longitude": 33.61296718032496,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3660295.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.612967%2C44.903415&mode=routes&rtext=~44.903330%2C33.613005&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.629742+00:00"
+}

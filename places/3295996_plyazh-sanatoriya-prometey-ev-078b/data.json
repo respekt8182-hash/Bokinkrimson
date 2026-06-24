@@ -1,0 +1,24 @@
+{
+  "id": "3295996",
+  "name": "Пляж санатория «Прометей» (ЕВ-078Б)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория, пгт Заозерное, ул. Аллея Дружбы, 15",
+  "latitude": 45.169505034631875,
+  "longitude": 33.298519703685855,
+  "description": "Песчаный пляж находится в Заозерном. На территории есть спасательное и прочее оборудование, необходимое для комфортного и безопасного отдыха у воды.\n\nНа пляже установлены теневые навесы, раздевалки, имеются фонтанчики с питьевой водой и ногомойки.",
+  "description_html": "<p>Песчаный пляж находится в&nbsp;Заозерном. На территории есть спасательное и&nbsp;прочее оборудование, необходимое для&nbsp;комфортного и&nbsp;безопасного отдыха у&nbsp;воды.</p><p>На пляже установлены теневые навесы, раздевалки, имеются фонтанчики с&nbsp;питьевой водой и&nbsp;ногомойки.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3295996.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.298520%2C45.169505&mode=routes&rtext=~45.169421%2C33.298480&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 747-39-85",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.766541+00:00"
+}

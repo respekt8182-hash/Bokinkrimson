@@ -1,0 +1,24 @@
+{
+  "id": "3659896",
+  "name": "Пляж АНО «Таврида.Арт» (СУ-20)",
+  "category": "Пляжи",
+  "region": "Судак",
+  "address": "г. Судак, Мидийная бухта",
+  "latitude": 44.823596892305595,
+  "longitude": 35.041635669637785,
+  "description": "",
+  "description_html": "",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.041636%2C44.823597&mode=routes&rtext=~44.823610%2C35.041618&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.603481+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "3661644",
+  "name": "Пляж «Донбасс» (ЯЛ-97)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "г. Ялта",
+  "latitude": 44.50001372461581,
+  "longitude": 34.194466455222546,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090514/3661644.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.194466%2C44.500014&mode=routes&rtext=~44.500023%2C34.194399&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.535560+00:00"
+}

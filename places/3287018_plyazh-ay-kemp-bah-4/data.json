@@ -1,0 +1,23 @@
+{
+  "id": "3287018",
+  "name": "Пляж «Ай Кэмп» (Бах. 4)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.87362490274756,
+  "longitude": 33.608408003589716,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3287018.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.608408%2C44.873625&mode=routes&rtext=~44.873464%2C33.608369&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.514216+00:00"
+}

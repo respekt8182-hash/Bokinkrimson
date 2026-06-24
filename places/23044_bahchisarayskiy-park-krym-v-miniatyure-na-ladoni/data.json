@@ -1,0 +1,24 @@
+{
+  "id": "23044",
+  "name": "Бахчисарайский парк «Крым в миниатюре на ладони»",
+  "category": "История и культура",
+  "region": "Бахчисарай",
+  "address": "г. Бахчисарай, ул. Ленина, д.4",
+  "latitude": 44.753895,
+  "longitude": 33.859237,
+  "description": "«Крым в миниатюре на ладони» — это третий и самый большой по величине парк миниатюр на полуострове, где собраны все историко-культурные и архитектурные достопримечательности полуострова в масштабе 1:25.",
+  "description_html": "<p>&laquo;Крым в&nbsp;миниатюре на&nbsp;ладони&raquo;&nbsp;&mdash; это третий и&nbsp;самый большой по&nbsp;величине парк миниатюр на&nbsp;полуострове, где собраны все историко-культурные и&nbsp;архитектурные достопримечательности полуострова в&nbsp;масштабе 1:25.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCb-vIPZ",
+  "image_url": "https://travelcrimea.com/images/01/31/013193.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-SA 3.0, Бахтина Дарья",
+  "phone": "+7(800)1005177 (доб. 1010), +7(978)0000745",
+  "site": "http://minibah.ru",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/bakhchisaray/get.json",
+    "services/places/deti/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.234907+00:00"
+}

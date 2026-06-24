@@ -1,0 +1,24 @@
+{
+  "id": "3279630",
+  "name": "Пляж ИП Модин (АЛ-36/2)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта",
+  "latitude": 44.6599276069914,
+  "longitude": 34.40785042496363,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090605/3279630.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.407926%2C44.659895&mode=routes&rtext=~44.659889%2C34.407843&rtt=mt&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.626916+00:00"
+}

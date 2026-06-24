@@ -1,0 +1,25 @@
+{
+  "id": "406220",
+  "name": "Байдарские ворота",
+  "category": "История и культура",
+  "region": "Ялта",
+  "address": "Большая Ялта, п. Форос",
+  "latitude": 44.406153,
+  "longitude": 33.782005,
+  "description": "Байдарские ворота построены в 1848 году. Находятся на старой трассе Ялта – Севастополь, между поселками Форос и Орлиное. Отсюда открывается красивый панорамный вид на Форосскую церковь и долину.",
+  "description_html": "<p>Байдарские ворота построены в&nbsp;1848 году. Находятся на&nbsp;старой трассе Ялта &ndash; Севастополь, между поселками Форос и&nbsp;Орлиное. Отсюда открывается красивый панорамный вид на&nbsp;Форосскую церковь и&nbsp;долину.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CGSWR-ly",
+  "image_url": "https://travelcrimea.com/images/40/62/406201.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Sergio Hoffmann",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/kultura/get.json",
+    "services/places/sevastopol/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.231298+00:00"
+}

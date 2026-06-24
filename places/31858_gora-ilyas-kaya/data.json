@@ -1,0 +1,24 @@
+{
+  "id": "31858",
+  "name": "Гора Ильяс-Кая",
+  "category": "Природа",
+  "region": "Севастополь",
+  "address": "г.Ялта, пгт. Форос",
+  "latitude": 44.406549,
+  "longitude": 33.739017,
+  "description": "Относится к скалистому массиву Байдарской яйлы — 681,9 м над уровнем моря. Гора Ильяс-Кая стоит в 4 км к северо-западу от посёлка Форос. На её вершине ранее находилась укреплённая монастырская церковь Святого Ильи X-XV вв.",
+  "description_html": "<p>Относится к&nbsp;скалистому массиву Байдарской яйлы&nbsp;&mdash; 681,9 м над&nbsp;уровнем моря. Гора Ильяс-Кая стоит в&nbsp;4 км к&nbsp;северо-западу от&nbsp;посёлка Форос. На её вершине ранее находилась укреплённая монастырская церковь Святого Ильи X-XV вв.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbHbJmN",
+  "image_url": "https://travelcrimea.com/images/01/57/015709.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-SA 3.0, Vimoculars ",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/priroda/get.json",
+    "services/places/sevastopol/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.829983+00:00"
+}

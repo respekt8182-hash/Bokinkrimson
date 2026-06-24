@@ -1,0 +1,24 @@
+{
+  "id": "3295066",
+  "name": "Пляж Всероссийского детского центра «Алые паруса» (ЕВ-025)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.18341715099,
+  "longitude": 33.36323486580174,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3295066.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.363235%2C45.183417&mode=routes&rtext=~45.183410%2C33.363222&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.605586+00:00"
+}

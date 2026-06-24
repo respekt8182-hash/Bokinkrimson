@@ -1,0 +1,24 @@
+{
+  "id": "3660582",
+  "name": "Пляж ООО «Руслогистика» (ЧЕ-4)",
+  "category": "Пляжи",
+  "region": "Черноморский район",
+  "address": "Черноморский р-н, с. Оленевка",
+  "latitude": 45.38073200588066,
+  "longitude": 32.510151135520914,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3660582.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=32.510151%2C45.380732&mode=routes&rtext=~45.380845%2C32.510072&rtt=auto&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/chernomorskiy-rayon/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.661207+00:00"
+}

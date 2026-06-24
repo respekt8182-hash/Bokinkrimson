@@ -1,0 +1,24 @@
+{
+  "id": "3286792",
+  "name": "Пляж общего пользования (БЕ-08)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, с. Береговое, напротив Ротонды",
+  "latitude": 45.09680565427163,
+  "longitude": 35.44455722450509,
+  "description": "Пляж общего пользования.\n\nНаходится в с. Береговое (Феодосийский городской округ). Берег песчаный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для переодевания. Здесь работают спасательный пост и медпункт.",
+  "description_html": "<p>Пляж общего пользования.</p><p>Находится в&nbsp;с. Береговое (Феодосийский городской округ). Берег песчаный, широкий. На пляже есть теневые навесы, шезлонги, душ, кабины для&nbsp;переодевания. Здесь работают спасательный пост и&nbsp;медпункт.</p><p>&nbsp;</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286792.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.444557%2C45.096806&mode=routes&rtext=~45.096822%2C35.444575&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/328/78/3287860.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": " Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 724 86 25",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.703264+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "886559",
+  "name": "Пляж пансионата «Феодосия» (ФЕ-05)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, ул. Курортная",
+  "latitude": 45.043258,
+  "longitude": 35.384288,
+  "description": "Пляж предназначен для отдыхающих пансионата «Феодосия», однако готов принимать всех желающих туристов. Трёхуровневый благоустроенный пляж находится в 100 метрах от пансионата. Берег покрыт галькой, вход в море протяжённый и пологий.",
+  "description_html": "<p>Пляж предназначен для&nbsp;отдыхающих пансионата &laquo;Феодосия&raquo;, однако готов принимать всех желающих туристов. Трёхуровневый благоустроенный пляж находится в&nbsp;100 метрах от&nbsp;пансионата. Берег покрыт галькой, вход в&nbsp;море протяжённый и&nbsp;пологий.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200218/886559.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKUk5K8Y",
+  "image_url": "https://travelcrimea.com/images/88/65/886540.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото: Pixabay / haderer17",
+  "phone": "+7 910 81 79 836",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.728601+00:00"
+}

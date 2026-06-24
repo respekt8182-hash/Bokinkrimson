@@ -1,0 +1,24 @@
+{
+  "id": "3285862",
+  "name": "Пляж «Ультимо» (ФЕ-01)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, набережная Десантников, район КНС 2",
+  "latitude": 45.03291248702628,
+  "longitude": 35.383576464840566,
+  "description": "Пляж галечный. Спуск в море пологий.\n\nНа территории работает кафе-бар «Веранда» с европейской кухней с большим выбором напитков.",
+  "description_html": "<p>Пляж галечный. Спуск в&nbsp;море пологий.<br />На территории работает кафе-бар &laquo;Веранда&raquo; с&nbsp;европейской кухней с&nbsp;большим выбором напитков.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285862.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.383576%2C45.032912&mode=routes&rtext=~45.032905%2C35.383600&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 033 60 30",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.594378+00:00"
+}

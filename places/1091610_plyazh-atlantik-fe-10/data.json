@@ -1,0 +1,24 @@
+{
+  "id": "1091610",
+  "name": "Пляж «Атлантик» (ФЕ-10)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Черноморская набережная, 6",
+  "latitude": 45.056155,
+  "longitude": 35.391388,
+  "description": "Пляж находится на юго-восточном побережье Феодосии. Он раскинулся вдоль линии Феодосийского залива в Черном море примерно на 50 м, а его ширина составляет около 25 м.",
+  "description_html": "<p>Пляж находится на&nbsp;юго-восточном побережье Феодосии. Он раскинулся вдоль линии Феодосийского залива в&nbsp;Черном море примерно на&nbsp;50 м, а&nbsp;его ширина составляет около&nbsp;25 м.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200513/1091610.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/C8HGJRjY",
+  "image_url": "https://travelcrimea.com/images/106/25/1062546.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото: Pixabay / rawenergy ",
+  "phone": "+7 978 122 84 00",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.519065+00:00"
+}

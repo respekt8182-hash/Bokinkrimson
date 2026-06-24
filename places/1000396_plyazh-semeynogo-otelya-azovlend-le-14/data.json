@@ -1,0 +1,24 @@
+{
+  "id": "1000396",
+  "name": "Пляж семейного отеля «Азовленд» (ЛЕ-14)",
+  "category": "Пляжи",
+  "region": "Ленинский район",
+  "address": "Ленинский р-н, с. Золотое, ул. Северная, 1а",
+  "latitude": 45.430084,
+  "longitude": 36.072186,
+  "description": "Пляж находится в селе Золотое Ленинского района на берегу Азовского моря.\n\nОдновременно на нём могут разместиться более 1,2 тыс. человек. На территории также есть бассейны с водными аттракционами.",
+  "description_html": "<p>Пляж находится в&nbsp;селе Золотое Ленинского района на&nbsp;берегу Азовского моря.&nbsp;</p><p>Одновременно на&nbsp;нём могут разместиться более 1,2 тыс. человек. На территории также есть бассейны с&nbsp;водными аттракционами.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200402/1000396.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKuSjHkP",
+  "image_url": "https://travelcrimea.com/images/100/05/1000522.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено владельцами базы отдыха",
+  "phone": "+7(978)8189267",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/leninskiy-rayon/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.781759+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "3285975",
+  "name": "Пляж «Жемчужный» (ФЕ-08)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Черноморская набережная, зона «Прибрежная» № 83",
+  "latitude": 45.05447790863333,
+  "longitude": 35.390093812014435,
+  "description": "Благоустроенный песчаный пляж, оборудованный для посещения инвалидами.\n\nШирокая береговая полоса и доступность пляжа позволяет отдыхать всей семьёй.",
+  "description_html": "<p>Благоустроенный песчаный пляж, оборудованный для&nbsp;посещения инвалидами.</p><p>Широкая береговая полоса и&nbsp;доступность пляжа позволяет отдыхать всей семьёй.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285975.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.390094%2C45.054478&mode=routes&rtext=~45.054482%2C35.390070&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/329/02/3290212.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 790 12 45",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.537496+00:00"
+}

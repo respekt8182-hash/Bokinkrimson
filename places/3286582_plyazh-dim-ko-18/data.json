@@ -1,0 +1,24 @@
+{
+  "id": "3286582",
+  "name": "Пляж «ДИМ» (КО-18)",
+  "category": "Пляжи",
+  "region": "Коктебель",
+  "address": "пгт Коктебель, район базы отдыха «ДИМ»",
+  "latitude": 44.96742190847347,
+  "longitude": 35.2655933058428,
+  "description": "Пляж напротив базы отдыха «ДИМ» благоустроен, на территории есть теневые зонты, шезлонги, работает коктейль-бар.\n\nК пляжу примыкает набережная, на которой работают кафе, столовые и бары, где можно подкрепиться и выпить прохладительный напиток.",
+  "description_html": "<p>Пляж напротив базы отдыха &laquo;ДИМ&raquo; благоустроен, на&nbsp;территории есть теневые зонты, шезлонги, работает коктейль-бар.</p><p>К пляжу примыкает набережная, на&nbsp;которой работают кафе, столовые и&nbsp;бары, где можно подкрепиться и&nbsp;выпить прохладительный напиток.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286582.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.265593%2C44.967422&mode=routes&rtext=~44.967391%2C35.265577&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/328/85/3288507.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": " Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 112 81 03",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.533630+00:00"
+}

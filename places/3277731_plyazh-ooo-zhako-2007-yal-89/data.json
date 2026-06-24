@@ -1,0 +1,24 @@
+{
+  "id": "3277731",
+  "name": "Пляж ООО «Жако-2007» (ЯЛ-89)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "пгт Гурзуф",
+  "latitude": 44.54028192517145,
+  "longitude": 34.27657546270315,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090604/3277731.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.276575%2C44.540282&mode=routes&rtext=~44.540287%2C34.276581&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.648981+00:00"
+}

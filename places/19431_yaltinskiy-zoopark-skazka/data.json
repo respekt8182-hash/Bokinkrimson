@@ -1,0 +1,25 @@
+{
+  "id": "19431",
+  "name": "Ялтинский зоопарк «Сказка»",
+  "category": "Природа",
+  "region": "Ялта",
+  "address": "г. Ялта, ул. Кирова, д.156",
+  "latitude": 44.4946605,
+  "longitude": 34.1186542,
+  "description": "Зоопарк «Сказка» — первый в СНГ частный зоопарк. Объект природно-заповедного фонда России. Был создан в 1995 г. недалеко от водопада Учан-Су. Сегодня это самый крупный в Крыму зоопарк: в настоящее время в нём насчитывается более 100 видов животных.",
+  "description_html": "<p>Зоопарк &laquo;Сказка&raquo;&nbsp;&mdash; первый в&nbsp;СНГ частный зоопарк. Объект природно-заповедного фонда России. Был создан в&nbsp;1995 г. недалеко от&nbsp;водопада Учан-Су. Сегодня это самый крупный в&nbsp;Крыму зоопарк: в&nbsp;настоящее время в&nbsp;нём насчитывается более 100 видов животных.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbHqY4Y",
+  "image_url": "https://travelcrimea.com/images/01/04/010416.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Сергей Мальгавко",
+  "phone": "+7(978)7934580, +7(3654)310030",
+  "site": "http://yaltazoo.org/",
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/deti/get.json",
+    "services/places/priroda/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.933141+00:00"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "3300669",
+  "name": "Пляж ИП Степаненко (СИ-9)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Симферопольский р-н, пгт Николаевка",
+  "latitude": 44.96916888442145,
+  "longitude": 33.60092275255173,
+  "description": "Для удобства отдыхающих на пляже оборудованы раздевалки и душ. Ведется регулярная уборка территории, работает спасательная служба.\n\nОтдыхающим предлагаются разнообразные морские прогулки.",
+  "description_html": "<p>Для удобства отдыхающих на&nbsp;пляже оборудованы раздевалки и&nbsp;душ. Ведется регулярная уборка территории, работает спасательная служба.</p><p>Отдыхающим предлагаются разнообразные морские прогулки.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090625/3300669.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.600923%2C44.969169&mode=routes&rtext=~44.969110%2C33.600980&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 978 039 39 50",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.633590+00:00"
+}

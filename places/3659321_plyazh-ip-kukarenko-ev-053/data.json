@@ -1,0 +1,24 @@
+{
+  "id": "3659321",
+  "name": "Пляж ИП Кукаренко (ЕВ-053)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.17353040225025,
+  "longitude": 33.336337233251605,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090513/3659321.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.336337%2C45.173530&mode=routes&rtext=~45.173554%2C33.336349&rtt=auto&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.624495+00:00"
+}

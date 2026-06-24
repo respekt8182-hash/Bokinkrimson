@@ -1,0 +1,24 @@
+{
+  "id": "3285709",
+  "name": "Пляж «ФОРУМ-ЧАЙКА» (СУ-19)",
+  "category": "Пляжи",
+  "region": "Судак",
+  "address": "г. Судак",
+  "latitude": 44.83632063272118,
+  "longitude": 34.98544185526459,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285709.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.985442%2C44.836321&mode=routes&rtext=~44.836314%2C34.985415&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/sudak/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.594531+00:00"
+}

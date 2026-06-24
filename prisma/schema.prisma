@@ -32,10 +32,11 @@ enum PasswordResetRequestStatus {
 }
 
 enum PropertyStatus {
-  DRAFT              @map("draft")
-  PENDING_MODERATION @map("pending_moderation")
-  PUBLISHED          @map("published")
-  REJECTED           @map("rejected")
+  DRAFT                    @map("draft")
+  PENDING_MODERATION       @map("pending_moderation")
+  PUBLISHED                @map("published")
+  REQUIRES_REGISTRY_REVIEW @map("requires_registry_review")
+  REJECTED                 @map("rejected")
 }
 
 enum ExcursionStatus {
@@ -139,9 +140,80 @@ enum BathroomType {
 }
 
 enum ApplicationStatus {
-  NEW         @map("new")
-  IN_PROGRESS @map("in_progress")
-  CLOSED      @map("closed")
+  NEW               @map("new")
+  SENT_TO_OWNER     @map("sent_to_owner")
+  VIEWED_BY_OWNER   @map("viewed_by_owner")
+  OWNER_RESPONDED   @map("owner_responded")
+  CLOSED            @map("closed")
+  CANCELLED_BY_USER @map("cancelled_by_user")
+  IN_PROGRESS       @map("in_progress")
+}
+
+enum LegalListingType {
+  PRIVATE_RENTAL             @map("private_rental")
+  GUEST_HOUSE                @map("guest_house")
+  CLASSIFIED_ACCOMMODATION   @map("classified_accommodation")
+  NON_ACCOMMODATION_LISTING  @map("non_accommodation_listing")
+}
+
+enum AccommodationRegistryStatus {
+  ACTIVE       @map("active")
+  SUSPENDED    @map("suspended")
+  EXPIRED      @map("expired")
+  NOT_VERIFIED @map("not_verified")
+}
+
+enum ConsentSubjectType {
+  VISITOR                 @map("visitor")
+  USER                    @map("user")
+  LISTING_OWNER           @map("listing_owner")
+  APPLICANT               @map("applicant")
+  PLATFORM_SERVICE_BUYER  @map("platform_service_buyer")
+  CLAIMANT                @map("claimant")
+  PUBLIC_CONTACT_OWNER    @map("public_contact_owner")
+}
+
+enum ConsentType {
+  PERSONAL_DATA             @map("personal_data")
+  PUBLIC_DATA_DISTRIBUTION  @map("public_data_distribution")
+  MARKETING                 @map("marketing")
+  COOKIES_FUNCTIONAL        @map("cookies_functional")
+  COOKIES_ANALYTICS         @map("cookies_analytics")
+  REVIEW_PUBLICATION        @map("review_publication")
+}
+
+enum ConsentAction {
+  GRANTED @map("granted")
+  REVOKED @map("revoked")
+  UPDATED @map("updated")
+}
+
+enum PlatformServiceOrderStatus {
+  CREATED                @map("created")
+  PAID                   @map("paid")
+  RECEIPT_PENDING        @map("receipt_pending_manual_issue")
+  RECEIPT_ISSUED         @map("receipt_issued")
+  REFUND_REQUESTED       @map("refund_requested")
+  REFUNDED               @map("refunded")
+  CANCELLED              @map("cancelled")
+}
+
+enum NpdReceiptStatus {
+  PENDING_MANUAL_ISSUE @map("receipt_pending_manual_issue")
+  CREATED              @map("created")
+  SENT                 @map("sent")
+  FAILED               @map("failed")
+  REFUND_PENDING       @map("refund_pending")
+  REFUNDED             @map("refunded")
+}
+
+enum RefundRequestStatus {
+  NEW          @map("new")
+  IN_REVIEW    @map("in_review")
+  APPROVED     @map("approved")
+  REJECTED     @map("rejected")
+  PAID         @map("paid")
+  CANCELLED    @map("cancelled")
 }
 
 enum PaymentStatus {
@@ -280,6 +352,9 @@ model User {
   passwordResetTokens       PasswordResetToken[]
   chatConsentGiven          Boolean                @default(false) @map("chat_consent_given")
   supportChat               SupportChat?
+  consentEvents             ConsentEvent[]
+  platformServiceOrders     PlatformServiceOrder[]
+  refundRequests            RefundRequest[]
 
   @@index([deletedAt, deletionExpiresAt, createdAt])
   @@index([phoneVerifiedAt])
@@ -416,8 +491,18 @@ model Property {
   starRating                    Int?
   registryNumber                String?
   registryNumberPending         String?
+  legalListingType              LegalListingType              @default(PRIVATE_RENTAL)
+  registryId                    String?
+  registryUrl                   String?
+  registryStatus                AccommodationRegistryStatus    @default(NOT_VERIFIED)
+  registryCheckedAt             DateTime?
+  registryType                  String?
+  registryCategory              String?
   registryModerationSubmittedAt DateTime?
   registryDetails               String?
+  publicDataConsentGrantedAt    DateTime?
+  publicDataConsentVersion      String?
+  contactsPublicationAllowed    Boolean                    @default(false)
   selfAssessmentPassed          Boolean?
   moderationNotes               String?
   moderatedById                 String?
@@ -462,6 +547,8 @@ model Property {
   @@index([isPublishedVisible, status, updatedAt])
   @@index([paymentStatus, paidUntil])
   @@index([tariffType, paidUntil])
+  @@index([legalListingType, registryStatus, registryCheckedAt])
+  @@index([contactsPublicationAllowed, publicDataConsentGrantedAt])
   @@index([pendingEditStatus, updatedAt])
   @@index([ownerDeletedAt, ownerDeletionExpiresAt])
   @@index([locationId, status, isPublishedVisible, updatedAt], map: "property_catalog_location_visible_updated_idx")
@@ -1139,6 +1226,7 @@ model Payment {
   excursion           Excursion?        @relation(fields: [excursionId], references: [id], onDelete: Cascade)
   transfer            Transfer?         @relation(fields: [transferId], references: [id], onDelete: Cascade)
   owner               User              @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
+  platformServiceOrders PlatformServiceOrder[]
 
   @@index([propertyId, status, createdAt])
   @@index([propertyId, status, placementValidUntil])
@@ -1519,6 +1607,121 @@ model ChatManager {
 
   @@index([isActive])
   @@map("chat_managers")
+}
+
+model ConsentEvent {
+  id              String             @id @default(cuid())
+  userId          String?
+  subjectType     ConsentSubjectType
+  subjectId       String?
+  consentType     ConsentType
+  action          ConsentAction
+  documentVersion String             @db.VarChar(40)
+  url             String             @db.VarChar(500)
+  ipAddress       String?            @db.VarChar(80)
+  userAgent       String?            @db.VarChar(500)
+  categories      String[]           @default([])
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, consentType, createdAt])
+  @@index([subjectType, subjectId, consentType, createdAt])
+  @@index([consentType, action, createdAt])
+}
+
+model DocumentVersion {
+  id          String   @id @default(cuid())
+  documentKey String   @db.VarChar(80)
+  version     String   @db.VarChar(40)
+  title       String
+  url         String   @db.VarChar(500)
+  effectiveAt DateTime @db.Date
+  publishedAt DateTime @default(now())
+  checksum    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([documentKey, version])
+  @@index([documentKey, isActive])
+}
+
+model PlatformServiceOrder {
+  id              String                     @id @default(cuid())
+  orderNumber     String                     @unique @db.VarChar(40)
+  userId          String?
+  paymentId       String?
+  serviceCode     String                     @db.VarChar(80)
+  serviceName     String
+  amount          Decimal                    @db.Decimal(10, 2)
+  currency        String                     @default("RUB") @db.VarChar(3)
+  offerVersion    String                     @db.VarChar(40)
+  consentEvidence Json
+  status          PlatformServiceOrderStatus @default(CREATED)
+  paidAt          DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  user            User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  payment         Payment?                   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  receipts        NpdReceipt[]
+  refundRequests  RefundRequest[]
+
+  @@index([userId, createdAt])
+  @@index([paymentId])
+  @@index([status, createdAt])
+}
+
+model NpdReceipt {
+  id               String           @id @default(cuid())
+  orderId          String
+  refundRequestId  String?
+  status           NpdReceiptStatus @default(PENDING_MANUAL_ISSUE)
+  provider         String           @default("manual") @db.VarChar(40)
+  providerReceiptId String?
+  receiptUrl       String?
+  amount           Decimal          @db.Decimal(10, 2)
+  deadlineAt       DateTime?
+  issuedAt         DateTime?
+  sentAt           DateTime?
+  failureReason    String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  order            PlatformServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refundRequest    RefundRequest?   @relation(fields: [refundRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status, createdAt])
+  @@index([refundRequestId])
+  @@index([status, deadlineAt])
+}
+
+model RefundRequest {
+  id                   String              @id @default(cuid())
+  requestNumber         String              @unique @db.VarChar(40)
+  orderId               String?
+  userId                String?
+  fullName              String
+  email                 String
+  phone                 String?
+  serviceType           String              @db.VarChar(120)
+  paidAmount            Decimal             @db.Decimal(10, 2)
+  paidAt                DateTime?
+  reason                String              @db.VarChar(120)
+  comment               String?
+  preliminaryAmount     Decimal?            @db.Decimal(10, 2)
+  finalAmount           Decimal?            @db.Decimal(10, 2)
+  documentedExpenses    Decimal?            @db.Decimal(10, 2)
+  status                RefundRequestStatus @default(NEW)
+  consentEvidence       Json
+  decisionHistory       Json                @default("[]")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  order                 PlatformServiceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user                  User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  receipts              NpdReceipt[]
+
+  @@index([orderId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model SiteSetting {

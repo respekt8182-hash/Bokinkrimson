@@ -1,0 +1,24 @@
+{
+  "id": "3658429",
+  "name": "Пляж ООО «Люкс Юг» (АЛ-43)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта",
+  "latitude": 44.664255965690884,
+  "longitude": 34.412011139858464,
+  "description": "",
+  "description_html": "",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.412011%2C44.664256&mode=routes&rtext=~44.664280%2C34.412007&rtt=auto&ruri=~&utm_source=api-maps&z=20",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.655204+00:00"
+}

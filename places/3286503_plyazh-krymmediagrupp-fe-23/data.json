@@ -1,0 +1,24 @@
+{
+  "id": "3286503",
+  "name": "Пляж «Крыммедиагрупп» (ФЕ-23)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Керченское шоссе, напротив дельфинария «Немо»",
+  "latitude": 45.084492653568255,
+  "longitude": 35.42409604143143,
+  "description": "Пляж протянулся вдоль Керченского шоссе в Феодосии. Он находится в шаговой доступности от дельфинария «Немо».\n\nПляж песчаный, оборудован всем необходимым для отличного времяпрепровождения.",
+  "description_html": "<p>Пляж протянулся вдоль Керченского шоссе в&nbsp;Феодосии. Он находится в&nbsp;шаговой доступности от&nbsp;дельфинария &laquo;Немо&raquo;.</p><p>Пляж песчаный, оборудован всем необходимым для&nbsp;отличного времяпрепровождения.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286503.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.424096%2C45.084531&mode=routes&rtext=~45.084506%2C35.424098&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": "+7 986 929 35 83",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.548788+00:00"
+}

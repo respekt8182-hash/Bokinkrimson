@@ -1,0 +1,24 @@
+{
+  "id": "3286806",
+  "name": "Пляж фирмы «Карун» (БЕ-10)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, с. Береговое",
+  "latitude": 45.09748956365362,
+  "longitude": 35.44598147749199,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3286806.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.445981%2C45.097490&mode=routes&rtext=~45.097457%2C35.445956&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.785927+00:00"
+}

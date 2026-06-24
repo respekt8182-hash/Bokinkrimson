@@ -1,0 +1,24 @@
+{
+  "id": "31604",
+  "name": "Тихая бухта",
+  "category": "Природа",
+  "region": "Коктебель",
+  "address": "г. Феодосия, пгт. Коктебель",
+  "latitude": 44.969214,
+  "longitude": 35.3113,
+  "description": "Бухта между Коктебелем и Феодосией, лежит между мысом Хамелеон, мысом Пятый и хребтом Биюк-Янышар. 64 вида растений Тихой бухты относятся к редким в Крыму эндемичным видам. Здесь водятся 15 видов животных и 25 видов птиц, занесённых в Красную книгу.",
+  "description_html": "<p>Бухта между Коктебелем и&nbsp;Феодосией, лежит между мысом Хамелеон, мысом Пятый и&nbsp;хребтом Биюк-Янышар. 64 вида растений Тихой бухты относятся к&nbsp;редким в&nbsp;Крыму эндемичным видам. Здесь водятся 15 видов животных и&nbsp;25 видов птиц, занесённых в&nbsp;Красную книгу.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCbHfYMp",
+  "image_url": "https://travelcrimea.com/images/01/54/015421.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Владислав Сергиенко",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/koktebel/get.json",
+    "services/places/priroda/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.916718+00:00"
+}

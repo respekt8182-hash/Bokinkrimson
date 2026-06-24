@@ -1,0 +1,24 @@
+{
+  "id": "3296109",
+  "name": "Пляж детского оздоровительного центра «Фортуна» (ЕВ-086)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория, пгт Заозерное",
+  "latitude": 45.16047417402709,
+  "longitude": 33.295664837870106,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3296109.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.295665%2C45.160474&mode=routes&rtext=~45.160428%2C33.295557&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.693282+00:00"
+}

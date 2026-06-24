@@ -1,0 +1,23 @@
+{
+  "id": "3287236",
+  "name": "Пляж ООО «Инвесттранссервис» (Бах. 6)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.861568807713155,
+  "longitude": 33.604394914601215,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3287236.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.604395%2C44.861569&mode=routes&rtext=~44.861476%2C33.604384&rtt=auto&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.649664+00:00"
+}

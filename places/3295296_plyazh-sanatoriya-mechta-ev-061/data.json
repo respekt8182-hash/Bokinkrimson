@@ -1,0 +1,24 @@
+{
+  "id": "3295296",
+  "name": "Пляж санатория «Мечта» (ЕВ-061)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.17430412088505,
+  "longitude": 33.328197553163456,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090619/3295296.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.328198%2C45.174304&mode=routes&rtext=~45.174319%2C33.328185&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.758316+00:00"
+}

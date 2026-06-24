@@ -1,0 +1,24 @@
+{
+  "id": "3279295",
+  "name": "Пляж Тренировочного центра спортивной подготовки сборных команд России «Крымский» (АЛ-16)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, пос. Чайка",
+  "latitude": 44.61603836659869,
+  "longitude": 34.37963444691473,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090605/3279295.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.379634%2C44.616038&mode=routes&rtext=~44.616026%2C34.379665&rtt=mt&ruri=~&utm_source=api-maps&z=17",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.679314+00:00"
+}

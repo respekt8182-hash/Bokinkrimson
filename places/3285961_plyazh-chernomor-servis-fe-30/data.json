@@ -1,0 +1,24 @@
+{
+  "id": "3285961",
+  "name": "Пляж «Черномор-сервис» (ФЕ-30)",
+  "category": "Пляжи",
+  "region": "Феодосия",
+  "address": "г. Феодосия, Черноморская набережная (бывшая спортплощадка)",
+  "latitude": 45.053467335174794,
+  "longitude": 35.38913292418656,
+  "description": "Уютный песчаный пляж предусмотрен для посещения всей семьёй. Он расположен на Черноморской набережной.",
+  "description_html": "<p>Уютный песчаный пляж предусмотрен для&nbsp;посещения всей семьёй. Он расположен на&nbsp;Черноморской набережной.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20090610/3285961.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=35.389133%2C45.053467&mode=routes&rtext=~45.053433%2C35.389081&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": "https://travelcrimea.com/images/329/03/3290374.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото предоставлено пользователем пляжа",
+  "phone": "+7 978 807 68 66",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/feodosia/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.601114+00:00"
+}

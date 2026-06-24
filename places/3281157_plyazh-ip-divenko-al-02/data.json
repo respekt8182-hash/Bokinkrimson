@@ -1,0 +1,24 @@
+{
+  "id": "3281157",
+  "name": "Пляж ИП Дивенко (АЛ-02)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта, пгт Партенит",
+  "latitude": 44.576202840731476,
+  "longitude": 34.34884853677799,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090606/3281157.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.348849%2C44.576203&mode=routes&rtext=~44.576156%2C34.348860&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.620214+00:00"
+}

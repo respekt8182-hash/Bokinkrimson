@@ -1,0 +1,24 @@
+{
+  "id": "3279541",
+  "name": "Пляж санатория «Кирова» (АЛ-28)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта",
+  "latitude": 44.65267315275584,
+  "longitude": 34.403297946926806,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090605/3279541.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.403298%2C44.652673&mode=routes&rtext=~44.652569%2C34.403248&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.755555+00:00"
+}

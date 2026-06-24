@@ -1,0 +1,23 @@
+{
+  "id": "3287107",
+  "name": "Пляж «Дельфин» (Бах. 9)",
+  "category": "Пляжи",
+  "region": null,
+  "address": "Бахчисарайский р-н, с. Песчаное",
+  "latitude": 44.85596633792754,
+  "longitude": 33.60165554852676,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090611/3287107.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.601656%2C44.855966&mode=routes&rtext=~44.855969%2C33.601656&rtt=mt&ruri=~&utm_source=api-maps&z=19",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.534507+00:00"
+}

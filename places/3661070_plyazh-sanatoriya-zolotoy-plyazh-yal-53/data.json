@@ -1,0 +1,24 @@
+{
+  "id": "3661070",
+  "name": "Пляж санатория «Золотой пляж» (ЯЛ-53)",
+  "category": "Пляжи",
+  "region": "Ялта",
+  "address": "г. Ялта, пгт Курпаты",
+  "latitude": 44.44623022803297,
+  "longitude": 34.13508111686554,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090514/3661070.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=34.135081%2C44.446230&mode=routes&rtext=~44.446189%2C34.135055&rtt=auto&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.752191+00:00"
+}

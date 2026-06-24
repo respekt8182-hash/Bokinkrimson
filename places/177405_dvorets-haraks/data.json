@@ -1,0 +1,23 @@
+{
+  "id": "177405",
+  "name": "Дворец Харакс",
+  "category": "История и культура",
+  "region": "Ялта",
+  "address": "г. Ялта, пгт. Гаспра",
+  "latitude": 44.42935,
+  "longitude": 34.12031,
+  "description": "Усадебный дом с парковой зоной. Находится в поселке Гаспра. Дворец построен в XIX веке известным архитектором Николаем Красновым. Название получил в честь римской крепости, которая находилась на этом месте до середины III века н.э.",
+  "description_html": "<p>Усадебный дом с&nbsp;парковой зоной. Находится в&nbsp;поселке Гаспра. Дворец построен в&nbsp;XIX веке известным архитектором Николаем Красновым. Название получил в&nbsp;честь римской крепости, которая находилась на&nbsp;этом месте до&nbsp;середины III века н.э.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCc2mE~E",
+  "image_url": "https://travelcrimea.com/images/258/41/2584195.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Светлана Мальцева",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/yalta/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.259800+00:00"
+}

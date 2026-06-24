@@ -1,0 +1,24 @@
+{
+  "id": "3297653",
+  "name": "Пляж «Водный мир» (СР-7)",
+  "category": "Пляжи",
+  "region": "Саки",
+  "address": "Сакский р-н, с. Прибрежное",
+  "latitude": 45.14781314784245,
+  "longitude": 33.4945064032963,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20090620/3297653.html",
+  "map_url": "https://yandex.ru/map-widget/v1/?from=api-maps&ll=33.494506%2C45.148089&mode=routes&rtext=~45.147844%2C33.494652&rtt=mt&ruri=~&utm_source=api-maps&z=18",
+  "image_url": null,
+  "image_file": null,
+  "image_copyright": null,
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.526944+00:00"
+}

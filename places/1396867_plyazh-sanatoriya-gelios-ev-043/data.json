@@ -1,0 +1,24 @@
+{
+  "id": "1396867",
+  "name": "Пляж санатория «Гелиос» (ЕВ-043)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория",
+  "latitude": 45.174264,
+  "longitude": 33.345043,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20200826/1396867.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCQt6DvJSC",
+  "image_url": "https://travelcrimea.com/images/17/30/173093.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Алексей Павлишак",
+  "phone": "+7(978)8147391",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.742609+00:00"
+}

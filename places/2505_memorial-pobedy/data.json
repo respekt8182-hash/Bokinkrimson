@@ -1,0 +1,24 @@
+{
+  "id": "2505",
+  "name": "Мемориал Победы",
+  "category": "История и культура",
+  "region": "Севастополь",
+  "address": "г. Севастополь, Ленинский р-н, ул. Капитанская",
+  "latitude": 44.615661,
+  "longitude": 33.517131,
+  "description": "Комплекс, посвящённый победе в Великой Отечественной войне. В 2007 г. открыта первая очередь, мемориал Победы, с отреставрированной скульптурной композицией «Матрос и солдат». Это один из крупнейших памятников на бывшей территории Советского Союза.",
+  "description_html": "<p>Комплекс, посвящённый победе в&nbsp;Великой Отечественной войне. В 2007 г. открыта первая очередь, мемориал Победы, с&nbsp;отреставрированной скульптурной композицией &laquo;Матрос и&nbsp;солдат&raquo;. Это один из&nbsp;крупнейших памятников на&nbsp;бывшей территории Советского Союза.</p>",
+  "source_url": null,
+  "map_url": "https://yandex.ru/maps/-/CCbLjO7K",
+  "image_url": "https://travelcrimea.com/images/00/69/006929.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "CC BY-NC-SA 2.0, Vanessa Bertozzi",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/sevastopol/get.json",
+    "services/places/voinskay-slava/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.316769+00:00"
+}

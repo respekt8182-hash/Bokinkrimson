@@ -1,0 +1,24 @@
+{
+  "id": "849534",
+  "name": "Пляж санатория «Полтава» (СА 06)",
+  "category": "Пляжи",
+  "region": "Саки",
+  "address": "г. Саки, ул. Морская, ул. Морская, 8",
+  "latitude": 45.117548,
+  "longitude": 33.530619,
+  "description": "Широкий песчано-галечный пляж. Вода чистая, море с песчаным дном, вход пологий, подходит для отдыха с детьми.\n\nНа территории установлены душевые, фонтанчики с питьевой водой, кабинки для переодевания. Работают спасательные пункты.",
+  "description_html": "<p>Широкий песчано-галечный пляж. Вода чистая, море с&nbsp;песчаным дном, вход пологий, подходит для&nbsp;отдыха с&nbsp;детьми.</p><p>На территории установлены душевые, фонтанчики с&nbsp;питьевой водой, кабинки для&nbsp;переодевания. Работают спасательные пункты.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200204/849534.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKQ5R49D",
+  "image_url": "https://travelcrimea.com/images/116/99/1169954.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Сергей Коршунов",
+  "phone": "+79788214303",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/saki/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.762256+00:00"
+}

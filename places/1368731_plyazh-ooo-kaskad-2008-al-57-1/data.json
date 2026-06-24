@@ -1,0 +1,24 @@
+{
+  "id": "1368731",
+  "name": "Пляж ООО «Каскад-2008» (АЛ-57/1)",
+  "category": "Пляжи",
+  "region": "Алушта",
+  "address": "г. Алушта",
+  "latitude": 44.678601,
+  "longitude": 34.422567,
+  "description": "",
+  "description_html": "",
+  "source_url": "https://travelcrimea.com/plyazh/20200818/1368731.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CCQte2aOWA",
+  "image_url": "https://travelcrimea.com/images/136/86/1368669.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото с сайта пансионата",
+  "phone": null,
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/alushta/get.json",
+    "services/places/plyazh/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.651969+00:00"
+}

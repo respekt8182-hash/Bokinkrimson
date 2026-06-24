@@ -1,0 +1,24 @@
+{
+  "id": "852967",
+  "name": "Пляж «Родничок» (ЕВ-065)",
+  "category": "Пляжи",
+  "region": "Евпатория",
+  "address": "г. Евпатория, набережная, в районе озера Мойнаки",
+  "latitude": 45.174855,
+  "longitude": 33.324908,
+  "description": "Пляж находится на Мойнакской пересыпи в Евпатории.\n\nБерег песчаный, вход в море пологий. На территории есть волейбольная площадка, детская зона, теневые навесы и индивидуальные бунгало, шезлонги. Кроме того, можно арендовать водные аттракционы.",
+  "description_html": "<p>Пляж находится на&nbsp;Мойнакской пересыпи в&nbsp;Евпатории.</p><p>Берег песчаный, вход в&nbsp;море пологий. На территории есть волейбольная площадка, детская зона, теневые навесы и&nbsp;индивидуальные бунгало, шезлонги. Кроме того, можно арендовать водные аттракционы.</p>",
+  "source_url": "https://travelcrimea.com/plyazh/20200205/852967.html",
+  "map_url": "https://yandex.ru/map-widget/v1/-/CKQbQYm~",
+  "image_url": "https://travelcrimea.com/images/106/23/1062338.jpg",
+  "image_file": "photo.jpg",
+  "image_copyright": "Фото: Pixabay / sathish_artisanz",
+  "phone": "+7(978)7807598",
+  "site": null,
+  "working_hours": null,
+  "source_feeds": [
+    "services/places/plyazh/get.json",
+    "services/places/yevpatoria/get.json"
+  ],
+  "collected_at": "2026-06-20T11:44:21.574480+00:00"
+}

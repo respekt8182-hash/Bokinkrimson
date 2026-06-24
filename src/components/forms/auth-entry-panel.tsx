@@ -53,7 +53,7 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
           <div className="space-y-2 text-center">
             <h1 className="text-2xl text-olive md:text-[28px]">Добро пожаловать обратно</h1>
             <p className="text-sm leading-6 text-olive/62">
-              Войдите, чтобы управлять бронированиями и объявлениями.
+              Войдите, чтобы управлять запросами, объявлениями и услугами сайта.
             </p>
           </div>
 
@@ -81,7 +81,7 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
           <div className="space-y-2 text-center">
             <h1 className="text-2xl text-olive md:text-[28px]">Создайте аккаунт</h1>
             <p className="text-sm leading-6 text-olive/62">
-              Размещайте жильё, бронируйте услуги и общайтесь с клиентами напрямую.
+              Размещайте жилье, оплачивайте услуги сайта и общайтесь с клиентами напрямую.
             </p>
           </div>
 
@@ -93,7 +93,7 @@ export function AuthEntryPanel({ nextPath, defaultTab = "login" }: AuthEntryPane
             </span>
             <span>
               <span className="block font-semibold text-terra-ink">
-                Без комиссии за бронирование
+                Без комиссии с проживания
               </span>
               <span className="mt-1 block leading-5">
                 Размещайтесь один раз и работайте напрямую с клиентами. Подходит отелям, гостевым
