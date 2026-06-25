@@ -2346,7 +2346,7 @@ export function PublicPropertyDetails({
                                   }}
                                   className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-xl bg-[#e8621a] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#d45615] active:scale-[0.97]"
                                 >
-                                  Отправить запрос владельцу
+                                  Запросить
                                 </button>
                               </>
                             )}
@@ -2552,7 +2552,7 @@ export function PublicPropertyDetails({
                                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#e8621a] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(232,98,26,0.24)] transition hover:bg-[#d45615] active:scale-[0.98] sm:w-auto"
                                   >
                                     <AppIcon icon={Check} className="h-4 w-4" />
-                                    Отправить запрос владельцу
+                                    Запросить
                                   </button>
                                 </div>
                               ) : (

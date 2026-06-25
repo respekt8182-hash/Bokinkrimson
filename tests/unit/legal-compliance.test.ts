@@ -106,7 +106,7 @@ describe("legal compliance foundation", () => {
     const propertyDetails = repoFile("src/components/public/public-property-details.tsx");
     const oferta = repoFile("src/app/oferta/page.tsx");
 
-    expect(propertyDetails).toContain("Отправить запрос владельцу");
+    expect(propertyDetails).toContain("Запросить");
     expect(propertyDetails).toContain("Отправка запроса не подтверждает бронирование");
     expect(oferta).toContain("Оплата проживания, экскурсий или иных услуг владельцев объектов");
     expect(oferta).not.toContain("если это применимо");
