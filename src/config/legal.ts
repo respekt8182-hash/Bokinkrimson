@@ -10,10 +10,7 @@ export const legalConfig = {
     fullName: "Гаврисюк Александр Дмитриевич",
     inn: "910524018609",
     taxStatus: "SELF_EMPLOYED_NPD",
-    claimsPostalAddress: envOrFallback(
-      "LEGAL_CLAIMS_POSTAL_ADDRESS",
-      "[ПОЧТОВЫЙ АДРЕС ДЛЯ ПРЕТЕНЗИЙ]",
-    ),
+    claimsPostalAddress: envOrFallback("LEGAL_CLAIMS_POSTAL_ADDRESS", ""),
     contactEmail: "krymvokrug@mail.ru",
     contactPhone: "+7 (979) 047-53-36",
     supportContact: "krymvokrug@mail.ru",
@@ -36,12 +33,9 @@ export const legalConfig = {
     ],
   },
   personalData: {
-    rknNotificationNumber: envOrFallback(
-      "LEGAL_RKN_NOTIFICATION_NUMBER",
-      "[НОМЕР ЗАПИСИ ИЛИ TODO]",
-    ),
-    primaryDatabaseCountry: envOrFallback("LEGAL_PRIMARY_DATABASE_COUNTRY", "[СТРАНА]"),
-    primaryDatabaseRegion: envOrFallback("LEGAL_PRIMARY_DATABASE_REGION", "[РЕГИОН ИЛИ ЦОД]"),
+    rknNotificationNumber: envOrFallback("LEGAL_RKN_NOTIFICATION_NUMBER", ""),
+    primaryDatabaseCountry: envOrFallback("LEGAL_PRIMARY_DATABASE_COUNTRY", ""),
+    primaryDatabaseRegion: envOrFallback("LEGAL_PRIMARY_DATABASE_REGION", ""),
   },
   documents: {
     offerVersion: "2026-06-24",
@@ -57,11 +51,11 @@ export const legalConfig = {
   },
   processors: {
     payment: "YooKassa",
-    analytics: "Yandex Metrika после opt-in",
+    analytics: "Yandex Metrika после согласия на аналитические cookies",
     maps: "Yandex Maps / Geocoder",
-    email: "SMTP через nodemailer или log mode",
-    storage: "Local uploads или S3-compatible storage",
-    rateLimit: "In-memory или Upstash Redis",
+    email: "SMTP через nodemailer",
+    storage: "локальное хранилище загрузок или S3-совместимое хранилище по конфигурации окружения",
+    rateLimit: "in-memory или Upstash Redis по конфигурации окружения",
   },
 } as const;
 
@@ -95,10 +89,26 @@ export function getOwnerNpdStatement(): string {
 export function getDocumentMeta(version: string, pathname: string) {
   return [
     { label: "Версия", value: version },
+    { label: "Опубликовано", value: LEGAL_DOCUMENT_EFFECTIVE_DATE },
     { label: "Вступает в силу", value: LEGAL_DOCUMENT_EFFECTIVE_DATE },
     { label: "Последнее изменение", value: LEGAL_DOCUMENT_EFFECTIVE_DATE },
     { label: "Постоянный URL", value: `${legalConfig.business.domain}${pathname}` },
   ];
+}
+
+export function getPublicRequisites() {
+  return [
+    { label: "ФИО исполнителя", value: legalConfig.owner.fullName },
+    { label: "Статус", value: "физическое лицо, применяющее НПД" },
+    { label: "ИНН", value: legalConfig.owner.inn },
+    { label: "НДС", value: legalConfig.business.vatStatus },
+    { label: "Email", value: legalConfig.owner.contactEmail },
+    { label: "Телефон", value: legalConfig.owner.contactPhone },
+    { label: "Сайт", value: legalConfig.business.domain },
+    legalConfig.owner.claimsPostalAddress
+      ? { label: "Почтовый адрес для юридически значимых сообщений", value: legalConfig.owner.claimsPostalAddress }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null && item.value.trim().length > 0);
 }
 
 export function validateLegalConfig(config: LegalConfigLike): string[] {
@@ -113,7 +123,7 @@ export function validateLegalConfig(config: LegalConfigLike): string[] {
   }
 
   if (!config.owner.claimsPostalAddress.trim()) {
-    errors.push("owner.claimsPostalAddress is required");
+    errors.push("LEGAL_CLAIMS_POSTAL_ADDRESS is required");
   }
 
   if (!config.owner.contactEmail.trim()) {
@@ -132,7 +142,11 @@ export function validateLegalConfig(config: LegalConfigLike): string[] {
   }
 
   if (!config.personalData.primaryDatabaseCountry.trim()) {
-    errors.push("personalData.primaryDatabaseCountry is required");
+    errors.push("LEGAL_PRIMARY_DATABASE_COUNTRY is required");
+  }
+
+  if (!config.personalData.primaryDatabaseRegion.trim()) {
+    errors.push("LEGAL_PRIMARY_DATABASE_REGION is required");
   }
 
   for (const key of [

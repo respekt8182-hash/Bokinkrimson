@@ -41,7 +41,7 @@ function buildManualReceiptResult(): ReceiptResult {
     manualIssueDeadlineAt: deadline,
     adminNotificationRequired: true,
     customerMessage:
-      "Оплата услуги сайта получена. Чек НПД будет направлен после ручного формирования владельцем сайта.",
+      "Оплата услуги сайта получена. Чек НПД будет направлен владельцем сайта в установленный срок.",
   };
 }
 
@@ -55,7 +55,7 @@ export class ManualNpdReceiptProvider implements NpdReceiptProvider {
       ...buildManualReceiptResult(),
       status: "refund_pending",
       customerMessage:
-        "Возврат зарегистрирован. Корректирующий чек НПД будет направлен после ручного формирования.",
+        "Возврат зарегистрирован. Корректирующий чек НПД будет направлен в установленный срок.",
     };
   }
 

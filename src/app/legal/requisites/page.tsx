@@ -3,7 +3,7 @@ import {
   RequisitesBlock,
   StandardLegalPage,
 } from "@/components/legal/standard-legal-page";
-import { getOwnerNpdStatement, legalConfig } from "@/config/legal";
+import { legalConfig } from "@/config/legal";
 import { buildCanonicalPath } from "@/lib/seo/canonical";
 
 export const metadata: Metadata = {
@@ -17,38 +17,32 @@ export default function RequisitesPage() {
     <StandardLegalPage
       pathname="/legal/requisites"
       title="Реквизиты"
-      description="Публичные реквизиты владельца сайта и порядок связи по претензиям и поддержке."
+      description="Публичные реквизиты владельца сайта и контакты для обращений."
       version={legalConfig.documents.termsVersion}
       sections={[
         {
           id: "owner",
           title: "Владелец сайта",
-          body: (
-            <>
-              <RequisitesBlock />
-              <p>{getOwnerNpdStatement()}</p>
-            </>
-          ),
+          body: <RequisitesBlock />,
         },
         {
           id: "claims",
-          title: "Обращения и претензии",
+          title: "Обращения",
           body: (
             <ol className="space-y-3">
-              <li>Претензии направляются на email {legalConfig.owner.contactEmail} и по почтовому адресу, указанному в конфигурации.</li>
-              <li>Обращения поддержки принимаются через {legalConfig.owner.supportContact}.</li>
-              <li>Ответ подготавливается после проверки фактов, приложений и статуса услуги платформы.</li>
+              <li>Обращения по работе сайта и услугам платформы принимаются на {legalConfig.owner.contactEmail}.</li>
+              <li>Юридически значимые сообщения направляются по подтвержденным контактам, указанным на этой странице.</li>
+              <li>Ответ подготавливается после проверки фактов, приложений, статуса услуги и полномочий заявителя.</li>
             </ol>
           ),
         },
         {
-          id: "receipt",
+          id: "receipts",
           title: "Чеки НПД",
           body: (
             <p>
-              При оплате услуг платформы чек формируется в рамках режима НПД через подтвержденный
-              механизм владельца сайта. Если автоматическая интеграция не настроена, требуется
-              ручное формирование чека.
+              При оплате собственных услуг платформы чек формируется исполнителем в рамках режима
+              НПД и направляется плательщику после подтверждения платежа.
             </p>
           ),
         },

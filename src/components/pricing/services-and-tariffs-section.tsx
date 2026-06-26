@@ -80,7 +80,7 @@ export function ServicesAndTariffsSection({
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-olive/75 md:text-base md:leading-7">
               Добавляйте жильё, экскурсии, туры и трансферы без оплаты. Каждое новое объявление
-              получает 12 месяцев бесплатного размещения с даты создания, количество объявлений
+              получает 12 месяцев бесплатного размещения с даты публикации после модерации, количество объявлений
               не ограничено.
             </p>
             <Link
@@ -209,8 +209,8 @@ export function ServicesAndTariffsSection({
             <thead>
               <tr className="border-b border-olive/10 bg-white/90 text-left text-xs font-semibold uppercase tracking-[0.18em] text-olive/55">
                 <th className="px-4 py-3">Услуга</th>
-                <th className="px-4 py-3">Сезон до 31 октября</th>
-                <th className="px-4 py-3">Год</th>
+                <th className="px-4 py-3">Срок</th>
+                <th className="px-4 py-3">Стоимость</th>
                 <th className="px-4 py-3">Условия</th>
               </tr>
             </thead>
@@ -221,9 +221,7 @@ export function ServicesAndTariffsSection({
                     <p className="font-semibold text-olive">{row.serviceName}</p>
                     <p className="mt-1 text-xs leading-5 text-olive/60">{row.serviceNote}</p>
                   </td>
-                  <td className="px-4 py-4 align-top text-olive/75">
-                    {row.seasonPriceRub ? formatRub(row.seasonPriceRub) : "-"}
-                  </td>
+                  <td className="px-4 py-4 align-top text-olive/75">{row.durationLabel}</td>
                   <td className="px-4 py-4 align-top font-semibold text-olive">
                     {formatRub(row.priceRub)}
                   </td>
@@ -247,13 +245,11 @@ export function ServicesAndTariffsSection({
               <p className="mt-1 text-sm leading-6 text-olive/65">{row.serviceNote}</p>
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <dt className="text-olive/55">Сезон</dt>
-                  <dd className="text-right text-olive/75">
-                    {row.seasonPriceRub ? formatRub(row.seasonPriceRub) : "-"}
-                  </dd>
+                  <dt className="text-olive/55">Срок</dt>
+                  <dd className="text-right text-olive/75">{row.durationLabel}</dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <dt className="text-olive/55">Год</dt>
+                  <dt className="text-olive/55">Стоимость</dt>
                   <dd className="text-right font-semibold text-olive">{formatRub(row.priceRub)}</dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">
@@ -271,7 +267,7 @@ export function ServicesAndTariffsSection({
 
       <div className="mt-4 rounded-2xl border border-olive/10 bg-white/80 px-4 py-3 text-sm leading-6 text-olive/70">
         <p>
-          Бесплатный год начинается отдельно для каждого нового объявления в день его создания.
+          Бесплатный год начинается отдельно для каждой новой карточки в день ее публикации после модерации.
           Можно добавлять новые объявления позже — каждое из них также получит свои 12 бесплатных
           месяцев.
         </p>

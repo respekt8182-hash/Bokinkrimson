@@ -127,7 +127,7 @@ export function PlacementFirstYearPrice({
           />
         </div>
         <p className="max-w-[190px] text-right text-[11px] leading-4 text-olive/58">
-          {freePeriodUntil ?? "12 месяцев с даты создания карточки"}
+          {freePeriodUntil ?? "12 месяцев с даты публикации после модерации"}
         </p>
       </div>
       <div className="mt-2 border-t border-emerald-900/10 pt-2 text-[11px] leading-4 text-olive/65">

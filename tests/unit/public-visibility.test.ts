@@ -20,7 +20,9 @@ describe("public catalog visibility", () => {
     process.env.NODE_ENV = "development";
 
     expect(buildPublicCatalogPropertyVisibilityWhere()).toEqual({
-      status: "PUBLISHED",
+      status: {
+        in: ["PUBLISHED", "REQUIRES_REGISTRY_REVIEW"],
+      },
       isPublishedVisible: true,
       ownerDeletedAt: null,
       owner: {
@@ -48,7 +50,9 @@ describe("public catalog visibility", () => {
     expect(buildPublicCatalogPropertyVisibilityWhere()).toEqual({
       AND: [
         {
-          status: "PUBLISHED",
+          status: {
+            in: ["PUBLISHED", "REQUIRES_REGISTRY_REVIEW"],
+          },
           isPublishedVisible: true,
           ownerDeletedAt: null,
           owner: {

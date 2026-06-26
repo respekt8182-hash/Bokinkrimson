@@ -53,8 +53,8 @@ export const legalDocumentGroups: LegalDocumentGroup[] = [
       },
       {
         href: "/legal/public-data-consent",
-        label: "Согласие на распространение публичных данных",
-        description: "Порядок публикации данных в карточках объектов и услуг.",
+        label: "Согласие на обработку персональных данных, разрешённых для распространения",
+        description: "Порядок публикации выбранных категорий данных в карточках и отзывах.",
       },
       {
         href: "/legal/marketing-consent",

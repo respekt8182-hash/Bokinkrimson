@@ -500,6 +500,13 @@ model Property {
   registryCategory              String?
   registryModerationSubmittedAt DateTime?
   registryDetails               String?
+  registryNonApplicabilityReason String?
+  registryConfirmationText       String?
+  registryConfirmationVersion    String?
+  registryConfirmedAt            DateTime?
+  registryConfirmationIp         String?
+  registryConfirmationUserAgent  String?
+  registryReviewHistory          Json                       @default("[]")
   publicDataConsentGrantedAt    DateTime?
   publicDataConsentVersion      String?
   contactsPublicationAllowed    Boolean                    @default(false)

@@ -1,4 +1,4 @@
-// KSR verification endpoint: currently returns manual-review response when automatic registry lookup is unavailable.
+// KSR verification endpoint: saves a registry number for moderation review.
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -23,6 +23,6 @@ export async function GET(request: Request) {
     verified: false,
     source: "manual_review",
     message:
-      "Автоматическая проверка на tourism.fsa.gov.ru сейчас недоступна. Номер сохранен и будет проверен администратором при модерации.",
+      "Номер принят для проверки. Сведения будут сверены с реестром при модерации карточки.",
   });
 }

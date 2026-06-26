@@ -11,20 +11,17 @@ import {
   parsePublishedPropertySnapshot,
   shouldUsePublishedSnapshot,
 } from "@/lib/property-public-snapshot";
-import {
-  buildPublicCatalogPropertyVisibilityWhere,
-} from "@/lib/public-visibility";
+import { buildPublicCatalogPropertyVisibilityWhere } from "@/lib/public-visibility";
 import {
   parseListParam,
   parseMapBoundsSearchParams,
   parseOptionalFloatParam,
-  parseOptionalIntParam,
   pickFirstListValue,
   type MapBounds,
 } from "@/lib/search-contracts";
 
-const defaultMapLimit = 500;
-const maxMapLimit = 800;
+const defaultMapLimit = 5000;
+const maxMapLimit = 5000;
 
 function parseLimit(raw: string | null): number {
   const parsed = Number.parseInt(raw ?? "", 10);
@@ -74,12 +71,17 @@ function buildBoundsWhere(bounds: MapBounds | null): Prisma.PropertyWhereInput {
   };
 }
 
-function buildPriceWhere(input: {
-  minPrice?: number;
-  maxPrice?: number;
-  checkIn: Date | null;
-  checkOut: Date | null;
-}): Prisma.RoomPriceWhereInput {
+function buildPriceWhere(
+  input: {
+    minPrice?: number;
+    maxPrice?: number;
+    checkIn: Date | null;
+    checkOut: Date | null;
+  },
+  options?: {
+    includeDateRange?: boolean;
+  },
+): Prisma.RoomPriceWhereInput {
   const where: Prisma.RoomPriceWhereInput = {};
 
   if (input.minPrice !== undefined || input.maxPrice !== undefined) {
@@ -89,7 +91,12 @@ function buildPriceWhere(input: {
     };
   }
 
-  if (input.checkIn && input.checkOut && input.checkOut > input.checkIn) {
+  if (
+    options?.includeDateRange !== false &&
+    input.checkIn &&
+    input.checkOut &&
+    input.checkOut > input.checkIn
+  ) {
     where.dateFrom = { lte: input.checkOut };
     where.dateTo = { gte: input.checkIn };
   }
@@ -103,7 +110,6 @@ function buildMapWhere(input: {
   locationId?: string;
   location?: string;
   type?: string;
-  guests?: number;
   minPrice?: number;
   maxPrice?: number;
   minRating?: number;
@@ -123,7 +129,7 @@ function buildMapWhere(input: {
   smokingForbidden: boolean;
   quietHours: boolean;
 }): Prisma.PropertyWhereInput {
-  const priceWhere = buildPriceWhere(input);
+  const priceWhere = buildPriceWhere(input, { includeDateRange: false });
   const hasPriceFilter = Object.keys(priceWhere).length > 0;
   const locationName =
     input.locationId && crimeaLocationById[input.locationId]
@@ -134,21 +140,18 @@ function buildMapWhere(input: {
     AND: [
       buildPublicCatalogPropertyVisibilityWhere(),
       buildBoundsWhere(input.bounds),
-      {
-        rooms: {
-          some: {
-            isActive: true,
-            ...(input.guests ? { OR: [{ beds: { gte: input.guests } }, { extraBeds: { gte: input.guests - 1 } }] } : {}),
-            ...(hasPriceFilter
-              ? {
-                  prices: {
-                    some: priceWhere,
-                  },
-                }
-              : {}),
-          },
-        },
-      },
+      hasPriceFilter
+        ? {
+            rooms: {
+              some: {
+                isActive: true,
+                prices: {
+                  some: priceWhere,
+                },
+              },
+            },
+          }
+        : {},
       input.searchQuery.length >= 2
         ? {
             OR: [
@@ -180,7 +183,11 @@ function buildMapWhere(input: {
         ? {
             OR: [
               { customAmenities: { some: { name: { contains: "бассейн", mode: "insensitive" } } } },
-              { amenities: { some: { amenity: { name: { contains: "бассейн", mode: "insensitive" } } } } },
+              {
+                amenities: {
+                  some: { amenity: { name: { contains: "бассейн", mode: "insensitive" } } },
+                },
+              },
             ],
           }
         : {},
@@ -188,15 +195,27 @@ function buildMapWhere(input: {
         ? {
             OR: [
               { customAmenities: { some: { name: { contains: "кух", mode: "insensitive" } } } },
-              { amenities: { some: { amenity: { name: { contains: "кух", mode: "insensitive" } } } } },
+              {
+                amenities: {
+                  some: { amenity: { name: { contains: "кух", mode: "insensitive" } } },
+                },
+              },
             ],
           }
         : {},
       input.hasAirConditioner
         ? {
             OR: [
-              { customAmenities: { some: { name: { contains: "кондиционер", mode: "insensitive" } } } },
-              { amenities: { some: { amenity: { name: { contains: "кондиционер", mode: "insensitive" } } } } },
+              {
+                customAmenities: {
+                  some: { name: { contains: "кондиционер", mode: "insensitive" } },
+                },
+              },
+              {
+                amenities: {
+                  some: { amenity: { name: { contains: "кондиционер", mode: "insensitive" } } },
+                },
+              },
             ],
           }
         : {},
@@ -205,7 +224,11 @@ function buildMapWhere(input: {
             OR: [
               { parkingInfo: { not: null } },
               { customAmenities: { some: { name: { contains: "парков", mode: "insensitive" } } } },
-              { amenities: { some: { amenity: { name: { contains: "парков", mode: "insensitive" } } } } },
+              {
+                amenities: {
+                  some: { amenity: { name: { contains: "парков", mode: "insensitive" } } },
+                },
+              },
             ],
           }
         : {},
@@ -255,10 +278,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const bounds = parseMapBoundsSearchParams(searchParams);
   const limit = parseLimit(searchParams.get("limit"));
-  const guests = parseOptionalIntParam(searchParams.get("guests") ?? searchParams.get("adults"), {
-    min: 1,
-    max: 20,
-  });
   const minPrice = parseOptionalFloatParam(
     searchParams.get("minPrice") ?? searchParams.get("min_price"),
     { min: 0, max: 1_000_000_000 },
@@ -278,7 +297,11 @@ export async function GET(request: Request) {
     pickFirstListValue(searchParams.get("type[]")) ??
     undefined;
 
-  const priceWhere = buildPriceWhere({ minPrice, maxPrice, checkIn, checkOut });
+  const displayPriceWhere = buildPriceWhere({ minPrice, maxPrice, checkIn, checkOut });
+  const filterPriceWhere = buildPriceWhere(
+    { minPrice, maxPrice, checkIn, checkOut },
+    { includeDateRange: false },
+  );
   const priceOrderBy: Prisma.RoomPriceOrderByWithRelationInput[] = [{ price: "asc" }];
   const rows = await db.property.findMany({
     where: buildMapWhere({
@@ -287,7 +310,6 @@ export async function GET(request: Request) {
       locationId: searchParams.get("location_id") ?? searchParams.get("locationId") ?? undefined,
       location: searchParams.get("location") ?? undefined,
       type,
-      guests,
       minPrice,
       maxPrice,
       minRating,
@@ -298,7 +320,8 @@ export async function GET(request: Request) {
       hasPhotos: parseFlag(searchParams.get("hasPhotos")),
       hasReviews: parseFlag(searchParams.get("hasReviews")),
       familyFriendly:
-        parseFlag(searchParams.get("familyFriendly")) || parseFlag(searchParams.get("kidsFriendly")),
+        parseFlag(searchParams.get("familyFriendly")) ||
+        parseFlag(searchParams.get("kidsFriendly")),
       petsAllowed: parseFlag(searchParams.get("petsAllowed")),
       nearSea: parseFlag(searchParams.get("nearSea")),
       hasPool: parseFlag(searchParams.get("hasPool")),
@@ -331,12 +354,13 @@ export async function GET(request: Request) {
       rooms: {
         where: {
           isActive: true,
-          ...(guests ? { OR: [{ beds: { gte: guests } }, { extraBeds: { gte: guests - 1 } }] } : {}),
-          ...(Object.keys(priceWhere).length > 0 ? { prices: { some: priceWhere } } : {}),
+          ...(Object.keys(filterPriceWhere).length > 0
+            ? { prices: { some: filterPriceWhere } }
+            : {}),
         },
         select: {
           prices: {
-            where: priceWhere,
+            where: displayPriceWhere,
             orderBy: priceOrderBy,
             select: {
               price: true,
@@ -374,7 +398,9 @@ export async function GET(request: Request) {
 
     const livePrice = row.rooms[0]?.prices[0] ?? null;
     const coverImageUrl =
-      snapshot?.media.find((media) => media.type === MediaType.IMAGE)?.url ?? row.media[0]?.url ?? null;
+      snapshot?.media.find((media) => media.type === MediaType.IMAGE)?.url ??
+      row.media[0]?.url ??
+      null;
     const locationId = display.locationId ?? null;
     const locationName = locationId
       ? (crimeaLocationById[locationId]?.name ?? display.locationName)

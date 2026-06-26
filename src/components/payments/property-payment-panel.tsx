@@ -679,7 +679,7 @@ export function PropertyPaymentPanel({
                     <span className="text-olive/65">Срок</span>
                     <span className="text-right font-semibold text-emerald-700">
                       {selectedPlacementPricing?.freePeriodUntil ??
-                        "1 год с даты создания объявления"}
+                        "1 год с даты публикации после модерации"}
                     </span>
                   </div>
                 ) : (

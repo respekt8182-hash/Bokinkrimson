@@ -78,7 +78,7 @@ export function getPlacementBasePrice(
   }
 
   if (normalizedPeriod === "season" && "seasonPrice" in tariff) {
-    return tariff.seasonPrice;
+    return category === "object" ? tariff.seasonPrice : tariff.yearPrice;
   }
 
   if (category === "object") {

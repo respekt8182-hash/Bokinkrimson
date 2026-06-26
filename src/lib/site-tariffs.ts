@@ -15,7 +15,6 @@ export type PublicServiceTariffRow = {
   serviceName: string;
   serviceNote: string;
   priceRub: number;
-  seasonPriceRub?: number;
   conditionsLabel: string;
   durationLabel: string;
   extraLabel?: string;
@@ -58,28 +57,25 @@ export const publicServiceTariffRows: PublicServiceTariffRow[] = [
     serviceName: "Экскурсия",
     serviceNote: "Размещение карточки экскурсии. Комиссию с заказов мы не берём.",
     priceRub: EXCURSION_PUBLICATION_FEE_RUB,
-    seasonPriceRub: placementTariffs.excursion.seasonPrice,
-    conditionsLabel: "Сезонный и годовой тарифы действуют без комиссии с заказов.",
-    durationLabel: "Сезон до 31 октября или 365 дней",
+    conditionsLabel: "Размещение и продление действуют 12 месяцев без комиссии с запросов.",
+    durationLabel: "12 месяцев",
   },
   {
     id: "tour_standard",
     serviceName: "Тур",
     serviceNote: "Размещение карточки тура. Комиссию с заказов мы не берём.",
     priceRub: TOUR_PUBLICATION_FEE_RUB,
-    seasonPriceRub: placementTariffs.tour.seasonPrice,
-    conditionsLabel: "Сезонный и годовой тарифы действуют без комиссии с заказов.",
-    durationLabel: "Сезон до 31 октября или 365 дней",
+    conditionsLabel: "Размещение и продление действуют 12 месяцев без комиссии с запросов.",
+    durationLabel: "12 месяцев",
   },
   {
     id: "transfer_standard",
     serviceName: "Трансфер",
     serviceNote: "Размещение карточки трансфера. Один автомобиль входит в стоимость размещения.",
     priceRub: TRANSFER_PUBLICATION_FEE_RUB,
-    seasonPriceRub: placementTariffs.transfer.seasonPrice,
-    conditionsLabel: "Дополнительные автомобили оплачиваются отдельно.",
-    durationLabel: "Сезон до 31 октября или 365 дней",
-    extraLabel: `Дополнительный автомобиль: +${formatTariffPrice(TRANSFER_EXTRA_VEHICLE_FEE_RUB)}`,
+    conditionsLabel: "Размещение и продление действуют 12 месяцев без комиссии с запросов.",
+    durationLabel: "12 месяцев",
+    extraLabel: `Дополнительный автомобиль действует до окончания основной карточки: +${formatTariffPrice(TRANSFER_EXTRA_VEHICLE_FEE_RUB)}`,
   },
 ];
 
@@ -148,7 +144,7 @@ export const additionalServiceRows: AdditionalServiceRow[] = [
 export const publicTariffHighlights = [
   "Сезонные тарифы рассчитаны для размещения до 31 октября.",
   "Годовой тариф действует 12 месяцев с даты оплаты.",
-  "Новые карточки получают 1 год бесплатного размещения с даты создания объявления.",
+  "Новые карточки получают 1 год бесплатного размещения с даты публикации после модерации.",
   "Дополнительные опции, например дополнительные автомобили в трансфере, оплачиваются отдельно.",
   "Годовое размещение включает сезон, период раннего бронирования и межсезонье.",
 ];

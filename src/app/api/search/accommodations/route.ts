@@ -14,8 +14,8 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const interactiveBoundsCandidateBase = 240;
-const interactiveBoundsCandidateCap = 600;
+const interactiveBoundsCandidateBase = 5000;
+const interactiveBoundsCandidateCap = 5000;
 
 function parseSort(raw: string | null) {
   const value = (raw ?? "").trim().toLowerCase();

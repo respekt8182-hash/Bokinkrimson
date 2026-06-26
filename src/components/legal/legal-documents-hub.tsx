@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, FileText, Info, Landmark, ShieldCheck } from "lucide-react";
-import { DraftLegalNotice, PlatformModeNotice } from "@/components/legal/standard-legal-page";
+import { PlatformModeNotice } from "@/components/legal/standard-legal-page";
 import { legalConfig } from "@/config/legal";
 import { legalDocumentGroups } from "@/config/legal-documents";
 
@@ -41,8 +41,7 @@ export function LegalDocumentsHub({ canonicalPath }: LegalDocumentsHubProps) {
             </p>
           </div>
 
-          <div className="mt-7 grid gap-3 lg:grid-cols-2">
-            <DraftLegalNotice />
+          <div className="mt-7 grid gap-3">
             <PlatformModeNotice />
           </div>
         </div>

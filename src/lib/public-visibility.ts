@@ -6,7 +6,9 @@ function shouldExcludeDemoContentFromPublicCatalog(): boolean {
 
 export function buildPublishedPropertyVisibilityWhere(): Prisma.PropertyWhereInput {
   return {
-    status: PropertyStatus.PUBLISHED,
+    status: {
+      in: [PropertyStatus.PUBLISHED, PropertyStatus.REQUIRES_REGISTRY_REVIEW],
+    },
     isPublishedVisible: true,
     ownerDeletedAt: null,
     owner: {

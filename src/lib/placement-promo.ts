@@ -6,11 +6,11 @@ export const PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE_2027 = "free_placement_until_2
 export const PLACEMENT_LEGACY_PROMO_CAMPAIGN_TYPE = "free_placement_until_2026_06_20";
 export const PLACEMENT_PROMO_DISCOUNT_PERCENT = 100;
 export const PLACEMENT_PROMO_ENDS_AT_ISO = "2027-05-01T00:00:00.000+03:00";
-export const PLACEMENT_PROMO_END_LABEL = "1 год с даты создания объявления";
+export const PLACEMENT_PROMO_END_LABEL = "1 год с даты публикации после модерации";
 export const PLACEMENT_PROMO_SHORT_END_LABEL = "1 год бесплатно";
 export const PLACEMENT_PROMO_BADGE_LABEL = "0 ₽ на 1 год";
 export const PLACEMENT_PROMO_NOTICE =
-  "Каждое новое объявление — объект размещения, экскурсия, тур или трансфер — публикуется бесплатно на 1 год с даты его создания. Количество бесплатных объявлений не ограничено.";
+  "Каждая новая карточка жилья, экскурсии, тура или трансфера публикуется бесплатно на 1 год с даты публикации после модерации. Количество бесплатных карточек не ограничено.";
 export const PLACEMENT_PROMO_DEMO_MODE = "demo";
 export const PLACEMENT_PROMO_DEMO_LABEL = "Бесплатный год";
 export const PLACEMENT_PROMO_DEMO_ENDS_AT_ISO = PLACEMENT_PROMO_ENDS_AT_ISO;
